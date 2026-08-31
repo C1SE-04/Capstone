@@ -24,7 +24,7 @@ Hỗ trợ:
 
 ---
 
-# Bước 1: Cài đặt Node.js v20
+# Bước 1: Cài đặt Node.js v22
 
 ## 1.1 Tải Node.js
 
@@ -280,7 +280,7 @@ node -v
 Kết quả:
 
 ```bash
-v20.x.x
+v22.x.x
 ```
 
 ---
@@ -315,8 +315,8 @@ Python 3.11.x
 
 # Checklist hoàn thành
 
-* [ ] Đã cài đặt Node.js v20
-* [ ] Lệnh `node -v` trả về `v20.x.x`
+* [ ] Đã cài đặt Node.js v22
+* [ ] Lệnh `node -v` trả về `v22.x.x`
 * [ ] Đã cài đặt Python 3.11
 * [ ] Lệnh `python --version` trả về `Python 3.11.x`
 * [ ] Đã cài đặt VS Code
@@ -340,7 +340,7 @@ node -v
 trả về:
 
 ```bash
-v20.x.x
+v22.x.x
 ```
 
 2. Chạy lệnh:
