@@ -1,6 +1,7 @@
 # Capstone1
 
-SocraticKid: A Pedagogically Safe Agentic Tutor with Dynamic Scaffolding
+    SocraticKid: A Pedagogically Safe Agentic Tutor with Dynamic Scaffolding
+
 AI Tutor chủ động nhưng không làm bài thay trẻ
 Pain point
 Nhiều chatbot đưa đáp án quá sớm, khiến trẻ phụ thuộc vào AI và giảm quá trình tự suy nghĩ.
