@@ -15,3 +15,8 @@ Hệ thống áp dụng “intentional friction”: trẻ phải thực hiện m
 nhận gợi ý tiếp theo. Đây là hướng quan trọng vì nghiên cứu gần đây cho thấy agent giáo dục
 phải cân bằng giữa tự động hóa và nỗ lực nhận thức của người học.
 AI ghi nhận lịch sử học, điều chỉnh mức gợi ý và tạo bài tiếp theo.
+
+## 🚀 Môi trường Triển khai (Deployment)
+
+- **Frontend (Vercel):** `https://socratickid.vercel.app/`
+- **Backend (Render):** `https://capstone-backend-r12q.onrender.com`
