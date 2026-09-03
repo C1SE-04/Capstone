@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from middleware import JWTMiddleware
 
@@ -27,3 +27,11 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok", "message": "FastAPI is healthy and CORS is working!"}
+
+@app.get("/api/protected")
+def protected_route(request: Request):
+    # Route này không nằm trong public_paths nên sẽ phải đi qua middleware
+    return {
+        "message": "Bạn đã vượt qua middleware thành công!",
+        "user_info": request.state.user
+    }
