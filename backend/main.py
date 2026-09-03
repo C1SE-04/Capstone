@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from middleware import JWTMiddleware
 
 app = FastAPI()
 
@@ -15,6 +16,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Thêm JWT Middleware vào ứng dụng
+app.add_middleware(JWTMiddleware)
 
 @app.get("/")
 def read_root():
