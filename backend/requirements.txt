@@ -4,3 +4,5 @@ sqlalchemy
 psycopg2-binary
 python-jose[cryptography]
 python-dotenv
+pytest
+httpx
