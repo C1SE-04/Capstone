@@ -1,15 +1,14 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+# database.py
 import os
-from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-load_dotenv() # Đọc file .env
+# Cú pháp: postgresql://<username>:<password>@<host>:<port>/<db_name>
+DATABASE_URL = "postgresql://postgres:123456@localhost:5432/NewSocraticKid"
 
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+# PostgreSQL không cần connect_args={"check_same_thread": False} như SQLite
+engine = create_engine(DATABASE_URL)
 
-# pool_pre_ping=True giúp tự động kết nối lại nếu rớt mạng
-engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
