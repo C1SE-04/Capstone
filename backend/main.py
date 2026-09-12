@@ -1,4 +1,9 @@
 from datetime import datetime, timedelta, timezone
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
+
+load_dotenv()
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -180,3 +185,32 @@ def monitor_dashboard(current_user: dict = Depends(dependencies.require_role(["M
 @app.delete("/students/{student_id}")
 def delete_student(student_id: int, current_user: dict = Depends(dependencies.require_role(["ADMIN"]))):
     return {"message": f"Đã xoá sinh viên {student_id}"}
+
+# @app.post("/gemini/generate")
+# def generate_gemini(request: schemas.GeminiRequest):
+#     api_key = os.environ.get("GEMINI_API_KEY")
+#     if not api_key:
+#         raise HTTPException(status_code=500, detail="Gemini API Key not configured")
+    
+#     genai.configure(api_key=api_key)
+#     try:
+#         model = genai.GenerativeModel("gemini-3.1-flash-lite")
+#         response = model.generate_content(request.prompt)
+#         return {"response": response.text}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+# @app.get("/gemini/models")
+# def list_available_models():
+#     api_key = os.environ.get("GEMINI_API_KEY")
+#     if not api_key:
+#         raise HTTPException(status_code=500, detail="Gemini API Key not configured")
+#     genai.configure(api_key=api_key)
+#     try:
+#         models = [
+#             m.name for m in genai.list_models() 
+#             if "generateContent" in m.supported_generation_methods
+#         ]
+#         return {"supported_models": models}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))

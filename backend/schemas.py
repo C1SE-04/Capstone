@@ -27,3 +27,6 @@ class RefreshRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+class GeminiRequest(BaseModel):
+    prompt: str
