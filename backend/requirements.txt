@@ -4,5 +4,8 @@ sqlalchemy
 psycopg2-binary
 python-jose[cryptography]
 python-dotenv
+google-generativeai
+passlib[bcrypt]
+python-multipart
 pytest
 httpx
