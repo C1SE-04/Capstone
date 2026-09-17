@@ -15,7 +15,6 @@ Tài liệu này hướng dẫn từng bước cài đặt môi trường làm v
   * Prettier
   * Python
   * Prisma
-  * Antigravity
 
 ## Yêu cầu hệ điều hành
 
@@ -268,27 +267,6 @@ Mục đích:
 
 ---
 
-## 4.5 Antigravity
-
-Tên Extension:
-
-```text
-Antigravity
-```
-
-Nhà phát triển:
-
-```text
-Google
-```
-
-Mục đích:
-
-* Trợ lý AI hỗ trợ lập trình
-* Tự động hóa các tác vụ phát triển
-
----
-
 # Bước 5: Xác nhận môi trường
 
 Sau khi hoàn thành, chạy các lệnh sau.
@@ -346,7 +324,6 @@ Python 3.11.x
 * [ ] Đã cài đặt Prettier
 * [ ] Đã cài đặt Python Extension
 * [ ] Đã cài đặt Prisma Extension
-* [ ] Đã cài đặt Antigravity Extension
 
 ---
 
@@ -386,6 +363,5 @@ Python 3.11.x
 * Prettier
 * Python
 * Prisma
-* Antigravity
 
 5. Không xuất hiện lỗi liên quan đến PATH của Node.js hoặc Python.

@@ -21,11 +21,11 @@ genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-3.1-flash-lite')
 
 prompt = """
-Hãy tạo thông tin ngẫu nhiên về một tựa game. Trả về kết quả dưới định dạng JSON với cấu trúc sau:
+Hãy tạo thông tin ngẫu nhiên về một học sinh. Trả về kết quả dưới định dạng JSON với cấu trúc sau:
 {
     "name": "string",
-    "release_date": "string",
-    "publisher": "string"
+    "genre": "string",
+    "price": "number"
 }
 """
 
