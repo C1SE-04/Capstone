@@ -7,7 +7,7 @@ import orchestrator
 
 load_dotenv()
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 import models, schemas, auth, dependencies
 from database import engine, get_db
@@ -189,8 +189,8 @@ def delete_student(student_id: int, current_user: dict = Depends(dependencies.re
     return {"message": f"Đã xoá sinh viên {student_id}"}
 
 @app.post("/chat/orchestrator")
-def chat_with_orchestrator(request: schemas.GeminiRequest):
-    return orchestrator.process_query_with_orchestrator(request.prompt)
+def chat_with_orchestrator(request: schemas.GeminiRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    return orchestrator.process_query_with_orchestrator(request.prompt, db, background_tasks)
 
 @app.post("/gemini/generate")
 def generate_gemini(request: schemas.GeminiRequest):

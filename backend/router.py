@@ -3,35 +3,43 @@ import json
 # ==========================================
 # 1. CÁC HÀM MOCK AGENT (Dữ liệu giả)
 # ==========================================
-def mock_agent_hoc_vu(user_query: str):
-    print(f"[Agent Học Vụ] Đang xử lý: {user_query}")
-    return {"agent_name": "Học Vụ", "reply": "Đây là câu trả lời giả lập từ Agent Học Vụ."}
+def mock_agent_safety(user_query: str):
+    print(f"[Safety Agent] Đang xử lý: {user_query}")
+    return {"agent_name": "Safety Agent", "reply": "Nội dung đã được kiểm duyệt an toàn."}
 
-def mock_agent_thong_tin(user_query: str):
-    print(f"[Agent Thông Tin] Đang xử lý: {user_query}")
-    return {"agent_name": "Thông Tin", "reply": "Đây là câu trả lời giả lập từ Agent Thông Tin."}
+def mock_agent_knowledge_tracing(user_query: str):
+    print(f"[Knowledge Tracing Agent] Đang xử lý: {user_query}")
+    return {"agent_name": "Knowledge Tracing Agent", "reply": "Đang đánh giá nền tảng kiến thức của học sinh..."}
+
+def mock_agent_misconception(user_query: str):
+    print(f"[Misconception Agent] Đang xử lý: {user_query}")
+    return {"agent_name": "Misconception Agent", "reply": "Phát hiện lỗi logic trong câu trả lời của học sinh."}
+
+def mock_agent_scaffolding(user_query: str):
+    print(f"[Scaffolding Agent] Đang xử lý: {user_query}")
+    return {"agent_name": "Scaffolding Agent", "reply": "Đang phân tích để đưa ra gợi ý phù hợp (không đưa đáp án)."}
 
 def mock_agent_unknown(user_query: str):
-    return {"agent_name": "Unknown", "reply": "Xin lỗi, tôi không biết phải chuyển câu hỏi này cho ai."}
+    return {"agent_name": "Unknown Agent", "reply": "Không rõ người dùng đang cần gì, trả về mặc định."}
 
 # ==========================================
 # 2. HÀM ĐIỀU PHỐI CHÍNH (Router Function)
 # ==========================================
 def agent_router(json_response_tu_gemini: str, user_query: str):
     try:
-        # Parse JSON từ Gemini trả về (đã làm ở Task 38)
         data = json.loads(json_response_tu_gemini)
-        
-        # Giả sử Gemini trả về JSON có field "target_agent" 
-        # (VD: "HOC_VU", "THONG_TIN", "KHAC")
-        target_agent = data.get("target_agent", "KHAC")
+        target_agent = data.get("target_agent", "UNKNOWN_AGENT")
         
         # 3. ĐIỀU HƯỚNG BẰNG MATCH...CASE
         match target_agent:
-            case "HOC_VU":
-                return mock_agent_hoc_vu(user_query)
-            case "THONG_TIN":
-                return mock_agent_thong_tin(user_query)
+            case "SAFETY_AGENT":
+                return mock_agent_safety(user_query)
+            case "KNOWLEDGE_TRACING_AGENT":
+                return mock_agent_knowledge_tracing(user_query)
+            case "MISCONCEPTION_AGENT":
+                return mock_agent_misconception(user_query)
+            case "SCAFFOLDING_AGENT":
+                return mock_agent_scaffolding(user_query)
             case _:
                 return mock_agent_unknown(user_query)
                 
