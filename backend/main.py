@@ -14,7 +14,11 @@ from database import engine, get_db
 from fastapi.security import OAuth2PasswordRequestForm
 
 # Tự động tạo bảng 'users' trong database nếu chưa có
-models.Base.metadata.create_all(bind=engine)
+try:
+    models.Base.metadata.create_all(bind=engine)
+except Exception as _db_err:
+    import warnings
+    warnings.warn(f"[WARN] Không thể kết nối DB khi startup: {_db_err}", RuntimeWarning)
 
 app = FastAPI()
 
@@ -200,7 +204,7 @@ def generate_gemini(request: schemas.GeminiRequest):
     
     genai.configure(api_key=api_key)
     try:
-        model = genai.GenerativeModel("gemini-3.1-flash-lite")
+        model = genai.GenerativeModel("gemini-3.5-flash-lite")
         response = model.generate_content(request.prompt)
         return {"response": response.text}
     except Exception as e:

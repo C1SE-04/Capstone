@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import google.generativeai as genai
 from router import agent_router
 from fastapi import HTTPException, BackgroundTasks
@@ -7,13 +8,17 @@ from sqlalchemy.orm import Session
 import models
 
 def save_orchestrator_log(db: Session, user_query: str, target_agent: str, reason: str):
-    new_log = models.OrchestratorLog(
-        user_query=user_query,
-        target_agent=target_agent,
-        reason=reason
-    )
-    db.add(new_log)
-    db.commit()
+    try:
+        new_log = models.OrchestratorLog(
+            user_query=user_query,
+            target_agent=target_agent,
+            reason=reason
+        )
+        db.add(new_log)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Error saving orchestrator log: {e}")
 
 def process_query_with_orchestrator(user_query: str, db: Session, background_tasks: BackgroundTasks):
     """
@@ -46,22 +51,48 @@ Hãy trả về kết quả dưới định dạng JSON đúng chuẩn sau:
 }}
 """
 
-    try:
-        model = genai.GenerativeModel('gemini-3.1-flash-lite')
-        # trả về JSON
-        response = model.generate_content(
-            system_prompt,
-            generation_config=genai.types.GenerationConfig(
-                response_mime_type="application/json"
+    max_retries = 3
+    retry_delay = 1
+    response = None
+
+    for attempt in range(max_retries):
+        try:
+            model = genai.GenerativeModel('gemini-3.5-flash-lite')
+            # trả về JSON
+            response = model.generate_content(
+                system_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    response_mime_type="application/json"
+                )
             )
-        )
-        
+            break
+        except Exception as e:
+            error_msg = str(e).lower()
+            is_rate_limit = any(keyword in error_msg for keyword in ["429", "rate limit", "quota", "resource exhausted"])
+            
+            if attempt == max_retries - 1:
+                if is_rate_limit:
+                    raise HTTPException(status_code=429, detail="Gemini API rate limit exceeded. Please try again later.")
+                raise HTTPException(status_code=500, detail=f"Lỗi Orchestrator Service: {str(e)}")
+            
+            time.sleep(retry_delay * (2 ** attempt))
+
+    try:
         # Lấy kết quả chuỗi JSON thô từ AI Điều phối
-        raw_json_str = response.text
+        raw_json_str = response.text.strip()
+        
+        # Làm sạch JSON nếu có markdown formatting
+        if raw_json_str.startswith("```json"):
+            raw_json_str = raw_json_str[7:]
+        elif raw_json_str.startswith("```"):
+            raw_json_str = raw_json_str[3:]
+        if raw_json_str.endswith("```"):
+            raw_json_str = raw_json_str[:-3]
+        raw_json_str = raw_json_str.strip()
         
         # Parse JSON để lấy thông tin log
         decision = json.loads(raw_json_str)
-        target_agent = decision.get("target_agent", "KHAC")
+        target_agent = decision.get("target_agent", "UNKNOWN_AGENT")
         reason = decision.get("reason", "")
         
         # Thêm task lưu log chạy ngầm (Bất đồng bộ)
@@ -78,5 +109,7 @@ Hãy trả về kết quả dưới định dạng JSON đúng chuẩn sau:
         
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Gemini không trả về chuẩn JSON")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi Orchestrator Service: {str(e)}")
