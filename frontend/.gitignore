@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# duplicate nested folder (junk)
+/frontend/
+
 # production
 /build
 
