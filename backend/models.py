@@ -40,3 +40,31 @@ class OrchestratorLog(Base):
     target_agent = Column(String, nullable=False)
     reason = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    user_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    title = Column(String, nullable=True) # Tên phiên chat, có thể sinh tự động
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    session_id = Column(
+        String,
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    sender_type = Column(String, nullable=False) # "USER", "AGENT_TUTOR", v.v.
+    content = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
