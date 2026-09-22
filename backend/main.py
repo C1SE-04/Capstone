@@ -8,6 +8,7 @@ import orchestrator
 load_dotenv()
 
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import models, schemas, auth, dependencies
 from database import engine, get_db
@@ -21,6 +22,14 @@ except Exception as _db_err:
     warnings.warn(f"[WARN] Không thể kết nối DB khi startup: {_db_err}", RuntimeWarning)
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 1. API ĐĂNG KÝ
 @app.post("/register/student", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
