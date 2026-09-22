@@ -9,3 +9,5 @@ passlib[bcrypt]
 python-multipart
 pytest
 httpx
+pandas 
+scikit-learn
