@@ -25,7 +25,7 @@ Hãy tạo thông tin ngẫu nhiên về một học sinh. Trả về kết qu�
 {
     "name": "string",
     "genre": "string",
-    "price": "number"
+    "age": "number"
 }
 """
 
