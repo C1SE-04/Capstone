@@ -7,7 +7,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 load_dotenv()
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:123456@localhost:5432/NewSocraticKid")
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://neondb_owner:npg_LgvPyk9znt8p@ep-withered-forest-b37ql1e0-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require")
 
 # PostgreSQL không cần connect_args={"check_same_thread": False} như SQLite
 engine = create_engine(DATABASE_URL)
