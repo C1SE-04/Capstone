@@ -30,3 +30,19 @@ class LogoutRequest(BaseModel):
 
 class GeminiRequest(BaseModel):
     prompt: str
+
+from typing import Optional
+from datetime import datetime
+
+class SessionCreate(BaseModel):
+    title: Optional[str] = "Phòng chat mới"
+
+class SessionResponse(BaseModel):
+    id: str
+    user_id: str
+    title: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
