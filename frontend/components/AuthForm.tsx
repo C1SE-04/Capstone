@@ -16,7 +16,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<'student' | 'monitor'>('student');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [errors, setErrors] = useState<{
     email?: string;
     password?: string;
@@ -88,7 +88,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         }
 
         if (onClose) onClose();
-        router.refresh();
+        router.push("/dashboard");
+        // Không gọi setIsLoading(false) để giữ vòng xoay loading mượt mà khi redirect
       } else {
         // Tích hợp API Đăng ký
         const endpoint = role === 'student' ? '/register/student' : '/register/monitor';
@@ -97,22 +98,22 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
         });
-        
+
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.detail || "Đã có lỗi xảy ra khi đăng ký");
         }
-        
+
         // Đăng ký xong → chuyển sang tab đăng nhập
         setIsLoginMode(true);
         setEmail("");
         setPassword("");
         setConfirmPassword("");
         setErrors({ form: "✅ Đăng ký thành công! Vui lòng đăng nhập." });
+        setIsLoading(false);
       }
     } catch (err: any) {
       setErrors({ form: err.message });
-    } finally {
       setIsLoading(false);
     }
   };
@@ -121,10 +122,10 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       {/* Background form nhạt hơn F1CCA6 để lỗi dễ đọc hơn */}
       <div className="relative w-full max-w-md bg-[#F1CCA6] rounded-3xl overflow-hidden p-8 shadow-xl">
-        
+
         {/* Close Button */}
         {onClose && (
-          <button 
+          <button
             type="button"
             onClick={onClose}
             className="absolute top-4 right-4 p-2 text-[#8C4905] hover:text-[#CB6600] transition-colors"
@@ -134,7 +135,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             </svg>
           </button>
         )}
-        
+
         {/* Avatar Placeholder */}
         <div className="flex justify-center mb-6">
           <div className="w-20 h-20 bg-[#D9D9D9] rounded-full flex items-center justify-center shadow-inner">
@@ -154,9 +155,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${
-                errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
-              }`}
+              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+                }`}
               disabled={isLoading}
             />
             {errors.email && (
@@ -171,20 +171,18 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${
-                errors.password ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
-              }`}
+              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.password ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+                }`}
               disabled={isLoading}
             />
             {errors.password && (
               <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.password}</p>
             )}
-            
+
             {/* Form Level Message (Error or Success) */}
             {errors.form && isLoginMode && (
-              <p className={`mt-2 text-sm font-bold text-center ${
-                errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#CB6600]'
-              }`}>{errors.form}</p>
+              <p className={`mt-2 text-sm font-bold text-center ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#CB6600]'
+                }`}>{errors.form}</p>
             )}
           </div>
 
@@ -196,15 +194,14 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${
-                  errors.confirmPassword ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
-                }`}
+                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+                  }`}
                 disabled={isLoading}
               />
               {errors.confirmPassword && (
                 <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.confirmPassword}</p>
               )}
-              
+
               {/* Form Level Error (e.g., Email exists) */}
               {errors.form && !isLoginMode && (
                 <p className="mt-2 text-sm text-[#CB6600] font-bold text-center">{errors.form}</p>
@@ -218,11 +215,10 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               <button
                 type="button"
                 onClick={() => setRole('student')}
-                className={`flex-1 py-2 rounded-xl font-bold transition-all ${
-                  role === 'student' 
-                    ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md' 
+                className={`flex-1 py-2 rounded-xl font-bold transition-all ${role === 'student'
+                    ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
                     : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
-                }`}
+                  }`}
                 disabled={isLoading}
               >
                 Học sinh
@@ -230,11 +226,10 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               <button
                 type="button"
                 onClick={() => setRole('monitor')}
-                className={`flex-1 py-2 rounded-xl font-bold transition-all ${
-                  role === 'monitor' 
-                    ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md' 
+                className={`flex-1 py-2 rounded-xl font-bold transition-all ${role === 'monitor'
+                    ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
                     : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
-                }`}
+                  }`}
                 disabled={isLoading}
               >
                 Người giám sát
@@ -274,7 +269,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         {isLoginMode && (
           <div className="mt-6 text-center">
             <div className="flex justify-center mb-4">
-              <button 
+              <button
                 type="button"
                 disabled={isLoading}
                 onClick={() => signIn("google")}
@@ -289,8 +284,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         <div className="mt-4 text-center">
           <p className="text-xs font-bold text-[#8C4905]">
             {isLoginMode ? "Không có tài khoản ? " : "Đã có tài khoản ? "}
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={toggleMode}
               disabled={isLoading}
               className="text-[#CB6600] hover:underline focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed ml-1"

@@ -6,23 +6,29 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// Cấu hình NextAuth xử lý xác thực (Authentication)
 export const authOptions: NextAuthOptions = {
+  // PrismaAdapter giúp lưu trữ session/user vào database (tuy nhiên ta đang dùng JWT nên adapter này có thể chỉ dùng cho GoogleProvider)
   adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
     }),
+    // Cấu hình đăng nhập bằng tài khoản/mật khẩu
     CredentialsProvider({
       name: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
+      // Hàm authorize chạy khi người dùng ấn nút Đăng Nhập ở FE
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
         try {
+          // Gọi sang API của Backend (FastAPI) để xác thực
+
           const res = await fetch("http://127.0.0.1:8000/login", {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -36,11 +42,12 @@ export const authOptions: NextAuthOptions = {
 
           const data = await res.json();
 
-          // Decode JWT payload để lấy thông tin user
+          // Decode JWT payload (Access Token) từ Backend trả về để lấy thông tin user (ID, Email, Role)
           const payload = JSON.parse(
             Buffer.from(data.access_token.split(".")[1], "base64").toString()
           );
 
+          // Trả về object user để NextAuth lưu vào phiên đăng nhập (Session)
           return {
             id: payload.sub,
             email: payload.email,
@@ -58,7 +65,9 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/",
   },
+  // Các callback xử lý khi tạo Token và Session
   callbacks: {
+    // Gọi khi tạo hoặc cập nhật JWT token
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
@@ -67,6 +76,7 @@ export const authOptions: NextAuthOptions = {
       }
       return token;
     },
+    // Gọi khi Client yêu cầu lấy dữ liệu Session (vd: dùng hook useSession)
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
