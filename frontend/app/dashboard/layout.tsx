@@ -29,53 +29,32 @@ export default function DashboardLayout({
 
   const isChatRoute = pathname === "/dashboard/chat";
 
+  // Khi ở trang Chat, nhường layout cho ChatPage tự quản lý Sidebar và ChatWindow bằng State React thuần
+  if (isChatRoute) {
+    return <>{children}</>;
+  }
+
   return (
     <div className="flex h-screen bg-[#F7ECE1] overflow-hidden font-sans">
-      {/* Sidebar — ẩn khi collapsed trên desktop */}
-      {isChatRoute ? (
-        <div className={`${isSidebarCollapsed ? 'hidden' : 'flex'} transition-all duration-300`}>
-          <ChatSidebar isMobileOpen={isMobileOpen} setIsMobileOpen={setIsMobileOpen} />
-        </div>
-      ) : (
-        <Sidebar isMobileOpen={isMobileOpen} setIsMobileOpen={setIsMobileOpen} />
-      )}
+      <Sidebar isMobileOpen={isMobileOpen} setIsMobileOpen={setIsMobileOpen} />
 
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        {/* Header — hiển thị trên mobile hoặc khi chat sidebar bị thu gọn */}
-        <header className={`bg-white border-b border-[#F1CCA6] p-3 flex items-center justify-between shadow-sm z-30 ${isChatRoute ? 'flex' : 'md:hidden flex'}`}>
-          <div className="flex items-center gap-3">
-            {/* Hamburger: trên mobile mở sidebar overlay, trên desktop toggle collapse */}
-            <button
-              onClick={() => {
-                if (window.innerWidth < 768) {
-                  setIsMobileOpen(true);
-                } else {
-                  setIsSidebarCollapsed(!isSidebarCollapsed);
-                }
-              }}
-              className="p-2 text-[#8C4905] hover:bg-[#F1CCA6]/50 rounded-lg transition-colors"
-            >
-              <Menu size={22} />
-            </button>
-            {isChatRoute && (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-[#D9D9D9] rounded-lg flex items-center justify-center text-[#8C4905] font-bold text-xs shadow-inner cursor-pointer" onClick={() => router.push('/dashboard')}>
-                  SK
-                </div>
-                <span className="font-bold italic text-[#C1762A] text-base">SocraticKid</span>
-              </div>
-            )}
+        {/* Header trên Mobile */}
+        <header className="bg-white border-b border-[#F1CCA6] p-3 flex md:hidden items-center justify-between shadow-sm z-30">
+          <button
+            onClick={() => setIsMobileOpen(true)}
+            className="p-2 text-[#8C4905] hover:bg-[#F1CCA6]/50 rounded-lg transition-colors"
+          >
+            <Menu size={22} />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold shadow-inner text-xs">SK</div>
+            <span className="text-base font-bold italic text-[#C1762A]">SocraticKid</span>
           </div>
-          {!isChatRoute && (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold shadow-inner text-xs">SK</div>
-              <span className="text-base font-bold italic text-[#C1762A]">SocraticKid</span>
-            </div>
-          )}
         </header>
 
         {/* Main Content Area */}
-        <main className={`flex-1 overflow-y-auto bg-[#F7ECE1] ${isChatRoute ? 'p-0' : 'p-4 md:p-8'}`}>
+        <main className="flex-1 overflow-y-auto bg-[#F7ECE1] p-4 md:p-8">
           {children}
         </main>
       </div>
