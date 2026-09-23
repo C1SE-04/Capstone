@@ -7,6 +7,8 @@ from fastapi import HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 import models
 
+from chat_utils import get_recent_chat_context
+
 def save_orchestrator_log(db: Session, user_query: str, target_agent: str, reason: str):
     try:
         new_log = models.OrchestratorLog(
@@ -20,7 +22,7 @@ def save_orchestrator_log(db: Session, user_query: str, target_agent: str, reaso
         db.rollback()
         print(f"Error saving orchestrator log: {e}")
 
-def process_query_with_orchestrator(user_query: str, db: Session, background_tasks: BackgroundTasks):
+def process_query_with_orchestrator(user_query: str, session_id: str, db: Session, background_tasks: BackgroundTasks):
     """
     Gọi Gemini API với prompt phân loại (Slow-Path), 
     nhận JSON trả về và đưa cho router phân luồng.
@@ -31,10 +33,21 @@ def process_query_with_orchestrator(user_query: str, db: Session, background_tas
         
     genai.configure(api_key=api_key)
 
-    # Tích hợp prompt - Phân loại câu hỏi (Orchestrator)
+    # 1. Lưu tin nhắn của học sinh vào Database
+    user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query)
+    db.add(user_msg)
+    db.commit()
+
+    # 2. Lấy 5 tin nhắn ngữ cảnh (bao gồm cả tin nhắn vừa lưu)
+    chat_history = get_recent_chat_context(db, session_id, limit=5)
+    
+    # Format lịch sử thành chuỗi văn bản cho AI dễ đọc
+    history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in chat_history])
+
+    # 3. Tích hợp prompt - Phân loại câu hỏi (Orchestrator)
     system_prompt = f"""
 Bạn là một AI Điều phối (Orchestrator) trong một hệ thống Chatbot học tập theo phương pháp Socratic (dẫn dắt học sinh tư duy, không đưa đáp án trực tiếp).
-Nhiệm vụ của bạn là đọc câu hỏi/tin nhắn của học sinh và quyết định xem Agent nào phù hợp nhất để xử lý tiếp theo:
+Nhiệm vụ của bạn là đọc toàn bộ Lịch sử đoạn chat dưới đây, đặc biệt chú ý vào [Tin nhắn mới nhất của học sinh], để quyết định xem Agent nào phù hợp nhất để xử lý tiếp theo:
 
 - "SAFETY_AGENT": Chọn nếu tin nhắn chứa ngôn từ độc hại, bạo lực, vi phạm tiêu chuẩn cộng đồng hoặc không phù hợp với lứa tuổi học sinh.
 - "KNOWLEDGE_TRACING_AGENT": Chọn nếu học sinh mới bắt đầu học một chủ đề hoặc cần được hệ thống đánh giá/kiểm tra lại nền tảng kiến thức hiện tại.
@@ -42,12 +55,14 @@ Nhiệm vụ của bạn là đọc câu hỏi/tin nhắn của học sinh và q
 - "SCAFFOLDING_AGENT": Chọn nếu học sinh đang bế tắc, yêu cầu gợi ý hoặc cần được dẫn dắt từng bước để tự tìm ra câu trả lời (mà không đưa ra đáp án trực tiếp).
 - "UNKNOWN_AGENT": Chọn nếu không rơi vào các trường hợp trên.
 
-Tin nhắn của học sinh: "{user_query}"
+--- LỊCH SỬ CHAT GẦN ĐÂY ---
+{history_text}
+----------------------------
 
 Hãy trả về kết quả dưới định dạng JSON đúng chuẩn sau:
 {{
     "target_agent": "SAFETY_AGENT" | "KNOWLEDGE_TRACING_AGENT" | "MISCONCEPTION_AGENT" | "SCAFFOLDING_AGENT" | "UNKNOWN_AGENT",
-    "reason": "Giải thích ngắn gọn tại sao lại chọn Agent này"
+    "reason": "Giải thích ngắn gọn tại sao lại chọn Agent này dựa trên ngữ cảnh đoạn chat"
 }}
 """
 
@@ -101,10 +116,18 @@ Hãy trả về kết quả dưới định dạng JSON đúng chuẩn sau:
         # Đưa JSON qua cho Router xử lý phân luồng
         final_result = agent_router(raw_json_str, user_query)
         
+        # 4. Lưu tin nhắn trả lời của AI vào Database
+        ai_reply_content = final_result.get("reply", "")
+        if ai_reply_content:
+            ai_msg = models.Message(session_id=session_id, sender_type="AGENT_TUTOR", content=ai_reply_content)
+            db.add(ai_msg)
+            db.commit()
+
         # Gom cả quyết định của Orchestrator và câu trả lời của Agent để trả về
         return {
             "orchestrator_decision": decision,
-            "agent_response": final_result
+            "agent_response": final_result,
+            "debug_context": history_text
         }
         
     except json.JSONDecodeError:
