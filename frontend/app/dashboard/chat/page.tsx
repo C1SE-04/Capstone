@@ -54,6 +54,24 @@ export default function ChatPage() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+
+  // Theo dõi trạng thái kết nối mạng của người dùng
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsOnline(navigator.onLine);
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // 1. Khôi phục trạng thái từ localStorage khi người dùng F5 hoặc truy cập lại
   useEffect(() => {
@@ -118,12 +136,76 @@ export default function ChatPage() {
     }
   };
 
+  // Handler: Thử kết nối lại
+  const handleReconnect = () => {
+    if (typeof window !== "undefined") {
+      setIsOnline(navigator.onLine);
+    }
+  };
+
+  // Hàm xử lý phản hồi từ AI (có xử lý lỗi mạng & trạng thái tin nhắn)
+  const triggerBotResponse = (targetConversationId: string, userMessageId: string, userContent: string) => {
+    // Nếu mất mạng: chuyển ngay trạng thái tin nhắn thành "error"
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === targetConversationId
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === userMessageId ? { ...m, status: "error" } : m
+                ),
+              }
+            : c
+        )
+      );
+      setIsTyping(false);
+      return;
+    }
+
+    setIsTyping(true);
+
+    // Giả lập bot Socratic Kid phản hồi (hoặc gọi API)
+    setTimeout(() => {
+      // Khi gửi thành công, chuyển status user message thành "sent"
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === targetConversationId
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === userMessageId ? { ...m, status: "sent" } : m
+                ),
+              }
+            : c
+        )
+      );
+
+      const botResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: `Tuyệt vời! Về câu hỏi: "${userContent}", bạn hãy suy nghĩ xem bước đầu tiên chúng ta cần xác định các hệ số hoặc công thức liên quan là gì nhé? Hãy thử nêu suy nghĩ của bạn!`,
+      };
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === targetConversationId
+            ? { ...c, messages: [...c.messages, botResponse] }
+            : c
+        )
+      );
+      setIsTyping(false);
+    }, 1200);
+  };
+
   // Handler: Gửi prompt trong khung chat
   const handleSendMessage = (content: string) => {
+    const messageId = Date.now().toString();
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: messageId,
       role: "user",
       content,
+      status: isOnline ? "sending" : "error",
     };
 
     let targetId = activeChatId;
@@ -156,24 +238,32 @@ export default function ChatPage() {
       );
     }
 
-    // Giả lập bot Socratic Kid phản hồi
-    setIsTyping(true);
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `Tuyệt vời! Về câu hỏi: "${content}", bạn hãy suy nghĩ xem bước đầu tiên chúng ta cần xác định các hệ số hoặc công thức liên quan là gì nhé? Hãy thử nêu suy nghĩ của bạn!`,
-      };
+    if (!isOnline) {
+      return;
+    }
 
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === targetId
-            ? { ...c, messages: [...c.messages, botResponse] }
-            : c
-        )
-      );
-      setIsTyping(false);
-    }, 1200);
+    triggerBotResponse(targetId, messageId, content);
+  };
+
+  // Handler: Thử lại (Retry) khi gửi tin nhắn thất bại
+  const handleRetryMessage = (messageId: string, content: string) => {
+    if (!activeChatId) return;
+
+    // Chuyển lại trạng thái thành "sending"
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeChatId
+          ? {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === messageId ? { ...m, status: "sending" } : m
+              ),
+            }
+          : c
+      )
+    );
+
+    triggerBotResponse(activeChatId, messageId, content);
   };
 
   return (
@@ -232,7 +322,10 @@ export default function ChatPage() {
           <ChatWindow
             messages={currentMessages}
             isTyping={isTyping}
+            isOnline={isOnline}
             onSendMessage={handleSendMessage}
+            onRetryMessage={handleRetryMessage}
+            onReconnect={handleReconnect}
           />
         </main>
       </div>

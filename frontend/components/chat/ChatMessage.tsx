@@ -10,39 +10,47 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm"; // Hỗ trợ cú pháp GitHub Flavored Markdown (như table, strikethrough)
 import remarkMath from "remark-math"; // Hỗ trợ cú pháp toán học (dấu $ hoặc $$)
 import rehypeKatex from "rehype-katex"; // Biến đổi cú pháp toán học thành HTML chuẩn KaTeX
+import { AlertCircle, RotateCcw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Message } from "@/types/chat";
 
-// Định nghĩa cấu trúc của một object Message
-export interface MessageProps {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-}
+export interface MessageProps extends Message {}
 
 interface ChatMessageProps {
-  message: MessageProps;
+  message: Message;
+  onRetry?: (messageId: string, content: string) => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onRetry }: ChatMessageProps) {
   // Biến cờ kiểm tra xem tin nhắn có phải của user hay không
   const isUser = message.role === "user";
+  const isError = message.status === "error";
+  const isSending = message.status === "sending";
 
   return (
     // Wrap chính: flex để đẩy bong bóng sang phải (user) hoặc trái (assistant)
     <div className={cn("flex w-full mb-6", isUser ? "justify-end" : "justify-start")}>
-      <div className={cn("flex max-w-[85%] md:max-w-[75%]", isUser ? "flex-row-reverse" : "flex-row")}>
+      <div className={cn("flex flex-col max-w-[85%] md:max-w-[75%]", isUser ? "items-end" : "items-start")}>
         {/* Bong bóng chat */}
         <div
           className={cn(
-            "px-5 py-4 rounded-2xl shadow-sm text-[15px] leading-relaxed",
+            "px-5 py-4 rounded-2xl shadow-sm text-[15px] leading-relaxed transition-all",
             isUser
-              ? "bg-[#C1762A] text-white rounded-tr-sm"
-              : "bg-white border border-[#F1CCA6] text-[#000000] rounded-tl-sm"
+              ? isError
+                ? "bg-red-50 text-red-900 border border-red-300 rounded-tr-sm"
+                : "bg-[#C1762A] text-white rounded-tr-sm"
+              : "bg-white border border-[#F1CCA6] text-[#000000] rounded-tl-sm",
+            isSending && "opacity-80"
           )}
         >
           {isUser ? (
             // Tin nhắn của user: giữ nguyên ngắt dòng tự nhiên bằng whitespace-pre-wrap
-            <div className="whitespace-pre-wrap">{message.content}</div>
+            <div className="whitespace-pre-wrap flex items-start gap-2">
+              <span className="flex-1">{message.content}</span>
+              {isSending && (
+                <Loader2 size={16} className="animate-spin text-white/80 shrink-0 mt-1" />
+              )}
+            </div>
           ) : (
             // Tin nhắn của assistant: Cần render thành Markdown và Toán học.
             // Sử dụng các class `prose-*` của Tailwind (hoặc tùy chỉnh thủ công) để định dạng các thẻ HTML (h1, p, pre, code, table) bên trong Markdown.
@@ -68,6 +76,24 @@ export function ChatMessage({ message }: ChatMessageProps) {
             </div>
           )}
         </div>
+
+        {/* Thông báo lỗi & nút Thử lại khi tin nhắn gửi thất bại do mạng lag / offline */}
+        {isUser && isError && (
+          <div className="flex items-center gap-2 mt-1.5 mr-1 text-xs text-red-600 animate-in fade-in duration-200">
+            <AlertCircle size={13} className="shrink-0" />
+            <span>Gửi thất bại (lỗi mạng hoặc timeout)</span>
+            {onRetry && (
+              <button
+                onClick={() => onRetry(message.id, message.content)}
+                className="inline-flex items-center gap-1 font-semibold text-[#8C4905] bg-[#F1CCA6]/60 hover:bg-[#F1CCA6] px-2 py-0.5 rounded-full transition-colors ml-1"
+                title="Gửi lại tin nhắn này"
+              >
+                <RotateCcw size={11} />
+                Thử lại
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
