@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
-import orchestrator
+import agents.orchestrator as orchestrator
 
 
 load_dotenv()
