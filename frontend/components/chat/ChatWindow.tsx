@@ -11,6 +11,9 @@
 import { useState, useRef, useEffect } from "react";
 import { ChatMessage, MessageProps } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
+import { LessonCard } from "@/components/dashboard/LessonCard";
+import { mockLessons } from "@/data/mockLessons";
+import { useRouter } from "next/navigation";
 
 // Dữ liệu mock ban đầu cho cuộc trò chuyện
 const initialMockMessages: MessageProps[] = [
@@ -59,6 +62,8 @@ export function ChatWindow() {
   // State hiển thị hiệu ứng "AI đang gõ chữ"
   const [isTyping, setIsTyping] = useState(false);
   
+  const router = useRouter();
+  
   // Ref dùng để xác định vị trí phần tử cuối cùng trong danh sách tin nhắn (phục vụ auto-scroll)
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
@@ -99,50 +104,46 @@ export function ChatWindow() {
   };
 
   return (
-    // Container chính: flex-col để xếp dọc, giới hạn chiều cao bằng 100vh trừ đi khoảng trống margin
-    <div className="flex flex-col h-[calc(100vh-2rem)] md:h-[calc(100vh-4rem)] max-w-5xl mx-auto bg-white/50 rounded-3xl border border-[#F1CCA6] shadow-sm overflow-hidden relative">
-      
-      {/* Header của Chat Window */}
-      <div className="px-6 py-4 border-b border-[#F1CCA6] bg-white flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-3">
-          {/* Avatar thu nhỏ của AI */}
-          <div className="w-10 h-10 rounded-xl bg-[#D9D9D9] flex items-center justify-center text-[#8C4905] font-bold text-sm shadow-inner">
-            SK
-          </div>
-          <div>
-            <h2 className="font-bold text-[#8C4905] leading-tight">SocraticKid AI</h2>
-            <p className="text-xs text-[#C1762A]">Luôn sẵn sàng hỗ trợ</p>
-          </div>
-        </div>
-      </div>
+    // Container chính: h-full để lấp đầy khu vực main content từ layout
+    <div className="flex flex-col h-full bg-[#F7ECE1] overflow-hidden">
 
       {/* Vùng hiển thị tin nhắn (Messages Area) */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
-        <div className="max-w-4xl mx-auto flex flex-col justify-end min-h-full">
-          
+        <div className="max-w-4xl mx-auto flex flex-col min-h-full">
+
+          {/* Hiển thị LessonCard gợi ý khi chưa có tin nhắn */}
+          {messages.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center gap-6 py-12">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-[#8C4905] mb-2">Xin chào! Bạn muốn học gì hôm nay?</h2>
+                <p className="text-[#C1762A]">Đặt câu hỏi, hoặc chọn bài học bên dưới để bắt đầu.</p>
+              </div>
+              <div className="w-full max-w-sm">
+                <LessonCard {...mockLessons[0]} onClick={() => router.push('/dashboard/chat')} />
+              </div>
+            </div>
+          )}
+
           {/* Render danh sách tin nhắn */}
-          {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
-          ))}
-          
-          {/* Hiệu ứng bong bóng 3 dấu chấm (Typing indicator) */}
-          {isTyping && (
-            <div className="flex justify-start mb-6 w-full animate-in fade-in duration-300">
-              <div className="flex max-w-[75%] gap-4">
-                <div className="w-10 h-10 rounded-xl bg-[#D9D9D9] flex items-center justify-center flex-shrink-0 text-[#8C4905] font-bold text-sm shadow-inner border border-[#C1762A]/20">
-                  SK
-                </div>
+          <div className="flex flex-col justify-end flex-1">
+            {messages.map((msg) => (
+              <ChatMessage key={msg.id} message={msg} />
+            ))}
+
+            {/* Hiệu ứng bong bóng 3 dấu chấm (Typing indicator) */}
+            {isTyping && (
+              <div className="flex justify-start mb-6 w-full animate-in fade-in duration-300">
                 <div className="bg-white border border-[#F1CCA6] px-5 py-5 rounded-2xl rounded-tl-sm flex items-center gap-1 shadow-sm h-[52px]">
                   <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                   <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                   <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce"></div>
                 </div>
               </div>
-            </div>
-          )}
-          
-          {/* Thẻ div rỗng nằm ở cuối để làm mốc cho hàm cuộn (scrollIntoView) */}
-          <div ref={endOfMessagesRef} className="h-4" />
+            )}
+
+            {/* Thẻ div rỗng nằm ở cuối để làm mốc cho hàm cuộn (scrollIntoView) */}
+            <div ref={endOfMessagesRef} className="h-4" />
+          </div>
         </div>
       </div>
 

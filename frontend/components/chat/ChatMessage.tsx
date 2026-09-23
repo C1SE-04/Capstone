@@ -30,33 +30,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
   return (
     // Wrap chính: flex để đẩy bong bóng sang phải (user) hoặc trái (assistant)
     <div className={cn("flex w-full mb-6", isUser ? "justify-end" : "justify-start")}>
-      
-      {/* Vùng chứa avatar và bong bóng, giới hạn độ rộng max 75-85% */}
-      <div className={cn("flex max-w-[85%] md:max-w-[75%] gap-4", isUser ? "flex-row-reverse" : "flex-row")}>
-        
-        {/* Phần 1: Render Avatar */}
-        <div className="flex-shrink-0">
-          {isUser ? (
-            // Avatar của người dùng (U)
-            <div className="w-10 h-10 rounded-full bg-[#C1762A] flex items-center justify-center text-white font-bold text-sm shadow-md">
-              U
-            </div>
-          ) : (
-            // Avatar của AI (SK)
-            <div className="w-10 h-10 rounded-xl bg-[#D9D9D9] flex items-center justify-center text-[#8C4905] font-bold text-sm shadow-inner border border-[#C1762A]/20">
-              SK
-            </div>
-          )}
-        </div>
-
-        {/* Phần 2: Render Nội dung tin nhắn (Bong bóng chat) */}
+      <div className={cn("flex max-w-[85%] md:max-w-[75%]", isUser ? "flex-row-reverse" : "flex-row")}>
+        {/* Bong bóng chat */}
         <div
           className={cn(
             "px-5 py-4 rounded-2xl shadow-sm text-[15px] leading-relaxed",
             isUser
-              // Styling bong bóng user: Nền cam, chữ trắng
               ? "bg-[#C1762A] text-white rounded-tr-sm"
-              // Styling bong bóng assistant: Nền trắng, viền cam, chữ đen
               : "bg-white border border-[#F1CCA6] text-[#000000] rounded-tl-sm"
           )}
         >

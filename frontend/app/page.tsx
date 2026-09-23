@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
 
@@ -8,15 +8,6 @@ export default function Home() {
   const { data: session } = useSession();
   const router = useRouter();
   const [showAuthForm, setShowAuthForm] = useState(false);
-
-  const handleStart = () => {
-    if (session) {
-      router.push("/dashboard");
-    } else {
-      setShowAuthForm(true);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#F7ECE1] font-sans flex flex-col">
       {/* Navigation Bar / Header */}
@@ -81,7 +72,7 @@ export default function Home() {
           </p>
         </div>
         <button 
-          onClick={handleStart}
+          onClick={() => session ? router.push("/dashboard") : router.push("/try")}
           className="bg-[#F1CCA6] text-[#8C4905] font-bold text-lg py-3 px-10 rounded-xl hover:bg-[#F7AD62] hover:text-white transition-all shadow-md transform hover:scale-105">
           Dùng thử
         </button>
