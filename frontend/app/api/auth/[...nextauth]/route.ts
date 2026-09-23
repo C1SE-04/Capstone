@@ -28,8 +28,8 @@ export const authOptions: NextAuthOptions = {
 
         try {
           // Gọi sang API của Backend (FastAPI) để xác thực
-
-          const res = await fetch("http://127.0.0.1:8000/login", {
+          const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+          const res = await fetch(`${backendUrl}/login`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({

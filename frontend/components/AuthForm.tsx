@@ -93,7 +93,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
       } else {
         // Tích hợp API Đăng ký
         const endpoint = role === 'student' ? '/register/student' : '/register/monitor';
-        const response = await fetch(`http://127.0.0.1:8000${endpoint}`, {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
+        const response = await fetch(`${backendUrl}${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
