@@ -8,10 +8,5 @@
 import { ChatWindow } from "@/components/chat/ChatWindow";
 
 export default function ChatPage() {
-  return (
-    // Wrapper div có animation mờ dần (fade-in) khi tải trang
-    <div className="h-full animate-in fade-in duration-500">
-      <ChatWindow />
-    </div>
-  );
+  return <ChatWindow />;
 }

@@ -8,7 +8,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Home, History, Settings, LogOut, Menu, X } from "lucide-react";
+import { History, Settings, LogOut, X } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -23,11 +23,10 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = useSession();
+  const [showSettings, setShowSettings] = useState(false);
 
   const navLinks = [
-    { name: "Trang chủ", href: "/dashboard", icon: Home },
     { name: "Lịch sử", href: "/dashboard/history", icon: History },
-    { name: "Cài đặt", href: "/dashboard/settings", icon: Settings },
   ];
 
   return (
@@ -55,9 +54,12 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
           </button>
         </div>
 
-        {/* Logo Area */}
+        {/* Logo Area — clicking navigates to Dashboard */}
         <div className="p-6 pt-8 md:pt-6 flex flex-col items-center border-b border-[#C1762A]/20">
-          <div className="w-16 h-16 bg-[#D9D9D9] rounded-2xl flex items-center justify-center text-[#8C4905] font-bold text-xl shadow-inner cursor-pointer" onClick={() => router.push("/")}>
+          <div
+            className="w-16 h-16 bg-[#D9D9D9] rounded-2xl flex items-center justify-center text-[#8C4905] font-bold text-xl shadow-inner cursor-pointer hover:bg-[#F7AD62]/40 transition-colors"
+            onClick={() => router.push("/dashboard")}
+          >
             SK
           </div>
           <h2 className="mt-4 text-[#8C4905] font-extrabold italic text-2xl tracking-tight">
@@ -92,33 +94,42 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
           })}
         </nav>
 
+        {/* Settings Dropdown */}
+        {showSettings && (
+          <div className="absolute bottom-20 left-4 right-4 bg-white rounded-xl shadow-lg border border-[#F1CCA6] p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+            <button
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#8C4905] hover:bg-[#F7ECE1] rounded-lg transition-colors font-medium"
+            >
+              <LogOut size={16} />
+              Đăng xuất
+            </button>
+          </div>
+        )}
+
         {/* Mini Profile Area */}
-        <div className="p-4 border-t border-[#C1762A]/20 bg-[#F1CCA6]">
-          <div className="flex items-center gap-3 mb-4 p-2">
+        <div className="p-4 border-t border-[#C1762A]/20 bg-[#F1CCA6] flex items-center justify-between">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             {session?.user?.image ? (
               <img
                 src={session.user.image}
                 alt="Avatar"
-                className="w-10 h-10 rounded-full border-2 border-[#C1762A]"
+                className="w-8 h-8 rounded-full border border-[#C1762A]"
               />
             ) : (
-              <div className="w-10 h-10 bg-[#C1762A] rounded-full flex items-center justify-center text-white font-bold">
+              <div className="w-8 h-8 bg-[#C1762A] rounded-full flex items-center justify-center text-white font-bold text-sm">
                 {session?.user?.name?.charAt(0) || "U"}
               </div>
             )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-[#8C4905] truncate">
-                {session?.user?.name || "Người dùng"}
-              </p>
-            </div>
+            <p className="text-sm font-bold text-[#8C4905] truncate flex-1">
+              {session?.user?.name || "Người dùng"}
+            </p>
           </div>
-          
           <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-transparent text-[#8C4905] border border-[#C1762A] rounded-lg hover:bg-[#C1762A] hover:text-white transition-colors font-semibold"
+            onClick={() => setShowSettings(!showSettings)}
+            className="p-2 text-[#8C4905] hover:bg-[#F7AD62]/30 rounded-lg transition-colors"
           >
-            <LogOut size={18} />
-            <span>Đăng xuất</span>
+            <Settings size={20} />
           </button>
         </div>
       </aside>

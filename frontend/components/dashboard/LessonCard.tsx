@@ -11,12 +11,25 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { LessonProps } from "@/data/mockLessons";
 
-export function LessonCard({ id, title, description, thumbnail, progress }: LessonProps) {
+interface LessonCardProps extends LessonProps {
+  // Prop tùy chọn: Nếu được truyền vào, sẽ ghi đè hành vi điều hướng mặc định của thẻ
+  onClick?: () => void;
+}
+
+export function LessonCard({ id, title, description, thumbnail, progress, onClick }: LessonCardProps) {
   const router = useRouter();
+
+  const handleClick = () => {
+    if (onClick) {
+      onClick();
+    } else {
+      router.push(`/dashboard/chat`); // Mặc định: vào trang Chat
+    }
+  };
 
   return (
     <div 
-      onClick={() => router.push(`/lessons/${id}`)}
+      onClick={handleClick}
       className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-[1.02] cursor-pointer flex flex-col h-full border border-[#F1CCA6]/50 group"
     >
       {/* Thumbnail Area */}
