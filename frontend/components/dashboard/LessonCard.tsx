@@ -60,19 +60,6 @@ export function LessonCard({ id, title, description, thumbnail, progress, onClic
           {description}
         </p>
 
-        {/* Progress Bar */}
-        <div className="mt-auto">
-          <div className="flex justify-between text-xs font-semibold mb-1">
-            <span className="text-[#C1762A]">Tiến độ</span>
-            <span className="text-[#8C4905]">{progress}%</span>
-          </div>
-          <div className="w-full bg-[#F7ECE1] rounded-full h-2.5 overflow-hidden">
-            <div 
-              className="bg-gradient-to-r from-[#F7AD62] to-[#C1762A] h-2.5 rounded-full transition-all duration-1000 ease-out"
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-        </div>
       </div>
     </div>
   );
