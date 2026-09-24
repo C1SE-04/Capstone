@@ -68,7 +68,7 @@ export function ChatMessage({ message, onRetry }: ChatMessageProps) {
             >
               {/* Component ReactMarkdown thực hiện chức năng phân tích cú pháp chuỗi thành HTML */}
               <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
+                remarkPlugins={[remarkMath, remarkGfm]}
                 rehypePlugins={[rehypeKatex]}
               >
                 {message.content}
