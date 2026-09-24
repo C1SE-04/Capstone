@@ -68,7 +68,7 @@ export default function Home() {
         </p>
         <div className="max-w-3xl text-[#8C4905] bg-[#F1CCA6]/40 p-6 rounded-2xl mb-10 shadow-sm border border-[#F1CCA6]">
           <p className="font-medium text-base md:text-lg italic leading-relaxed">
-            "Khác với các công cụ AI thông thường, SocraticKid không bao giờ làm bài hộ hay đưa ra đáp án trực tiếp. Chúng tôi áp dụng phương pháp Socratic – đặt câu hỏi gợi mở, dẫn dắt từng bước để các em học sinh tự mình khám phá ra câu trả lời, từ đó hiểu sâu và nhớ lâu hơn."
+            &ldquo;Khác với các công cụ AI thông thường, SocraticKid không bao giờ làm bài hộ hay đưa ra đáp án trực tiếp. Chúng tôi áp dụng phương pháp Socratic – đặt câu hỏi gợi mở, dẫn dắt từng bước để các em học sinh tự mình khám phá ra câu trả lời, từ đó hiểu sâu và nhớ lâu hơn.&rdquo;
           </p>
         </div>
         <button 
@@ -101,7 +101,7 @@ export default function Home() {
             <img src="/shield.svg" alt="Shield Icon" className="w-12 h-12 mb-4" />
             <h3 className="text-xl font-bold text-[#8C4905] mb-4">An Toàn & Chuẩn Xác Tuyệt Đối</h3>
             <p className="text-[#C1762A] font-medium leading-relaxed">
-              Mọi câu trả lời của AI đều được đi qua một hệ thống "Giám thị" (Reviewer Agent) nhằm đảm bảo nội dung phù hợp với học sinh, loại bỏ các từ ngữ độc hại và kiểm tra độ chính xác trước khi hiển thị.
+              Mọi câu trả lời của AI đều được đi qua một hệ thống &ldquo;Giám thị&rdquo; (Reviewer Agent) nhằm đảm bảo nội dung phù hợp với học sinh, loại bỏ các từ ngữ độc hại và kiểm tra độ chính xác trước khi hiển thị.
             </p>
           </div>
           {/* Card 3 */}
@@ -122,7 +122,7 @@ export default function Home() {
           <div className="flex flex-col gap-4">
             <div className="w-12 h-12 bg-[#D9D9D9] rounded-lg"></div> {/* Logo Placeholder */}
             <p className="font-medium text-sm md:text-base">
-              "Hệ thống AI Gia sư Socratic – Đồng hành cùng học sinh Việt Nam."
+              &ldquo;Hệ thống AI Gia sư Socratic – Đồng hành cùng học sinh Việt Nam.&rdquo;
             </p>
             <p className="text-sm mt-4 opacity-80">
               © 2026 SocraticKid. All rights reserved.

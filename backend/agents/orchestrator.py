@@ -7,24 +7,6 @@ from typing import Any, Optional, Tuple, TypedDict
 import sympy
 import joblib
 
-from fastapi import BackgroundTasks
-from sqlalchemy.orm import Session
-import models
-from router import agent_router
-
-
-def save_orchestrator_log(db: Session, user_query: str, target_agent: str, reason: str):
-    try:
-        new_log = models.OrchestratorLog(
-            user_query=user_query,
-            target_agent=target_agent,
-            reason=reason
-        )
-        db.add(new_log)
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        print(f"Error saving orchestrator log: {e}")
 
 class RoutingResult(TypedDict):
     """Cấu trúc dữ liệu kết quả phân luồng của Orchestrator."""
@@ -38,9 +20,10 @@ def _build_task_description(
     problem_context: Optional[dict] = None,
     student_ans: Optional[str] = None,
     expected_ans: Optional[str] = None,
+    safety_subtype: Optional[str] = None,
 ) -> str:
     """
-    Tạo task_description có ngữ cảnh bài học.
+    Tạo task_description có ngữ cảnh bài học và vai trò người thầy.
     """
     problem_text = ""
     if problem_context:
@@ -50,9 +33,42 @@ def _build_task_description(
             or ""
         )
     if agent == "SAFETY":
+        msg_lower = message.lower()
+        # 1. Phát hiện học sinh xưng hô thiếu tôn trọng (mày, tao, thằng, con, bot ngu,...) hoặc chửi thề
+        has_disrespect = (
+            safety_subtype == "DISRESPECT"
+            or any(re.search(rf"\b{re.escape(w)}\b", msg_lower) for w in ("mày", "tao", "mầy", "thằng", "con", "bot ngu", "ông già", "bà già"))
+            or any(w in msg_lower for w in ("đm", "vl", "vcl", "chó", "lồn", "cặc", "địt", "đụ", "cút", "mẹ mày"))
+        )
+        if has_disrespect:
+            return (
+                f"Học sinh có biểu hiện xưng hô thiếu tôn trọng hoặc vô lễ: '{message[:60]}'. "
+                "Bạn là THẦY GIÁO. BẮT BUỘC bạn phải: "
+                "1. Nghiêm túc chấn chỉnh và uốn nắn học sinh ngay từ câu đầu tiên: Nhắc học sinh phải xưng hô lễ phép 'thầy - em', tuyệt đối không được xưng 'mày - tao' hay nói chuyện cộc lốc/vô lễ. "
+                "2. TUYỆT ĐỐI KHÔNG xưng 'Dạ', không được xin lỗi, không được nịnh nọt học sinh (như khen 'học trò đáng yêu' khi học sinh vừa vô lễ). "
+                "3. Yêu cầu học sinh giữ thái độ đúng mực và hỏi học sinh cần hướng dẫn bài toán nào."
+            )
+
+        # 2. Phát hiện học sinh hú hét / gọi đùa cộc lốc vô nghĩa ("hú", "la hét", "ú òa", "áaa",...)
+        is_shouting = (
+            safety_subtype == "SHOUTING"
+            or any(s in msg_lower for s in ("hú", "la hét", "hét", "gào", "ú òa", "áaa"))
+            or bool(re.match(r"^(h[úu]+|ê+|á+|ủa+|ơ+)$", msg_lower.strip()))
+        )
+        if is_shouting:
+            return (
+                f"Học sinh đang hú hét hoặc phát ra tiếng gọi đùa cộc lốc vô nghĩa: '{message[:60]}'. "
+                "Bạn là THẦY GIÁO. BẮT BUỘC bạn phải: "
+                "1. Nhắc nhở học sinh giữ trật tự và tác phong nghiêm túc: Trong giờ học không được hú hét hay gọi đùa vô nghĩa, cần chào hỏi đàng hoàng, lễ phép. "
+                "2. TUYỆT ĐỐI KHÔNG xưng 'Dạ', luôn xưng 'thầy' gọi 'em'. "
+                "3. Ân cần hỏi học sinh hôm nay cần thầy hướng dẫn bài toán nào."
+            )
+
+        # 3. Off-topic (ngoài lề)
         return (
             f"Học sinh đang giao tiếp ngoài bài học: '{message[:60]}'. "
-            "Hãy phản hồi thân thiện, lịch sự và dẫn dắt học sinh quay lại tập trung vào bài toán."
+            "Bạn là THẦY GIÁO (xưng thầy, gọi em, tuyệt đối không xưng 'Dạ'). "
+            "Hãy từ chối chuyện ngoài lề một cách nhã nhặn, giữ phong thái người thầy mẫu mực và hướng dẫn học sinh tập trung vào bài học."
         )
     if agent == "KNOWLEDGE_TRACING":
         topic = message.replace("là gì", "").replace("thầy ơi", "").replace("vậy thầy", "").strip()
@@ -106,7 +122,16 @@ class OrchestratorAgent:
         "con cặc", "cục cặc", "cái cặc", "đầu cặc", "cái quần què", "quần què","phò", "điếm", "cave", "đĩ điếm", "gái điếm", "con đĩ",
         "nứng", "nứng lồn", "nứng sảng", "chịch", "xoạc", "bú cu", "bú lồn", "liếm lồn","súc vật", "súc sinh", "óc chó", "óc lợn", "ngu học", 
         "ngu như bò", "ngu lồn", "khốn nạn", "khốn kiếp", "chó má",  "đĩ chó", "đĩ ngựa", "đĩ thoã",
-        "ê", "mày", "tao", "thằng kia", "con kia", "bot ngu"
+        "ê", "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này"
+    )
+
+    # ── Danh sách tiếng hú hét, gọi cộc lốc, vô nghĩa, quấy rối ─────────
+    SHOUTING_SIGNALS: tuple = (
+        "hú", "hú hú", "hú hu", "húu", "húuu", "húuuu", "huuu", "hu", "hú hồn",
+        "hét", "la hét", "gào", "gầm", "hú alo", "alo hú",
+        "á", "á á", "áaa", "ơ", "ơ kìa", "ủa", "ủa ủa",
+        "ú òa", "u oa", "ú oà", "meo meo", "gâu gâu", "quạc quạc",
+        "ahihi", "keke", "hơ hơ", "hoho",
     )
 
     # ── Từ bắt đầu lời chào ────────────────────────────
@@ -360,6 +385,12 @@ class OrchestratorAgent:
             re.IGNORECASE | re.UNICODE,
         )
 
+        # Regex tiếng hú hét, cảm thán quấy rối
+        self._shouting_re = re.compile(
+            r"^(h[úu]+(\s+h[úu]+)*|ê+|á+|ú\s*òa|ơ+|ủa+)$",
+            re.IGNORECASE | re.UNICODE,
+        )
+
         # Regex câu hỏi lý thuyết
         self._theory_re = re.compile(
             r"(.+)\s+(là gì|là cái gì|là j|là cái j|là số gì|là số nào|là cái nào)\s*[?]?$"
@@ -379,11 +410,11 @@ class OrchestratorAgent:
         if _model_path.exists():
             try:
                 self._local_model = joblib.load(_model_path)
-                print(f"[OrchestratorAgent] ✅ Local ML Model loaded ({_model_path.stat().st_size // 1024}KB)")
+                print(f"[OrchestratorAgent] [OK] Local ML Model loaded ({_model_path.stat().st_size // 1024}KB)")
             except Exception as e:
-                print(f"[OrchestratorAgent] ⚠️  Không load được ML Model: {e}")
+                print(f"[OrchestratorAgent] [WARN] Khong load duoc ML Model: {e}")
         else:
-            print(f"[OrchestratorAgent] ⚠️  ML Model không có — chạy train_local_model.py trước.")
+            print(f"[OrchestratorAgent] [WARN] ML Model khong co — chay train_local_model.py truoc.")
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -432,6 +463,62 @@ class OrchestratorAgent:
         """Kiểm tra câu không chứa tín hiệu hỏi bài học."""
         return not any(s in text for s in self.STUDY_SIGNALS)
 
+    @staticmethod
+    def _last_agent_from_history(history_text: str) -> Optional[str]:
+        """
+        Trụ cột 3 — Trích xuất agent cuối cùng từ lịch sử hội thoại.
+        """
+        if not history_text:
+            return None
+
+        patterns = [
+            r"\[Agent:\s*(MISCONCEPTION|SCAFFOLDING|KNOWLEDGE_TRACING|SAFETY)\]",
+            r"agent_role[=:\s]+(MISCONCEPTION|SCAFFOLDING|KNOWLEDGE_TRACING|SAFETY)",
+            r"agent[=:\s]+(MISCONCEPTION|SCAFFOLDING|KNOWLEDGE_TRACING|SAFETY)",
+            r"\b(MISCONCEPTION|SCAFFOLDING|KNOWLEDGE_TRACING|SAFETY)\b",
+        ]
+        for p in patterns:
+            matches = re.findall(p, history_text, re.IGNORECASE)
+            if matches:
+                return matches[-1].upper()
+
+        return None
+
+    def _state_machine_route(
+        self,
+        text_clean: str,
+        history_text: str,
+        problem_context: Optional[dict],
+        original_message: str,
+    ) -> RoutingResult:
+        """
+        Trụ cột 3 — Suy luận từ ngữ cảnh bài học, không cần API.
+        Đây là tầng cuối cùng, luôn trả về kết quả.
+        """
+        # 3.1 Bài toán đang mở → SCAFFOLDING
+        if problem_context and problem_context.get("correctSolution"):
+            return RoutingResult(
+                selected_agent="SCAFFOLDING",
+                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                routing_scratchpad=f"[Trụ3 - StateMachine]: Bài toán đang mở → SCAFFOLDING.",
+            )
+
+        # 3.2 Kế thừa agent cuối từ lịch sử hội thoại
+        last_agent = self._last_agent_from_history(history_text)
+        if last_agent and last_agent in ("MISCONCEPTION", "KNOWLEDGE_TRACING"):
+            return RoutingResult(
+                selected_agent=last_agent,
+                task_description=_build_task_description(last_agent, original_message, problem_context),
+                routing_scratchpad=f"[Trụ3 - StateMachine]: Tiếp tục ngữ cảnh '{last_agent}' từ lịch sử.",
+            )
+
+        # 3.3 Mặc định an toàn
+        return RoutingResult(
+            selected_agent="SCAFFOLDING",
+            task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+            routing_scratchpad=f"[Trụ3 - StateMachine]: Mặc định SCAFFOLDING.",
+        )
+
     def _structural_route(
         self,
         text_clean: str,
@@ -443,12 +530,24 @@ class OrchestratorAgent:
         Trả về None nếu không khớp bất kỳ phễu nào.
         """
 
-        # 1.1 Profanity
+        # 1.1 Profanity & Disrespect (mày, tao, xúc phạm)
         if self._profanity_re.search(text_clean):
             return RoutingResult(
                 selected_agent="SAFETY",
-                task_description=_build_task_description("SAFETY", original_message),
-                routing_scratchpad="[Trụ1] Profanity detected.",
+                task_description=_build_task_description("SAFETY", original_message, safety_subtype="DISRESPECT"),
+                routing_scratchpad="[Trụ1] Profanity / Disrespect detected.",
+            )
+
+        # 1.1b Shouting / Gibberish / Hú hét cộc lốc
+        is_shouting_msg = (
+            any(s == text_clean or text_clean.startswith(s + " ") or text_clean.endswith(" " + s) for s in self.SHOUTING_SIGNALS)
+            or bool(self._shouting_re.match(text_clean))
+        )
+        if is_shouting_msg and self._no_study_intent(text_clean):
+            return RoutingResult(
+                selected_agent="SAFETY",
+                task_description=_build_task_description("SAFETY", original_message, safety_subtype="SHOUTING"),
+                routing_scratchpad=f"[Trụ1] Shouting / improper exclamation detected: '{text_clean[:40]}'",
             )
 
         # 1.2 Off-topic tuyệt đối
@@ -594,12 +693,8 @@ class OrchestratorAgent:
         if result is not None:
             return result
 
-        # Trụ cột 3 (chưa code) — tạm thời fallback mặc định
-        return RoutingResult(
-            selected_agent="SCAFFOLDING",
-            task_description=_build_task_description("SCAFFOLDING", latest_message, problem_context),
-            routing_scratchpad="[Fallback] Trụ 3 chưa code — mặc định SCAFFOLDING.",
-        )
+        # Trụ cột 3
+        return self._state_machine_route(text_clean, history_text, problem_context, latest_message)
 
     def route_sync(
         self,
@@ -631,76 +726,7 @@ class OrchestratorAgent:
         if result is not None:
             return result
 
-        # Trụ cột 3 (chưa code) — tạm thời fallback mặc định
-        return RoutingResult(
-            selected_agent="SCAFFOLDING",
-            task_description=_build_task_description("SCAFFOLDING", latest_message, problem_context),
-            routing_scratchpad="[Fallback] Trụ 3 chưa code — mặc định SCAFFOLDING.",
-        )
+        # Trụ cột 3
+        return self._state_machine_route(text_clean, history_text, problem_context, latest_message)
     
 _agent = OrchestratorAgent()
-
-from chat_utils import get_recent_chat_context
-
-def process_query_with_orchestrator(
-    user_query: str,
-    session_id: str,
-    db: Session,
-    background_tasks: BackgroundTasks,
-    problem_context: Optional[dict] = None,
-):
-    """
-    Wrapper nối OrchestratorAgent với FastAPI.
-    - Ghi nhận tin nhắn vào DB
-    - Lấy lịch sử chat
-    - Gọi route_sync() để phân luồng (0 API call).
-    - Lưu log vào DB (BackgroundTask).
-    - Gọi agent_router để xử lý tiếp.
-    """
-    # 1. Lưu tin nhắn của học sinh vào Database
-    user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query)
-    db.add(user_msg)
-    db.commit()
-
-    # 2. Lấy 5 tin nhắn ngữ cảnh (bao gồm cả tin nhắn vừa lưu)
-    chat_history = get_recent_chat_context(db, session_id, limit=5)
-    
-    # Format lịch sử thành chuỗi văn bản cho AI dễ đọc
-    history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in chat_history])
-
-    result = _agent.route_sync(
-        latest_message=user_query,
-        history_text=history_text,
-        problem_context=problem_context,
-    )
-
-    # Map: "SAFETY" → "SAFETY_AGENT" (giữ tương thích với router cũ của Capstone)
-    selected = result["selected_agent"]
-    target_agent = selected if selected.endswith("_AGENT") else selected + "_AGENT"
-    reason = result["routing_scratchpad"]
-    task_description = result.get("task_description", "")
-
-    print(f"[Orchestrator ⚡] {target_agent} | {reason}")
-
-    # Lưu log ngầm
-    background_tasks.add_task(save_orchestrator_log, db, user_query, target_agent, reason)
-
-    # 1. Yield quyết định của Orchestrator
-    decision = {"target_agent": target_agent, "reason": reason, "debug_context": history_text}
-    yield f"event: orchestrator\ndata: {json.dumps(decision, ensure_ascii=False)}\n\n"
-
-    # 2. Đưa sang router để sinh văn bản (stream)
-    full_reply = ""
-    for chunk in agent_router(target_agent, task_description, history_text, user_query):
-        full_reply += chunk
-        chunk_data = {"text": chunk}
-        yield f"event: message\ndata: {json.dumps(chunk_data, ensure_ascii=False)}\n\n"
-
-    # 3. Lưu tin nhắn trả lời của AI vào Database
-    if full_reply:
-        ai_msg = models.Message(session_id=session_id, sender_type="AGENT_TUTOR", content=full_reply)
-        db.add(ai_msg)
-        db.commit()
-
-    # 4. Đánh dấu kết thúc
-    yield "event: done\ndata: {}\n\n"
