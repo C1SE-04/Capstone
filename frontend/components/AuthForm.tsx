@@ -205,11 +205,6 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             {errors.password && (
               <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.password}</p>
             )}
-
-            {/* Form Level Message (Error or Success) */}
-            {errors.form && (
-              <p className="mt-2 text-sm font-bold text-center text-[#CB6600]">{errors.form}</p>
-            )}
           </div>
 
           {/* Confirm Password (Only in Sign up) */}
@@ -226,11 +221,6 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               />
               {errors.confirmPassword && (
                 <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.confirmPassword}</p>
-              )}
-
-              {/* Form Level Error (e.g., Email exists) */}
-              {errors.form && !isLoginMode && (
-                <p className="mt-2 text-sm text-[#CB6600] font-bold text-center">{errors.form}</p>
               )}
             </div>
           )}
@@ -276,6 +266,16 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               <a href="#" className="text-xs font-bold text-[#8C4905] hover:text-[#CB6600] transition-colors cursor-pointer">
                 Quên mật khẩu?
               </a>
+            </div>
+          )}
+
+          {/* Form Level Message (Error or Success) */}
+          {errors.form && (
+            <div className="mt-2 text-center">
+              <p className={`text-sm font-bold ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#CB6600]'
+                }`}>
+                {errors.form}
+              </p>
             </div>
           )}
 
