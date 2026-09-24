@@ -23,7 +23,11 @@ export function LessonCard({ id, title, description, thumbnail, progress, onClic
     if (onClick) {
       onClick();
     } else {
-      router.push(`/dashboard/chat`); // Mặc định: vào trang Chat
+      // Khi click vào bài học Toán học, đặt active chat về bài Toán để mở đúng đoạn chat
+      if (typeof window !== "undefined") {
+        localStorage.setItem("socratic_active_chat_id", "c-math-1");
+      }
+      router.push(`/dashboard/chat`);
     }
   };
 
