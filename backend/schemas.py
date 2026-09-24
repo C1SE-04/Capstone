@@ -29,6 +29,7 @@ class LogoutRequest(BaseModel):
     refresh_token: str
 
 class GeminiRequest(BaseModel):
+    session_id: str
     prompt: str
 
 from typing import Optional
