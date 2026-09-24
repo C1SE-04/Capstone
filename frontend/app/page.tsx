@@ -33,7 +33,7 @@ export default function Home() {
           {!session ? (
             <button
               onClick={() => setShowAuthForm(true)}
-              className="bg-[#F1CCA6] text-[#C1762A] font-bold py-2 px-6 rounded-lg hover:bg-[#F7AD62] hover:text-white transition-colors italic"
+              className="bg-[#F1CCA6] text-[#C1762A] font-bold py-2 px-6 rounded-lg hover:bg-[#F7AD62] hover:text-white transition-colors italic cursor-pointer"
             >
               đăng nhập
             </button>
@@ -49,7 +49,7 @@ export default function Home() {
               />
               <button
                 onClick={() => signOut()}
-                className="bg-[#C1762A] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#8C4905] transition-colors text-sm"
+                className="bg-[#C1762A] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#8C4905] transition-colors text-sm cursor-pointer"
               >
                 Đăng xuất
               </button>
@@ -73,7 +73,7 @@ export default function Home() {
         </div>
         <button 
           onClick={() => session ? router.push("/dashboard") : router.push("/try")}
-          className="bg-[#F1CCA6] text-[#8C4905] font-bold text-lg py-3 px-10 rounded-xl hover:bg-[#F7AD62] hover:text-white transition-all shadow-md transform hover:scale-105">
+          className="bg-[#F1CCA6] text-[#8C4905] font-bold text-lg py-3 px-10 rounded-xl hover:bg-[#F7AD62] hover:text-white transition-all shadow-md transform hover:scale-105 cursor-pointer">
           Dùng thử
         </button>
       </main>
