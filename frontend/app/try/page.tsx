@@ -66,8 +66,9 @@ export default function TryPage() {
     const botMsg: Message = { id: botId, role: "assistant", content: "" };
     setMessages((prev) => [...prev, botMsg]);
 
+    const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
     try {
-      const response = await fetch("http://localhost:8000/chat/orchestrator", {
+      const response = await fetch(`${BACKEND_URL}/chat/orchestrator`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
