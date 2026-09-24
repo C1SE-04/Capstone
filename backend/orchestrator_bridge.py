@@ -40,16 +40,17 @@ def process_query_with_orchestrator(
     - Lưu log vào DB (BackgroundTask).
     - Gọi agent_router để sinh văn bản (stream).
     """
-    # 1. Lưu tin nhắn của học sinh vào Database
-    user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query)
-    db.add(user_msg)
-    db.commit()
+    history_text = ""
+    # Lưu tin nhắn và lấy lịch sử (Bao gồm cả Guest vì giờ mỗi Guest 1 phòng)
+    if session_id:
+        # 1. Lưu tin nhắn của học sinh vào Database
+        user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query)
+        db.add(user_msg)
+        db.commit()
 
-    # 2. Lấy 5 tin nhắn ngữ cảnh (bao gồm cả tin nhắn vừa lưu)
-    chat_history = get_recent_chat_context(db, session_id, limit=5)
-
-    # Format lịch sử thành chuỗi văn bản cho AI dễ đọc
-    history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in chat_history])
+        # 2. Lấy 5 tin nhắn ngữ cảnh (bao gồm cả tin nhắn vừa lưu)
+        chat_history = get_recent_chat_context(db, session_id, limit=5)
+        history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in chat_history])
 
     result = _agent.route_sync(
         latest_message=user_query,
@@ -80,7 +81,7 @@ def process_query_with_orchestrator(
         yield f"event: message\ndata: {json.dumps(chunk_data, ensure_ascii=False)}\n\n"
 
     # Lưu tin nhắn trả lời của AI vào Database
-    if full_reply:
+    if full_reply and session_id:
         ai_msg = models.Message(session_id=session_id, sender_type="AGENT_TUTOR", content=full_reply)
         db.add(ai_msg)
         db.commit()

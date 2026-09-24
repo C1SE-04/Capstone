@@ -19,7 +19,7 @@ def chat_with_orchestrator(
     db: Session = Depends(get_db)
 ):
     # --- AUTO-CREATE GUEST SESSION IF NEEDED ---
-    if request.session_id == "guest-try-session":
+    if request.session_id and request.session_id.startswith("guest-"):
         import models
         guest_user = db.query(models.User).filter(models.User.id == "guest-user-id").first()
         if not guest_user:
@@ -32,12 +32,12 @@ def chat_with_orchestrator(
             db.add(guest_user)
             db.commit()
             
-        guest_session = db.query(models.Session).filter(models.Session.id == "guest-try-session").first()
+        guest_session = db.query(models.Session).filter(models.Session.id == request.session_id).first()
         if not guest_session:
             guest_session = models.Session(
-                id="guest-try-session", 
+                id=request.session_id, 
                 user_id="guest-user-id", 
-                title="Chế độ dùng thử"
+                title="Chế độ dùng thử (Mới)"
             )
             db.add(guest_session)
             db.commit()
