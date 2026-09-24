@@ -129,12 +129,11 @@ npm run test:watch
 ## 🔧 Cài Đặt Local
 
 ### Backend
-```bash
+```powershell
 cd backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+python -m venv venv --without-pip
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\uvicorn main:app --reload --port 8000
 ```
 
 ### Frontend

@@ -1,6 +1,6 @@
 # models.py
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index
 from sqlalchemy.sql import func
 from database import Base
 
@@ -55,6 +55,11 @@ class Session(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # Composite index: tối ưu query lấy sessions của 1 user, sort theo mới nhất
+    __table_args__ = (
+        Index("ix_sessions_user_updated", "user_id", "updated_at"),
+    )
+
 class Message(Base):
     __tablename__ = "messages"
 
@@ -68,3 +73,8 @@ class Message(Base):
     sender_type = Column(String, nullable=False) # "USER", "AGENT_TUTOR", v.v.
     content = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Composite index: tối ưu query lấy tin nhắn trong 1 session, sort theo thứ tự thời gian
+    __table_args__ = (
+        Index("ix_messages_session_created", "session_id", "created_at"),
+    )

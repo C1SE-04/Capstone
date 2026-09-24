@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import models
 from database import engine
 
@@ -16,6 +17,20 @@ app = FastAPI(
     title="Socratic Chatbot API",
     description="Backend API cho Chatbot Socratic",
     version="1.0.0"
+)
+
+# Cấu hình CORS của team FE
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://socratickid.vercel.app",
+        "https://*.vercel.app",  # Cho phép cả preview deployments
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Đăng ký (include) các module API

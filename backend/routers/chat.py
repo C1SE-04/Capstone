@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 import google.generativeai as genai
 from sqlalchemy.orm import Session
 
-import schemas, orchestrator
+import schemas
+import agents.orchestrator as orchestrator
 from database import get_db
 
 router = APIRouter(tags=["Chat & AI"])
