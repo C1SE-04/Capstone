@@ -55,15 +55,7 @@ def chat_with_orchestrator(
             )
     # -------------------------------------------
     
-    # Lưu tin nhắn của user vào database
-    import models as _models
-    user_msg = _models.Message(
-        session_id=request.session_id,
-        sender_type="USER",
-        content=request.prompt
-    )
-    db.add(user_msg)
-    db.commit()
+
 
     return StreamingResponse(
         orchestrator_bridge.process_query_with_orchestrator(

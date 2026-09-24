@@ -61,7 +61,7 @@ class Session(Base):
         Index("ix_sessions_user_updated", "user_id", "updated_at"),
     )
 
-    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan")
+    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan", order_by="Message.created_at")
 
 class Message(Base):
     __tablename__ = "messages"

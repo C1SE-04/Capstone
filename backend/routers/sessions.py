@@ -40,3 +40,25 @@ def get_user_sessions(
     ).order_by(models.Session.updated_at.desc()).all()
     
     return sessions
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_session(
+    session_id: str,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Xóa một phòng chat (Session) và toàn bộ tin nhắn bên trong.
+    """
+    session = db.query(models.Session).filter(
+        models.Session.id == session_id,
+        models.Session.user_id == current_user["id"]
+    ).first()
+    
+    if not session:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Không tìm thấy phòng chat hoặc không có quyền truy cập.")
+        
+    db.delete(session)
+    db.commit()
+    return None
