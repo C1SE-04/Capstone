@@ -35,7 +35,7 @@ export default function Home() {
               onClick={() => setShowAuthForm(true)}
               className="bg-[#F1CCA6] text-[#C1762A] font-bold py-2 px-6 rounded-lg hover:bg-[#F7AD62] hover:text-white transition-colors italic cursor-pointer"
             >
-              đăng nhập
+              Đăng nhập
             </button>
           ) : (
             <div className="flex items-center gap-4">
