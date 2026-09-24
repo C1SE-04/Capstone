@@ -678,25 +678,29 @@ def process_query_with_orchestrator(
     selected = result["selected_agent"]
     target_agent = selected if selected.endswith("_AGENT") else selected + "_AGENT"
     reason = result["routing_scratchpad"]
+    task_description = result.get("task_description", "")
 
     print(f"[Orchestrator ⚡] {target_agent} | {reason}")
 
     # Lưu log ngầm
     background_tasks.add_task(save_orchestrator_log, db, user_query, target_agent, reason)
 
-    # Đưa sang router để xử lý tiếp
-    decision = {"target_agent": target_agent, "reason": reason}
-    final_result = agent_router(json.dumps(decision), user_query)
+    # 1. Yield quyết định của Orchestrator
+    decision = {"target_agent": target_agent, "reason": reason, "debug_context": history_text}
+    yield f"event: orchestrator\ndata: {json.dumps(decision, ensure_ascii=False)}\n\n"
 
-    # 4. Lưu tin nhắn trả lời của AI vào Database
-    ai_reply_content = final_result.get("reply", "")
-    if ai_reply_content:
-        ai_msg = models.Message(session_id=session_id, sender_type="AGENT_TUTOR", content=ai_reply_content)
+    # 2. Đưa sang router để sinh văn bản (stream)
+    full_reply = ""
+    for chunk in agent_router(target_agent, task_description, history_text, user_query):
+        full_reply += chunk
+        chunk_data = {"text": chunk}
+        yield f"event: message\ndata: {json.dumps(chunk_data, ensure_ascii=False)}\n\n"
+
+    # 3. Lưu tin nhắn trả lời của AI vào Database
+    if full_reply:
+        ai_msg = models.Message(session_id=session_id, sender_type="AGENT_TUTOR", content=full_reply)
         db.add(ai_msg)
         db.commit()
 
-    return {
-        "orchestrator_decision": decision,
-        "agent_response": final_result,
-        "debug_context": history_text
-    }
+    # 4. Đánh dấu kết thúc
+    yield "event: done\ndata: {}\n\n"

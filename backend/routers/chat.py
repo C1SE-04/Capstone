@@ -9,17 +9,22 @@ from database import get_db
 
 router = APIRouter(tags=["Chat & AI"])
 
+from fastapi.responses import StreamingResponse
+
 @router.post("/chat/orchestrator")
 def chat_with_orchestrator(
     request: schemas.GeminiRequest, 
     background_tasks: BackgroundTasks, 
     db: Session = Depends(get_db)
 ):
-    return orchestrator.process_query_with_orchestrator(
-        user_query=request.prompt, 
-        session_id=request.session_id, 
-        db=db, 
-        background_tasks=background_tasks
+    return StreamingResponse(
+        orchestrator.process_query_with_orchestrator(
+            user_query=request.prompt, 
+            session_id=request.session_id, 
+            db=db, 
+            background_tasks=background_tasks
+        ),
+        media_type="text/event-stream"
     )
 
 @router.post("/gemini/generate")
