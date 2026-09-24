@@ -116,7 +116,7 @@ export default function Home() {
       </section>
 
       {/* Bottom Footer Area */}
-      <footer className="w-full bg-[#C1762A] text-[#F7ECE1] py-12 px-8 mt-auto">
+      <footer id="contact" className="w-full bg-[#C1762A] text-[#F7ECE1] py-12 px-8 mt-auto">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Cột 1: Thương hiệu & Thông điệp */}
           <div className="flex flex-col gap-4">

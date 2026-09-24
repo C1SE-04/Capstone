@@ -9,7 +9,6 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const GUEST_SESSION_ID = "guest-try-session";
 
 const SUGGESTIONS = [
   "Phân số là gì?",
@@ -43,6 +42,16 @@ export default function TryPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const [sessionId, setSessionId] = useState("");
+
+  useEffect(() => {
+    let sid = sessionStorage.getItem("guest_session_id");
+    if (!sid) {
+      sid = "guest-" + crypto.randomUUID();
+      sessionStorage.setItem("guest_session_id", sid);
+    }
+    setSessionId(sid);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -72,7 +81,7 @@ export default function TryPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: GUEST_SESSION_ID,
+          session_id: sessionId,
           prompt: trimmed,
           problem_context: null, // Chế độ dùng thử: không có bài toán cụ thể
         }),
