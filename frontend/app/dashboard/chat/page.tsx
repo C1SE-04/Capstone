@@ -155,7 +155,8 @@ export default function ChatPage() {
   };
 
   // Handler: Xóa một đoạn chat khỏi lịch sử
-  const handleDeleteChat = (id: string) => {
+  const handleDeleteChat = async (id: string) => {
+    // 1. Cập nhật state UI ngay lập tức
     const updated = conversations.filter((c) => c.id !== id);
     setConversations(updated);
     if (activeChatId === id) {
@@ -164,6 +165,23 @@ export default function ChatPage() {
       } else {
         setActiveChatId(null);
       }
+    }
+
+    // 2. Gọi API để xóa trên Database (nếu đã đăng nhập)
+    try {
+      const { getSession } = await import("next-auth/react");
+      const nextAuthSession = await getSession();
+      const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+      
+      if (token) {
+        const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+        await fetch(`${BACKEND_URL}/sessions/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+    } catch (e) {
+      console.error("Lỗi xóa session trên Server:", e);
     }
   };
 
