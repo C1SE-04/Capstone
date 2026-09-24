@@ -40,12 +40,22 @@ class GeminiRequest(BaseModel):
 class SessionCreate(BaseModel):
     title: Optional[str] = "Phòng chat mới"
 
+class MessageResponse(BaseModel):
+    id: str
+    sender_type: str
+    content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class SessionResponse(BaseModel):
     id: str
     user_id: str
     title: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    messages: list[MessageResponse] = []
 
     class Config:
         from_attributes = True

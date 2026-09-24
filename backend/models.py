@@ -1,6 +1,7 @@
 # models.py
 import uuid
 from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 
@@ -60,6 +61,8 @@ class Session(Base):
         Index("ix_sessions_user_updated", "user_id", "updated_at"),
     )
 
+    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan")
+
 class Message(Base):
     __tablename__ = "messages"
 
@@ -78,3 +81,5 @@ class Message(Base):
     __table_args__ = (
         Index("ix_messages_session_created", "session_id", "created_at"),
     )
+    
+    session = relationship("Session", back_populates="messages")

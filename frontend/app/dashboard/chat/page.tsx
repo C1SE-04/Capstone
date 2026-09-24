@@ -73,43 +73,70 @@ export default function ChatPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getOnlineServerSnapshot);
 
-  // 1. Khôi phục trạng thái từ localStorage khi người dùng F5 hoặc truy cập lại
+  // 1. Khôi phục trạng thái từ DB khi người dùng truy cập
   useEffect(() => {
-    const timer = setTimeout(() => {
+    let isMounted = true;
+    const fetchSessions = async () => {
       try {
-        const savedConvs = localStorage.getItem(STORAGE_KEY_CONVERSATIONS);
-        const savedActiveId = localStorage.getItem(STORAGE_KEY_ACTIVE_ID);
-
-        if (savedConvs) {
-          const parsed = JSON.parse(savedConvs);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setConversations(parsed);
+        const { getSession } = await import("next-auth/react");
+        const nextAuthSession = await getSession();
+        const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+        
+        if (token) {
+          const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+          const res = await fetch(`${BACKEND_URL}/sessions`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          if (res.ok && isMounted) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              // Convert backend data to frontend Conversation format
+              const loadedConvs = data.map((sess: any) => ({
+                id: sess.id,
+                title: sess.title || "Phòng chat",
+                date: new Date(sess.updated_at).toLocaleDateString(),
+                messages: (sess.messages || []).map((m: any) => ({
+                  id: m.id,
+                  role: m.sender_type === "USER" ? "user" : "assistant",
+                  content: m.content
+                }))
+              }));
+              setConversations(loadedConvs);
+              
+              // Nếu activeChatId không nằm trong danh sách load về, set lại cái đầu tiên
+              const activeIdExists = loadedConvs.some((c: any) => c.id === activeChatId);
+              if (!activeIdExists && loadedConvs.length > 0) {
+                setActiveChatId(loadedConvs[0].id);
+              }
+            } else {
+              // Nếu user chưa có session nào ở DB, có thể tạo 1 session mặc định hoặc để trống
+              // Nhưng API backend chưa tạo, tạm thời giữ nguyên hoặc khởi tạo trống
+              setConversations([]);
+              setActiveChatId(null);
+            }
           }
         }
-
-        if (savedActiveId !== null) {
-          setActiveChatId(savedActiveId === "" ? null : savedActiveId);
-        }
       } catch (e) {
-        console.error("Lỗi đọc dữ liệu từ localStorage:", e);
+        console.error("Lỗi đọc dữ liệu từ Server:", e);
       } finally {
-        setIsHydrated(true);
+        if (isMounted) setIsHydrated(true);
       }
-    }, 0);
-
-    return () => clearTimeout(timer);
+    };
+    fetchSessions();
+    
+    return () => { isMounted = false; };
   }, []);
 
-  // 2. Lưu vào localStorage mỗi khi conversations hoặc activeChatId thay đổi
+  // 2. localStorage backup for active chat state (optional, can be removed)
   useEffect(() => {
     if (!isHydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(conversations));
       localStorage.setItem(STORAGE_KEY_ACTIVE_ID, activeChatId || "");
     } catch (e) {
       console.error("Lỗi ghi dữ liệu vào localStorage:", e);
     }
-  }, [conversations, activeChatId, isHydrated]);
+  }, [activeChatId, isHydrated]);
 
   // Cuộc trò chuyện hiện tại đang được chọn
   const currentConversation = conversations.find((c) => c.id === activeChatId);

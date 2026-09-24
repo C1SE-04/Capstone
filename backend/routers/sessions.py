@@ -32,7 +32,10 @@ def get_user_sessions(
     Lấy danh sách tất cả phòng chat (Session) của người dùng đang đăng nhập,
     sắp xếp theo thời gian cập nhật mới nhất.
     """
-    sessions = db.query(models.Session).filter(
+    from sqlalchemy.orm import joinedload
+    sessions = db.query(models.Session).options(
+        joinedload(models.Session.messages)
+    ).filter(
         models.Session.user_id == current_user["id"]
     ).order_by(models.Session.updated_at.desc()).all()
     
