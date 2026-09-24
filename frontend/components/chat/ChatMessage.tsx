@@ -14,7 +14,7 @@ import { AlertCircle, RotateCcw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Message } from "@/types/chat";
 
-export interface MessageProps extends Message {}
+export type MessageProps = Message;
 
 interface ChatMessageProps {
   message: Message;

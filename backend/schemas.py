@@ -1,5 +1,7 @@
 # schemas.py
 from pydantic import BaseModel, EmailStr
+from typing import Optional
+from datetime import datetime
 
 # Dữ liệu gửi lên khi Đăng ký & Đăng nhập
 class AuthInput(BaseModel):
@@ -31,9 +33,9 @@ class LogoutRequest(BaseModel):
 class GeminiRequest(BaseModel):
     session_id: str
     prompt: str
+    problem_context: Optional[dict] = None  # Ngữ cảnh bài toán (correctSolution, v.v.) — dùng cho Trụ 1
 
-from typing import Optional
-from datetime import datetime
+
 
 class SessionCreate(BaseModel):
     title: Optional[str] = "Phòng chat mới"

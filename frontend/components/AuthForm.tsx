@@ -113,8 +113,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         setErrors({ form: "✅ Đăng ký thành công! Vui lòng đăng nhập." });
         setIsLoading(false);
       }
-    } catch (err: any) {
-      setErrors({ form: err.message });
+    } catch (err) {
+      setErrors({ form: err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định" });
       setIsLoading(false);
     }
   };

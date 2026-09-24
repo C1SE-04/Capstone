@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { Conversation, Message } from "@/types/chat";
@@ -44,6 +44,23 @@ Bạn có muốn làm thử một bài tập ví dụ không?`,
 const STORAGE_KEY_CONVERSATIONS = "socratic_conversations";
 const STORAGE_KEY_ACTIVE_ID = "socratic_active_chat_id";
 
+function subscribeOnline(callback: () => void) {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+function getOnlineSnapshot() {
+  return typeof navigator !== "undefined" ? navigator.onLine : true;
+}
+
+function getOnlineServerSnapshot() {
+  return true;
+}
+
 export default function ChatPage() {
   const router = useRouter();
 
@@ -54,46 +71,33 @@ export default function ChatPage() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
-
-  // Theo dõi trạng thái kết nối mạng của người dùng
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setIsOnline(navigator.onLine);
-
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
+  const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getOnlineServerSnapshot);
 
   // 1. Khôi phục trạng thái từ localStorage khi người dùng F5 hoặc truy cập lại
   useEffect(() => {
-    try {
-      const savedConvs = localStorage.getItem(STORAGE_KEY_CONVERSATIONS);
-      const savedActiveId = localStorage.getItem(STORAGE_KEY_ACTIVE_ID);
+    const timer = setTimeout(() => {
+      try {
+        const savedConvs = localStorage.getItem(STORAGE_KEY_CONVERSATIONS);
+        const savedActiveId = localStorage.getItem(STORAGE_KEY_ACTIVE_ID);
 
-      if (savedConvs) {
-        const parsed = JSON.parse(savedConvs);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setConversations(parsed);
+        if (savedConvs) {
+          const parsed = JSON.parse(savedConvs);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setConversations(parsed);
+          }
         }
-      }
 
-      if (savedActiveId !== null) {
-        setActiveChatId(savedActiveId === "" ? null : savedActiveId);
+        if (savedActiveId !== null) {
+          setActiveChatId(savedActiveId === "" ? null : savedActiveId);
+        }
+      } catch (e) {
+        console.error("Lỗi đọc dữ liệu từ localStorage:", e);
+      } finally {
+        setIsHydrated(true);
       }
-    } catch (e) {
-      console.error("Lỗi đọc dữ liệu từ localStorage:", e);
-    } finally {
-      setIsHydrated(true);
-    }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, []);
 
   // 2. Lưu vào localStorage mỗi khi conversations hoặc activeChatId thay đổi
@@ -139,12 +143,12 @@ export default function ChatPage() {
   // Handler: Thử kết nối lại
   const handleReconnect = () => {
     if (typeof window !== "undefined") {
-      setIsOnline(navigator.onLine);
+      window.dispatchEvent(new Event(navigator.onLine ? "online" : "offline"));
     }
   };
 
   // Hàm xử lý phản hồi từ AI (có xử lý lỗi mạng & trạng thái tin nhắn)
-  const triggerBotResponse = (targetConversationId: string, userMessageId: string, userContent: string) => {
+  const triggerBotResponse = async (targetConversationId: string, userMessageId: string, userContent: string) => {
     // Nếu mất mạng: chuyển ngay trạng thái tin nhắn thành "error"
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setConversations((prev) =>
@@ -165,9 +169,8 @@ export default function ChatPage() {
 
     setIsTyping(true);
 
-    // Giả lập bot Socratic Kid phản hồi (hoặc gọi API)
-    setTimeout(() => {
-      // Khi gửi thành công, chuyển status user message thành "sent"
+    try {
+      // Khi bắt đầu gửi thì đổi status của tin nhắn user thành "sent"
       setConversations((prev) =>
         prev.map((c) =>
           c.id === targetConversationId
@@ -181,25 +184,109 @@ export default function ChatPage() {
         )
       );
 
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
+      // Tạo tin nhắn AI rỗng ban đầu để chuẩn bị stream
+      const botMessageId = (Date.now() + 1).toString();
+      const initialBotMsg: Message = {
+        id: botMessageId,
         role: "assistant",
-        content: `Tuyệt vời! Về câu hỏi: "${userContent}", bạn hãy suy nghĩ xem bước đầu tiên chúng ta cần xác định các hệ số hoặc công thức liên quan là gì nhé? Hãy thử nêu suy nghĩ của bạn!`,
+        content: "",
       };
 
       setConversations((prev) =>
         prev.map((c) =>
           c.id === targetConversationId
-            ? { ...c, messages: [...c.messages, botResponse] }
+            ? { ...c, messages: [...c.messages, initialBotMsg] }
             : c
         )
       );
+
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+
+      // Lấy access_token từ session NextAuth (nếu đang đăng nhập)
+      let authHeader: Record<string, string> = {};
+      try {
+        const { getSession } = await import("next-auth/react");
+        const nextAuthSession = await getSession();
+        const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+        if (token) {
+          authHeader = { Authorization: `Bearer ${token}` };
+        }
+      } catch {
+        // Không có session -> chat như khách
+      }
+
+      const response = await fetch(`${BACKEND_URL}/chat/orchestrator`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({
+          session_id: targetConversationId,
+          prompt: userContent,
+          problem_context: null,
+        }),
+      });
+
+      if (!response.body) throw new Error("Không có phản hồi từ server");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let aiText = "";
+      let isDone = false;
+
+      while (!isDone) {
+        const { value, done } = await reader.read();
+        isDone = done;
+        if (value) {
+          const chunkStr = decoder.decode(value, { stream: true });
+          const lines = chunkStr.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const dataStr = line.slice(6).trim();
+              if (dataStr === "" || dataStr === "{}") continue;
+              try {
+                const dataObj = JSON.parse(dataStr);
+                if (dataObj.text) {
+                  aiText += dataObj.text;
+                  setConversations((prev) =>
+                    prev.map((c) =>
+                      c.id === targetConversationId
+                        ? {
+                            ...c,
+                            messages: c.messages.map((m) =>
+                              m.id === botMessageId ? { ...m, content: aiText } : m
+                            ),
+                          }
+                        : c
+                    )
+                  );
+                }
+              } catch {
+                // Ignore parse error on partial chunks
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Lỗi khi kết nối backend:", error);
+      const errorMsg: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: "Xin lỗi, đã có lỗi kết nối tới máy chủ.",
+      };
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === targetConversationId
+            ? { ...c, messages: [...c.messages, errorMsg] }
+            : c
+        )
+      );
+    } finally {
       setIsTyping(false);
-    }, 1200);
+    }
   };
 
   // Handler: Gửi prompt trong khung chat
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = async (content: string) => {
     const messageId = Date.now().toString();
     const userMsg: Message = {
       id: messageId,
@@ -211,12 +298,42 @@ export default function ChatPage() {
     let targetId = activeChatId;
 
     if (!targetId) {
-      // Trường hợp New Chat: tạo phiên hội thoại mới và thêm vào Sidebar
-      targetId = "c-" + Date.now();
+      // Trường hợp New Chat: cần tạo Session trên DB trước, rồi mới chat
       const title =
         content.trim().length > 25
           ? content.trim().slice(0, 25) + "..."
           : content.trim();
+
+      // Tạo session thật trên DB (gọi POST /sessions)
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      let realSessionId: string | null = null;
+
+      try {
+        const { getSession } = await import("next-auth/react");
+        const nextAuthSession = await getSession();
+        const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+
+        if (token) {
+          // Người dùng đã đăng nhập → tạo session trên DB
+          const res = await fetch(`${BACKEND_URL}/sessions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ title }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            realSessionId = data.id;
+          }
+        }
+      } catch (e) {
+        console.error("Không thể tạo session trên DB:", e);
+      }
+
+      // Nếu chưa đăng nhập hoặc tạo session thất bại → dùng ID local tạm thời
+      targetId = realSessionId || ("c-" + Date.now());
 
       const newConv: Conversation = {
         id: targetId,

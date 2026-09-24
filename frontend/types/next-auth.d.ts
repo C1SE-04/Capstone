@@ -1,9 +1,10 @@
-import NextAuth, { DefaultSession, DefaultUser } from "next-auth";
-import { JWT, DefaultJWT } from "next-auth/jwt";
+import type { DefaultSession, DefaultUser } from "next-auth";
+import type { DefaultJWT } from "next-auth/jwt";
 
 // 1. Mở rộng session và user của next-auth
 declare module "next-auth" {
   interface Session {
+    access_token?: string;
     user: {
       id: string;
       role?: string;
@@ -13,6 +14,7 @@ declare module "next-auth" {
   interface User extends DefaultUser {
     id: string;
     role?: string;
+    access_token?: string;
   }
 }
 
@@ -21,5 +23,6 @@ declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     id: string;
     role?: string;
+    access_token?: string;
   }
 }
