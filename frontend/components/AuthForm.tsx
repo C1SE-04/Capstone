@@ -14,13 +14,16 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<'student' | 'monitor'>('student');
+  const [role, setRole] = useState<'student' | 'monitor' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
   const [errors, setErrors] = useState<{
     email?: string;
     password?: string;
     confirmPassword?: string;
+    role?: string;
     form?: string;
   }>({});
 
@@ -57,6 +60,11 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
       hasError = true;
     }
 
+    if (!isLoginMode && !role) {
+      newErrors.role = "Vui lòng chọn vai trò";
+      hasError = true;
+    }
+
     if (hasError) {
       setErrors(newErrors);
     }
@@ -87,9 +95,12 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           throw new Error("Sai email hoặc mật khẩu");
         }
 
-        if (onClose) onClose();
-        router.push("/dashboard");
-        // Không gọi setIsLoading(false) để giữ vòng xoay loading mượt mà khi redirect
+        setToastMessage("Đăng nhập thành công!");
+        setShowSuccessToast(true);
+        setTimeout(() => {
+          if (onClose) onClose();
+          router.push("/dashboard");
+        }, 1500);
       } else {
         // Tích hợp API Đăng ký
         const endpoint = role === 'student' ? '/register/student' : '/register/monitor';
@@ -110,7 +121,10 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         setEmail("");
         setPassword("");
         setConfirmPassword("");
-        setErrors({ form: "✅ Đăng ký thành công! Vui lòng đăng nhập." });
+        setRole(null);
+        setToastMessage("Đăng ký thành công! Vui lòng đăng nhập.");
+        setShowSuccessToast(true);
+        setTimeout(() => setShowSuccessToast(false), 3000);
         setIsLoading(false);
       }
     } catch (err) {
@@ -121,6 +135,18 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <div className="fixed top-4 right-4 z-[60] bg-white border-l-4 border-green-500 shadow-lg rounded-lg px-6 py-4 animate-fade-in-down flex items-center gap-3">
+          <div className="bg-green-100 rounded-full p-1">
+            <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <p className="text-gray-800 font-medium">{toastMessage}</p>
+        </div>
+      )}
+
       {/* Background form nhạt hơn F1CCA6 để lỗi dễ đọc hơn */}
       <div className="relative w-full max-w-md bg-[#F1CCA6] rounded-3xl overflow-hidden p-8 shadow-xl">
 
@@ -129,7 +155,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 text-[#8C4905] hover:text-[#CB6600] transition-colors"
+            className="absolute top-4 right-4 p-2 text-[#8C4905] hover:text-[#CB6600] transition-colors cursor-pointer"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -181,9 +207,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             )}
 
             {/* Form Level Message (Error or Success) */}
-            {errors.form && isLoginMode && (
-              <p className={`mt-2 text-sm font-bold text-center ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#CB6600]'
-                }`}>{errors.form}</p>
+            {errors.form && (
+              <p className="mt-2 text-sm font-bold text-center text-[#CB6600]">{errors.form}</p>
             )}
           </div>
 
@@ -216,7 +241,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               <button
                 type="button"
                 onClick={() => setRole('student')}
-                className={`flex-1 py-2 rounded-xl font-bold transition-all ${role === 'student'
+                className={`flex-1 py-2 rounded-xl font-bold transition-all cursor-pointer ${role === 'student'
                     ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
                     : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
                   }`}
@@ -227,7 +252,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               <button
                 type="button"
                 onClick={() => setRole('monitor')}
-                className={`flex-1 py-2 rounded-xl font-bold transition-all ${role === 'monitor'
+                className={`flex-1 py-2 rounded-xl font-bold transition-all cursor-pointer ${role === 'monitor'
                     ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
                     : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
                   }`}
@@ -237,15 +262,18 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               </button>
             </div>
           )}
+          {errors.role && !isLoginMode && (
+            <p className="mt-1 text-sm text-[#CB6600] font-bold text-center">{errors.role}</p>
+          )}
 
           {/* Login Options */}
           {isLoginMode && (
             <div className="flex items-center justify-between mt-2 px-1">
               <label className="flex items-center text-xs font-bold text-[#8C4905] cursor-pointer">
-                <input type="checkbox" className="mr-2 rounded text-[#8C4905] focus:ring-[#F7AD62]" disabled={isLoading} />
+                <input type="checkbox" className="mr-2 rounded text-[#8C4905] focus:ring-[#F7AD62] cursor-pointer" disabled={isLoading} />
                 Nhớ tôi
               </label>
-              <a href="#" className="text-xs font-bold text-[#8C4905] hover:text-[#CB6600] transition-colors">
+              <a href="#" className="text-xs font-bold text-[#8C4905] hover:text-[#CB6600] transition-colors cursor-pointer">
                 Quên mật khẩu?
               </a>
             </div>
@@ -255,7 +283,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full mt-4 bg-[#000000] text-[#F7ECE1] font-bold py-3 rounded-xl hover:bg-gray-800 transition-colors flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-md"
+            className="w-full mt-4 bg-[#000000] text-[#F7ECE1] font-bold py-3 rounded-xl hover:bg-gray-800 transition-colors flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-md cursor-pointer"
           >
             {isLoading ? (
               <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -274,7 +302,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                 type="button"
                 disabled={isLoading}
                 onClick={() => signIn("google")}
-                className="w-12 h-12 bg-[#F7ECE1] rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-md disabled:opacity-70 disabled:cursor-not-allowed p-2"
+                className="w-12 h-12 bg-[#F7ECE1] rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-md disabled:opacity-70 disabled:cursor-not-allowed p-2 cursor-pointer"
               >
                 <img src="/google-logo.svg" alt="Google Login" className="w-full h-full object-contain" />
               </button>
@@ -289,7 +317,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               type="button"
               onClick={toggleMode}
               disabled={isLoading}
-              className="text-[#CB6600] hover:underline focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed ml-1"
+              className="text-[#CB6600] hover:underline focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed ml-1 cursor-pointer"
             >
               {isLoginMode ? "Đăng ký" : "Đăng nhập"}
             </button>
