@@ -7,40 +7,6 @@ import { Conversation, Message } from "@/types/chat";
 import { Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-// Dữ liệu ban đầu mặc định cho bài học Toán học: Đại số (theo đúng yêu cầu & hình ảnh)
-const defaultMathConversation: Conversation = {
-  id: "c-math-1",
-  title: "Toán học: Đại số",
-  date: "Today",
-  messages: [
-    {
-      id: "m1",
-      role: "assistant",
-      content: `Tất nhiên rồi! Dưới đây là phương trình bậc 2 dạng tổng quát:
-
-$$ax^2 + bx + c = 0$$ (với $a \\neq 0$)
-
-Để giải phương trình này, chúng ta tính biệt thức Delta ($\\Delta$):
-$$\\Delta = b^2 - 4ac$$
-
-Dựa vào $\\Delta$, ta có các trường hợp sau:
-1. Nếu $\\Delta < 0$: Phương trình vô nghiệm.
-2. Nếu $\\Delta = 0$: Phương trình có nghiệm kép $x = -\\frac{b}{2a}$.
-3. Nếu $\\Delta > 0$: Phương trình có 2 nghiệm phân biệt:
-$$x_{1,2} = \\frac{-b \\pm \\sqrt{\\Delta}}{2a}$$
-
-**Bảng tóm tắt:**
-| $\\Delta$ | Số nghiệm |
-| :--- | :--- |
-| $< 0$ | 0 |
-| $= 0$ | 1 (nghiệm kép) |
-| $> 0$ | 2 (phân biệt) |
-
-Bạn có muốn làm thử một bài tập ví dụ không?`,
-    },
-  ],
-};
-
 const STORAGE_KEY_CONVERSATIONS = "socratic_conversations";
 const STORAGE_KEY_ACTIVE_ID = "socratic_active_chat_id";
 
@@ -64,9 +30,9 @@ function getOnlineServerSnapshot() {
 export default function ChatPage() {
   const router = useRouter();
 
-  // Khởi tạo state với dữ liệu mặc định ban đầu
-  const [conversations, setConversations] = useState<Conversation[]>([defaultMathConversation]);
-  const [activeChatId, setActiveChatId] = useState<string | null>("c-math-1");
+  // Khởi tạo state trống để đợi load từ DB
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -104,10 +70,14 @@ export default function ChatPage() {
               }));
               setConversations(loadedConvs);
               
-              // Nếu activeChatId không nằm trong danh sách load về, set lại cái đầu tiên
-              const activeIdExists = loadedConvs.some((c: any) => c.id === activeChatId);
-              if (!activeIdExists && loadedConvs.length > 0) {
+              // Khôi phục activeChatId từ localStorage nếu có
+              const savedActiveId = localStorage.getItem(STORAGE_KEY_ACTIVE_ID);
+              if (savedActiveId && loadedConvs.some((c: any) => c.id === savedActiveId)) {
+                setActiveChatId(savedActiveId);
+              } else if (loadedConvs.length > 0) {
                 setActiveChatId(loadedConvs[0].id);
+              } else {
+                setActiveChatId(null);
               }
             } else {
               // Nếu user chưa có session nào ở DB, có thể tạo 1 session mặc định hoặc để trống
@@ -427,6 +397,17 @@ export default function ChatPage() {
 
     triggerBotResponse(activeChatId, messageId, content);
   };
+
+  if (!isHydrated) {
+    return (
+      <div className="flex h-screen w-screen bg-[#F7ECE1] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-[#8C4905] border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-[#8C4905] font-medium">Đang tải dữ liệu...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen bg-[#F7ECE1] overflow-hidden font-sans">
