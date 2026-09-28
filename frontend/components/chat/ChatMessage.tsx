@@ -3,6 +3,7 @@
  * Mô tả: Component chịu trách nhiệm render từng dòng tin nhắn (bong bóng chat).
  * Hỗ trợ render Markdown và các công thức toán học (KaTeX) đối với tin nhắn từ AI (Assistant).
  * Tin nhắn của người dùng sẽ hiển thị dạng văn bản thô, lệch về bên phải.
+ * US4.1: Hiển thị 2 nút "Đã hiểu" / "Chưa hiểu" sau tin nhắn cuối cùng của AI.
  */
 "use client";
 
@@ -13,15 +14,32 @@ import rehypeKatex from "rehype-katex"; // Biến đổi cú pháp toán học t
 import { AlertCircle, RotateCcw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Message } from "@/types/chat";
+import { UnderstandingButtons } from "./UnderstandingButtons";
 
 export type MessageProps = Message;
 
 interface ChatMessageProps {
   message: Message;
   onRetry?: (messageId: string, content: string) => void;
+  /** US4.1: Cac callback chi truyen vao tin nhan AI cuoi cung de hien nut Da hieu/Chua hieu */
+  onUnderstood?: () => void;
+  onNotUnderstood?: () => void;
+  onSendExplanation?: (text: string) => void;
+  /** Truyen xuong de disable nut khi AI dang xu ly */
+  isAiLoading?: boolean;
+  /** US4.1: So lan nhan Chua hieu (tu ChatPage, khong bi reset khi remount) */
+  notUnderstoodCount?: number;
 }
 
-export function ChatMessage({ message, onRetry }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  onRetry,
+  onUnderstood,
+  onNotUnderstood,
+  onSendExplanation,
+  isAiLoading,
+  notUnderstoodCount = 0,
+}: ChatMessageProps) {
   // Biến cờ kiểm tra xem tin nhắn có phải của user hay không
   const isUser = message.role === "user";
   const isError = message.status === "error";
@@ -76,6 +94,17 @@ export function ChatMessage({ message, onRetry }: ChatMessageProps) {
             </div>
           )}
         </div>
+
+        {/* US4.1: Nut Da hieu / Chua hieu - chi hien duoi tin nhan cuoi cung cua AI */}
+        {!isUser && onUnderstood && onNotUnderstood && onSendExplanation && (
+          <UnderstandingButtons
+            onUnderstood={onUnderstood}
+            onNotUnderstood={onNotUnderstood}
+            onSendExplanation={onSendExplanation}
+            isLoading={isAiLoading}
+            notUnderstoodCount={notUnderstoodCount}
+          />
+        )}
 
         {/* Thông báo lỗi & nút Thử lại khi tin nhắn gửi thất bại do mạng lag / offline */}
         {isUser && isError && (
