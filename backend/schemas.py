@@ -34,6 +34,26 @@ class GeminiRequest(BaseModel):
     session_id: str
     prompt: str
     problem_context: Optional[dict] = None  # Ngữ cảnh bài toán (correctSolution, v.v.) — dùng cho Trụ 1
+    # answer_status: FE gửi lên để BE biết học sinh vừa trả lời đúng hay sai
+    # Các giá trị hợp lệ: None (chưa biết), "correct" (đúng), "wrong" (sai)
+    answer_status: Optional[str] = None
+
+
+class ComprehensionRequest(BaseModel):
+    """Request gửi lên khi học sinh bấm nút 'Đã hiểu' hoặc 'Chưa hiểu'."""
+    session_id: str
+    understood: bool  # True = Đã hiểu, False = Chưa hiểu
+
+
+class SessionStatsResponse(BaseModel):
+    """Trả về số liệu học tập của 1 session cho FE."""
+    session_id: str
+    consecutive_wrong_count: int
+    hint_count: int
+    not_understood_count: int
+
+    class Config:
+        from_attributes = True
 
 
 

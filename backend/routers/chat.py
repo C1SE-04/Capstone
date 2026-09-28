@@ -62,8 +62,49 @@ def chat_with_orchestrator(
             db=db, 
             background_tasks=background_tasks,
             problem_context=request.problem_context,
+            answer_status=request.answer_status,  # Đưa trạng thái đúng/sai của học sinh vào
         ),
         media_type="text/event-stream"
+    )
+
+
+@router.post("/chat/comprehension")
+def comprehension_response(
+    request: schemas.ComprehensionRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Xử lý khi học sinh bấm nút 'Đã hiểu' hoặc 'Chưa hiểu'.
+    - understood=True  → ghi nhận, kết thúc.
+    - understood=False → tăng bộ đếm not_understood_count, AI giải thích lại (stream).
+    """
+    import models as _models
+    existing = db.query(_models.Session).filter(_models.Session.id == request.session_id).first()
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Session '{request.session_id}' không tồn tại.")
+
+    return StreamingResponse(
+        orchestrator_bridge.process_comprehension_response(
+            session_id=request.session_id,
+            understood=request.understood,
+            db=db,
+        ),
+        media_type="text/event-stream"
+    )
+
+
+@router.get("/chat/stats/{session_id}", response_model=schemas.SessionStatsResponse)
+def get_session_stats(
+    session_id: str,
+    db: Session = Depends(get_db)
+):
+    """Lấy bộ đếm học tập hiện tại của 1 session."""
+    stats = orchestrator_bridge.get_or_create_session_stats(db, session_id)
+    return schemas.SessionStatsResponse(
+        session_id=session_id,
+        consecutive_wrong_count=stats.consecutive_wrong_count,
+        hint_count=stats.hint_count,
+        not_understood_count=stats.not_understood_count,
     )
 
 @router.post("/gemini/generate")

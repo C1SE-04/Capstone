@@ -1,6 +1,6 @@
 # models.py
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index, Integer
 from sqlalchemy.sql import func
 from database import Base
 
@@ -78,3 +78,26 @@ class Message(Base):
     __table_args__ = (
         Index("ix_messages_session_created", "session_id", "created_at"),
     )
+
+
+class SessionStats(Base):
+    """Bộ đếm hành vi học tập của học sinh trong từng session chat."""
+    __tablename__ = "session_stats"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    session_id = Column(
+        String,
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,  # 1 session chỉ có 1 bộ stats
+        index=True
+    )
+    # Số lần học sinh trả lời sai liên tiếp trong bài toán hiện tại
+    # Reset về 0 khi học sinh trả lời đúng
+    consecutive_wrong_count = Column(Integer, default=0, nullable=False)
+    # Số lần hệ thống đã đưa ra gợi ý (hint) trong bài toán hiện tại
+    # Reset về 0 khi học sinh trả lời đúng
+    hint_count = Column(Integer, default=0, nullable=False)
+    # Tổng số lần học sinh bấm "Chưa hiểu" trong toàn session
+    not_understood_count = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
