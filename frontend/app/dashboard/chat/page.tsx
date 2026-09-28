@@ -544,7 +544,7 @@ export default function ChatPage() {
             </button>
             <div
               className="flex items-center gap-2 cursor-pointer"
-              onClick={() => router.push("/dashboard")}
+              onClick={() => router.push("/")}
             >
               <div className="w-8 h-8 bg-[#D9D9D9] rounded-lg flex items-center justify-center text-[#8C4905] font-bold text-xs shadow-inner">
                 SK

@@ -69,7 +69,7 @@ export function ChatSidebar({
         <div className="p-4 flex flex-col gap-4">
           <div
             className="flex items-center gap-3 mb-2 cursor-pointer"
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.push("/")}
           >
             <div className="w-10 h-10 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold text-sm shadow-inner">
               SK
@@ -84,7 +84,7 @@ export function ChatSidebar({
             className="w-full flex items-center justify-center gap-2 py-3 bg-white text-[#8C4905] rounded-2xl font-bold shadow-sm hover:shadow transition-all border border-[#F1CCA6]"
           >
             <Plus size={18} />
-            new chat
+            New chat
           </button>
         </div>
 

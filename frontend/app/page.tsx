@@ -72,9 +72,9 @@ export default function Home() {
           </p>
         </div>
         <button 
-          onClick={() => session ? router.push("/dashboard") : router.push("/try")}
+          onClick={() => session ? router.push("/dashboard/chat") : router.push("/try")}
           className="bg-[#F1CCA6] text-[#8C4905] font-bold text-lg py-3 px-10 rounded-xl hover:bg-[#F7AD62] hover:text-white transition-all shadow-md transform hover:scale-105 cursor-pointer">
-          Dùng thử
+          {session ? "Vô khung chat" : "Dùng thử"}
         </button>
       </main>
 
