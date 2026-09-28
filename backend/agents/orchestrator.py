@@ -193,7 +193,8 @@ class OrchestratorAgent:
         "hàng trăm", "nhóm hạng tử", "tách hạng tử", "khử mẫu", "đưa vào", 
         "đưa ra", "góc ngoài", "tam giác vuông", "tam giác tù", "tam giác nhọn", 
         "hoành độ", "tung độ", "trục tọa độ", "mặt phẳng tọa độ", "gốc tọa độ", 
-        "hệ số góc", "cắt nhau", "trùng nhau", "khoảng cách", "số chính phương", "vế trái", "vế phải"
+        "hệ số góc", "cắt nhau", "trùng nhau", "khoảng cách", "số chính phương", "vế trái", "vế phải",
+        "dạ", "vâng", "dạ có", "dạ không", "vâng ạ", "dạ hiểu", "dạ vâng", "dạ đúng"
     )
 
     # ── Tín hiệu ngoài lề (luôn là SAFETY, dù dài bao nhiêu từ) ─────────────
