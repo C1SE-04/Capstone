@@ -18,6 +18,11 @@ interface ChatWindowProps {
   onNotUnderstood?: () => void;
   /** US4.1: So lan nhan Chua hieu (quan ly o ChatPage de tranh bi reset khi remount) */
   notUnderstoodCount?: number;
+  /**
+   * Key tăng mỗi khi người dùng chọn một cuộc hội thoại cũ từ Sidebar.
+   * Khi key thay đổi, ChatWindow sẽ scroll ngay xuống tin nhắn mới nhất.
+   */
+  selectedChatKey?: number;
 }
 
 export function ChatWindow({
@@ -30,6 +35,7 @@ export function ChatWindow({
   onUnderstood,
   onNotUnderstood,
   notUnderstoodCount = 0,
+  selectedChatKey = 0,
 }: ChatWindowProps) {
   // Container cuộn của danh sách tin nhắn
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -67,6 +73,18 @@ export function ChatWindow({
       setHasNewMessage(false);
     }
   };
+
+  // Khi người dùng chọn một cuộc hội thoại cũ từ Sidebar (selectedChatKey thay đổi),
+  // scroll ngay xuống dưới cùng bằng "instant" (không animation) để thấy tin nhắn mới nhất
+  useEffect(() => {
+    if (selectedChatKey === 0) return; // Bỏ qua lần mount đầu tiên
+    // Dùng setTimeout nhỏ để đảm bảo DOM đã render xong danh sách tin nhắn
+    const timer = setTimeout(() => {
+      scrollToBottom("instant");
+    }, 50);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChatKey]);
 
   // Lắng nghe thay đổi messages hoặc isTyping để kích hoạt auto-scroll thông minh
   useEffect(() => {

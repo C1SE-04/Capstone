@@ -8,6 +8,7 @@ import models
 from router import agent_router
 from chat_utils import get_recent_chat_context
 from agents.orchestrator import _agent
+from sqlalchemy.sql import func
 
 # Các hằng số cho logic sư phạm
 WRONG_BEFORE_HINT = 2 # Nếu sai <= 2 lần thì mode = socratic. Sai > 2 lần thì mode = hint
@@ -126,6 +127,12 @@ def process_query_with_orchestrator(
         # 1. Lưu tin nhắn của học sinh vào Database
         user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query)
         db.add(user_msg)
+        
+        # Cập nhật updated_at của session
+        session_obj = db.query(models.Session).filter(models.Session.id == session_id).first()
+        if session_obj:
+            session_obj.updated_at = func.now()
+            
         db.commit()
 
         # 2. Cập nhật bộ đếm
@@ -191,6 +198,12 @@ def process_query_with_orchestrator(
     if full_reply and session_id:
         ai_msg = models.Message(session_id=session_id, sender_type="AGENT_TUTOR", content=full_reply)
         db.add(ai_msg)
+        
+        # Cập nhật updated_at của session
+        session_obj = db.query(models.Session).filter(models.Session.id == session_id).first()
+        if session_obj:
+            session_obj.updated_at = func.now()
+            
         db.commit()
 
     # Trigger hỏi "Đã hiểu / Chưa hiểu" khi:
