@@ -99,7 +99,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         setShowSuccessToast(true);
         setTimeout(() => {
           if (onClose) onClose();
-          router.push("/dashboard");
+          router.push("/dashboard/chat");
         }, 1500);
       } else {
         // Tích hợp API Đăng ký
@@ -181,7 +181,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value.toLowerCase())}
               className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
                 }`}
               disabled={isLoading}
@@ -296,7 +296,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
         {/* Social Login & Toggle Mode */}
         {isLoginMode && (
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center hidden">
             <div className="flex justify-center mb-4">
               <button
                 type="button"

@@ -9,6 +9,15 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: '/dashboard',
+        destination: '/dashboard/chat',
+        permanent: true, // hoac false tuy muc dich, de true hien tai vi tam thoi an
+      },
+    ];
+  },
 };
 
 export default nextConfig;
