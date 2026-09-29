@@ -22,13 +22,16 @@ export function getOrCreateGuestId(): string | null {
   if (typeof window === "undefined") return null;
 
   let guestId = localStorage.getItem(GUEST_ID_KEY);
+  if (guestId && !guestId.startsWith("guest-")) {
+    guestId = null;
+  }
 
   if (!guestId) {
     // Tạo UUID ngẫu nhiên — dùng crypto.randomUUID() nếu trình duyệt hỗ trợ,
     // fallback về Math.random() cho môi trường cũ hơn.
     guestId =
       typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
+        ? `guest-${crypto.randomUUID()}`
         : `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
     localStorage.setItem(GUEST_ID_KEY, guestId);

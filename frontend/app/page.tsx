@@ -42,11 +42,15 @@ export default function Home() {
               <span className="text-[#C1762A] font-medium hidden sm:inline-block">
                 Xin chào, {session.user?.name}
               </span>
-              <img
-                src={session.user?.image || ""}
-                alt="Avatar"
-                className="w-10 h-10 rounded-full border-2 border-[#C1762A]"
-              />
+              {session.user?.image ? (
+                <img
+                  src={session.user.image}
+                  alt="Avatar"
+                  className="w-10 h-10 rounded-full border-2 border-[#C1762A]"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full border-2 border-[#C1762A] bg-[#D9D9D9]" />
+              )}
               <button
                 onClick={() => signOut()}
                 className="bg-[#C1762A] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#8C4905] transition-colors text-sm cursor-pointer"
