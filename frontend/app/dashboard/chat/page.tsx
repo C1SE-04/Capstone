@@ -37,6 +37,8 @@ export default function ChatPage() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  // US4.1: Luu so lan nhan "Chua hieu" o cap page de state khong bi mat khi AI tra loi moi
+  const [notUnderstoodCount, setNotUnderstoodCount] = useState(0);
   const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getOnlineServerSnapshot);
 
   // 1. Khôi phục trạng thái từ DB khi người dùng truy cập
@@ -160,6 +162,97 @@ export default function ChatPage() {
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event(navigator.onLine ? "online" : "offline"));
     }
+  };
+
+  // US4.1 - Handler: Hoc sinh nhan "Da hieu" -> reset dem
+  const handleUnderstood = () => {
+    setNotUnderstoodCount(0);
+    console.log("[US4.1] Hoc sinh da hieu bai.");
+  };
+
+  // US4.1 - Trigger AI giai thich lai (AN, khong them tin nhan user vao UI)
+  const triggerSilentReexplain = async (conversationId: string) => {
+    if (!conversationId) return;
+    setIsTyping(true);
+    const botMessageId = (Date.now() + 1).toString();
+    const initialBotMsg: Message = { id: botMessageId, role: "assistant", content: "" };
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversationId ? { ...c, messages: [...c.messages, initialBotMsg] } : c
+      )
+    );
+    try {
+      let authHeader: Record<string, string> = {};
+      try {
+        const { getSession } = await import("next-auth/react");
+        const nextAuthSession = await getSession();
+        const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+        if (token) authHeader = { Authorization: `Bearer ${token}` };
+      } catch { /* khong co session */ }
+
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${BACKEND_URL}/chat/orchestrator`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({
+          session_id: conversationId,
+          // Prompt an: hoc sinh chua hieu, yeu cau AI giai thich lai theo cach don gian hon
+          prompt: "Hoc sinh chua hieu cach giai thich tren. Hay giai thich lai theo cach khac, don gian va de hieu hon.",
+          problem_context: null,
+        }),
+      });
+      if (!response.body) throw new Error("No stream");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let aiText = "";
+      let isDone = false;
+      while (!isDone) {
+        const { value, done } = await reader.read();
+        isDone = done;
+        if (value) {
+          const chunkStr = decoder.decode(value, { stream: true });
+          for (const line of chunkStr.split("\n")) {
+            if (line.startsWith("data: ")) {
+              const dataStr = line.slice(6).trim();
+              if (!dataStr || dataStr === "{}") continue;
+              try {
+                const dataObj = JSON.parse(dataStr);
+                if (dataObj.text) {
+                  aiText += dataObj.text;
+                  setConversations((prev) =>
+                    prev.map((c) =>
+                      c.id === conversationId
+                        ? { ...c, messages: c.messages.map((m) => m.id === botMessageId ? { ...m, content: aiText } : m) }
+                        : c
+                    )
+                  );
+                }
+              } catch { /* ignore parse error */ }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[US4.1] Loi goi lai AI:", error);
+      const errMsg: Message = { id: Date.now().toString(), role: "assistant", content: "Xin loi, khong the ket noi lai may chu." };
+      setConversations((prev) =>
+        prev.map((c) => c.id === conversationId ? { ...c, messages: [...c.messages, errMsg] } : c)
+      );
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  // US4.1 - Handler: Hoc sinh nhan "Chua hieu"
+  // ChatPage quan ly dem de state khong bi reset khi AI tra loi moi va component remount
+  const handleNotUnderstood = () => {
+    const newCount = notUnderstoodCount + 1;
+    setNotUnderstoodCount(newCount);
+    if (newCount === 1 && activeChatId) {
+      // Lan 1: yeu cau AI giai thich lai (an, khong hien tren UI)
+      triggerSilentReexplain(activeChatId);
+    }
+    // Lan 2+: UnderstandingButtons tu xu ly hien textarea (nho notUnderstoodCount tu prop)
   };
 
   // Hàm xử lý phản hồi từ AI (có xử lý lỗi mạng & trạng thái tin nhắn)
@@ -302,6 +395,9 @@ export default function ChatPage() {
 
   // Handler: Gửi prompt trong khung chat
   const handleSendMessage = async (content: string) => {
+    // US4.1: Reset lai dem "Chua hieu" khi bat dau gui bat cu tin nhan moi nao
+    setNotUnderstoodCount(0);
+
     const messageId = Date.now().toString();
     const userMsg: Message = {
       id: messageId,
@@ -469,6 +565,9 @@ export default function ChatPage() {
             onSendMessage={handleSendMessage}
             onRetryMessage={handleRetryMessage}
             onReconnect={handleReconnect}
+            onUnderstood={handleUnderstood}
+            onNotUnderstood={handleNotUnderstood}
+            notUnderstoodCount={notUnderstoodCount}
           />
         </main>
       </div>

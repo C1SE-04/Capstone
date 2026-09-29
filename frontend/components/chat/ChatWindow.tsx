@@ -13,6 +13,11 @@ interface ChatWindowProps {
   onSendMessage: (content: string) => void;
   onRetryMessage?: (messageId: string, content: string) => void;
   onReconnect?: () => void;
+  /** US4.1: Callbacks cho nut Da hieu / Chua hieu */
+  onUnderstood?: () => void;
+  onNotUnderstood?: () => void;
+  /** US4.1: So lan nhan Chua hieu (quan ly o ChatPage de tranh bi reset khi remount) */
+  notUnderstoodCount?: number;
 }
 
 export function ChatWindow({
@@ -22,6 +27,9 @@ export function ChatWindow({
   onSendMessage,
   onRetryMessage,
   onReconnect,
+  onUnderstood,
+  onNotUnderstood,
+  notUnderstoodCount = 0,
 }: ChatWindowProps) {
   // Container cuộn của danh sách tin nhắn
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -127,13 +135,28 @@ export function ChatWindow({
           ) : (
             /* Render danh sách tin nhắn */
             <div className="flex flex-col justify-end flex-1">
-              {messages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  message={msg}
-                  onRetry={onRetryMessage}
-                />
-              ))}
+              {messages.map((msg, index) => {
+                // US4.1: Chi truyen callbacks cho tin nhan AI cuoi cung (khong tinh khi AI dang typing)
+                const isLastAssistantMsg =
+                  !isTyping &&
+                  msg.role === "assistant" &&
+                  index === messages.length - 1;
+
+                return (
+                  <ChatMessage
+                    key={msg.id}
+                    message={msg}
+                    onRetry={onRetryMessage}
+                    {...(isLastAssistantMsg && {
+                      onUnderstood,
+                      onNotUnderstood,
+                      onSendExplanation: (text: string) => onSendMessage(text),
+                      isAiLoading: isTyping,
+                      notUnderstoodCount,
+                    })}
+                  />
+                );
+              })}
 
               {/* Hiệu ứng bong bóng 3 dấu chấm (Typing indicator) */}
               {isTyping && (
