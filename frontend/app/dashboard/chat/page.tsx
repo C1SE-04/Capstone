@@ -7,9 +7,6 @@ import { Conversation, Message } from "@/types/chat";
 import { Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const STORAGE_KEY_CONVERSATIONS = "socratic_conversations";
-const STORAGE_KEY_ACTIVE_ID = "socratic_active_chat_id";
-
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
   window.addEventListener("offline", callback);
@@ -39,9 +36,13 @@ export default function ChatPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   // US4.1: Luu so lan nhan "Chua hieu" o cap page de state khong bi mat khi AI tra loi moi
   const [notUnderstoodCount, setNotUnderstoodCount] = useState(0);
+  // Key tăng mỗi khi người dùng chọn chat cũ từ Sidebar
+  // ChatWindow lắng nghe key này để trigger scroll-to-bottom ngay lập tức
+  const [selectedChatKey, setSelectedChatKey] = useState(0);
   const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getOnlineServerSnapshot);
 
-  // 1. Khôi phục trạng thái từ DB khi người dùng truy cập
+  // 1. Khôi phục danh sách conversations từ DB khi người dùng truy cập
+  //    KHÔNG khôi phục activeChatId → luôn bắt đầu bằng New Chat trống hoàn toàn
   useEffect(() => {
     let isMounted = true;
     const fetchSessions = async () => {
@@ -49,44 +50,32 @@ export default function ChatPage() {
         const { getSession } = await import("next-auth/react");
         const nextAuthSession = await getSession();
         const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
-        
+
         if (token) {
           const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
           const res = await fetch(`${BACKEND_URL}/sessions`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           });
-          
+
           if (res.ok && isMounted) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
-              // Convert backend data to frontend Conversation format
               const loadedConvs = data.map((sess: any) => ({
                 id: sess.id,
                 title: sess.title || "Phòng chat",
-                date: new Date(sess.updated_at).toLocaleDateString(),
+                date: new Date(sess.updated_at).toLocaleDateString("vi-VN"),
                 messages: (sess.messages || []).map((m: any) => ({
                   id: m.id,
                   role: m.sender_type === "USER" ? "user" : "assistant",
-                  content: m.content
-                }))
+                  content: m.content,
+                })),
               }));
               setConversations(loadedConvs);
-              
-              // Khôi phục activeChatId từ localStorage nếu có
-              const savedActiveId = localStorage.getItem(STORAGE_KEY_ACTIVE_ID);
-              if (savedActiveId && loadedConvs.some((c: any) => c.id === savedActiveId)) {
-                setActiveChatId(savedActiveId);
-              } else if (loadedConvs.length > 0) {
-                setActiveChatId(loadedConvs[0].id);
-              } else {
-                setActiveChatId(null);
-              }
             } else {
-              // Nếu user chưa có session nào ở DB, có thể tạo 1 session mặc định hoặc để trống
-              // Nhưng API backend chưa tạo, tạm thời giữ nguyên hoặc khởi tạo trống
               setConversations([]);
-              setActiveChatId(null);
             }
+            // Luôn bắt đầu với New Chat trống (không restore activeChatId)
+            setActiveChatId(null);
           }
         }
       } catch (e) {
@@ -96,27 +85,21 @@ export default function ChatPage() {
       }
     };
     fetchSessions();
-    
-    return () => { isMounted = false; };
-  }, []);
 
-  // 2. localStorage backup for active chat state (optional, can be removed)
-  useEffect(() => {
-    if (!isHydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY_ACTIVE_ID, activeChatId || "");
-    } catch (e) {
-      console.error("Lỗi ghi dữ liệu vào localStorage:", e);
-    }
-  }, [activeChatId, isHydrated]);
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Cuộc trò chuyện hiện tại đang được chọn
   const currentConversation = conversations.find((c) => c.id === activeChatId);
   const currentMessages = currentConversation ? currentConversation.messages : [];
 
   // Handler: Chọn phiên chat từ Sidebar
+  // Tăng selectedChatKey để ChatWindow nhận biết và scroll xuống tin nhắn mới nhất
   const handleSelectChat = (id: string) => {
     setActiveChatId(id);
+    setSelectedChatKey((prev) => prev + 1);
     setIsMobileOpen(false);
   };
 
@@ -132,24 +115,21 @@ export default function ChatPage() {
     const updated = conversations.filter((c) => c.id !== id);
     setConversations(updated);
     if (activeChatId === id) {
-      if (updated.length > 0) {
-        setActiveChatId(updated[0].id);
-      } else {
-        setActiveChatId(null);
-      }
+      // Sau khi xóa → quay về New Chat trống thay vì load chat khác
+      setActiveChatId(null);
     }
 
-    // 2. Gọi API để xóa trên Database (nếu đã đăng nhập)
+    // 2. Gọi API để xóa trên Database
     try {
       const { getSession } = await import("next-auth/react");
       const nextAuthSession = await getSession();
       const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
-      
+
       if (token) {
         const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
         await fetch(`${BACKEND_URL}/sessions/${id}`, {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
       }
     } catch (e) {
@@ -188,7 +168,9 @@ export default function ChatPage() {
         const nextAuthSession = await getSession();
         const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
         if (token) authHeader = { Authorization: `Bearer ${token}` };
-      } catch { /* khong co session */ }
+      } catch {
+        /* khong co session */
+      }
 
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
       const response = await fetch(`${BACKEND_URL}/chat/orchestrator`, {
@@ -196,8 +178,8 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
           session_id: conversationId,
-          // Prompt an: hoc sinh chua hieu, yeu cau AI giai thich lai theo cach don gian hon
-          prompt: "Hoc sinh chua hieu cach giai thich tren. Hay giai thich lai theo cach khac, don gian va de hieu hon.",
+          prompt:
+            "Hoc sinh chua hieu cach giai thich tren. Hay giai thich lai theo cach khac, don gian va de hieu hon.",
           problem_context: null,
         }),
       });
@@ -222,21 +204,34 @@ export default function ChatPage() {
                   setConversations((prev) =>
                     prev.map((c) =>
                       c.id === conversationId
-                        ? { ...c, messages: c.messages.map((m) => m.id === botMessageId ? { ...m, content: aiText } : m) }
+                        ? {
+                            ...c,
+                            messages: c.messages.map((m) =>
+                              m.id === botMessageId ? { ...m, content: aiText } : m
+                            ),
+                          }
                         : c
                     )
                   );
                 }
-              } catch { /* ignore parse error */ }
+              } catch {
+                /* ignore parse error */
+              }
             }
           }
         }
       }
     } catch (error) {
       console.error("[US4.1] Loi goi lai AI:", error);
-      const errMsg: Message = { id: Date.now().toString(), role: "assistant", content: "Xin loi, khong the ket noi lai may chu." };
+      const errMsg: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: "Xin loi, khong the ket noi lai may chu.",
+      };
       setConversations((prev) =>
-        prev.map((c) => c.id === conversationId ? { ...c, messages: [...c.messages, errMsg] } : c)
+        prev.map((c) =>
+          c.id === conversationId ? { ...c, messages: [...c.messages, errMsg] } : c
+        )
       );
     } finally {
       setIsTyping(false);
@@ -244,20 +239,20 @@ export default function ChatPage() {
   };
 
   // US4.1 - Handler: Hoc sinh nhan "Chua hieu"
-  // ChatPage quan ly dem de state khong bi reset khi AI tra loi moi va component remount
   const handleNotUnderstood = () => {
     const newCount = notUnderstoodCount + 1;
     setNotUnderstoodCount(newCount);
     if (newCount === 1 && activeChatId) {
-      // Lan 1: yeu cau AI giai thich lai (an, khong hien tren UI)
       triggerSilentReexplain(activeChatId);
     }
-    // Lan 2+: UnderstandingButtons tu xu ly hien textarea (nho notUnderstoodCount tu prop)
   };
 
   // Hàm xử lý phản hồi từ AI (có xử lý lỗi mạng & trạng thái tin nhắn)
-  const triggerBotResponse = async (targetConversationId: string, userMessageId: string, userContent: string) => {
-    // Nếu mất mạng: chuyển ngay trạng thái tin nhắn thành "error"
+  const triggerBotResponse = async (
+    targetConversationId: string,
+    userMessageId: string,
+    userContent: string
+  ) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setConversations((prev) =>
         prev.map((c) =>
@@ -278,7 +273,6 @@ export default function ChatPage() {
     setIsTyping(true);
 
     try {
-      // Khi bắt đầu gửi thì đổi status của tin nhắn user thành "sent"
       setConversations((prev) =>
         prev.map((c) =>
           c.id === targetConversationId
@@ -292,13 +286,8 @@ export default function ChatPage() {
         )
       );
 
-      // Tạo tin nhắn AI rỗng ban đầu để chuẩn bị stream
       const botMessageId = (Date.now() + 1).toString();
-      const initialBotMsg: Message = {
-        id: botMessageId,
-        role: "assistant",
-        content: "",
-      };
+      const initialBotMsg: Message = { id: botMessageId, role: "assistant", content: "" };
 
       setConversations((prev) =>
         prev.map((c) =>
@@ -310,7 +299,6 @@ export default function ChatPage() {
 
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
-      // Lấy access_token từ session NextAuth (nếu đang đăng nhập)
       let authHeader: Record<string, string> = {};
       try {
         const { getSession } = await import("next-auth/react");
@@ -415,7 +403,6 @@ export default function ChatPage() {
           ? content.trim().slice(0, 25) + "..."
           : content.trim();
 
-      // Tạo session thật trên DB (gọi POST /sessions)
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
       let realSessionId: string | null = null;
 
@@ -425,7 +412,6 @@ export default function ChatPage() {
         const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
 
         if (token) {
-          // Người dùng đã đăng nhập → tạo session trên DB
           const res = await fetch(`${BACKEND_URL}/sessions`, {
             method: "POST",
             headers: {
@@ -443,27 +429,35 @@ export default function ChatPage() {
         console.error("Không thể tạo session trên DB:", e);
       }
 
-      // Nếu chưa đăng nhập hoặc tạo session thất bại → dùng ID local tạm thời
       targetId = realSessionId || ("c-" + Date.now());
 
+      const nowStr = new Date().toLocaleDateString("vi-VN");
       const newConv: Conversation = {
         id: targetId,
         title,
-        date: "Today",
+        date: nowStr,
         messages: [userMsg],
       };
 
       setConversations((prev) => [newConv, ...prev]);
       setActiveChatId(targetId);
     } else {
-      // Đã có phiên hội thoại: thêm tin nhắn vào phiên hiện tại
-      setConversations((prev) =>
-        prev.map((c) =>
+      // Đã có phiên hội thoại: thêm tin nhắn + cập nhật timestamp sidebar
+      const nowStr = new Date().toLocaleDateString("vi-VN");
+      setConversations((prev) => {
+        const updated = prev.map((c) =>
           c.id === targetId
-            ? { ...c, messages: [...c.messages, userMsg] }
+            ? { ...c, messages: [...c.messages, userMsg], date: nowStr }
             : c
-        )
-      );
+        );
+        // Đưa conversation đang chat lên đầu danh sách
+        const idx = updated.findIndex((c) => c.id === targetId);
+        if (idx > 0) {
+          const [item] = updated.splice(idx, 1);
+          updated.unshift(item);
+        }
+        return [...updated];
+      });
     }
 
     if (!isOnline) {
@@ -477,7 +471,6 @@ export default function ChatPage() {
   const handleRetryMessage = (messageId: string, content: string) => {
     if (!activeChatId) return;
 
-    // Chuyển lại trạng thái thành "sending"
     setConversations((prev) =>
       prev.map((c) =>
         c.id === activeChatId
@@ -568,6 +561,7 @@ export default function ChatPage() {
             onUnderstood={handleUnderstood}
             onNotUnderstood={handleNotUnderstood}
             notUnderstoodCount={notUnderstoodCount}
+            selectedChatKey={selectedChatKey}
           />
         </main>
       </div>

@@ -14,6 +14,11 @@ import { Send, Bot, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
 import { getOrCreateGuestId, getGuestHeaders } from "@/lib/guestId";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 const SUGGESTIONS = [
   "Phân số là gì?",
@@ -327,13 +332,33 @@ export default function TryPage() {
 
             {/* Bubble */}
             <div
-              className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-sm ${
+              className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
                 msg.role === "user"
-                  ? "bg-[#C1762A] text-white rounded-tr-sm"
+                  ? "bg-[#C1762A] text-white rounded-tr-sm whitespace-pre-wrap"
                   : "bg-white text-[#1a1a1a] rounded-tl-sm border border-[#C1762A]/10"
               } ${msg.content === "" ? "animate-pulse bg-gray-100 text-gray-400 italic" : ""}`}
             >
-              {msg.content === "" ? "Đang soạn..." : msg.content}
+              {msg.content === "" ? (
+                "Đang soạn..."
+              ) : msg.role === "user" ? (
+                msg.content
+              ) : (
+                <div className="markdown-prose prose-sm max-w-none
+                  prose-p:leading-relaxed prose-p:mb-2
+                  prose-pre:bg-gray-100 prose-pre:p-3 prose-pre:rounded-lg
+                  prose-code:text-[#CB6600] prose-code:bg-[#F1CCA6]/40 prose-code:px-1 prose-code:rounded
+                  prose-ul:list-disc prose-ul:ml-4 prose-ul:mb-2
+                  prose-ol:list-decimal prose-ol:ml-4 prose-ol:mb-2
+                  prose-strong:text-[#8C4905]"
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkMath, remarkGfm]}
+                    rehypePlugins={[rehypeKatex]}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
           </div>
         ))}

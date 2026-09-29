@@ -8,6 +8,7 @@ import models
 from router import agent_router
 from chat_utils import get_recent_chat_context
 from agents.orchestrator import _agent
+from sqlalchemy.sql import func
 
 
 def save_orchestrator_log(db: Session, user_query: str, target_agent: str, reason: str):
@@ -46,6 +47,12 @@ def process_query_with_orchestrator(
         # 1. Lưu tin nhắn của học sinh vào Database
         user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query)
         db.add(user_msg)
+        
+        # Cập nhật updated_at của session
+        session_obj = db.query(models.Session).filter(models.Session.id == session_id).first()
+        if session_obj:
+            session_obj.updated_at = func.now()
+            
         db.commit()
 
         # 2. Lấy 5 tin nhắn ngữ cảnh (bao gồm cả tin nhắn vừa lưu)
@@ -84,6 +91,12 @@ def process_query_with_orchestrator(
     if full_reply and session_id:
         ai_msg = models.Message(session_id=session_id, sender_type="AGENT_TUTOR", content=full_reply)
         db.add(ai_msg)
+        
+        # Cập nhật updated_at của session
+        session_obj = db.query(models.Session).filter(models.Session.id == session_id).first()
+        if session_obj:
+            session_obj.updated_at = func.now()
+            
         db.commit()
 
     # Đánh dấu kết thúc
