@@ -75,7 +75,7 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
         {/* Nút đính kèm file */}
         <button
           disabled={isOffline}
-          className="p-2.5 text-[#8C4905] hover:bg-[#F1CCA6] rounded-full transition-colors self-end mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="p-2.5 text-[#8C4905] hover:bg-[#F1CCA6] rounded-full transition-colors self-end mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >
           <Paperclip size={20} />
         </button>
@@ -97,7 +97,7 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
           onClick={handleSend}
           disabled={!content.trim() || isLoading || isOffline}
           className={cn(
-            "p-2.5 rounded-full flex items-center justify-center transition-all self-end mb-0.5 shadow-sm",
+            "p-2.5 rounded-full flex items-center justify-center transition-all self-end mb-0.5 shadow-sm shrink-0",
             content.trim() && !isLoading && !isOffline
               ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105"
               : "bg-[#D9D9D9] text-gray-400 cursor-not-allowed"
