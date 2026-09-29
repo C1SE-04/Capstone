@@ -43,14 +43,15 @@ def process_query_with_orchestrator(
     history_text = ""
     # Lưu tin nhắn và lấy lịch sử (Bao gồm cả Guest vì giờ mỗi Guest 1 phòng)
     if session_id:
-        # 1. Lưu tin nhắn của học sinh vào Database
+        # 1. Lấy lịch sử TRƯỚC khi lưu tin nhắn mới
+        # (để is_empty_history hoạt động đúng cho tin nhắn đầu tiên trong phiên)
+        chat_history = get_recent_chat_context(db, session_id, limit=5)
+        history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in chat_history])
+
+        # 2. Lưu tin nhắn của học sinh vào Database
         user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query)
         db.add(user_msg)
         db.commit()
-
-        # 2. Lấy 5 tin nhắn ngữ cảnh (bao gồm cả tin nhắn vừa lưu)
-        chat_history = get_recent_chat_context(db, session_id, limit=5)
-        history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in chat_history])
 
     result = _agent.route_sync(
         latest_message=user_query,

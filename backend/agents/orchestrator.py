@@ -122,7 +122,7 @@ class OrchestratorAgent:
         "con cặc", "cục cặc", "cái cặc", "đầu cặc", "cái quần què", "quần què","phò", "điếm", "cave", "đĩ điếm", "gái điếm", "con đĩ",
         "nứng", "nứng lồn", "nứng sảng", "chịch", "xoạc", "bú cu", "bú lồn", "liếm lồn","súc vật", "súc sinh", "óc chó", "óc lợn", "ngu học", 
         "ngu như bò", "ngu lồn", "khốn nạn", "khốn kiếp", "chó má",  "đĩ chó", "đĩ ngựa", "đĩ thoã",
-        "ê", "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này"
+        "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này"
     )
 
     # ── Danh sách tiếng hú hét, gọi cộc lốc, vô nghĩa, quấy rối ─────────
@@ -682,11 +682,15 @@ class OrchestratorAgent:
         )
         if is_empty_history:
             student_val, _ = self._extract_fraction(text_clean)
-            if student_val is None:
+            has_math_expr = bool(self._math_expr_re.search(text_clean))
+            # Nếu không có phân số VÀ không có biểu thức toán học → SCAFFOLDING ngay
+            # Nếu CÓ biểu thức toán (kể cả "3/43 + 32/2 = mấy") → cũng SCAFFOLDING,
+            # tránh ML nhầm "mấy" (bao nhiêu) thành "mày" (bất lịch sự).
+            if student_val is None or has_math_expr:
                 return RoutingResult(
                     selected_agent="SCAFFOLDING",
                     task_description=_build_task_description("SCAFFOLDING", latest_message, problem_context),
-                    routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng).",
+                    routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
                 )
 
         # Trụ cột 2
@@ -716,11 +720,12 @@ class OrchestratorAgent:
         )
         if is_empty_history:
             student_val, _ = self._extract_fraction(text_clean)
-            if student_val is None:
+            has_math_expr = bool(self._math_expr_re.search(text_clean))
+            if student_val is None or has_math_expr:
                 return RoutingResult(
                     selected_agent="SCAFFOLDING",
                     task_description=_build_task_description("SCAFFOLDING", latest_message, problem_context),
-                    routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng).",
+                    routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
                 )
 
         result = self._ml_route(text_clean, problem_context)
