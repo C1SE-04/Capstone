@@ -1,4 +1,4 @@
-import os
+﻿import os
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 import google.generativeai as genai
 from sqlalchemy.orm import Session
@@ -37,13 +37,13 @@ def chat_with_orchestrator(
             guest_session = models.Session(
                 id=request.session_id, 
                 user_id="guest-user-id", 
-                title="Chế độ dùng thử (Mới)"
+                title="Cháº¿ Ä‘á»™ dÃ¹ng thá»­ (Má»›i)"
             )
             db.add(guest_session)
             db.commit()
     else:
-        # Với session thật: kiểm tra session_id có tồn tại trong DB không
-        # Nếu không tồn tại (ví dụ FE dùng ID local chưa tạo qua /sessions), báo 404
+        # Vá»›i session tháº­t: kiá»ƒm tra session_id cÃ³ tá»“n táº¡i trong DB khÃ´ng
+        # Náº¿u khÃ´ng tá»“n táº¡i (vÃ­ dá»¥ FE dÃ¹ng ID local chÆ°a táº¡o qua /sessions), bÃ¡o 404
         import models as _models
         existing_session = db.query(_models.Session).filter(
             _models.Session.id == request.session_id
@@ -51,7 +51,7 @@ def chat_with_orchestrator(
         if not existing_session:
             raise HTTPException(
                 status_code=404,
-                detail=f"Session '{request.session_id}' không tồn tại. Hãy tạo session qua POST /sessions trước."
+                detail=f"Session '{request.session_id}' khÃ´ng tá»“n táº¡i. HÃ£y táº¡o session qua POST /sessions trÆ°á»›c."
             )
     # -------------------------------------------
     
@@ -64,6 +64,7 @@ def chat_with_orchestrator(
             db=db, 
             background_tasks=background_tasks,
             problem_context=request.problem_context,
+            answer_status=request.answer_status,
         ),
         media_type="text/event-stream"
     )
@@ -97,3 +98,55 @@ def list_available_models():
         return {"supported_models": models}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/chat/comprehension")
+def submit_comprehension_feedback(
+    req: schemas.ComprehensionRequest,
+    db: Session = Depends(get_db)
+):
+    import models as _models
+    stats = db.query(_models.SessionStats).filter(
+        _models.SessionStats.session_id == req.session_id
+    ).first()
+    
+    if not stats:
+        # Náº¿u chÆ°a cÃ³ thÃ¬ táº¡o má»›i
+        stats = _models.SessionStats(session_id=req.session_id)
+        db.add(stats)
+        
+    if req.understood:
+        stats.consecutive_wrong_count = 0
+        stats.hint_count = 0
+    else:
+        stats.not_understood_count += 1
+        
+    db.commit()
+    db.refresh(stats)
+    
+    return {
+        "status": "success",
+        "message": "Feedback recorded",
+        "stats": {
+            "consecutive_wrong_count": stats.consecutive_wrong_count,
+            "hint_count": stats.hint_count,
+            "not_understood_count": stats.not_understood_count
+        }
+    }
+
+@router.get("/chat/stats/{session_id}", response_model=schemas.SessionStatsResponse)
+def get_session_stats(session_id: str, db: Session = Depends(get_db)):
+    import models as _models
+    stats = db.query(_models.SessionStats).filter(
+        _models.SessionStats.session_id == session_id
+    ).first()
+    
+    if not stats:
+        return schemas.SessionStatsResponse(
+            session_id=session_id,
+            consecutive_wrong_count=0,
+            hint_count=0,
+            not_understood_count=0
+        )
+        
+    return stats
+

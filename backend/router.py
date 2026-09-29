@@ -1,6 +1,7 @@
 import os
 import json
 import google.generativeai as genai
+from agents.reviewer import LocalReviewerAgent
 
 # ==========================================
 # CHỈ DẪN HỆ THỐNG CHO VAI TRÒ NGƯỜI THẦY
@@ -32,9 +33,9 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
 """
 
 # ==========================================
-# HÀM ĐIỀU PHỐI CHÍNH (Router Function) - CÓ STREAMING
+# HÀM ĐIỀU PHỐI CHÍNH (Router Function) - CÓ TÍCH HỢP REVIEWER TỰ ĐỘNG SỬA LỖI
 # ==========================================
-def agent_router(target_agent: str, task_description: str, history_text: str, user_query: str):
+def agent_router(target_agent: str, task_description: str, history_text: str, user_query: str, expected_answer: str = ""):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         yield "Lỗi: Chưa cấu hình GEMINI_API_KEY"
@@ -51,7 +52,7 @@ def agent_router(target_agent: str, task_description: str, history_text: str, us
         )
     )
     
-    prompt = f"""
+    base_prompt = f"""
 Vai trò chuyên môn hiện tại: {target_agent}.
 Chỉ đạo sư phạm từ Orchestrator: {task_description}
 
@@ -66,10 +67,41 @@ NHẮC LẠI NGUYÊN TẮC:
 - Chỉ nhắc nhở thái độ khi học sinh dùng từ XÚC PHẠM THỰC SỰ (mày, tao, chửi thề) — câu ngắn, không chào hỏi, không có chủ ngữ là BÌNH THƯỜNG, không nhắc.
 - Trả lời ngắn gọn, chuẩn mực (2-4 câu).
 """
-    try:
-        response = model.generate_content(prompt, stream=True)
-        for chunk in response:
-            if chunk.text:
-                yield chunk.text
-    except Exception as e:
-        yield f" [Lỗi khi gọi AI: {str(e)}]"
+    
+    reviewer = LocalReviewerAgent()
+    max_retries = 2
+    current_attempt = 0
+    final_text = ""
+    prompt = base_prompt
+
+    while current_attempt <= max_retries:
+        try:
+            # Lấy toàn bộ văn bản để Reviewer có thể đánh giá (không stream trực tiếp)
+            response = model.generate_content(prompt, stream=False)
+            generated_text = response.text
+            
+            # Chỉ kiểm duyệt gắt gao nếu đang đóng vai SCAFFOLDING_AGENT
+            if target_agent == "SCAFFOLDING_AGENT":
+                review_result = reviewer.review(user_query, expected_answer, generated_text)
+                if not review_result["is_approved"]:
+                    current_attempt += 1
+                    print(f"[Reviewer Agent 🛑] Từ chối (Lần {current_attempt}/{max_retries}): {review_result['feedback']}")
+                    print(f"[Reviewer Agent 🛑] Lý do: {review_result['reasoning']}")
+                    
+                    # Nạp lại lời mắng vào prompt để ép AI phải sửa lỗi
+                    prompt += f"\n\n[HỆ THỐNG KIỂM DUYỆT CẢNH BÁO]: Câu trả lời vừa rồi của bạn bị TỪ CHỐI vì lý do: {review_result['feedback']}. \nHãy sinh lại câu trả lời khác và TUYỆT ĐỐI KHÔNG vi phạm lỗi này nữa."
+                    final_text = generated_text  # Backup lỡ như hết số lần thử vẫn ngu
+                    continue
+            
+            # Nếu pass qua được Reviewer hoặc không phải Scaffolding thì chốt đáp án
+            final_text = generated_text
+            break
+            
+        except Exception as e:
+            yield f" [Lỗi khi gọi AI: {str(e)}]"
+            return
+
+    # Sau khi chốt được văn bản xịn, chẻ nhỏ ra để giả lập luồng Stream trả về Frontend cho mượt
+    words = final_text.split(" ")
+    for i, word in enumerate(words):
+        yield word + (" " if i < len(words) - 1 else "")
