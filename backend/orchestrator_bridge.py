@@ -170,6 +170,9 @@ def process_query_with_orchestrator(
     # Lưu log ngầm
     background_tasks.add_task(save_orchestrator_log, db, user_query, target_agent, reason)
 
+    # Yield quyết định của Orchestrator
+    emotion_flag = result.get("emotion_flag", "GUIDING")
+    decision = {"target_agent": target_agent, "reason": reason, "debug_context": history_text, "emotion_flag": emotion_flag}
     # Yield event orchestrator (kèm stats và teaching_mode để FE debug)
     decision = {
         "target_agent": target_agent,
