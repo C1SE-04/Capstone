@@ -486,6 +486,16 @@ class OrchestratorAgent:
 
         return None
 
+    # ── Tín hiệu tích cực / kết thúc hiểu bài — không báo WRONG dù agent cũ là MISCONCEPTION ──
+    POSITIVE_CLOSE_SIGNALS: tuple = (
+        "ok em hiểu", "em hiểu rồi", "hiểu rồi thầy", "hiểu rồi ạ", "em hiểu ạ",
+        "cảm ơn thầy", "cảm ơn", "cám ơn thầy", "cám ơn", "thank thầy", "thanks thầy",
+        "dạ em hiểu", "dạ hiểu", "dạ em biết rồi", "biết rồi thầy",
+        "ok thầy", "oke thầy", "được rồi thầy", "rõ rồi thầy",
+        "em làm được rồi", "làm được rồi", "giải được rồi",
+        "dạ vâng", "vâng ạ", "dạ", "vâng",
+    )
+
     def _state_machine_route(
         self,
         text_clean: str,
@@ -509,6 +519,16 @@ class OrchestratorAgent:
         # 3.2 Kế thừa agent cuối từ lịch sử hội thoại
         last_agent = self._last_agent_from_history(history_text)
         if last_agent and last_agent in ("MISCONCEPTION", "KNOWLEDGE_TRACING"):
+            # FIX #1: Nếu tin nhắn hiện tại là lời cảm ơn / đã hiểu rồi
+            # thì KHÔNG báo WRONG dù agent cũ là MISCONCEPTION
+            is_positive_close = any(s in text_clean for s in self.POSITIVE_CLOSE_SIGNALS)
+            if last_agent == "MISCONCEPTION" and is_positive_close:
+                return RoutingResult(
+                    selected_agent="SCAFFOLDING",
+                    task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                    routing_scratchpad=f"[Trụ3 - StateMachine]: Học sinh đã hiểu sau MISCONCEPTION → SCAFFOLDING khen.",
+                    emotion_flag="CORRECT",  # Cú vui vẻ vỗ tay vì học sinh hiểu bài rồi
+                )
             return RoutingResult(
                 selected_agent=last_agent,
                 task_description=_build_task_description(last_agent, original_message, problem_context),
@@ -616,6 +636,20 @@ class OrchestratorAgent:
         if correct_solution:
             correct_frac, correct_raw = self._extract_fraction(str(correct_solution))
             if correct_frac is not None:
+                # FIX #2: Nếu câu học sinh chứa từ phủ định / không hiểu
+                # thì KHÔNG so khớp toán học — tránh trích số từ "bài 3", "câu 2" nhầm thành đáp án
+                _negation_signals = (
+                    "không hiểu", "ko hiểu", "k hiểu", "chưa hiểu",
+                    "không biết", "ko biết", "k biết",
+                    "sai rồi", "em sai", "mình sai",
+                    "không làm được", "ko làm được",
+                    "chưa làm", "chưa ra", "không ra",
+                    "bài này", "câu này", "đề này",
+                )
+                _has_negation = any(s in text_clean for s in _negation_signals)
+                if _has_negation:
+                    return None  # Bỏ qua so khớp toán học, xuống Trụ 2
+
                 _has_operator = bool(re.search(r"[\+\-\*\/\^\(\)x]", original_message, re.IGNORECASE))
                 if _has_operator:
                     student_frac = self._eval_math_expr(original_message)
@@ -732,6 +766,7 @@ class OrchestratorAgent:
         Mapping:
           SAFETY                           → "WARNING"
           MISCONCEPTION (math mismatch)    → "WRONG"
+          MISCONCEPTION (hiểu sai rõ ràng) → "WRONG"
           SCAFFOLDING (math CORRECT)       → "CORRECT"
           KNOWLEDGE_TRACING                → "GUIDING"
           SCAFFOLDING (mặc định)           → "GUIDING"
@@ -739,9 +774,25 @@ class OrchestratorAgent:
         if agent == "SAFETY":
             return "WARNING"
         if agent == "MISCONCEPTION":
-            if "Math mismatch" in routing_scratchpad or "math mismatch" in routing_scratchpad:
-                # 1. Nếu hệ thống tự tính và thấy học sinh nộp đáp án sai thực sự ("Math mismatch") -> Cú lắc đầu (WRONG)
-                # 2. Nếu học sinh chỉ đang tự nhận lỗi hoặc hỏi "em sai chỗ nào?" -> Cú vẫn gật gù hướng dẫn (GUIDING)
+            # FIX #3: Trụ 2 (ML Router) phân loại MISCONCEPTION nhưng scratchpad không chứa
+            # "Math mismatch" — cần kiểm tra thêm từ khóa trong tin nhắn gốc để quyết định
+            # cờ là WRONG (hiểu sai thực sự) hay GUIDING (chỉ đang hỏi về lỗi sai)
+            _explicit_wrong_keywords = (
+                "tưởng", "nhầm", "lộn", "sai r", "sai rồi", "ngộ nhận",
+                "hiểu sai", "tính sai", "học sai", "nghĩ sai",
+                "quên đổi dấu", "quên ngoặc", "không đổi chiều",
+                "âm nhân âm ra âm", "âm bình phương ra âm",
+                "tử cộng tử mẫu cộng mẫu", "nhân chéo nhầm",
+            )
+            # 1. Nếu hệ thống tự tính thấy sai (Math mismatch) → WRONG
+            # 2. Nếu học sinh dùng keyword hiểu sai rõ ràng → WRONG
+            # 3. Nếu học sinh chỉ hỏi về lỗi sai → GUIDING (cú vẫn gật gù)
+            msg_lower = original_message.lower()
+            if (
+                "Math mismatch" in routing_scratchpad
+                or "math mismatch" in routing_scratchpad
+                or any(kw in msg_lower for kw in _explicit_wrong_keywords)
+            ):
                 return "WRONG"
             return "GUIDING"
         if agent == "SCAFFOLDING" and (
