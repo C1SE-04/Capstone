@@ -34,6 +34,7 @@ class GeminiRequest(BaseModel):
     session_id: str
     prompt: str
     problem_context: Optional[dict] = None  # Ngữ cảnh bài toán (correctSolution, v.v.) — dùng cho Trụ 1
+    answer_status: Optional[str] = None # 'wrong' hoặc 'correct' (để tính hint)
 
 
 
@@ -59,3 +60,16 @@ class SessionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class SessionStatsResponse(BaseModel):
+    session_id: str
+    consecutive_wrong_count: int
+    hint_count: int
+    not_understood_count: int
+
+    class Config:
+        from_attributes = True
+
+class ComprehensionRequest(BaseModel):
+    session_id: str
+    understood: bool
