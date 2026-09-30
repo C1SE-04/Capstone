@@ -7,6 +7,7 @@ import asyncio
 # Import các routers
 from routers import auth, users, chat, sessions
 from cleanup_guests import cleanup_old_guest_sessions
+from redis_client import get_redis, close_redis
 
 # Tự động tạo bảng 'users' trong database nếu chưa có
 try:
@@ -55,4 +56,18 @@ async def schedule_guest_cleanup():
 
 @app.on_event("startup")
 async def startup_event():
+    # 1. Khởi động Redis connection pool (Task #90)
+    try:
+        redis = await get_redis()
+        await redis.ping()  # Kiểm tra kết nối thực sự
+        print("✅ Redis kết nối thành công!")
+    except Exception as e:
+        print(f"⚠️  Redis không khả dụng: {e}. Rate-limit sẽ bỏ qua (fail-open).")
+    # 2. Khởi động task dọn dẹp Guest session
     asyncio.create_task(schedule_guest_cleanup())
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    # Đóng kết nối Redis khi server dừng
+    await close_redis()
+    print("🔴 Redis đã đóng kết nối.")

@@ -14,4 +14,4 @@ httpx
 pandas 
 scikit-learn
 sympy
-joblib
+joblibredis[asyncio]
