@@ -1,4 +1,4 @@
-﻿import os
+import os
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 import google.generativeai as genai
 from sqlalchemy.orm import Session
@@ -7,6 +7,7 @@ import schemas
 import agents.orchestrator as orchestrator
 import orchestrator_bridge
 from database import get_db
+from dependencies.rate_limit import check_guest_rate_limit
 
 router = APIRouter(tags=["Chat & AI"])
 
@@ -16,7 +17,8 @@ from fastapi.responses import StreamingResponse
 def chat_with_orchestrator(
     request: schemas.GeminiRequest, 
     background_tasks: BackgroundTasks, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(check_guest_rate_limit),  # Task: Rate-limit 10 câu/24h cho Guest
 ):
     # --- AUTO-CREATE GUEST SESSION IF NEEDED ---
     if request.session_id and request.session_id.startswith("guest-"):
