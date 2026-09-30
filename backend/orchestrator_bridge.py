@@ -193,12 +193,13 @@ def process_query_with_orchestrator(
         db.add(ai_msg)
         db.commit()
 
-    # Trigger hỏi "Đã hiểu / Chưa hiểu" CHỈ KHI:
-    # - Hệ thống vừa reveal đáp án (tức là sau khi học sinh sai 5 lần liên tiếp: 2 socratic + 2 hint + 1 reveal)
-    should_ask_comprehension = (teaching_mode == "reveal")
+    # Trigger hỏi "Đã hiểu / Chưa hiểu" khi:
+    # - Học sinh trả lời đúng (answer_status="correct"), HOẶC
+    # - Hệ thống vừa reveal đáp án (teaching_mode="reveal")
+    should_ask_comprehension = (answer_status == "correct") or (teaching_mode == "reveal")
     if should_ask_comprehension:
         comprehension_event = {
-            "trigger": "auto_reveal",
+            "trigger": "correct_answer" if answer_status == "correct" else "auto_reveal",
             "message": "Hoi hoc sinh da hieu chua",
             "stats": {
                 "consecutive_wrong_count": stats.consecutive_wrong_count if stats else 0,
