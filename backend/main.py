@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import models
 from database import engine
 
+import asyncio
 # Import các routers
 from routers import auth, users, chat, sessions
+from cleanup_guests import cleanup_old_guest_sessions
 
 # Tự động tạo bảng 'users' trong database nếu chưa có
 try:
@@ -42,3 +44,15 @@ app.include_router(sessions.router)
 @app.get("/")
 def read_root():
     return {"message": "Welcome to Socratic Chatbot API!"}
+
+async def schedule_guest_cleanup():
+    while True:
+        try:
+            cleanup_old_guest_sessions()
+        except Exception as e:
+            pass
+        await asyncio.sleep(3600)  # Chạy mỗi 1 tiếng 1 lần
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(schedule_guest_cleanup())
