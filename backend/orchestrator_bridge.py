@@ -290,3 +290,4 @@ def process_comprehension_response(
             db.commit()
 
     yield "event: done\ndata: {}\n\n"
+    yield "event: done\ndata: {}\n\n"
