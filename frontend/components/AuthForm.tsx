@@ -39,13 +39,14 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     let hasError = false;
     const newErrors: typeof errors = {};
 
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
       newErrors.email = "Email/SDT không được bỏ trống";
       hasError = true;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.includes("@")) {
+    } else if (!trimmedEmail.includes("@")) {
       newErrors.email = "Vui lòng nhập đúng định dạng email";
       hasError = true;
-    } else if (!email.includes("@")) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(trimmedEmail)) {
       newErrors.email = "Vui lòng nhập đúng định dạng email";
       hasError = true;
     }
@@ -102,13 +103,13 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           router.push("/dashboard/chat");
         }, 1500);
       } else {
-        // Tích hợp API Đăng ký
+        // Tích hợp API Đăng ký — gửi email lowercase về DB
         const endpoint = role === 'student' ? '/register/student' : '/register/monitor';
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
         const response = await fetch(`${backendUrl}${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({ email: email.toLowerCase(), password })
         });
 
         if (!response.ok) {
@@ -179,9 +180,9 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           <div>
             <label className="block text-[#8C4905] text-sm font-bold mb-1">Email/SDT</label>
             <input
-              type="email"
+              type="text"
               value={email}
-              onChange={(e) => setEmail(e.target.value.toLowerCase())}
+              onChange={(e) => setEmail(e.target.value)}
               className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
                 }`}
               disabled={isLoading}

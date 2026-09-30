@@ -10,12 +10,13 @@ router = APIRouter(tags=["Auth"])
 
 @router.post("/register/student", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
-    existing_user = db.query(models.User).filter(models.User.email == user_data.email).first()
+    normalized_email = user_data.email.lower()
+    existing_user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email đã được sử dụng")
 
     new_user = models.User(
-        email=user_data.email,
+        email=normalized_email,
         hashed_password=auth.hash_password(user_data.password),
         role="STUDENT"
     )
@@ -26,12 +27,13 @@ def register(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
 
 @router.post("/register/monitor", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register_monitor(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
-    existing_user = db.query(models.User).filter(models.User.email == user_data.email).first()
+    normalized_email = user_data.email.lower()
+    existing_user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email đã được sử dụng")
 
     new_user = models.User(
-        email=user_data.email,
+        email=normalized_email,
         hashed_password=auth.hash_password(user_data.password),
         role="MONITOR"
     )
@@ -40,11 +42,15 @@ def register_monitor(user_data: schemas.AuthInput, db: Session = Depends(get_db)
     db.refresh(new_user)
     return new_user
 
+from sqlalchemy import func
+
 @router.post("/login", response_model=schemas.TokenResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # Chuẩn hóa email về chữ thường trước khi tra cứu DB — cho phép đăng nhập với mọi kiểu viết hoa
+    normalized_username = form_data.username.lower()
     user = (
         db.query(models.User).filter(
-            models.User.email == form_data.username
+            func.lower(models.User.email) == normalized_username
         ).first()
     )
     if not user or not auth.verify_password(form_data.password, user.hashed_password):

@@ -18,6 +18,11 @@ interface ChatWindowProps {
   onNotUnderstood?: () => void;
   /** US4.1: So lan nhan Chua hieu (quan ly o ChatPage de tranh bi reset khi remount) */
   notUnderstoodCount?: number;
+  /**
+   * Key tăng mỗi khi người dùng chọn một cuộc hội thoại cũ từ Sidebar.
+   * Khi key thay đổi, ChatWindow sẽ scroll ngay xuống tin nhắn mới nhất.
+   */
+  selectedChatKey?: number;
 }
 
 export function ChatWindow({
@@ -30,6 +35,7 @@ export function ChatWindow({
   onUnderstood,
   onNotUnderstood,
   notUnderstoodCount = 0,
+  selectedChatKey = 0,
 }: ChatWindowProps) {
   // Container cuộn của danh sách tin nhắn
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -40,6 +46,8 @@ export function ChatWindow({
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   // Cờ báo có tin nhắn mới khi người dùng đang cuộn lên xem lịch sử
   const [hasNewMessage, setHasNewMessage] = useState(false);
+  // Cờ điều khiển auto-scroll thông minh
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
   // Lưu số lượng tin nhắn trước đó để phát hiện tin nhắn mới
   const prevMessagesCountRef = useRef(messages.length);
 
@@ -58,9 +66,11 @@ export function ChatWindow({
     const scrollBottomOffset =
       container.scrollHeight - container.scrollTop - container.clientHeight;
 
-    // Nếu cách đáy hơn 120px thì coi như người dùng đang cuộn lên để đọc
-    const isScrolledUp = scrollBottomOffset > 120;
+    // Nếu cách đáy hơn 20px thì coi như người dùng đang cuộn lên để đọc
+    const isScrolledUp = scrollBottomOffset > 20;
     setShowScrollBottom(isScrolledUp);
+    // Bật tắt auto-scroll theo hành vi cuộn của người dùng
+    setIsAutoScrollEnabled(!isScrolledUp);
 
     // Khi người dùng đã cuộn lại gần đáy thì tự động xóa huy hiệu tin nhắn mới
     if (!isScrolledUp) {
@@ -68,25 +78,32 @@ export function ChatWindow({
     }
   };
 
+  // Khi người dùng chọn một cuộc hội thoại cũ từ Sidebar (selectedChatKey thay đổi),
+  // scroll ngay xuống dưới cùng bằng "instant" (không animation) để thấy tin nhắn mới nhất
+  useEffect(() => {
+    if (selectedChatKey === 0) return; // Bỏ qua lần mount đầu tiên
+    setIsAutoScrollEnabled(true);
+    // Dùng setTimeout nhỏ để đảm bảo DOM đã render xong danh sách tin nhắn
+    const timer = setTimeout(() => {
+      scrollToBottom("instant");
+    }, 50);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChatKey]);
+
   // Lắng nghe thay đổi messages hoặc isTyping để kích hoạt auto-scroll thông minh
   useEffect(() => {
     const isNewMessageAdded = messages.length > prevMessagesCountRef.current;
     prevMessagesCountRef.current = messages.length;
 
-    const container = scrollContainerRef.current;
-    const isNearBottom =
-      container
-        ? container.scrollHeight - container.scrollTop - container.clientHeight <= 150
-        : true;
-
-    // Nếu người dùng đang ở gần đáy hoặc vừa bắt đầu gõ -> tự động cuộn xuống
-    if (isNearBottom) {
+    // Nếu người dùng đang theo dõi phần mới nhất -> tự động cuộn
+    if (isAutoScrollEnabled) {
       scrollToBottom("smooth");
     } else if (isNewMessageAdded) {
       // Nếu người dùng đang đọc ở trên -> không cưỡng bức cuộn, mà hiện thông báo tin nhắn mới
       setHasNewMessage(true);
     }
-  }, [messages, isTyping, scrollToBottom]);
+  }, [messages, isTyping, isAutoScrollEnabled, scrollToBottom]);
 
   return (
     // Container chính: lấp đầy khu vực main content
@@ -134,7 +151,7 @@ export function ChatWindow({
             </div>
           ) : (
             /* Render danh sách tin nhắn */
-            <div className="flex flex-col justify-end flex-1">
+            <div className="flex flex-col justify-start flex-1 pt-2">
               {messages.map((msg, index) => {
                 // US4.1: Chi truyen callbacks cho tin nhan AI cuoi cung (khong tinh khi AI dang typing)
                 const isLastAssistantMsg =
@@ -157,18 +174,6 @@ export function ChatWindow({
                   />
                 );
               })}
-
-              {/* Hiệu ứng bong bóng 3 dấu chấm (Typing indicator) */}
-              {isTyping && (
-                <div className="flex justify-start mb-6 w-full animate-in fade-in duration-300">
-                  <div className="bg-white border border-[#F1CCA6] px-5 py-5 rounded-2xl rounded-tl-sm flex items-center gap-1.5 shadow-sm h-[52px]">
-                    <span className="text-xs text-[#8C4905] mr-1 font-medium">SocraticKid đang nghĩ</span>
-                    <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                    <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                    <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce"></div>
-                  </div>
-                </div>
-              )}
 
               {/* Thẻ div rỗng nằm ở cuối để làm mốc cho hàm cuộn (scrollIntoView) */}
               <div ref={endOfMessagesRef} className="h-4" />

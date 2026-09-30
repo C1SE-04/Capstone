@@ -33,7 +33,7 @@ export const authOptions: NextAuthOptions = {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
-              username: credentials.email,
+              username: credentials.email.toLowerCase(),
               password: credentials.password,
             }),
           });

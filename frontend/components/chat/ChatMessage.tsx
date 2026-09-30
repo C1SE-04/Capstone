@@ -69,6 +69,14 @@ export function ChatMessage({
                 <Loader2 size={16} className="animate-spin text-white/80 shrink-0 mt-1" />
               )}
             </div>
+          ) : message.content === "" ? (
+            // Tin nhắn của assistant đang trống (đang suy nghĩ)
+            <div className="flex items-center gap-1.5 h-6">
+              <span className="text-xs text-[#8C4905] mr-1 font-medium">SocraticKid đang nghĩ</span>
+              <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+              <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+              <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce"></div>
+            </div>
           ) : (
             // Tin nhắn của assistant: Cần render thành Markdown và Toán học.
             // Sử dụng các class `prose-*` của Tailwind (hoặc tùy chỉnh thủ công) để định dạng các thẻ HTML (h1, p, pre, code, table) bên trong Markdown.
