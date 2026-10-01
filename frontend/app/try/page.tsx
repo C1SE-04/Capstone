@@ -11,6 +11,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User } from "lucide-react";
+import Lottie from "lottie-react";
 import { useRouter } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
 import { getOrCreateGuestId, getGuestHeaders } from "@/lib/guestId";
@@ -41,7 +42,16 @@ function createMessageId(prefix: string = "msg") {
 /* ──────────────────────────────────────────────
    Modal: Thông báo hết lượt dùng thử (US 4.3)
 ────────────────────────────────────────────── */
-function TrialExpiredModal({ onLogin }: { onLogin: () => void }) {
+function TrialExpiredModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => void }) {
+  const [owlData, setOwlData] = useState<object | null>(null);
+
+  useEffect(() => {
+    fetch("/lottie/owl_idle.json")
+      .then((r) => r.json())
+      .then(setOwlData)
+      .catch(() => {});
+  }, []);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -75,14 +85,35 @@ function TrialExpiredModal({ onLogin }: { onLogin: () => void }) {
           }}
         />
 
+        {/* Close button */}
+        <button
+          id="trial-expired-close-btn"
+          onClick={onClose}
+          className="absolute top-3 right-3 p-1.5 rounded-full text-[#8C4905]/60 hover:text-[#8C4905] hover:bg-[#F1CCA6] transition-all cursor-pointer"
+          aria-label="Đóng thông báo"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
         <div className="px-8 py-8 flex flex-col items-center text-center gap-5">
-          {/* Owl icon */}
+          {/* Owl — hiển thị tĩnh frame đầu của Lottie */}
           <div
-            className="w-20 h-20 rounded-full bg-[#F1CCA6] flex items-center justify-center shadow-inner"
-            style={{ fontSize: "2.5rem" }}
+            className="w-24 h-24 rounded-full bg-[#F1CCA6] flex items-center justify-center shadow-inner overflow-hidden"
             aria-hidden="true"
           >
-            🦉
+            {owlData ? (
+              <Lottie
+                animationData={owlData}
+                loop={false}
+                autoplay={false}
+                initialSegment={[0, 1]}
+                style={{ width: "80px", height: "80px" }}
+              />
+            ) : (
+              <span style={{ fontSize: "2.2rem" }}>🦉</span>
+            )}
           </div>
 
           {/* Heading */}
@@ -92,21 +123,16 @@ function TrialExpiredModal({ onLogin }: { onLogin: () => void }) {
             </h2>
             <p className="text-sm text-[#C1762A] font-medium leading-relaxed max-w-xs">
               Bạn đã dùng hết{" "}
-              <strong className="text-[#8C4905]">10 câu hỏi</strong> miễn phí
+              <strong className="text-[#8C4905]">10 câu hỏi</strong> dùng thử
               hôm nay. Quay lại sau{" "}
               <strong className="text-[#8C4905]">24 tiếng</strong> để được cấp
               thêm lượt mới — hoặc{" "}
               <span className="text-[#8C4905] font-bold">đăng nhập</span> để
-              học tẹt ga không giới hạn! 🚀
+              học tẹt ga không giới hạn!
             </p>
           </div>
 
-          {/* Countdown hint */}
-          <div className="w-full bg-[#F1CCA6]/60 rounded-2xl px-5 py-3 border border-[#C1762A]/20">
-            <p className="text-xs text-[#8C4905]/70 font-medium">
-              ⏰ Lượt dùng thử sẽ được reset sau 24 giờ kể từ lần hỏi đầu tiên
-            </p>
-          </div>
+
 
           {/* CTA */}
           <div className="w-full flex flex-col gap-3 pt-1">
@@ -138,12 +164,9 @@ function TrialExpiredModal({ onLogin }: { onLogin: () => void }) {
                   d="M17 8l4 4m0 0l-4 4m4-4H3"
                 />
               </svg>
-              Đăng nhập / Đăng ký ngay
+              Đăng nhập
             </button>
 
-            <p className="text-xs text-[#8C4905]/50 font-medium">
-              Hoặc đợi đến ngày mai để tiếp tục dùng thử miễn phí
-            </p>
           </div>
         </div>
       </div>
@@ -160,7 +183,7 @@ export default function TryPage() {
       id: "welcome",
       role: "assistant",
       content:
-        "Xin chào! Mình là **SocraticKid** 🦉\n\nBạn có thể hỏi mình bất cứ điều gì về Toán học. Mình sẽ **không cho đáp án luôn** — mình sẽ đặt câu hỏi dẫn dắt để bạn tự khám phá ra nhé! 💪\n\n*Đây là chế độ dùng thử — lịch sử sẽ không được lưu lại.*",
+        "Xin chào! Mình là **SocraticKid** 🦉\n\nBạn có thể hỏi mình bất cứ điều gì về Toán học. Mình sẽ **không cho đáp án luôn** — mình sẽ đặt câu hỏi dẫn dắt để bạn tự khám phá ra nhé! \n\n*Đây là chế độ dùng thử — lịch sử sẽ không được lưu lại.*",
     },
   ]);
   const [inputValue, setInputValue] = useState("");
@@ -426,7 +449,10 @@ export default function TryPage() {
 
       {/* ── Modal: Hết lượt dùng thử (US 4.3 - Task 113) ── */}
       {showTrialExpired && (
-        <TrialExpiredModal onLogin={handleOpenAuth} />
+        <TrialExpiredModal
+          onLogin={handleOpenAuth}
+          onClose={() => setShowTrialExpired(false)}
+        />
       )}
 
       {/* ── Modal: AuthForm giống trang chủ (Task 113) ── */}
