@@ -67,35 +67,41 @@ def save_orchestrator_log(db: Session, user_query: str, target_agent: str, reaso
         print(f"Error saving orchestrator log: {e}")
 
 
-def update_stats_on_answer(db: Session, session_id: str, answer_status: Optional[str]) -> models.SessionStats:
+def update_stats_on_answer(db: Session, session_id: str, answer_status: Optional[str]):
     """
     Cập nhật số lần trả lời sai liên tiếp và số lần hint.
     - "wrong"   → wrong_count += 1, nếu đang ở mode hint thì hint_count += 1
     - "correct" → reset cả hai về 0
     - None      → không thay đổi
+
+    Trả về: (stats, computed_mode)
+    - computed_mode là mode đã được tính TRƯỚC KHI tăng hint_count.
+      Dùng giá trị này ở tầng ngoài để tránh tính lại 2 lần (bug double-computation).
     """
     stats = get_or_create_session_stats(db, session_id)
     if not answer_status:
-        return stats
+        return stats, None
 
+    computed_mode = None
     if answer_status == "wrong":
         stats.consecutive_wrong_count += 1
-        # Xác định chế độ trước khi tăng hint_count
-        mode = get_teaching_mode(stats.consecutive_wrong_count, stats.hint_count)
-        if mode == "hint":
+        # Tính mode TRƯỚC khi tăng hint_count — đây là mode thực sự của lượt này
+        computed_mode = get_teaching_mode(stats.consecutive_wrong_count, stats.hint_count)
+        if computed_mode == "hint":
             stats.hint_count += 1
         print(
             f"[Stats] Session {session_id}: sai lan {stats.consecutive_wrong_count} "
-            f"| hint {stats.hint_count}/{MAX_HINTS} | mode={mode}"
+            f"| hint {stats.hint_count}/{MAX_HINTS} | mode={computed_mode}"
         )
     elif answer_status == "correct":
         print(f"[Stats] Session {session_id}: DUNG → reset wrong={stats.consecutive_wrong_count}, hint={stats.hint_count}")
         stats.consecutive_wrong_count = 0
         stats.hint_count = 0
+        computed_mode = "socratic"  # Sau khi đúng luôn reset về socratic
 
     db.commit()
     db.refresh(stats)
-    return stats
+    return stats, computed_mode
 
 
 def process_query_with_orchestrator(
@@ -136,10 +142,15 @@ def process_query_with_orchestrator(
         db.commit()
 
         # 2. Cập nhật bộ đếm
-        stats = update_stats_on_answer(db, session_id, answer_status)
+        stats, computed_mode = update_stats_on_answer(db, session_id, answer_status)
 
         # 3. Xác định chế độ dạy học hiện tại
-        teaching_mode = get_teaching_mode(stats.consecutive_wrong_count, stats.hint_count)
+        # Dùng computed_mode từ bên trong hàm update_stats_on_answer (đã tính TRƯỚC khi hint_count tăng)
+        # để tránh bug double-computation: nếu tính lại ở đây, hint_count đã bị tăng → sai mode
+        if computed_mode is not None:
+            teaching_mode = computed_mode
+        else:
+            teaching_mode = get_teaching_mode(stats.consecutive_wrong_count, stats.hint_count)
 
         # 4. Lấy lịch sử ngữ cảnh
         chat_history = get_recent_chat_context(db, session_id, limit=5)
