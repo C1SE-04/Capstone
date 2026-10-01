@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
+import os
 import models
 from database import engine
 
@@ -45,6 +48,37 @@ app.include_router(sessions.router)
 @app.get("/")
 def read_root():
     return {"message": "Welcome to Socratic Chatbot API!"}
+
+# Task #101: Serve file hoạt hình Lottie với Cache-Control header
+# Cho phép trình duyệt học sinh cache file trong 1 năm, tránh tải đi tải lại
+LOTTIE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "lottie")
+
+@app.get("/static/lottie/{filename}")
+async def serve_lottie(filename: str):
+    """
+    Phục vụ file hoạt hình Lottie với Cache-Control header.
+    FE có thể trỏ URL về đây thay vì lấy từ public/ của Next.js
+    để tận dụng cache tập trung ở Backend.
+    """
+    filepath = os.path.join(LOTTIE_DIR, filename)
+
+    if not os.path.exists(filepath):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"File {filename} không tìm thấy")
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            # public: trình duyệt + CDN được phép cache
+            # max-age=31536000: cache trong 1 năm (tính bằng giây)
+            # immutable: file không thay đổi → bỏ qua kiểm tra lại
+            "Cache-Control": "public, max-age=31536000, immutable",
+        }
+    )
 
 async def schedule_guest_cleanup():
     while True:
