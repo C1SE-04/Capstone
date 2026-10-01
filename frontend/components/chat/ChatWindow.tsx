@@ -11,7 +11,7 @@ interface ChatWindowProps {
   messages: Message[];
   isTyping: boolean;
   isOnline?: boolean;
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string, isExplanation?: boolean) => void;
   onRetryMessage?: (messageId: string, content: string) => void;
   onReconnect?: () => void;
   /** US4.1: Callbacks cho nut Da hieu / Chua hieu */
@@ -166,10 +166,12 @@ export function ChatWindow({
             <div className="flex flex-col justify-start flex-1 pt-2">
               {messages.map((msg, index) => {
                 // US4.1: Chi truyen callbacks cho tin nhan AI cuoi cung (khong tinh khi AI dang typing)
+                // - Chi hien khi AI dua ra dap an (msg.isAnswerRevealed = true)
                 const isLastAssistantMsg =
                   !isTyping &&
                   msg.role === "assistant" &&
-                  index === messages.length - 1;
+                  index === messages.length - 1 &&
+                  msg.isAnswerRevealed === true;
 
                 return (
                   <ChatMessage
@@ -179,7 +181,7 @@ export function ChatWindow({
                     {...(isLastAssistantMsg && {
                       onUnderstood,
                       onNotUnderstood,
-                      onSendExplanation: (text: string) => onSendMessage(text),
+                      onSendExplanation: (text: string) => onSendMessage(text, true),
                       isAiLoading: isTyping,
                       notUnderstoodCount,
                     })}

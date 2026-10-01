@@ -66,15 +66,25 @@ export default function ChatPage() {
           if (res.ok && isMounted) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
+              // Danh sach cac prompt ngam can loc bo khi hien thi lai lich su
+              const HIDDEN_PROMPTS = [
+                "Hoc sinh chua hieu cach giai thich tren. Hay giai thich lai theo cach khac, don gian va de hieu hon.",
+                "Hoc sinh van chua hieu sau nhieu lan giai thich. Hay dua ra dap an chinh xac va giai thich tung buoc that ro rang.",
+              ];
               const loadedConvs = data.map((sess: any) => ({
                 id: sess.id,
                 title: sess.title || "Phòng chat",
                 date: new Date(sess.updated_at).toLocaleDateString("vi-VN"),
-                messages: (sess.messages || []).map((m: any) => ({
-                  id: m.id,
-                  role: m.sender_type === "USER" ? "user" : "assistant",
-                  content: m.content,
-                })),
+                messages: (sess.messages || [])
+                  .map((m: any) => ({
+                    id: m.id,
+                    role: m.sender_type === "USER" ? "user" : "assistant",
+                    content: m.content,
+                  }))
+                  // Loc bo cac prompt ngam de khong bi lo khi reload trang
+                  .filter((m: any) => !(
+                    m.role === "user" && HIDDEN_PROMPTS.includes(m.content.trim())
+                  )),
               }));
               setConversations(loadedConvs);
             } else {
@@ -161,7 +171,8 @@ export default function ChatPage() {
   };
 
   // US4.1 - Trigger AI giai thich lai (AN, khong them tin nhan user vao UI)
-  const triggerSilentReexplain = async (conversationId: string) => {
+  // Nhan tham so prompt de tai su dung cho ca lan 1 (giai thich lai) va lan 5+ (dua dap an)
+  const triggerSilentReexplain = async (conversationId: string, prompt: string) => {
     if (!conversationId) return;
     setIsTyping(true);
     const botMessageId = (Date.now() + 1).toString();
@@ -196,8 +207,7 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
           session_id: conversationId,
-          prompt:
-            "Hoc sinh chua hieu cach giai thich tren. Hay giai thich lai theo cach khac, don gian va de hieu hon.",
+          prompt,
           problem_context: null,
         }),
       });
@@ -206,6 +216,7 @@ export default function ChatPage() {
       const decoder = new TextDecoder();
       let aiText = "";
       let lastEmotion: string | undefined = undefined;
+      let isAnswerRevealedFlag = false;
       let isDone = false;
       while (!isDone) {
         const { value, done } = await reader.read();
@@ -213,6 +224,9 @@ export default function ChatPage() {
         if (value) {
           const chunkStr = decoder.decode(value, { stream: true });
           for (const line of chunkStr.split("\n")) {
+            if (line.startsWith("event: ask_comprehension")) {
+              isAnswerRevealedFlag = true;
+            }
             if (line.startsWith("data: ")) {
               const dataStr = line.slice(6).trim();
               if (!dataStr || dataStr === "{}") continue;
@@ -224,7 +238,7 @@ export default function ChatPage() {
                 if (dataObj.emotion) {
                   lastEmotion = dataObj.emotion;
                 }
-                if (dataObj.text || dataObj.emotion) {
+                if (dataObj.text || dataObj.emotion || isAnswerRevealedFlag) {
                   setConversations((prev) =>
                     prev.map((c) =>
                       c.id === conversationId
@@ -236,6 +250,7 @@ export default function ChatPage() {
                                     ...m,
                                     content: aiText,
                                     emotion: lastEmotion,
+                                    isAnswerRevealed: isAnswerRevealedFlag,
                                   }
                                 : m,
                             ),
@@ -271,12 +286,27 @@ export default function ChatPage() {
   };
 
   // US4.1 - Handler: Hoc sinh nhan "Chua hieu"
+  // - Lan 1: AI giai thich lai theo cach khac (prompt ngam)
+  // - Lan 2-4: Hien o nhap de hoc sinh tu giai thich phan chua hieu
+  // - Lan 5+: AI dua ra dap an truc tiep va giai thich tung buoc (prompt ngam)
+  const MAX_NOT_UNDERSTOOD = 5;
   const handleNotUnderstood = () => {
     const newCount = notUnderstoodCount + 1;
     setNotUnderstoodCount(newCount);
     if (newCount === 1 && activeChatId) {
-      triggerSilentReexplain(activeChatId);
+      // Lan 1: Yeu cau AI giai thich lai theo cach khac
+      triggerSilentReexplain(
+        activeChatId,
+        "Hoc sinh chua hieu cach giai thich tren. Hay giai thich lai theo cach khac, don gian va de hieu hon."
+      );
+    } else if (newCount >= MAX_NOT_UNDERSTOOD && activeChatId) {
+      // Lan 5+: Hoc sinh van chua hieu -> dua ra dap an chinh xac
+      triggerSilentReexplain(
+        activeChatId,
+        "Hoc sinh van chua hieu sau nhieu lan giai thich. Hay dua ra dap an chinh xac va giai thich tung buoc that ro rang."
+      );
     }
+    // Lan 2-4: Chi hien o nhap (xu ly o UnderstandingButtons, khong can goi AI)
   };
 
   // Hàm xử lý phản hồi từ AI (có xử lý lỗi mạng & trạng thái tin nhắn)
@@ -349,6 +379,22 @@ export default function ChatPage() {
         // Không có session -> chat như khách
       }
 
+      // Dummy problem_context (thực tế lấy từ state/context của ứng dụng)
+      const problem_context = {
+        correctSolution: "4",
+      };
+
+      let answer_status: string | null = null;
+      // Trích xuất con số đầu tiên tìm thấy trong message
+      const numberMatch = userContent.match(/\d+/);
+      if (numberMatch) {
+        if (numberMatch[0] === problem_context.correctSolution) {
+          answer_status = "correct";
+        } else {
+          answer_status = "wrong";
+        }
+      }
+
       const response = await fetch(`${BACKEND_URL}/chat/orchestrator`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader },
@@ -356,6 +402,7 @@ export default function ChatPage() {
           session_id: targetConversationId,
           prompt: userContent,
           problem_context: null,
+          answer_status,
         }),
       });
 
@@ -365,6 +412,7 @@ export default function ChatPage() {
       const decoder = new TextDecoder();
       let aiText = "";
       let lastEmotion: string | undefined = undefined;
+      let isAnswerRevealedFlag = false;
       let isDone = false;
 
       while (!isDone) {
@@ -374,6 +422,9 @@ export default function ChatPage() {
           const chunkStr = decoder.decode(value, { stream: true });
           const lines = chunkStr.split("\n");
           for (const line of lines) {
+            if (line.startsWith("event: ask_comprehension")) {
+              isAnswerRevealedFlag = true;
+            }
             if (line.startsWith("data: ")) {
               const dataStr = line.slice(6).trim();
               if (dataStr === "" || dataStr === "{}") continue;
@@ -386,8 +437,8 @@ export default function ChatPage() {
                 if (dataObj.emotion) {
                   lastEmotion = dataObj.emotion;
                 }
-                // Cập nhật message với cả text và emotion mới nhất
-                if (dataObj.text || dataObj.emotion) {
+                // Cập nhật message với cả text, emotion, và cờ isAnswerRevealed mới nhất
+                if (dataObj.text || dataObj.emotion || isAnswerRevealedFlag) {
                   setConversations((prev) =>
                     prev.map((c) =>
                       c.id === targetConversationId
@@ -399,6 +450,7 @@ export default function ChatPage() {
                                     ...m,
                                     content: aiText,
                                     emotion: lastEmotion,
+                                    isAnswerRevealed: isAnswerRevealedFlag,
                                   }
                                 : m,
                             ),
@@ -434,9 +486,14 @@ export default function ChatPage() {
   };
 
   // Handler: Gửi prompt trong khung chat
-  const handleSendMessage = async (content: string) => {
-    // US4.1: Reset lai dem "Chua hieu" khi bat dau gui bat cu tin nhan moi nao
-    setNotUnderstoodCount(0);
+  // isExplanation = true khi gui tu o UnderstandingButtons (onSendExplanation)
+  // -> Khong reset notUnderstoodCount vi day la phan cua flow "Chua hieu"
+  const handleSendMessage = async (content: string, isExplanation = false) => {
+    // US4.1: Chi reset dem "Chua hieu" khi hoc sinh tu go tin nhan moi hoan toan,
+    // khong reset khi gui giai thich tu UnderstandingButtons
+    if (!isExplanation) {
+      setNotUnderstoodCount(0);
+    }
 
     const messageId = Date.now().toString();
     const userMsg: Message = {

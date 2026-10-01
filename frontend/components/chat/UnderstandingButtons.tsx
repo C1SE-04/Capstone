@@ -115,8 +115,8 @@ export function UnderstandingButtons({
     }
   };
 
-  // Hien o nhap khi da nhan Chua hieu >= 2 lan
-  const showInput = notUnderstoodCount >= 2;
+  // Hien o nhap khi da nhan Chua hieu >= 2 lan va chua den lan 5 (lan 5 AI tu xu ly)
+  const showInput = notUnderstoodCount >= 2 && notUnderstoodCount < 5;
   const disableButtons = isLoading;
 
   return (
@@ -173,9 +173,14 @@ export function UnderstandingButtons({
             AI đang giải thích lại theo cách khác…
           </span>
         )}
-        {notUnderstoodCount >= 2 && (
+        {notUnderstoodCount >= 2 && notUnderstoodCount < 5 && (
           <span className="text-xs text-amber-700/80 italic animate-in fade-in duration-200">
             Hãy gõ phần bạn chưa hiểu bên dưới ↓
+          </span>
+        )}
+        {notUnderstoodCount >= 5 && !isLoading && (
+          <span className="text-xs text-red-700/80 italic animate-in fade-in duration-200">
+            AI đang đưa ra đáp án chính xác…
           </span>
         )}
       </div>
