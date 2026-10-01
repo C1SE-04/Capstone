@@ -165,19 +165,18 @@ def process_query_with_orchestrator(
     )
     enriched_task_description = f"{hint_instruction}\n\n{task_description}"
 
-    print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0}")
+    emotion_flag = result.get("emotion_flag", "GUIDING")
+    print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0} | 🦉 emotion={emotion_flag}")
 
     # Lưu log ngầm
     background_tasks.add_task(save_orchestrator_log, db, user_query, target_agent, reason)
 
-    # Yield quyết định của Orchestrator
-    emotion_flag = result.get("emotion_flag", "GUIDING")
-    decision = {"target_agent": target_agent, "reason": reason, "debug_context": history_text, "emotion_flag": emotion_flag}
-    # Yield event orchestrator (kèm stats và teaching_mode để FE debug)
+    # Yield event orchestrator (kèm stats, teaching_mode và emotion_flag để FE debug)
     decision = {
         "target_agent": target_agent,
         "reason": reason,
         "teaching_mode": teaching_mode,
+        "emotion_flag": emotion_flag,
         "stats": {
             "consecutive_wrong_count": stats.consecutive_wrong_count if stats else 0,
             "hint_count": stats.hint_count if stats else 0,
@@ -225,7 +224,16 @@ def process_query_with_orchestrator(
         }
         yield f"event: ask_comprehension\ndata: {json.dumps(comprehension_event, ensure_ascii=False)}\n\n"
 
-    yield "event: done\ndata: {}\n\n"
+    # Gửi emotion về FE để con cú thay đổi cử động
+    EMOTION_MAP = {
+        "CORRECT":  "correct",
+        "WRONG":    "incorrect",
+        "GUIDING":  "suggesting",
+        "WARNING":  "incorrect",   # Cú lắc đầu khi học sinh dùng ngôn ngữ không phù hợp
+    }
+    owl_emotion = EMOTION_MAP.get(emotion_flag, "suggesting")
+    print(f"[🦉 Owl] emotion_flag={emotion_flag} → owl_emotion={owl_emotion}")
+    yield f"event: done\ndata: {json.dumps({'emotion': owl_emotion}, ensure_ascii=False)}\n\n"
 
 
 def process_comprehension_response(

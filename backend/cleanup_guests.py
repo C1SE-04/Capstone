@@ -24,7 +24,7 @@ def cleanup_old_guest_sessions():
             deleted_count += 1
             
         db.commit()
-        print(f"✅ Đã dọn dẹp {deleted_count} phòng chat rác của Guest (cũ hơn 24h).")
+        # print(f"✅ Đã dọn dẹp {deleted_count} phòng chat rác của Guest (cũ hơn 24h).")
     except Exception as e:
         db.rollback()
         print(f"❌ Lỗi khi dọn dẹp: {e}")

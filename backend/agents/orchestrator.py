@@ -605,7 +605,11 @@ class OrchestratorAgent:
                 selected_agent="KNOWLEDGE_TRACING",
                 task_description=_build_task_description("KNOWLEDGE_TRACING", original_message, problem_context),
                 routing_scratchpad=f"[Trụ1] Theory question pattern: '{text_clean[:40]}'",
-                emotion_flag="GUIDING",
+                emotion_flag=OrchestratorAgent._determine_emotion_flag(
+                    "KNOWLEDGE_TRACING",
+                    f"[Trụ1] Theory question pattern: '{text_clean[:40]}'",
+                    original_message,
+                ),
             )
 
         # 1.5 Tín hiệu lỗi sai rõ ràng
@@ -740,11 +744,16 @@ class OrchestratorAgent:
             # Nếu CÓ biểu thức toán (kể cả "3/43 + 32/2 = mấy") → cũng SCAFFOLDING,
             # tránh ML nhầm "mấy" (bao nhiêu) thành "mày" (bất lịch sự).
             if student_val is None or has_math_expr:
+                emotion_new = OrchestratorAgent._determine_emotion_flag(
+                    "SCAFFOLDING",
+                    "[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
+                    latest_message,
+                )
                 return RoutingResult(
                     selected_agent="SCAFFOLDING",
                     task_description=_build_task_description("SCAFFOLDING", latest_message, problem_context),
                     routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
-                    emotion_flag="GUIDING",
+                    emotion_flag=emotion_new,
                 )
 
         # Trụ cột 2
@@ -764,44 +773,39 @@ class OrchestratorAgent:
         """
         Xác định cờ cảm xúc dựa trên kết quả phân luồng.
         Mapping:
-          SAFETY                           → "WARNING"
-          MISCONCEPTION (math mismatch)    → "WRONG"
-          MISCONCEPTION (hiểu sai rõ ràng) → "WRONG"
-          SCAFFOLDING (math CORRECT)       → "CORRECT"
-          KNOWLEDGE_TRACING                → "GUIDING"
-          SCAFFOLDING (mặc định)           → "GUIDING"
+          SAFETY                                  → "WARNING"
+          Bất kỳ agent + keyword hiểu sai rõ ràng → "WRONG"
+          MISCONCEPTION (math mismatch)           → "WRONG"
+          SCAFFOLDING (math CORRECT)              → "CORRECT"
+          KNOWLEDGE_TRACING                       → "GUIDING"
+          SCAFFOLDING (mặc định)                  → "GUIDING"
         """
+        # ── Kiểm tra keyword hiểu sai — áp dụng cho MỌI agent ──────────────
+        # Nếu học sinh tự thú nhận hiểu sai, dù ML Router chọn agent nào
+        # (SCAFFOLDING, MISCONCEPTION, ...) cũng đều báo WRONG cho cú lắc đầu
+        _explicit_wrong_keywords = (
+            "tưởng", "nhầm", "lộn", "sai r", "sai rồi", "ngộ nhận",
+            "hiểu sai", "tính sai", "học sai", "nghĩ sai",
+            "quên đổi dấu", "quên ngoặc", "không đổi chiều",
+            "âm nhân âm ra âm", "âm bình phương ra âm",
+            "tử cộng tử mẫu cộng mẫu", "nhân chéo nhầm",
+        )
+        msg_lower = original_message.lower()
+        if (
+            "Math mismatch" in routing_scratchpad
+            or "math mismatch" in routing_scratchpad
+            or any(kw in msg_lower for kw in _explicit_wrong_keywords)
+        ):
+            return "WRONG"
+        # ────────────────────────────────────────────────────────────────────
+
         if agent == "SAFETY":
             return "WARNING"
-        if agent == "MISCONCEPTION":
-            # FIX #3: Trụ 2 (ML Router) phân loại MISCONCEPTION nhưng scratchpad không chứa
-            # "Math mismatch" — cần kiểm tra thêm từ khóa trong tin nhắn gốc để quyết định
-            # cờ là WRONG (hiểu sai thực sự) hay GUIDING (chỉ đang hỏi về lỗi sai)
-            _explicit_wrong_keywords = (
-                "tưởng", "nhầm", "lộn", "sai r", "sai rồi", "ngộ nhận",
-                "hiểu sai", "tính sai", "học sai", "nghĩ sai",
-                "quên đổi dấu", "quên ngoặc", "không đổi chiều",
-                "âm nhân âm ra âm", "âm bình phương ra âm",
-                "tử cộng tử mẫu cộng mẫu", "nhân chéo nhầm",
-            )
-            # 1. Nếu hệ thống tự tính thấy sai (Math mismatch) → WRONG
-            # 2. Nếu học sinh dùng keyword hiểu sai rõ ràng → WRONG
-            # 3. Nếu học sinh chỉ hỏi về lỗi sai → GUIDING (cú vẫn gật gù)
-            msg_lower = original_message.lower()
-            if (
-                "Math mismatch" in routing_scratchpad
-                or "math mismatch" in routing_scratchpad
-                or any(kw in msg_lower for kw in _explicit_wrong_keywords)
-            ):
-                return "WRONG"
-            return "GUIDING"
         if agent == "SCAFFOLDING" and (
             "Math match CORRECT" in routing_scratchpad
             or "Học sinh tính đúng" in routing_scratchpad
         ):
             return "CORRECT"
-        if agent == "KNOWLEDGE_TRACING":
-            return "GUIDING"
         return "GUIDING"
     def route_sync(
         self,
@@ -824,11 +828,16 @@ class OrchestratorAgent:
             student_val, _ = self._extract_fraction(text_clean)
             has_math_expr = bool(self._math_expr_re.search(text_clean))
             if student_val is None or has_math_expr:
+                emotion_new = OrchestratorAgent._determine_emotion_flag(
+                    "SCAFFOLDING",
+                    "[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
+                    latest_message,
+                )
                 return RoutingResult(
                     selected_agent="SCAFFOLDING",
                     task_description=_build_task_description("SCAFFOLDING", latest_message, problem_context),
                     routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
-                    emotion_flag="GUIDING",
+                    emotion_flag=emotion_new,
                 )
 
         result = self._ml_route(text_clean, problem_context)
