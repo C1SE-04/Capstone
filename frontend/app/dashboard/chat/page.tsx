@@ -164,10 +164,43 @@ export default function ChatPage() {
     }
   };
 
-  // US4.1 - Handler: Hoc sinh nhan "Da hieu" -> reset dem
+  // US4.1 - Handler: Hoc sinh nhan "Da hieu" -> them tin nhan chuc mung + doi dieu bo cu
   const handleUnderstood = () => {
     setNotUnderstoodCount(0);
     console.log("[US4.1] Hoc sinh da hieu bai.");
+
+    // Chỉ thêm message chúc mừng khi đang có cuộc trò chuyện
+    if (!activeChatId) return;
+
+    const congratsMessages = [
+      "**Tuyệt vời!** Em đã hiểu rồi! Thầy rất vui vì em nắm được vấn đề. Hãy tiếp tục phát huy nhé!",
+      "**Xuất sắc!** Em đã hiểu bài rồi! Học toán mà hiểu được như vậy là rất giỏi đó. Tiếp tục nhé!",
+      "**Giỏi lắm!** Em đã nắm được kiến thức này rồi! Mỗi câu hỏi hiểu được là một bước tiến lớn. Cứ tiếp tục học nhé!",
+    ];
+    const randomMsg = congratsMessages[Math.floor(Math.random() * congratsMessages.length)];
+    const congratsId = `congrats-${Date.now()}`;
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeChatId
+          ? {
+              ...c,
+              messages: [
+                ...c.messages,
+                {
+                  id: congratsId,
+                  role: "assistant" as const,
+                  content: randomMsg,
+                  emotion: "correct",
+                  isAnswerRevealed: false, // Không hiện lại nút Đã hiểu/Chưa hiểu
+                },
+              ],
+            }
+          : c
+      )
+    );
+
+    // Con cú giữ nguyên trạng thái correct — không reset về idle
   };
 
   // US4.1 - Trigger AI giai thich lai (AN, khong them tin nhan user vao UI)

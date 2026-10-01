@@ -57,6 +57,8 @@ export function ChatMessage({
               ? isError
                 ? "bg-red-50 text-red-900 border border-red-300 rounded-tr-sm"
                 : "bg-[#C1762A] text-white rounded-tr-sm"
+              : message.emotion === "correct"
+              ? "bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 text-[#000000] rounded-tl-sm animate-in fade-in zoom-in-95 duration-500"
               : "bg-white border border-[#F1CCA6] text-[#000000] rounded-tl-sm",
             isSending && "opacity-80"
           )}
