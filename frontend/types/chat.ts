@@ -3,6 +3,7 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   status?: "sending" | "sent" | "error";
+  emotion?: "idle" | "thinking" | "suggesting" | "correct" | "incorrect" | string;
 }
 
 export interface Conversation {

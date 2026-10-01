@@ -5,6 +5,7 @@ import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Message } from "@/types/chat";
 import { Sparkles, ArrowDown, WifiOff, RefreshCw } from "lucide-react";
+import { AssistantOwl, OwlEmotion } from "./AssistantOwl";
 
 interface ChatWindowProps {
   messages: Message[];
@@ -41,6 +42,17 @@ export function ChatWindow({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   // Ref dùng để xác định vị trí phần tử cuối cùng trong danh sách tin nhắn (phục vụ auto-scroll)
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
+
+  // Xác định trạng thái cảm xúc của cú
+  let currentEmotion: OwlEmotion = "idle";
+  if (isTyping) {
+    currentEmotion = "thinking";
+  } else {
+    const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
+    if (lastAssistantMsg && lastAssistantMsg.emotion) {
+      currentEmotion = lastAssistantMsg.emotion as OwlEmotion;
+    }
+  }
 
   // Trạng thái hiển thị nút cuộn xuống dưới
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -175,8 +187,8 @@ export function ChatWindow({
                 );
               })}
 
-              {/* Thẻ div rỗng nằm ở cuối để làm mốc cho hàm cuộn (scrollIntoView) */}
-              <div ref={endOfMessagesRef} className="h-4" />
+              {/* Thẻ div rỗng nằm ở cuối để làm mốc cho hàm cuộn (scrollIntoView) và tạo padding bottom để không bị con cú che khuất */}
+              <div ref={endOfMessagesRef} className="h-[150px] md:h-[260px]" />
             </div>
           )}
         </div>
@@ -209,6 +221,9 @@ export function ChatWindow({
         isLoading={isTyping}
         isOffline={!isOnline}
       />
+
+      {/* Trợ lý ảo Cú */}
+      <AssistantOwl emotion={currentEmotion} />
     </div>
   );
 }
