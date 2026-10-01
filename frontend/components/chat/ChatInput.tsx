@@ -65,7 +65,7 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
 
   return (
     // Wrapper cố định phần tử ở cuối (mt-auto)
-    <div className="p-4 bg-transparent mt-auto relative z-10 w-full max-w-4xl mx-auto">
+    <div className="p-4 bg-transparent mt-auto relative z-10 w-full">
       {/* Vùng background bo góc chứa các nút và ô nhập liệu */}
       <div className={cn(
         "relative flex items-end gap-2 bg-[#F1CCA6]/40 p-2 pl-4 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-all",
@@ -86,7 +86,7 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isOffline ? "Mất kết nối mạng. Đang chờ kết nối lại..." : "Hỏi SocraticKid bất cứ điều gì..."}
+          placeholder={isOffline ? "Mất kết nối. Đang chờ kết nối lại..." : "Hỏi SocraticKid..."}
           className="flex-1 max-h-[150px] min-h-[44px] py-3 bg-transparent text-[#000000] placeholder:text-[#8C4905]/60 outline-none resize-none overflow-y-auto font-medium disabled:cursor-not-allowed"
           rows={1}
           disabled={isLoading || isOffline}
