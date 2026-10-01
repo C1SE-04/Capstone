@@ -227,7 +227,7 @@ export default function TryPage() {
       });
 
       // ── Hết lượt dùng thử → hiện bảng thông báo (US 4.3 - AC1, AC2, AC3) ──
-      if (response.status === 403) {
+      if (response.status === 429) {
         setMessages((prev) => prev.filter((m) => m.id !== botId));
         setShowTrialExpired(true);
         return;
