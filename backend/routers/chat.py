@@ -7,7 +7,7 @@ import schemas
 import agents.orchestrator as orchestrator
 import orchestrator_bridge
 from database import get_db
-from dependencies.rate_limit import check_guest_rate_limit
+from rate_limit import check_guest_rate_limit
 
 router = APIRouter(tags=["Chat & AI"])
 
