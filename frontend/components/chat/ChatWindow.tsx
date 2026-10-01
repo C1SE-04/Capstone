@@ -187,8 +187,8 @@ export function ChatWindow({
                 );
               })}
 
-              {/* Thẻ div rỗng nằm ở cuối để làm mốc cho hàm cuộn (scrollIntoView) và tạo padding bottom để không bị con cú che khuất */}
-              <div ref={endOfMessagesRef} className="h-[150px] md:h-[260px]" />
+              {/* Thẻ div rỗng nằm ở cuối để làm mốc cho hàm cuộn (scrollIntoView) */}
+              <div ref={endOfMessagesRef} className="h-4" />
             </div>
           )}
         </div>
@@ -215,15 +215,17 @@ export function ChatWindow({
         </div>
       )}
 
-      {/* Vùng nhập liệu (Input Area) ở dưới cùng */}
-      <ChatInput
-        onSendMessage={onSendMessage}
-        isLoading={isTyping}
-        isOffline={!isOnline}
-      />
-
-      {/* Trợ lý ảo Cú */}
-      <AssistantOwl emotion={currentEmotion} />
+      {/* Footer Strip: cú + ô nhập liệu nằm cùng 1 hàng, cú không bao giờ đè tin nhắn */}
+      <div className="flex flex-row items-end">
+        <AssistantOwl emotion={currentEmotion} />
+        <div className="flex-1 min-w-0">
+          <ChatInput
+            onSendMessage={onSendMessage}
+            isLoading={isTyping}
+            isOffline={!isOnline}
+          />
+        </div>
+      </div>
     </div>
   );
 }

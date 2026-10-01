@@ -114,9 +114,8 @@ export function AssistantOwl({ emotion = "idle" }: AssistantOwlProps) {
 
   return (
     <div
-      className="fixed bottom-0 right-0 z-50 pointer-events-none"
+      className="block relative self-start mt-4 ml-2 md:ml-0 md:mt-0 md:self-end shrink-0 w-[62px] h-[62px] md:w-[90px] md:h-[90px] md:mb-6 pointer-events-none"
       style={{
-        width: "clamp(120px, 18vw, 240px)",
         // Hiệu ứng fade: opacity đổi mượt mà trong 200ms khi chuyển trạng thái
         opacity: isFading ? 0 : 1,
         transition: "opacity 200ms ease-in-out",
@@ -126,7 +125,7 @@ export function AssistantOwl({ emotion = "idle" }: AssistantOwlProps) {
         animationData={currentAnimation}
         loop={true}
         autoplay={true}
-        style={{ width: "100%", height: "100%" }}
+        style={{ width: "100%", height: "100%", display: "block" }}
       />
     </div>
   );
