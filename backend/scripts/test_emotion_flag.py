@@ -1,89 +1,122 @@
+"""
+test_emotion_flag.py
+====================
+Chay: cd D:\Document\Capstone\backend && python scripts/test_emotion_flag.py
+
+Kiem tra xem ham _determine_emotion_flag (va toan bo pipeline route_sync)
+tra dung co cam xuc chua.
+
+Cot ket qua:
+  [PASS] ✅  -> Dung nhu mong doi
+  [FAIL] ❌  -> Sai -- in them agent, flag thuc te, scratchpad de debug
+"""
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from agents.orchestrator import _agent
+
+from agents.orchestrator import OrchestratorAgent
+
+# Khoi tao agent (load ML model)
+_agent = OrchestratorAgent()
 
 TEST_CASES = [
-    # ── NHÓM 1: Test cơ bản (đã pass T2.3) ──────────────────────────
-    ("1. Chui the thang",           "dm thay",                      None,                       "WARNING"),
-    ("2. Tinh dung dap an",         "x = 2",                        {"correctSolution": "2"},   "CORRECT"),
-    ("3. Tinh sai dap an",          "x = 5",                        {"correctSolution": "2"},   "WRONG"),
-    ("4. Hoi ly thuyet",            "phan so la gi thay",           None,                       "GUIDING"),
-    ("5. Xin goi y",                "bi qua thay oi cho hint",      None,                       "GUIDING"),
-    # Case 6: cau nay khong co keyword trong MISCONCEPTION_SIGNALS
-    # Tru1 khong bat duoc, roi xuong Tru2/Tru3 -> SCAFFOLDING/GUIDING
-    # De test dung phai co history (Tru3 StateMachine) - test E2E se cover
-    ("6. Tu nhan hieu sai (no ctx)",  "em tuong am nhan am ra am",    None,                       "GUIDING"),
-    ("7. Hu het",                   "hu hu hu",                     None,                       "WARNING"),
-    # Case 8: "choi game" khong co trong OFFTOPIC_SIGNALS -> GUIDING
-    # Nen them "choi game" vao OFFTOPIC_SIGNALS neu muon WARNING
-    ("8. Hoi ngoai le (thieu signal)", "choi game khong thay",       None,                       "GUIDING"),
-    ("9. Chao binh thuong",         "chao thay",                    None,                       "GUIDING"),
 
-    # ── NHÓM 2: Edge case - Đúng nhưng gõ khác thường ───────────────
-    ("10. Dung - them chu truoc",   "em tinh duoc x = 2",           {"correctSolution": "2"},   "CORRECT"),
-    ("11. Dung - so thuc",          "x = 0.5",                      {"correctSolution": "0.5"}, "CORRECT"),
-    ("12. Dung - so am",            "x = -3",                       {"correctSolution": "-3"},  "CORRECT"),
-    ("13. Dung - so lon",           "x = 100",                      {"correctSolution": "100"}, "CORRECT"),
+    # NHOM 1: CORRECT - Hoc sinh tra loi dung (co problem_context)
+    ("C1. Dung - so nguyen",           "x = 2",              {"correctSolution": "2"},    "CORRECT"),
+    ("C2. Dung - kem loi giai",        "em tinh duoc x = 2", {"correctSolution": "2"},    "CORRECT"),
+    ("C3. Dung - so thuc",             "x = 0.5",            {"correctSolution": "0.5"},  "CORRECT"),
+    ("C4. Dung - so am",               "x = -3",             {"correctSolution": "-3"},   "CORRECT"),
+    ("C5. Dung - phan so",             "ket qua la 1/2",     {"correctSolution": "1/2"},  "CORRECT"),
 
-    # ── NHÓM 3: Edge case - Sai nhưng gần đúng ──────────────────────
-    ("14. Sai 1 don vi",            "x = 3",                        {"correctSolution": "2"},   "WRONG"),
-    ("15. Sai dau am duong",        "x = -2",                       {"correctSolution": "2"},   "WRONG"),
-    ("16. Sai hoan toan",           "x = 999",                      {"correctSolution": "2"},   "WRONG"),
+    # NHOM 2: WRONG - Sai so (co problem_context)
+    ("W1. Sai - so khac",              "x = 5",              {"correctSolution": "2"},    "WRONG"),
+    ("W2. Sai - gan dung",             "x = 3",              {"correctSolution": "2"},    "WRONG"),
+    ("W3. Sai - dau am",               "x = -2",             {"correctSolution": "2"},    "WRONG"),
+    ("W4. Sai - so lon",               "x = 999",            {"correctSolution": "2"},    "WRONG"),
 
-    # ── NHÓM 4: Edge case - Câu mơ hồ ───────────────────────────────
-    ("17. Cau cut",                 "da",                           None,                       "GUIDING"),
-    ("18. Tra loi chung chung",     "ok thay",                      None,                       "GUIDING"),
-    ("19. Hoi goi y viet khac",     "thay oi em khong biet lam",    None,                       "GUIDING"),
-    ("20. Hoi ly thuyet dai",       "thay oi so nguyen to la gi",   None,                       "GUIDING"),
+    # NHOM 3: WRONG - Tu nhan hieu sai (KHONG co problem_context) -- hay bi bug
+    ("W5. Tu nhan - tuong",            "em tưởng đây là đáp án đúng nhưng thầy bảo sai", None, "WRONG"),
+    ("W6. Tu nhan - nham",             "em bị nhầm rồi thầy ơi",                          None, "WRONG"),
+    ("W7. Tu nhan - lon",              "em lộn chiều bất đẳng thức",                      None, "WRONG"),
+    ("W8. Tu nhan - sai roi",          "sai rồi em hiểu ra rồi",                          None, "WRONG"),
+    ("W9. Tu nhan - hieu sai",         "em hiểu sai khái niệm từ đầu",                    None, "WRONG"),
+    ("W10. Tu nhan - nghi sai",        "em nghĩ sai bước này",                            None, "WRONG"),
+    ("W11. Tu nhan - toan hoc",        "em tưởng âm nhân âm ra âm",                         None, "WRONG"),
 
-    # ── NHÓM 5: Edge case - Thái độ xấu ─────────────────────────────
-    ("21. Chui nhe",                "thay ngu vl",                  None,                       "WARNING"),
-    ("22. Doi giai ho",             "giai cho em luon di thay",     None,                       "GUIDING"),
-    # Case 23: "thu may" khong co trong OFFTOPIC_SIGNALS -> GUIDING
-    # Nen them "thu may", "ngay may" vao OFFTOPIC_SIGNALS neu muon WARNING
-    ("23. Hoi lac de (thieu signal)", "hom nay thu may thay",        None,                       "GUIDING"),
+    # NHOM 4: GUIDING - Hoi ly thuyet / xin goi y
+    ("G1. Hoi ly thuyet",              "phan so la gi thay",       None, "GUIDING"),
+    ("G2. Xin goi y",                  "bi qua thay oi cho hint",  None, "GUIDING"),
+    ("G3. Khong biet lam",             "thay oi em khong biet lam", None, "GUIDING"),
+    ("G4. Chao hoi",                   "chao thay",                None, "GUIDING"),
+    ("G5. Tra loi cut",                "da",                       None, "GUIDING"),
+    ("G6. Cau chung chung",            "ok thay",                  None, "GUIDING"),
+    ("G7. Hoi ve loi sai (k tu nhan)", "thay oi loi sai la gi",   None, "GUIDING"),
+    ("G8. Xin goi y bai toan",         "em khong hieu thay goi y cho em voi", None, "GUIDING"),
+
+    # NHOM 5: WARNING - Ngon ngu xuc pham
+    ("X1. Chui the nhe",               "dm thay",   None, "WARNING"),
+    ("X2. Xuc pham",                   "thay ngu vl", None, "WARNING"),
 ]
 
+GROUPS = {
+    "NHOM 1 - CORRECT (co problem_context)":          [c for c in TEST_CASES if c[0].startswith("C")],
+    "NHOM 2 - WRONG (sai so, co problem_context)":    [c for c in TEST_CASES if c[0].startswith("W") and int(c[0][1]) <= 4],
+    "NHOM 3 - WRONG (tu nhan, KHONG co ctx) [DE BUG]":[c for c in TEST_CASES if c[0].startswith("W") and int(c[0][1]) >= 5],
+    "NHOM 4 - GUIDING (hoi, goi y, chao)":            [c for c in TEST_CASES if c[0].startswith("G")],
+    "NHOM 5 - WARNING (xuc pham)":                    [c for c in TEST_CASES if c[0].startswith("X")],
+}
+
+EMOJI = {"CORRECT": "✅ CORRECT", "WRONG": "❌ WRONG", "GUIDING": "💡 GUIDING", "WARNING": "⚠️  WARNING"}
 
 def run_tests():
-    passed = failed = 0
-    groups = {
-        "NHOM 1 - Co ban (9 cases)":             range(0, 9),
-        "NHOM 2 - Dung nhung go khac (4 cases)": range(9, 13),
-        "NHOM 3 - Sai nhung gan dung (3 cases)": range(13, 16),
-        "NHOM 4 - Cau mo ho (4 cases)":          range(16, 20),
-        "NHOM 5 - Thai do xau (3 cases)":        range(20, 23),
-    }
-    cases = list(TEST_CASES)
-    print("=" * 65)
-    print("TEST CO CAM XUC ORCHESTRATOR - T2.4 EXTENDED (23 cases)")
-    print("=" * 65)
+    total_pass = total_fail = 0
+    failed_cases = []
 
-    for group_name, idx_range in groups.items():
+    print("=" * 70)
+    print("  TEST CO CAM XUC CON CU (emotion_flag) - ORCHESTRATOR")
+    print("=" * 70)
+
+    for group_name, cases in GROUPS.items():
         print(f"\n--- {group_name} ---")
-        for i in idx_range:
-            desc, msg, ctx, expected = cases[i]
+        for desc, msg, ctx, expected in cases:
             result = _agent.route_sync(
-                latest_message=msg, history_text="", problem_context=ctx
+                latest_message=msg,
+                history_text="",
+                problem_context=ctx,
             )
-            actual = result.get("emotion_flag", "MISSING")
-            ok = actual == expected
-            status = "PASS" if ok else "FAIL"
-            passed += ok
-            failed += not ok
-            marker = "" if ok else " <-- SAI"
-            print(f"  [{status}] {desc}{marker}")
-            if not ok:
-                print(f"         agent={result['selected_agent']}  flag={actual!r}  want={expected!r}")
-                print(f"         scratchpad={result['routing_scratchpad']!r}")
+            actual  = result.get("emotion_flag", "MISSING")
+            agent   = result.get("selected_agent", "?")
+            scratch = result.get("routing_scratchpad", "")
+            ok      = (actual == expected)
 
-    print("\n" + "=" * 65)
-    print(f"Ket qua T2.4: {passed}/{passed + failed} PASS")
-    if failed:
-        print(f"Con {failed} FAIL — kiem tra lai logic truoc khi bao cao!")
+            if ok:
+                total_pass += 1
+                print(f"  PASS  {desc}")
+                print(f"        agent={agent}  flag={EMOJI.get(actual, actual)}")
+            else:
+                total_fail += 1
+                failed_cases.append((desc, msg, ctx, expected, actual, agent, scratch))
+                print(f"  FAIL  {desc}")
+                print(f"        Mong doi : {EMOJI.get(expected, expected)}")
+                print(f"        Thuc te  : {EMOJI.get(actual, actual)}   (agent={agent})")
+                print(f"        Tin nhan : \"{msg}\"")
+                print(f"        Scratchpad: {scratch!r}")
+
+    total = total_pass + total_fail
+    print(f"\n{'=' * 70}")
+    print(f"  KET QUA: {total_pass}/{total} PASS  |  {total_fail} FAIL")
+    print(f"{'=' * 70}")
+
+    if total_fail == 0:
+        print("  Tat ca PASS! Con cu dang nhan dung co cam xuc.")
     else:
-        print("Tat ca PASS! San sang bao cao cho Thong (T2.5) va Bao (T2.2).")
-    print("=" * 65)
+        print(f"  Con {total_fail} case bi sai!\n")
+        print("  Danh sach FAIL:")
+        for i, (desc, msg, ctx, expected, actual, agent, scratch) in enumerate(failed_cases, 1):
+            print(f"  {i}. [{desc}]")
+            print(f"     msg    = \"{msg}\"")
+            print(f"     ctx    = {ctx}")
+            print(f"     expect = {expected}  got = {actual}  (agent={agent})")
+    print(f"{'=' * 70}\n")
 
 
 if __name__ == "__main__":

@@ -39,7 +39,11 @@ export default function ChatPage() {
   // Key tăng mỗi khi người dùng chọn chat cũ từ Sidebar
   // ChatWindow lắng nghe key này để trigger scroll-to-bottom ngay lập tức
   const [selectedChatKey, setSelectedChatKey] = useState(0);
-  const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getOnlineServerSnapshot);
+  const isOnline = useSyncExternalStore(
+    subscribeOnline,
+    getOnlineSnapshot,
+    getOnlineServerSnapshot,
+  );
 
   // 1. Khôi phục danh sách conversations từ DB khi người dùng truy cập
   //    KHÔNG khôi phục activeChatId → luôn bắt đầu bằng New Chat trống hoàn toàn
@@ -49,10 +53,12 @@ export default function ChatPage() {
       try {
         const { getSession } = await import("next-auth/react");
         const nextAuthSession = await getSession();
-        const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+        const token = (nextAuthSession as { access_token?: string } | null)
+          ?.access_token;
 
         if (token) {
-          const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+          const BACKEND_URL =
+            process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
           const res = await fetch(`${BACKEND_URL}/sessions`, {
             headers: { Authorization: `Bearer ${token}` },
           });
@@ -93,7 +99,9 @@ export default function ChatPage() {
 
   // Cuộc trò chuyện hiện tại đang được chọn
   const currentConversation = conversations.find((c) => c.id === activeChatId);
-  const currentMessages = currentConversation ? currentConversation.messages : [];
+  const currentMessages = currentConversation
+    ? currentConversation.messages
+    : [];
 
   // Handler: Chọn phiên chat từ Sidebar
   // Tăng selectedChatKey để ChatWindow nhận biết và scroll xuống tin nhắn mới nhất
@@ -123,10 +131,12 @@ export default function ChatPage() {
     try {
       const { getSession } = await import("next-auth/react");
       const nextAuthSession = await getSession();
-      const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+      const token = (nextAuthSession as { access_token?: string } | null)
+        ?.access_token;
 
       if (token) {
-        const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+        const BACKEND_URL =
+          process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
         await fetch(`${BACKEND_URL}/sessions/${id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -155,24 +165,32 @@ export default function ChatPage() {
     if (!conversationId) return;
     setIsTyping(true);
     const botMessageId = (Date.now() + 1).toString();
-    const initialBotMsg: Message = { id: botMessageId, role: "assistant", content: "" };
+    const initialBotMsg: Message = {
+      id: botMessageId,
+      role: "assistant",
+      content: "",
+    };
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === conversationId ? { ...c, messages: [...c.messages, initialBotMsg] } : c
-      )
+        c.id === conversationId
+          ? { ...c, messages: [...c.messages, initialBotMsg] }
+          : c,
+      ),
     );
     try {
       let authHeader: Record<string, string> = {};
       try {
         const { getSession } = await import("next-auth/react");
         const nextAuthSession = await getSession();
-        const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+        const token = (nextAuthSession as { access_token?: string } | null)
+          ?.access_token;
         if (token) authHeader = { Authorization: `Bearer ${token}` };
       } catch {
         /* khong co session */
       }
 
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const BACKEND_URL =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
       const response = await fetch(`${BACKEND_URL}/chat/orchestrator`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader },
@@ -187,6 +205,7 @@ export default function ChatPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let aiText = "";
+      let lastEmotion: string | undefined = undefined;
       let isDone = false;
       while (!isDone) {
         const { value, done } = await reader.read();
@@ -201,17 +220,28 @@ export default function ChatPage() {
                 const dataObj = JSON.parse(dataStr);
                 if (dataObj.text) {
                   aiText += dataObj.text;
+                }
+                if (dataObj.emotion) {
+                  lastEmotion = dataObj.emotion;
+                }
+                if (dataObj.text || dataObj.emotion) {
                   setConversations((prev) =>
                     prev.map((c) =>
                       c.id === conversationId
                         ? {
                             ...c,
                             messages: c.messages.map((m) =>
-                              m.id === botMessageId ? { ...m, content: aiText } : m
+                              m.id === botMessageId
+                                ? {
+                                    ...m,
+                                    content: aiText,
+                                    emotion: lastEmotion,
+                                  }
+                                : m,
                             ),
                           }
-                        : c
-                    )
+                        : c,
+                    ),
                   );
                 }
               } catch {
@@ -230,8 +260,10 @@ export default function ChatPage() {
       };
       setConversations((prev) =>
         prev.map((c) =>
-          c.id === conversationId ? { ...c, messages: [...c.messages, errMsg] } : c
-        )
+          c.id === conversationId
+            ? { ...c, messages: [...c.messages, errMsg] }
+            : c,
+        ),
       );
     } finally {
       setIsTyping(false);
@@ -251,7 +283,7 @@ export default function ChatPage() {
   const triggerBotResponse = async (
     targetConversationId: string,
     userMessageId: string,
-    userContent: string
+    userContent: string,
   ) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setConversations((prev) =>
@@ -260,11 +292,11 @@ export default function ChatPage() {
             ? {
                 ...c,
                 messages: c.messages.map((m) =>
-                  m.id === userMessageId ? { ...m, status: "error" } : m
+                  m.id === userMessageId ? { ...m, status: "error" } : m,
                 ),
               }
-            : c
-        )
+            : c,
+        ),
       );
       setIsTyping(false);
       return;
@@ -279,31 +311,37 @@ export default function ChatPage() {
             ? {
                 ...c,
                 messages: c.messages.map((m) =>
-                  m.id === userMessageId ? { ...m, status: "sent" } : m
+                  m.id === userMessageId ? { ...m, status: "sent" } : m,
                 ),
               }
-            : c
-        )
+            : c,
+        ),
       );
 
       const botMessageId = (Date.now() + 1).toString();
-      const initialBotMsg: Message = { id: botMessageId, role: "assistant", content: "" };
+      const initialBotMsg: Message = {
+        id: botMessageId,
+        role: "assistant",
+        content: "",
+      };
 
       setConversations((prev) =>
         prev.map((c) =>
           c.id === targetConversationId
             ? { ...c, messages: [...c.messages, initialBotMsg] }
-            : c
-        )
+            : c,
+        ),
       );
 
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const BACKEND_URL =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
       let authHeader: Record<string, string> = {};
       try {
         const { getSession } = await import("next-auth/react");
         const nextAuthSession = await getSession();
-        const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+        const token = (nextAuthSession as { access_token?: string } | null)
+          ?.access_token;
         if (token) {
           authHeader = { Authorization: `Bearer ${token}` };
         }
@@ -326,6 +364,7 @@ export default function ChatPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let aiText = "";
+      let lastEmotion: string | undefined = undefined;
       let isDone = false;
 
       while (!isDone) {
@@ -342,17 +381,30 @@ export default function ChatPage() {
                 const dataObj = JSON.parse(dataStr);
                 if (dataObj.text) {
                   aiText += dataObj.text;
+                }
+                // Parse emotion nếu server trả về
+                if (dataObj.emotion) {
+                  lastEmotion = dataObj.emotion;
+                }
+                // Cập nhật message với cả text và emotion mới nhất
+                if (dataObj.text || dataObj.emotion) {
                   setConversations((prev) =>
                     prev.map((c) =>
                       c.id === targetConversationId
                         ? {
                             ...c,
                             messages: c.messages.map((m) =>
-                              m.id === botMessageId ? { ...m, content: aiText } : m
+                              m.id === botMessageId
+                                ? {
+                                    ...m,
+                                    content: aiText,
+                                    emotion: lastEmotion,
+                                  }
+                                : m,
                             ),
                           }
-                        : c
-                    )
+                        : c,
+                    ),
                   );
                 }
               } catch {
@@ -373,8 +425,8 @@ export default function ChatPage() {
         prev.map((c) =>
           c.id === targetConversationId
             ? { ...c, messages: [...c.messages, errorMsg] }
-            : c
-        )
+            : c,
+        ),
       );
     } finally {
       setIsTyping(false);
@@ -403,13 +455,15 @@ export default function ChatPage() {
           ? content.trim().slice(0, 25) + "..."
           : content.trim();
 
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const BACKEND_URL =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
       let realSessionId: string | null = null;
 
       try {
         const { getSession } = await import("next-auth/react");
         const nextAuthSession = await getSession();
-        const token = (nextAuthSession as { access_token?: string } | null)?.access_token;
+        const token = (nextAuthSession as { access_token?: string } | null)
+          ?.access_token;
 
         if (token) {
           const res = await fetch(`${BACKEND_URL}/sessions`, {
@@ -429,7 +483,7 @@ export default function ChatPage() {
         console.error("Không thể tạo session trên DB:", e);
       }
 
-      targetId = realSessionId || ("c-" + Date.now());
+      targetId = realSessionId || "c-" + Date.now();
 
       const nowStr = new Date().toLocaleDateString("vi-VN");
       const newConv: Conversation = {
@@ -448,7 +502,7 @@ export default function ChatPage() {
         const updated = prev.map((c) =>
           c.id === targetId
             ? { ...c, messages: [...c.messages, userMsg], date: nowStr }
-            : c
+            : c,
         );
         // Đưa conversation đang chat lên đầu danh sách
         const idx = updated.findIndex((c) => c.id === targetId);
@@ -477,11 +531,11 @@ export default function ChatPage() {
           ? {
               ...c,
               messages: c.messages.map((m) =>
-                m.id === messageId ? { ...m, status: "sending" } : m
+                m.id === messageId ? { ...m, status: "sending" } : m,
               ),
             }
-          : c
-      )
+          : c,
+      ),
     );
 
     triggerBotResponse(activeChatId, messageId, content);
