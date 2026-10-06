@@ -12,10 +12,38 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False)
+    # Mã liên kết (Pairing Code) 6 ký tự để học sinh cung cấp cho phụ huynh
+    pairing_code = Column(String(6), unique=True, index=True, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    # Quan hệ Phụ huynh - Học sinh
+    monitored_students = relationship(
+        "User", 
+        secondary="parent_student_links",
+        primaryjoin="User.id == ParentStudentLink.parent_id",
+        secondaryjoin="User.id == ParentStudentLink.student_id",
+        backref="monitors"
+    )
 
+class ParentStudentLink(Base):
+    __tablename__ = "parent_student_links"
+
+    parent_id = Column(
+        String, 
+        ForeignKey("users.id", ondelete="CASCADE"), 
+        primary_key=True
+    )
+    student_id = Column(
+        String, 
+        ForeignKey("users.id", ondelete="CASCADE"), 
+        primary_key=True
+    )
     
+    # Biệt danh do phụ huynh tự đặt cho con trên giao diện (US 5.2)
+    student_nickname = Column(String, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 

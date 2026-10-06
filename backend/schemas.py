@@ -73,3 +73,23 @@ class SessionStatsResponse(BaseModel):
 class ComprehensionRequest(BaseModel):
     session_id: str
     understood: bool
+
+# --- US 5.2: Parent Dashboard Schemas ---
+
+class PairingCodeResponse(BaseModel):
+    pairing_code: str
+
+class LinkStudentRequest(BaseModel):
+    pairing_code: str
+
+class UpdateStudentNicknameRequest(BaseModel):
+    nickname: str
+
+class LinkedStudentResponse(BaseModel):
+    student_id: str
+    email: str
+    nickname: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
