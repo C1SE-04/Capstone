@@ -8,6 +8,7 @@ declare module "next-auth" {
     user: {
       id: string;
       role?: string;
+      grade_level?: string | number;
     } & DefaultSession["user"];
   }
 
@@ -15,6 +16,7 @@ declare module "next-auth" {
     id: string;
     role?: string;
     access_token?: string;
+    grade_level?: string | number;
   }
 }
 
@@ -24,5 +26,6 @@ declare module "next-auth/jwt" {
     id: string;
     role?: string;
     access_token?: string;
+    grade_level?: string | number;
   }
 }
