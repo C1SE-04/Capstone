@@ -15,6 +15,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<'student' | 'monitor' | null>(null);
+  const [grade, setGrade] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -24,6 +25,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     password?: string;
     confirmPassword?: string;
     role?: string;
+    grade?: string;
     form?: string;
   }>({});
 
@@ -33,6 +35,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     setEmail("");
     setPassword("");
     setConfirmPassword("");
+    setGrade(null);
   };
 
   const validateForm = () => {
@@ -63,6 +66,11 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
     if (!isLoginMode && !role) {
       newErrors.role = "Vui lòng chọn vai trò";
+      hasError = true;
+    }
+
+    if (!isLoginMode && role === 'student' && !grade) {
+      newErrors.grade = "Vui lòng chọn lớp học";
       hasError = true;
     }
 
@@ -109,7 +117,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         const response = await fetch(`${backendUrl}${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.toLowerCase(), password })
+          body: JSON.stringify({ email: email.toLowerCase(), password, grade })
         });
 
         if (!response.ok) {
@@ -123,6 +131,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         setPassword("");
         setConfirmPassword("");
         setRole(null);
+        setGrade(null);
         setToastMessage("Đăng ký thành công! Vui lòng đăng nhập.");
         setShowSuccessToast(true);
         setTimeout(() => setShowSuccessToast(false), 3000);
@@ -242,7 +251,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               </button>
               <button
                 type="button"
-                onClick={() => setRole('monitor')}
+                onClick={() => { setRole('monitor'); setGrade(null); }}
                 className={`flex-1 py-2 rounded-xl font-bold transition-all cursor-pointer ${role === 'monitor'
                     ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
                     : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
@@ -251,6 +260,33 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               >
                 Người giám sát
               </button>
+            </div>
+          )}
+
+          {/* Grade Dropdown — chỉ hiện khi chọn Học sinh */}
+          {!isLoginMode && role === 'student' && (
+            <div className="pt-1">
+              <label className="block text-[#8C4905] text-sm font-bold mb-1">
+                Lớp học <span className="text-[#CB6600]">*</span>
+              </label>
+              <select
+                value={grade ?? ""}
+                onChange={(e) => setGrade(e.target.value ? Number(e.target.value) : null)}
+                disabled={isLoading}
+                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 cursor-pointer ${
+                  errors.grade
+                    ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]'
+                    : 'focus:ring-[#F7AD62] border-transparent'
+                }`}
+              >
+                <option value="" disabled>-- Chọn lớp --</option>
+                {[4, 5, 6, 7, 8, 9].map((g) => (
+                  <option key={g} value={g}>Lớp {g}</option>
+                ))}
+              </select>
+              {errors.grade && (
+                <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.grade}</p>
+              )}
             </div>
           )}
           {errors.role && !isLoginMode && (

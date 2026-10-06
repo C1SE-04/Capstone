@@ -7,12 +7,14 @@ from datetime import datetime
 class AuthInput(BaseModel):
     email: EmailStr
     password: str
+    grade: Optional[int] = None  # Lớp học (4-9), chỉ bắt buộc cho STUDENT
 
 # Dữ liệu trả về khi Đăng ký thành công
 class UserResponse(BaseModel):
     id: str
     email: EmailStr
     role: str
+    grade: Optional[int] = None  # Trả về lớp học nếu có
 
     class Config:
         from_attributes = True

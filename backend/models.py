@@ -12,6 +12,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False)
+    grade = Column(Integer, nullable=True)  # Chỉ dùng cho STUDENT (lớp 4-9)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
 
