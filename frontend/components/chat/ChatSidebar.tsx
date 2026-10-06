@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LogOut, Settings, X, Plus, Trash2 } from "lucide-react";
+import { LogOut, Settings, Settings2, X, Plus, Trash2 } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -129,7 +129,14 @@ export function ChatSidebar({
 
         {/* Settings Dropdown (Floating) */}
         {showSettings && (
-          <div className="absolute bottom-20 left-4 right-4 bg-white rounded-xl shadow-lg border border-[#F1CCA6] p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+          <div className="absolute bottom-20 left-4 right-4 bg-white rounded-xl shadow-lg border border-[#F1CCA6] p-2 z-50 animate-in fade-in zoom-in-95 duration-200 flex flex-col gap-1">
+            <button
+              onClick={() => router.push("/dashboard/settings")}
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#8C4905] hover:bg-[#F7ECE1] rounded-lg transition-colors font-medium"
+            >
+              <Settings2 size={16} />
+              Cài đặt
+            </button>
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#8C4905] hover:bg-[#F7ECE1] rounded-lg transition-colors font-medium"

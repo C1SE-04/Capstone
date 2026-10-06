@@ -8,7 +8,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { History, Settings, LogOut, X } from "lucide-react";
+import { History, Settings, Settings2, LogOut, X } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -27,6 +27,7 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
 
   const navLinks = [
     { name: "Lịch sử", href: "/dashboard/history", icon: History },
+    { name: "Cài đặt", href: "/dashboard/settings", icon: Settings2 },
   ];
 
   return (
