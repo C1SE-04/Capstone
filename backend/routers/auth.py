@@ -15,10 +15,15 @@ def register(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(status_code=400, detail="Email đã được sử dụng")
 
+    # Validate grade bắt buộc và hợp lệ cho STUDENT
+    if user_data.grade is None or user_data.grade not in range(4, 10):
+        raise HTTPException(status_code=422, detail="Lớp học phải là số từ 4 đến 9")
+
     new_user = models.User(
         email=normalized_email,
         hashed_password=auth.hash_password(user_data.password),
-        role="STUDENT"
+        role="STUDENT",
+        grade=user_data.grade
     )
     db.add(new_user)
     db.commit()
