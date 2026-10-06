@@ -44,6 +44,8 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(chat.router)
 app.include_router(sessions.router)
+from routers import family
+app.include_router(family.router)
 
 @app.get("/")
 def read_root():
