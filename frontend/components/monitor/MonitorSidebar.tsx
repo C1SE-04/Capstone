@@ -59,7 +59,20 @@ export default function MonitorSidebar({
         },
       });
       if (res.ok) {
-        const data: LinkedStudent[] = await res.json();
+        let data: LinkedStudent[] = await res.json();
+        
+        // MOCK DATA: Nếu chưa có học sinh nào, tự động thêm 1 học sinh mẫu để test UI
+        if (data.length === 0) {
+          data = [
+            {
+              student_id: "default",
+              email: "student_demo@gmail.com",
+              nickname: "Bé Nam (Mock)",
+              created_at: new Date().toISOString()
+            }
+          ];
+        }
+
         setStudents(data);
         // Tự động chọn con đầu tiên nếu chưa chọn
         if (data.length > 0 && !selectedStudentId) {
