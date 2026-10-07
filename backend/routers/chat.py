@@ -67,6 +67,7 @@ def chat_with_orchestrator(
             background_tasks=background_tasks,
             problem_context=request.problem_context,
             answer_status=request.answer_status,
+            grade_level=request.grade_level,  # Task #132: truyền lớp học vào AI
         ),
         media_type="text/event-stream"
     )
