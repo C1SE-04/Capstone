@@ -53,6 +53,7 @@ export const authOptions: NextAuthOptions = {
             email: payload.email,
             name: payload.email.split("@")[0], // Dùng phần trước @ làm display name
             role: payload.role,
+            grade_level: payload.grade_level,
             access_token: data.access_token,
           };
         } catch {
@@ -72,6 +73,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.grade_level = user.grade_level;
         token.access_token = user.access_token;
       }
       return token;
@@ -81,6 +83,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string | undefined;
+        session.user.grade_level = token.grade_level as string | number | undefined;
         session.access_token = token.access_token as string | undefined;
       }
       return session;
