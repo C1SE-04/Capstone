@@ -1,4 +1,51 @@
 from typing import Optional
+import json
+import os
+
+def _load_curriculum() -> dict:
+    """Tai grade_curriculum.json mot lan khi khoi dong module."""
+    json_path = os.path.join(os.path.dirname(__file__), "grade_curriculum.json")
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+# Cache curriculum khi module duoc load (khong doc file nhieu lan)
+_CURRICULUM = _load_curriculum()
+
+
+def _get_grade_context(grade_level: Optional[int]) -> str:
+    """
+    Xây dựng đoạn text ngữ cảnh kiến thức tích lũy theo lớp.
+
+    Nguyên tắc tích lũy: Lớp 7 biết hết kiến thức lớp 4 + 5 + 6 + 7.
+    Nếu grade_level=None → trả về chuỗi rỗng (không ảnh hưởng prompt).
+    """
+    if not grade_level or not _CURRICULUM:
+        return ""
+
+    grade = int(grade_level)
+    all_topics = []
+    for lvl in range(4, grade + 1):
+        for topic in _CURRICULUM.get(str(lvl), []):
+            all_topics.append(f"  - [Lớp {lvl}] {topic}")
+
+    if not all_topics:
+        return ""
+
+    topics_text = "\n".join(all_topics)
+
+    return f"""
+─── THÔNG TIN LỚP HỌC SINH (QUAN TRỌNG) ───
+Học sinh đang học: Lớp {grade}
+Các kiến thức đã được học (tích lũy từ lớp 4 đến lớp {grade}):
+{topics_text}
+
+BẮT BUỘC khi học sinh nói "em chưa học" hoặc tỏ ra không hiểu:
+- Nếu kiến thức thuộc danh sách trên: Học sinh đã học rồi. Nhẹ nhàng nhắc: "Theo chương trình, đây là kiến thức lớp X mà em đã học. Thầy tin em có thể nhớ lại...".
+- Nếu KHÔNG thuộc danh sách (vượt cấp): Rất bình thường. An ủi: "Đây là kiến thức lớp cao hơn, em chưa học là hoàn toàn bình thường. Thầy sẽ giải thích thật đơn giản để em hiểu nhé...". Sau đó VẪN tiếp tục hướng dẫn học sinh giải quyết bài toán đó.
+"""
 
 _JSON_RULE = (
     "QUAN TRỌNG: Chỉ trả về JSON thuần túy. "
@@ -55,6 +102,7 @@ def build_specialized_agent_prompt(
     latest_message: str,
     reject_reason: Optional[str] = None, #ko có reject_reason thì mặc định là ko reject
     problem_context: Optional[dict] = None,
+    grade_level: Optional[int] = None, 
 ) -> str:
     """
     Sinh prompt cho 1 trong 4 Specialized Agent.
@@ -151,12 +199,12 @@ BẮT BUỘC: Nếu học sinh giải thích "vì em lấy mẫu A × mẫu B", 
   3. Hỏi dẫn dắt để học sinh tự nhận ra: nhân hai mẫu luôn cho mẫu chung, nhưng chưa chắc là mẫu chung NHỎ NHẤT.
   4. Không phủ nhận hoàn toàn câu trả lời của học sinh — vì trong bài này kết quả vẫn đúng.
 """
-
+    grade_context = _get_grade_context(grade_level)
     return f"""{_JSON_RULE}
 
 Bạn là {agent_role} AGENT của SocraticKid — gia sư AI cho học sinh lớp 4–9 Việt Nam.
 Vai trò của bạn: {role_description}
-{reject_section}{problem_section}
+{reject_section}{problem_section}{grade_context}
 ─── TASK TỪ ORCHESTRATOR ───
 {task_description}
 

@@ -1,7 +1,8 @@
-# 📘 Hướng Dẫn Thực Hiện Task: `[FE] Viết code để con cú biết thay đổi cử động dựa vào kết quả từ server trả về`
+# 📘 Hướng Dẫn Thực Hiện Task: `[AI] Sửa agent_prompts.py – Nhận tham số grade_level, chèn vào prompt`
 
-> **Sprint 4 – US 4.2: Cú Socratic sinh động**
-> **Người thực hiện:** [Bảo] – Trùm Frontend
+> **Sprint 5 – US 5.1: Chọn Lớp Học Sinh & AI Thích Nghi Theo Lớp**
+> **Người thực hiện:** [Thông] – AI Engineer
+> **Task:** T5.9
 > **Ước tính thời gian:** 4 giờ
 
 ---
@@ -10,567 +11,403 @@
 
 ### Task này làm gì?
 
-Hiện tại con cú (`AssistantOwl`) đã được **gắn lên màn hình** (task T2.1 của Bảo đã làm), nhưng cử động của nó **chưa được kết nối với dữ liệu thật từ server**. Nhiệm vụ này yêu cầu:
+Hiện tại, AI trả lời học sinh mà **không biết học sinh đang học lớp mấy**. Toàn bộ prompt trong `agent_prompts.py` chỉ nói chung chung "học sinh lớp 4–9". Nhiệm vụ này yêu cầu:
 
-> **"Bắt" con cú nhìn vào cái cờ cảm xúc (`emotion`) mà server trả về trong JSON, rồi tự động đổi hoạt hình tương ứng một cách mượt mà.**
-
-### Luồng hoạt động hiện tại (đã có)
-
-```
-Học sinh gõ tin nhắn
-   ↓
-ChatPage.tsx gọi fetch đến /chat/orchestrator (Backend)
-   ↓
-Backend stream về từng dòng SSE: data: {"text": "...", "emotion": "correct"}
-   ↓
-ChatPage nhận stream → chỉ lưu phần `text` vào messages
-   ↓
-ChatWindow đọc messages → hiển thị bong bóng chat
-   ↓
-AssistantOwl nhận prop `emotion` → phát hoạt hình
-```
+> **Cho `agent_prompts.py` biết `grade_level` của học sinh để tự động chèn vào prompt: "Học sinh đang học Lớp X. Các kiến thức em đã học bao gồm: [danh sách tích lũy từ lớp 4 đến lớp X]."**
 
 ### Vấn đề hiện tại
 
-Nhìn vào `page.tsx` (dòng 342-357), khi nhận stream từ server:
+Mở `agent_prompts.py` (dòng 51–58), hàm `build_specialized_agent_prompt` hiện tại **không có tham số `grade_level`**:
 
-```ts
-// ⚠️ HIỆN TẠI: chỉ lưu text, BỎ QUA emotion
-if (dataObj.text) {
-  aiText += dataObj.text;
-  setConversations((prev) =>
-    prev.map((c) =>
-      c.id === targetConversationId
-        ? {
-            ...c,
-            messages: c.messages.map((m) =>
-              m.id === botMessageId ? { ...m, content: aiText } : m
-              //                              ^^^^^^^^^^^^^^^^^^
-              //              Không có `emotion` ở đây!
-            ),
-          }
-        : c
-    )
-  );
-}
+```python
+# ⚠️ HIỆN TẠI: không biết grade_level
+def build_specialized_agent_prompt(
+    agent_role: str,
+    task_description: str,
+    history: list[dict],
+    latest_message: str,
+    reject_reason: Optional[str] = None,
+    problem_context: Optional[dict] = None,
+) -> str:
 ```
 
-Và `ChatWindow.tsx` (dòng 51-54) thì **đọc emotion từ tin nhắn cuối cùng**:
+Và trong `orchestrator_bridge.py` (dòng 206), `agent_router` được gọi cũng không truyền `grade_level`:
 
-```ts
-const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
-if (lastAssistantMsg && lastAssistantMsg.emotion) {
-  currentEmotion = lastAssistantMsg.emotion as OwlEmotion;
-}
+```python
+# ⚠️ HIỆN TẠI: không có grade_level
+for chunk in agent_router(target_agent, enriched_task_description, history_text, user_query, expected_answer):
 ```
 
-Nhưng vì `emotion` chưa bao giờ được gán vào message object → con cú **luôn ở trạng thái `idle`**, không bao giờ thay đổi theo phản hồi của server.
+Hệ quả: **AI không biết học sinh lớp 7 đã học gì, nên không thể đánh giá "Em chưa học phân số" là đúng hay sai**.
 
-### Những gì cần làm trong task này
+### Những gì cần làm
 
-| # | Việc cần làm | File liên quan |
+| # | Việc cần làm | File |
 |---|---|---|
-| 1 | **Parse trường `emotion`** từ SSE stream | `app/dashboard/chat/page.tsx` |
-| 2 | **Lưu `emotion` vào message object** khi AI trả lời xong | `app/dashboard/chat/page.tsx` |
-| 3 | **Xử lý transition mượt mà** giữa các trạng thái cú | `components/chat/AssistantOwl.tsx` |
-| 4 | **Xử lý `triggerSilentReexplain`** (luồng "Chưa hiểu") cũng phải gán emotion | `app/dashboard/chat/page.tsx` |
+| 1 | Tạo `grade_curriculum.json` – danh sách kiến thức tích lũy theo lớp 4–9 | `backend/agents/grade_curriculum.json` |
+| 2 | Thêm hàm `_get_grade_context()` và tham số `grade_level` vào hàm chính | `backend/agents/agent_prompts.py` |
+| 3 | Sửa `router.py` – thêm `grade_level`, chèn grade context vào prompt | `backend/router.py` |
+| 4 | Sửa `orchestrator_bridge.py` – nhận và truyền `grade_level` xuống | `backend/orchestrator_bridge.py` |
+| 5 | Sửa `main.py` – nhận `grade_level` từ request body | `backend/main.py` hoặc `schemas.py` |
 
-> **Lưu ý:** Không cần sửa `types/chat.ts` (field `emotion` đã có sẵn), không cần sửa `ChatWindow.tsx` (logic đọc emotion đã đúng), không cần cài thêm thư viện nào.
+> **Lưu ý:** Không cần sửa Frontend. Phần FE truyền `grade_level` là task của Thống/Bảo (T5.4 + T5.7). Task T5.9 chỉ làm phần AI/BE.
 
 ---
 
 ## 2. 🌿 Đặt Tên Branch
 
-Làm theo quy ước của team (feature branch từ `dev`):
-
 ```bash
 git checkout dev
 git pull origin dev
-git checkout -b feat/us4.2-owl-emotion-state
+git checkout -b feat/us5.1-grade-level-prompt
 ```
 
-> **Giải thích:** `feat/` = tính năng mới, `us4.2` = User Story 4.2, `owl-emotion-state` = mô tả ngắn gọn.
+> `feat/` = tính năng mới, `us5.1` = User Story 5.1, `grade-level-prompt` = mô tả ngắn.
 
 ---
 
-## 3. 📋 Kiểm Tra Thư Viện (Không Cần Cài Thêm)
+## 3. 🏗️ Phân Tích Code Hiện Tại
 
-Mở `package.json` kiểm tra thư viện đã có sẵn:
+### Luồng hiện tại (không có grade_level)
+
+```
+POST /chat/orchestrator
+   ↓ main.py
+   ↓ process_query_with_orchestrator()   [orchestrator_bridge.py, dòng 107]
+   ↓ agent_router()                      [router.py, dòng 38]
+   ↓ Prompt gửi Gemini (không biết lớp)
+```
+
+### Luồng SAU khi sửa
+
+```
+POST /chat/orchestrator  { grade_level: 7 }
+   ↓ main.py  →  parse grade_level=7
+   ↓ process_query_with_orchestrator(grade_level=7)
+   ↓ agent_router(grade_level=7)
+   ↓ _get_grade_context(7)  →  danh sách kiến thức lớp 4–7
+   ↓ Prompt chèn: "Học sinh đang học Lớp 7. Đã học: [...]"
+   ↓ Gemini biết đủ ngữ cảnh để phản hồi phù hợp
+```
+
+### Kiến trúc file quan trọng cần nắm
+
+- **`orchestrator_bridge.py`** – Điểm trung tâm, gọi `agent_router`. Đây là nơi đầu tiên nhận `grade_level` từ API.
+- **`router.py`** – Gọi Gemini. Là nơi `base_prompt` được tạo ra – cần chèn `grade_context` vào đây.
+- **`agent_prompts.py`** – Chứa `build_specialized_agent_prompt`. Cần thêm `grade_level` làm tham số và hàm `_get_grade_context()`.
+
+---
+
+## 4. 📋 Chuẩn Bị: Tạo `grade_curriculum.json`
+
+**Tạo file mới:** `backend/agents/grade_curriculum.json`
+
+**Nguyên tắc tích lũy:** Lớp 7 biết hết kiến thức lớp 4 + 5 + 6 + 7. Lớp 9 biết hết từ lớp 4 đến lớp 9.
 
 ```json
-"lottie-react": "^2.4.0"   ✅ Đã có
-```
-
-Thư viện `lottie-react` đã được cài từ task T2.1 của Bảo. File hoạt hình cú cũng đã đủ 5 trạng thái trong `public/lottie/`:
-
-```
-public/lottie/
-├── owl_idle.json        ✅ (đứng im, mặc định)
-├── owl_thinking.json    ✅ (đang suy nghĩ)
-├── owl_suggesting.json  ✅ (gợi ý)
-├── owl_correct.json     ✅ (trả lời đúng)
-└── owl_incorrect.json   ✅ (trả lời sai)
-```
-
----
-
-## 4. 🏗️ Phân Tích Code Hiện Tại
-
-### 4.1. `types/chat.ts` – Đã sẵn sàng
-
-```ts
-// File: frontend/types/chat.ts
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  status?: "sending" | "sent" | "error";
-  emotion?: "idle" | "thinking" | "suggesting" | "correct" | "incorrect" | string; // ✅ đã có
+{
+  "4": [
+    "So tu nhien, so chan, so le",
+    "Phep cong, tru, nhan, chia so co nhieu chu so",
+    "Phan so: khai niem, so sanh, rut gon",
+    "Cong, tru phan so cung mau va khac mau",
+    "Nhan, chia phan so",
+    "Dien tich, chu vi hinh chu nhat, hinh vuong",
+    "Goc nhon, goc tu, goc vuong",
+    "Don vi do do dai, dien tich, khoi luong, thoi gian"
+  ],
+  "5": [
+    "So thap phan: doc, viet, so sanh",
+    "Cong, tru, nhan, chia so thap phan",
+    "Ti so phan tram",
+    "Dien tich hinh tam giac, hinh thang",
+    "The tich hinh hop chu nhat",
+    "So nguyen to va hop so"
+  ],
+  "6": [
+    "Uoc va boi, UCLN, BCNN",
+    "So nguyen am",
+    "Phep tinh voi so nguyen",
+    "Phan so mo rong sang so nguyen",
+    "Ti le thuc",
+    "Hinh hoc: duong thang, goc, tam giac, tu giac",
+    "Thong ke co ban: bieu do cot, tan so"
+  ],
+  "7": [
+    "So huu ti va cac phep tinh",
+    "Ti le thuan va ti le nghich",
+    "Ham so va do thi (khai niem co ban)",
+    "Phuong trinh bac nhat mot an",
+    "Tam giac bang nhau (3 truong hop)",
+    "Tam giac can, tam giac deu",
+    "Tu giac: hinh thang, hinh binh hanh",
+    "Thong ke: so trung binh cong, so trung vi"
+  ],
+  "8": [
+    "Phep nhan, chia da thuc",
+    "Hang dang thuc dang nho (7 hang dang thuc)",
+    "Phan thuc dai so",
+    "Phuong trinh bac nhat hai an",
+    "He phuong trinh bac nhat hai an",
+    "Tu giac: hinh chu nhat, hinh thoi, hinh vuong",
+    "Dien tich cac hinh phang",
+    "Dinh ly Pythagore"
+  ],
+  "9": [
+    "Can bac hai va can thuc bac hai",
+    "Ham so bac nhat y = ax + b",
+    "Phuong trinh bac hai mot an",
+    "He thuc Vi-et",
+    "Ham so bac hai (khai niem)",
+    "Duong tron: tiep tuyen, day cung, goc noi tiep",
+    "Tam giac dong dang",
+    "Ti so luong giac trong tam giac vuong",
+    "The tich hinh tru, hinh non, hinh cau"
+  ]
 }
 ```
 
-Field `emotion` trong `Message` interface đã tồn tại, không cần sửa.
-
-### 4.2. `AssistantOwl.tsx` – Cần nâng cấp transition
-
-```tsx
-// File: frontend/components/chat/AssistantOwl.tsx (HIỆN TẠI)
-export function AssistantOwl({ emotion = "idle" }: AssistantOwlProps) {
-  const [animationData, setAnimationData] = useState<object | null>(null);
-
-  useEffect(() => {
-    const src = EMOTION_SRC[emotion];
-    fetch(src)
-      .then((res) => res.json())
-      .then((data) => setAnimationData(data))  // ← Load file Lottie mới
-      .catch((err) => console.error("Failed to load owl animation:", err));
-  }, [emotion]);
-
-  if (!animationData) return null;  // ← Khi đang tải → cú biến mất
-
-  return (
-    <div className="fixed bottom-0 right-0 z-50 pointer-events-none"
-         style={{ width: "clamp(120px, 18vw, 240px)" }}>
-      <Lottie animationData={animationData} loop={true} autoplay={true} ... />
-    </div>
-  );
-}
-```
-
-**Vấn đề:** Khi `emotion` thay đổi → `animationData` được set về `null` → cú **biến mất một khoảng khắc** trước khi load animation mới → **bị khựng hình, không mượt mà**.
-
-### 4.3. `ChatWindow.tsx` – Không cần sửa
-
-Logic đọc emotion ở dòng 46-55 đã đúng:
-
-```tsx
-let currentEmotion: OwlEmotion = "idle";
-if (isTyping) {
-  currentEmotion = "thinking";   // Khi AI đang gõ → cú suy nghĩ
-} else {
-  const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
-  if (lastAssistantMsg && lastAssistantMsg.emotion) {
-    currentEmotion = lastAssistantMsg.emotion as OwlEmotion;  // Đọc emotion từ message cuối
-  }
-}
-```
-
-Luồng này hoạt động **đúng rồi** — chỉ cần `page.tsx` gán `emotion` vào message là xong.
+> **Lưu ý về encoding:** File JSON dùng tiếng Việt không dấu để tránh vấn đề encoding trên Windows. Thông có thể tự thêm dấu vào sau khi tạo file trên máy của mình.
 
 ---
 
 ## 5. ✍️ Code Cần Viết
 
-### 5.1. Sửa `page.tsx` – Parse và lưu `emotion` từ stream
+### 5.1. Thêm hàm `_get_grade_context()` vào `agent_prompts.py`
 
-**Mở file:** `frontend/app/dashboard/chat/page.tsx`
+**Mở file:** `backend/agents/agent_prompts.py`
 
-#### Bước 5.1.1 – Thêm biến `lastEmotion` trong hàm `triggerBotResponse`
+**Thêm import và hàm mới vào đầu file** (ngay sau dòng `from typing import Optional`):
 
-Tìm đến hàm `triggerBotResponse` (khoảng dòng 251), **tìm đoạn**:
+```python
+import json
+import os
 
-```ts
-let aiText = "";
-let isDone = false;
-```
+def _load_curriculum() -> dict:
+    """Tai grade_curriculum.json mot lan khi khoi dong module."""
+    json_path = os.path.join(os.path.dirname(__file__), "grade_curriculum.json")
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
 
-**Sửa thành:**
+# Cache curriculum khi module duoc load (khong doc file nhieu lan)
+_CURRICULUM = _load_curriculum()
 
-```ts
-let aiText = "";
-let lastEmotion: string | undefined = undefined; // ← THÊM DÒNG NÀY
-let isDone = false;
-```
 
-#### Bước 5.1.2 – Parse `emotion` từ mỗi chunk SSE (trong `triggerBotResponse`)
+def _get_grade_context(grade_level: Optional[int]) -> str:
+    """
+    Xây dựng đoạn text ngữ cảnh kiến thức tích lũy theo lớp.
 
-Tìm đoạn xử lý `dataObj` trong vòng lặp stream (khoảng dòng 342-356):
+    Nguyên tắc tích lũy: Lớp 7 biết hết kiến thức lớp 4 + 5 + 6 + 7.
+    Nếu grade_level=None → trả về chuỗi rỗng (không ảnh hưởng prompt).
+    """
+    if not grade_level or not _CURRICULUM:
+        return ""
 
-```ts
-// ⚠️ HIỆN TẠI (chưa có emotion):
-if (dataObj.text) {
-  aiText += dataObj.text;
-  setConversations((prev) =>
-    prev.map((c) =>
-      c.id === targetConversationId
-        ? {
-            ...c,
-            messages: c.messages.map((m) =>
-              m.id === botMessageId ? { ...m, content: aiText } : m
-            ),
-          }
-        : c
-    )
-  );
-}
-```
+    grade = int(grade_level)
+    all_topics = []
+    for lvl in range(4, grade + 1):
+        for topic in _CURRICULUM.get(str(lvl), []):
+            all_topics.append(f"  - [Lớp {lvl}] {topic}")
 
-**Sửa thành:**
+    if not all_topics:
+        return ""
 
-```ts
-// ✅ SAU KHI SỬA (có xử lý emotion):
-if (dataObj.text) {
-  aiText += dataObj.text;
-}
-// Parse emotion nếu server trả về (có thể kèm theo text hoặc đứng riêng)
-if (dataObj.emotion) {
-  lastEmotion = dataObj.emotion;
-}
-// Cập nhật message với cả text và emotion mới nhất
-if (dataObj.text || dataObj.emotion) {
-  setConversations((prev) =>
-    prev.map((c) =>
-      c.id === targetConversationId
-        ? {
-            ...c,
-            messages: c.messages.map((m) =>
-              m.id === botMessageId
-                ? { ...m, content: aiText, emotion: lastEmotion }
-                : m
-            ),
-          }
-        : c
-    )
-  );
-}
-```
+    topics_text = "\n".join(all_topics)
 
-> **Giải thích:** Server có thể gửi `emotion` trong cùng chunk với `text` (ví dụ: `{"text":"Chúc mừng em!", "emotion":"correct"}`), hoặc gửi riêng. Code trên xử lý cả hai trường hợp.
+    return f"""
+─── THÔNG TIN LỚP HỌC SINH (QUAN TRỌNG) ───
+Học sinh đang học: Lớp {grade}
+Các kiến thức đã được học (tích lũy từ lớp 4 đến lớp {grade}):
+{topics_text}
 
-#### Bước 5.1.3 – Sửa tương tự trong `triggerSilentReexplain`
-
-Tìm hàm `triggerSilentReexplain` (khoảng dòng 154), tìm đoạn:
-
-```ts
-let aiText = "";
-let isDone = false;
-```
-
-**Sửa thành:**
-
-```ts
-let aiText = "";
-let lastEmotion: string | undefined = undefined; // ← THÊM DÒNG NÀY
-let isDone = false;
-```
-
-Rồi tìm đoạn xử lý `dataObj.text` trong hàm này:
-
-```ts
-// ⚠️ HIỆN TẠI:
-if (dataObj.text) {
-  aiText += dataObj.text;
-  setConversations((prev) =>
-    prev.map((c) =>
-      c.id === conversationId
-        ? {
-            ...c,
-            messages: c.messages.map((m) =>
-              m.id === botMessageId ? { ...m, content: aiText } : m
-            ),
-          }
-        : c
-    )
-  );
-}
-```
-
-**Sửa thành:**
-
-```ts
-// ✅ SAU KHI SỬA:
-if (dataObj.text) {
-  aiText += dataObj.text;
-}
-if (dataObj.emotion) {
-  lastEmotion = dataObj.emotion;
-}
-if (dataObj.text || dataObj.emotion) {
-  setConversations((prev) =>
-    prev.map((c) =>
-      c.id === conversationId
-        ? {
-            ...c,
-            messages: c.messages.map((m) =>
-              m.id === botMessageId
-                ? { ...m, content: aiText, emotion: lastEmotion }
-                : m
-            ),
-          }
-        : c
-    )
-  );
-}
+BẮT BUỘC khi học sinh nói "em chưa học" hoặc tỏ ra không hiểu:
+- Nếu kiến thức thuộc danh sách trên: Học sinh đã học rồi. Nhẹ nhàng nhắc: "Theo chương trình, đây là kiến thức lớp X mà em đã học. Thầy tin em có thể nhớ lại...".
+- Nếu KHÔNG thuộc danh sách (vượt cấp): Rất bình thường. An ủi: "Đây là kiến thức lớp cao hơn, em chưa học là hoàn toàn bình thường. Thầy sẽ giải thích thật đơn giản để em hiểu nhé...". Sau đó VẪN tiếp tục hướng dẫn học sinh giải quyết bài toán đó.
+"""
 ```
 
 ---
 
-### 5.2. Sửa `AssistantOwl.tsx` – Transition mượt mà, không bị khựng hình
+### 5.2. Sửa `build_specialized_agent_prompt` trong `agent_prompts.py`
 
-**Mở file:** `frontend/components/chat/AssistantOwl.tsx`
+**Tìm hàm `build_specialized_agent_prompt` (dòng 51). Thêm tham số `grade_level`:**
 
-**Thay thế toàn bộ nội dung file bằng code sau:**
+```python
+# TRUOC KHI SUA:
+def build_specialized_agent_prompt(
+    agent_role: str,
+    task_description: str,
+    history: list[dict],
+    latest_message: str,
+    reject_reason: Optional[str] = None,
+    problem_context: Optional[dict] = None,
+) -> str:
 
-```tsx
-"use client";
-
-import { useEffect, useState, useRef } from "react";
-import Lottie from "lottie-react";
-
-// Types cho emotion
-export type OwlEmotion = "idle" | "thinking" | "suggesting" | "correct" | "incorrect";
-
-interface AssistantOwlProps {
-  emotion?: OwlEmotion;
-}
-
-// Map emotion -> đường dẫn file JSON trong public/
-const EMOTION_SRC: Record<OwlEmotion, string> = {
-  idle: "/lottie/owl_idle.json",
-  thinking: "/lottie/owl_thinking.json",
-  suggesting: "/lottie/owl_suggesting.json",
-  correct: "/lottie/owl_correct.json",
-  incorrect: "/lottie/owl_incorrect.json",
-};
-
-// Cache để không tải lại cùng một file nhiều lần trong session
-const animationCache = new Map<string, object>();
-
-export function AssistantOwl({ emotion = "idle" }: AssistantOwlProps) {
-  // Animation đang được Lottie phát
-  const [currentAnimation, setCurrentAnimation] = useState<object | null>(null);
-  // Emotion đang được hiển thị (để so sánh tránh re-render vô ích)
-  const [displayedEmotion, setDisplayedEmotion] = useState<OwlEmotion>(emotion);
-  // Cờ fade-out: true = đang mờ dần trước khi chuyển animation mới
-  const [isFading, setIsFading] = useState(false);
-  // Ref để tránh race condition khi emotion đổi nhanh liên tục
-  const latestEmotionRef = useRef<OwlEmotion>(emotion);
-
-  // Hàm load animation từ file JSON (ưu tiên từ cache trước)
-  const loadAnimation = async (targetEmotion: OwlEmotion): Promise<object | null> => {
-    const src = EMOTION_SRC[targetEmotion];
-
-    // Trả về ngay từ cache nếu đã tải rồi
-    if (animationCache.has(src)) {
-      return animationCache.get(src)!;
-    }
-
-    try {
-      const res = await fetch(src);
-      const data = await res.json();
-      animationCache.set(src, data); // Lưu vào cache
-      return data;
-    } catch (err) {
-      console.error("Failed to load owl animation:", err);
-      return null;
-    }
-  };
-
-  // Tải sẵn animation `idle` ngay khi component mount
-  // → Cú xuất hiện ngay lập tức, không cần đợi người dùng gõ gì
-  useEffect(() => {
-    loadAnimation("idle").then((data) => {
-      if (data) {
-        setCurrentAnimation(data);
-        setDisplayedEmotion("idle");
-      }
-    });
-  }, []);
-
-  // Khi `emotion` prop thay đổi → chuyển animation với hiệu ứng fade
-  useEffect(() => {
-    // Cập nhật ref để các async callback biết emotion mới nhất
-    latestEmotionRef.current = emotion;
-
-    // Nếu emotion không thay đổi, bỏ qua (tránh flicker)
-    if (emotion === displayedEmotion) return;
-
-    // Bước 1: Bắt đầu fade-out (opacity về 0 trong 200ms)
-    const fadeTimer = setTimeout(() => {
-      setIsFading(true);
-    }, 0);
-
-    // Bước 2: Sau 200ms, load animation mới và hiển thị lên
-    const timer = setTimeout(async () => {
-      // Nếu trong thời gian chờ, emotion đã đổi thêm lần nữa → bỏ qua lần này
-      if (latestEmotionRef.current !== emotion) return;
-
-      const data = await loadAnimation(emotion);
-
-      // Kiểm tra lại sau await (race condition với async)
-      if (latestEmotionRef.current !== emotion) return;
-
-      if (data) {
-        setCurrentAnimation(data);
-        setDisplayedEmotion(emotion);
-      }
-
-      // Bước 3: Fade-in animation mới (opacity về 1)
-      setIsFading(false);
-    }, 200);
-
-    return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(timer);
-    };
-  }, [emotion]);
-
-  // Chưa có animation → không render (tránh layout shift)
-  if (!currentAnimation) return null;
-
-  return (
-    <div
-      className="fixed bottom-0 right-0 z-50 pointer-events-none"
-      style={{
-        width: "clamp(120px, 18vw, 240px)",
-        // Hiệu ứng fade: opacity đổi mượt mà trong 200ms khi chuyển trạng thái
-        opacity: isFading ? 0 : 1,
-        transition: "opacity 200ms ease-in-out",
-      }}
-    >
-      <Lottie
-        animationData={currentAnimation}
-        loop={true}
-        autoplay={true}
-        style={{ width: "100%", height: "100%" }}
-      />
-    </div>
-  );
-}
+# SAU KHI SUA:
+def build_specialized_agent_prompt(
+    agent_role: str,
+    task_description: str,
+    history: list[dict],
+    latest_message: str,
+    reject_reason: Optional[str] = None,
+    problem_context: Optional[dict] = None,
+    grade_level: Optional[int] = None,   # THEM DONG NAY
+) -> str:
 ```
 
-> **Giải thích kỹ thuật quan trọng:**
->
-> - **`animationCache`**: Map lưu sẵn các file JSON đã tải. Lần thứ 2 đổi về cùng emotion → dùng cache, **không tải lại từ network**, load gần như tức thì.
-> - **`isFading`**: Khi emotion thay đổi, cú mờ dần (`opacity: 0`) trong 200ms, sau đó đổi animation và hiện lại (`opacity: 1`). Người dùng thấy chuyển cảnh mượt mà, không bị "giật" hay "biến mất đột ngột".
-> - **`latestEmotionRef`**: Nếu emotion thay đổi 2 lần liên tiếp rất nhanh (ví dụ: `idle` → `thinking` → `correct`), ref này đảm bảo chỉ load và hiển thị animation của emotion **mới nhất**, tránh hiện animation cũ do async không theo thứ tự.
-> - **Preload `idle`**: Animation idle được tải ngay khi component mount → con cú xuất hiện ngay lập tức.
+**Thêm dòng này ngay trước câu lệnh `return f"""` ở cuối hàm:**
+
+```python
+grade_context = _get_grade_context(grade_level)   # THEM DONG NAY
+```
+
+**Tìm trong chuỗi `return f"""`, tìm đoạn `{reject_section}{problem_section}` và sửa:**
+
+```python
+# TRUOC KHI SUA:
+{reject_section}{problem_section}
+─── TASK TU ORCHESTRATOR ───
+
+# SAU KHI SUA (them {grade_context}):
+{reject_section}{problem_section}{grade_context}
+─── TASK TU ORCHESTRATOR ───
+```
+
+> **Lý do:** Khi `grade_level=None` thì `grade_context=""` → prompt không thay đổi gì. Backward compatible hoàn toàn.
+
+---
+
+### 5.3. Sửa `router.py`
+
+**Mở file:** `backend/router.py`
+
+**Bước 1 – Thêm import ở đầu file:**
+
+```python
+from agents.agent_prompts import _get_grade_context
+```
+
+**Bước 2 – Sửa chữ ký hàm `agent_router` (dòng 38):**
+
+```python
+# TRUOC:
+def agent_router(target_agent: str, task_description: str, history_text: str, user_query: str, expected_answer: str = ""):
+
+# SAU:
+def agent_router(target_agent: str, task_description: str, history_text: str, user_query: str, expected_answer: str = "", grade_level: int = None):
+```
+
+**Bước 3 – Tìm biến `base_prompt` (dòng 55), thêm `grade_context` vào đầu prompt:**
+
+```python
+# Them dong nay TRUOC khi tao base_prompt:
+# (LƯU Ý: Nếu muốn test khi Thống chưa làm xong Backend, hãy sửa tạm thành grade_level = 7 ở đây)
+grade_context = _get_grade_context(grade_level)
+
+# Sua base_prompt – them {grade_context} vao dau:
+base_prompt = f"""
+{grade_context}
+Vai tro chuyen mon hien tai: {target_agent}.
+Chi dao su pham tu Orchestrator: {task_description}
+
+--- LICH SU TRO CHUYEN ---
+{history_text}
+
+--- HOC SINH VUA NOI ---
+{user_query}
+
+NHAC LAI NGUYEN TAC:
+- Ban la THAY GIAO, xung "thay" goi "em", TUYET DOI KHONG xung "Da".
+- Chi nhac nho thai do khi hoc sinh dung tu XUC PHAM THUC SU (may, tao, chui the)
+- Tra loi ngan gon, chuan muc (2-4 cau).
+"""
+```
 
 ---
 
 ## 6. 🧪 Kiểm Tra Chức Năng (Acceptance Criteria)
 
-Sau khi code xong, tự test các kịch bản sau:
+Vì Thống đang làm phần nối dữ liệu từ ngoài vào (`main.py` -> `orchestrator_bridge.py`), nên để bạn có thể test độc lập ngay bây giờ, hãy **mở file `router.py`** và gán cứng tạm thời:
 
-| # | Kịch bản | Cách test | Kết quả mong đợi |
-|---|---|---|---|
-| **AC1** | Đang suy nghĩ | Gõ câu hỏi và gửi | Con cú chuyển sang trạng thái **suy nghĩ** (`owl_thinking.json`) trong lúc chờ AI |
-| **AC2** | Trả lời đúng | Server trả về `"emotion": "correct"` | Con cú **vỗ tay vui vẻ** (`owl_correct.json`) |
-| **AC3** | Trả lời sai | Server trả về `"emotion": "incorrect"` | Con cú **lắc đầu động viên** (`owl_incorrect.json`) |
-| **AC4** | Transition mượt | Đổi qua lại nhiều lần | Cú fade-out → fade-in mượt mà, **không bị khựng hình** hay biến mất |
-| **AC5** | Không ảnh hưởng chat | Chat đang stream text | Con cú cử động mà **chat vẫn chạy bình thường**, không bị lag |
+```python
+def agent_router(...):
+    # HARDCODE ĐỂ TEST TRONG LÚC CHỜ THỐNG:
+    grade_level = 7 
+    # ...
+```
+
+Test bằng Postman với kịch bản dưới đây (gọi `POST http://localhost:8000/chat/orchestrator`):
+
+| # | Hành động | Kết quả mong đợi |
+|---|---|---|
+| **Test 1** | Gửi message: "Em chua hoc phan so" | AI KHÔNG xin lỗi – nhắc "phân số là kiến thức lớp 4 em đã học" |
+| **Test 2** | Gửi message: "Em chua hoc phuong trinh bac hai" | AI an ủi "lớp cao hơn... chưa học là bình thường" và vẫn hướng dẫn |
+| **Test 3** | Sửa hardcode `grade_level = None` | AI trả lời bình thường, log KHÔNG có section "THÔNG TIN LỚP HỌC SINH" |
 
 ### Cách bật server để test
 
 ```bash
-# Terminal 1: chạy Backend
+# Chay backend:
 cd d:\Document\Capstone\backend
-# (theo hướng dẫn backend team)
+python -m uvicorn main:app --reload --port 8000
 
-# Terminal 2: chạy Frontend
-cd d:\Document\Capstone\frontend
-npm run dev
-```
-
-Mở trình duyệt: `http://localhost:3000`
-
-### Giả lập khi server chưa trả `emotion` (test thủ công UI)
-
-Nếu backend chưa gửi field `emotion`, tạm thời **hardcode** vào `page.tsx` để kiểm tra UI:
-
-```ts
-// Thêm TẠM vào cuối vòng lặp stream, sau khi isDone = true:
-// ⚠️ XÓA ĐOẠN NÀY SAU KHI TEST XONG
-if (isDone && !lastEmotion) {
-  // Thay "correct" bằng "incorrect" hoặc "suggesting" để thử từng trạng thái
-  setConversations((prev) =>
-    prev.map((c) =>
-      c.id === targetConversationId
-        ? {
-            ...c,
-            messages: c.messages.map((m) =>
-              m.id === botMessageId ? { ...m, emotion: "correct" } : m
-            ),
-          }
-        : c
-    )
-  );
-}
+# De debug prompt, them dong print vao router.py truoc khi goi model:
+print("=== PROMPT ===")
+print(prompt[:2000])  # in 2000 ky tu dau
+print("=== END ===")
+# XOA DOAN HARDCODE VA PRINT NAY SAU KHI TEST XONG
 ```
 
 ---
 
-## 7. 📁 Tóm Tắt File Cần Sửa
+## 7. 📁 Tóm Tắt File Cần Tạo / Sửa
 
 ```
-frontend/
-├── app/
-│   └── dashboard/
-│       └── chat/
-│           └── page.tsx           ← SỬA: thêm parse + lưu emotion vào 2 hàm
-└── components/
-    └── chat/
-        └── AssistantOwl.tsx       ← SỬA: thêm cache + transition fade mượt mà
+backend/
+├── agents/
+│   ├── agent_prompts.py       SUA: them grade_level, them ham _get_grade_context()
+│   └── grade_curriculum.json  TAO MOI: kien thuc theo lop
+└── router.py                  SUA: them grade_level, chen grade_context vao prompt
 ```
 
-**Không cần:**
-- ❌ Cài thêm thư viện nào (`lottie-react` đã có sẵn trong `package.json`)
-- ❌ Tạo file mới
-- ❌ Sửa `types/chat.ts` (field `emotion` đã có)
-- ❌ Sửa `ChatWindow.tsx` (logic đọc emotion đã đúng)
-- ❌ Tạo thêm file Lottie (5 trạng thái đã đủ trong `public/lottie/`)
+**Không cần (Phần việc của Thống):**
+- Sửa `orchestrator_bridge.py` và `main.py` / `schemas.py` (Thuộc T5.4 của Thống).
+- Frontend / Database.
 
 ---
 
 ## 8. 📤 Tạo Pull Request
 
-Sau khi làm xong và test ổn:
-
 ```bash
-git add components/chat/AssistantOwl.tsx
-git add app/dashboard/chat/page.tsx
-git commit -m "feat(US4.2): Owl animation responds to server emotion flag"
-git push origin feat/us4.2-owl-emotion-state
+git add backend/agents/agent_prompts.py
+git add backend/agents/grade_curriculum.json
+git add backend/orchestrator_bridge.py
+git add backend/router.py
+git add backend/main.py
+git commit -m "feat(US5.1-T5.9): Inject grade_level into AI prompt with cumulative curriculum"
+git push origin feat/us5.1-grade-level-prompt
 ```
 
 Lên GitHub tạo PR:
 - **Base branch:** `dev`
-- **PR title:** `[FE][US4.2] Owl emotion state from server response`
-- **Assign reviewer:** Thiên (theo T2.8: Review code FE của Bảo và gộp)
+- **PR title:** `[AI][US5.1-T5.9] Grade-level awareness in agent prompt`
+- **Assign reviewer:** Thien (T5.13: Review PR toan bo luong AI)
 
 ---
 
 ## 9. ⚠️ Phụ Thuộc Cần Biết
 
-Task này **phụ thuộc vào** team khác:
+| Người | Task | Ảnh hưởng đến T5.9 |
+|---|---|---|
+| **Thống** | T5.1: Thêm cột `grade_level` vào DB | Không cần đợi – test thủ công Postman với giá trị hardcode |
+| **Thống** | T5.4: API login trả về `grade_level` | Cần khi test luồng thật từ FE. Chưa có thì dùng Postman |
+| **Bảo** | T5.7: Lưu `grade_level` vào NextAuth | Không cần đợi – test BE độc lập |
 
-| Người | Task | Trạng thái | Lý do |
-|---|---|---|---|
-| **Thông** (AI) | T2.3: Gắn cờ `emotion` vào Orchestrator | Cần đợi | Nếu Thông chưa xong, server chưa trả `emotion` → dùng hardcode ở trên để test UI trước |
-| **Thống** (BE) | T2.5: Nhét cờ emotion vào JSON stream trả về | Cần đợi | Nếu Thống chưa nhét vào SSE, FE parse không thấy gì |
-
-> ✅ **Không cần ngồi đợi:** Bảo code phần FE với hardcode giả trước, chờ Thông + Thống xong thì ráp thật vào là done. Làm song song như sơ đồ phụ thuộc trong sprint đã nêu.
+> ✅ **Không cần ngồi đợi:** Thông làm phần AI/BE trước, test bằng Postman với `grade_level` hardcode. Khi Thống + Bảo xong thì ráp thật vào là done. Làm song song theo sơ đồ phụ thuộc sprint đã nêu.
 
 ---
 
-*Hướng dẫn này thuộc dự án Capstone — sẽ hoàn thiện tương đương SocraticKid về chức năng và cách hoạt động.*
+*Hướng dẫn này thuộc Sprint 5 – SocraticKid Capstone Project.*

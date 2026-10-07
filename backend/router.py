@@ -2,6 +2,7 @@ import os
 import json
 import google.generativeai as genai
 from agents.reviewer import LocalReviewerAgent
+from agents.agent_prompts import _get_grade_context
 
 # ==========================================
 # CHỈ DẪN HỆ THỐNG CHO VAI TRÒ NGƯỜI THẦY
@@ -35,7 +36,7 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
 # ==========================================
 # HÀM ĐIỀU PHỐI CHÍNH (Router Function) - CÓ TÍCH HỢP REVIEWER TỰ ĐỘNG SỬA LỖI
 # ==========================================
-def agent_router(target_agent: str, task_description: str, history_text: str, user_query: str, expected_answer: str = ""):
+def agent_router(target_agent: str, task_description: str, history_text: str, user_query: str, expected_answer: str = "", grade_level: int = None):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         yield "Lỗi: Chưa cấu hình GEMINI_API_KEY"
@@ -51,8 +52,9 @@ def agent_router(target_agent: str, task_description: str, history_text: str, us
             max_output_tokens=1024,
         )
     )
-    
+    grade_context = _get_grade_context(grade_level)
     base_prompt = f"""
+    {grade_context}
 Vai trò chuyên môn hiện tại: {target_agent}.
 Chỉ đạo sư phạm từ Orchestrator: {task_description}
 
