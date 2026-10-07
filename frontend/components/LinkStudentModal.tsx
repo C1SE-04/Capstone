@@ -2,7 +2,7 @@
 
 /**
  * File: components/LinkStudentModal.tsx
- * Mô tả: Modal dành cho Phụ huynh (role=PARENT) để nhập mã liên kết 6 chữ số
+ * Mô tả: Modal dành cho Người giám sát (role=MONITOR) để nhập mã liên kết 6 chữ số
  * do Học sinh tạo từ trang Cài đặt. Sau khi liên kết thành công, gọi callback onSuccess.
  *
  * ⚠️ MOCK API TẠM THỜI ⚠️
@@ -93,19 +93,8 @@ export default function LinkStudentModal({
     setErrorMsg("");
 
     try {
-      // ⚠️ MOCK API TẠM THỜI ⚠️
-      // Giả lập gọi API liên kết học sinh (delay 800ms)
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      // Mock: mã bắt đầu bằng số lẻ → thất bại; chẵn → thành công
-      if (parseInt(pairingCode[0]) % 2 !== 0) {
-        throw new Error("Mã liên kết không hợp lệ hoặc đã hết hạn.");
-      }
-
-      /*
-      // --- KHI CÓ API THẬT, HÃY DÙNG ĐOẠN NÀY ---
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${backendUrl}/users/me/link-student`, {
+      const res = await fetch(`${backendUrl}/family/link-student`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -120,10 +109,16 @@ export default function LinkStudentModal({
       }
 
       const data = await res.json();
-      const studentName = data.student_name || "Học sinh";
-      */
+      const studentName = data.nickname || data.email?.split("@")?.[0] || "Học sinh";
 
+      /*
+      // --- MOCK FALLBACK (chỉ dùng khi chưa có BE) ---
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      if (parseInt(pairingCode[0]) % 2 !== 0) {
+        throw new Error("Mã liên kết không hợp lệ hoặc đã hết hạn.");
+      }
       const studentName = "Học sinh Demo";
+      */
       setLinkedName(studentName);
       setIsSuccess(true);
 

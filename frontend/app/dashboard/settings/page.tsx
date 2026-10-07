@@ -89,26 +89,29 @@ export default function SettingsPage() {
   const generatePairingCode = async () => {
     setIsGeneratingCode(true);
     try {
-      // ⚠️ MOCK API TẠM THỜI ⚠️
-      await new Promise(resolve => setTimeout(resolve, 600));
-      // Random 6 chữ số chẵn để dễ test với mock phụ huynh
-      const code = (Math.floor(100000 + Math.random() * 900000) | 0x1).toString();
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/family/pairing-code`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Không thể tạo mã");
+      }
+
+      const data = await res.json();
+      const code: string = data.pairing_code;
 
       /*
-      // --- KHI CÓ API THẬT, HÃY DÙNG ĐOẠN NÀY ---
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${backendUrl}/users/me/pairing-code`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      });
-      if (!res.ok) throw new Error("Không thể tạo mã");
-      const data = await res.json();
-      const code = data.pairing_code;
-      const expiry = new Date(data.expires_at);
-      setCodeExpiry(expiry);
+      // --- MOCK FALLBACK (chỉ dùng khi chưa có BE) ---
+      await new Promise(resolve => setTimeout(resolve, 600));
+      const code = (Math.floor(100000 + Math.random() * 900000) | 0x1).toString();
       */
 
-      // Mock: hết hạn sau 5 phút
+      // Hết hạn sau 5 phút (countdown UI)
       const expiry = new Date(Date.now() + 5 * 60 * 1000);
       setCodeExpiry(expiry);
       setPairingCode(code);
@@ -132,6 +135,7 @@ export default function SettingsPage() {
       setIsGeneratingCode(false);
     }
   };
+
 
   const handleCopyCode = async () => {
     if (!pairingCode) return;

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 interface AuthFormProps {
@@ -106,9 +106,18 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
         setToastMessage("Đăng nhập thành công!");
         setShowSuccessToast(true);
-        setTimeout(() => {
+        setTimeout(async () => {
           if (onClose) onClose();
-          router.push("/dashboard/chat");
+          
+          // Lấy session mới nhất để kiểm tra role
+          const currentSession = await getSession();
+          const userRole = (currentSession?.user as any)?.role;
+          
+          if (userRole === "MONITOR") {
+            router.push("/dashboard/monitor");
+          } else {
+            router.push("/dashboard/chat");
+          }
         }, 1500);
       } else {
         // Tích hợp API Đăng ký — gửi email lowercase về DB

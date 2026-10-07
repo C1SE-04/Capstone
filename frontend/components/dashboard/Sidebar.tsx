@@ -8,10 +8,10 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { History, Settings, Settings2, LogOut, X, UserPlus } from "lucide-react";
+import { History, Settings, Settings2, LogOut, X, UserPlus, LayoutDashboard } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import LinkStudentModal from "@/components/LinkStudentModal";
 
 interface SidebarProps {
@@ -28,16 +28,27 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkedStudents, setLinkedStudents] = useState<string[]>([]);
 
-  const isParent = (session?.user as any)?.role === "PARENT";
+  const isMonitor = (session?.user as any)?.role === "MONITOR";
+
+  // Redirect MONITOR về dashboard riêng của họ
+  useEffect(() => {
+    if (isMonitor && !pathname.startsWith("/dashboard/monitor")) {
+      router.replace("/dashboard/monitor");
+    }
+  }, [isMonitor, pathname, router]);
 
   const handleLinkSuccess = (studentName: string) => {
     setLinkedStudents((prev) => [...prev, studentName]);
   };
 
   const navLinks = [
+    ...(isMonitor
+      ? [{ name: "Bảng phụ huynh", href: "/dashboard/monitor", icon: LayoutDashboard }]
+      : []),
     { name: "Lịch sử", href: "/dashboard/history", icon: History },
     { name: "Cài đặt", href: "/dashboard/settings", icon: Settings2 },
   ];
+
 
   return (
     <>
@@ -103,7 +114,7 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
             );
           })}
           {/* Nút Thêm học sinh — chỉ hiển thị cho Phụ huynh */}
-          {isParent && (
+          {isMonitor && (
             <button
               id="add-student-btn"
               onClick={() => {
