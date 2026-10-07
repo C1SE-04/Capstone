@@ -28,11 +28,13 @@ export default function DashboardLayout({
   const router = useRouter();
 
   const isChatRoute = pathname === "/dashboard/chat";
+  const isMonitorRoute = pathname.startsWith("/dashboard/monitor");
 
-  // Khi ở trang Chat, nhường layout cho ChatPage tự quản lý Sidebar và ChatWindow bằng State React thuần
-  if (isChatRoute) {
+  // Khi ở trang Chat hoặc Monitor, nhường layout cho trang con tự quản lý
+  if (isChatRoute || isMonitorRoute) {
     return <>{children}</>;
   }
+
 
   return (
     <div className="flex h-screen bg-[#F7ECE1] overflow-hidden font-sans">
