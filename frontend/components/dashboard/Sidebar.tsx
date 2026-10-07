@@ -8,10 +8,11 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { History, Settings, Settings2, LogOut, X } from "lucide-react";
+import { History, Settings, Settings2, LogOut, X, UserPlus } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import LinkStudentModal from "@/components/LinkStudentModal";
 
 interface SidebarProps {
   className?: string;
@@ -24,6 +25,14 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
   const router = useRouter();
   const { data: session } = useSession();
   const [showSettings, setShowSettings] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkedStudents, setLinkedStudents] = useState<string[]>([]);
+
+  const isParent = (session?.user as any)?.role === "PARENT";
+
+  const handleLinkSuccess = (studentName: string) => {
+    setLinkedStudents((prev) => [...prev, studentName]);
+  };
 
   const navLinks = [
     { name: "Lịch sử", href: "/dashboard/history", icon: History },
@@ -93,7 +102,33 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
               </button>
             );
           })}
+          {/* Nút Thêm học sinh — chỉ hiển thị cho Phụ huynh */}
+          {isParent && (
+            <button
+              id="add-student-btn"
+              onClick={() => {
+                setShowLinkModal(true);
+                setIsMobileOpen(false);
+              }}
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 font-semibold group text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#CB6600]"
+            >
+              <UserPlus size={20} className="text-[#C1762A] group-hover:text-[#CB6600] transition-colors" />
+              <span className="flex-1 text-left">Thêm học sinh</span>
+              {linkedStudents.length > 0 && (
+                <span className="bg-[#C1762A] text-white text-xs font-black rounded-full w-5 h-5 flex items-center justify-center">
+                  {linkedStudents.length}
+                </span>
+              )}
+            </button>
+          )}
         </nav>
+
+        {/* LinkStudentModal */}
+        <LinkStudentModal
+          isOpen={showLinkModal}
+          onClose={() => setShowLinkModal(false)}
+          onSuccess={handleLinkSuccess}
+        />
 
         {/* Settings Dropdown */}
         {showSettings && (
