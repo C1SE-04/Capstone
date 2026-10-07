@@ -15,6 +15,17 @@ class RoutingResult(TypedDict):
     routing_scratchpad: str  # Ghi chú suy luận nội bộ
     emotion_flag: str
 
+def _detect_uncovered_claim(message: str) -> bool:
+    """Trả về True nếu học sinh biện hộ rằng chưa học/chưa được dạy chủ đề nào đó."""
+    # Công thức: (Từ phủ định) + (từ đệm tùy chọn) + (học/dạy/thấy/gặp/nghe)
+    pattern = r"(chưa|chx|không|ko|k|hk)\s+(được\s+|đc\s+|dc\s+|từng\s+|bao giờ\s+|bao h\s+|cs\s+|có\s+)?(hc|học|dạy|nghe|biết tới|bt tới|bt|biết)|(lần đầu|mới|ms).{0,10}(gặp|thấy|nghe)|(chưa|chx)\s+quen"
+    # Cộng thêm các cụm từ viết tắt quá dị của Gen Z mà Regex khó gom nhóm
+    gen_z_slang = ("e ch hc", "chưa hỉu", "chx hỉu")
+    msg_lower = message.lower()
+    if re.search(pattern, msg_lower) or any(s in msg_lower for s in gen_z_slang):
+        return True
+    return False
+
 def _build_task_description(
     agent: str,
     message: str,
@@ -64,13 +75,23 @@ def _build_task_description(
                 "2. TUYỆT ĐỐI KHÔNG xưng 'Dạ', luôn xưng 'thầy' gọi 'em'. "
                 "3. Ân cần hỏi học sinh hôm nay cần thầy hướng dẫn bài toán nào."
             )
-
         # 3. Off-topic (ngoài lề)
         return (
             f"Học sinh đang giao tiếp ngoài bài học: '{message[:60]}'. "
             "Bạn là THẦY GIÁO (xưng thầy, gọi em, tuyệt đối không xưng 'Dạ'). "
             "Hãy từ chối chuyện ngoài lề một cách nhã nhặn, giữ phong thái người thầy mẫu mực và hướng dẫn học sinh tập trung vào bài học."
         )
+
+    if _detect_uncovered_claim(message):
+        return (
+            f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
+            "BẮT BUỘC phân loại ngữ cảnh và phản hồi đúng 1 trong 2 kịch bản sau:\n"
+            "KỊCH BẢN A – Nếu chủ đề học sinh nhắc đến THUỘC kiến thức lớp học sinh đang học (dựa vào danh sách kiến thức trong THÔNG TIN LỚP HỌC SINH ở phần đầu prompt): "
+            "Học sinh đang nói dối hoặc quên. TUYỆT ĐỐI KHÔNG xin lỗi. Nhẹ nhàng nhắc: 'Theo chương trình, đây là kiến thức lớp X mà em đã học. Thầy tin em có thể nhớ lại...' rồi tiếp tục hướng dẫn bình thường.\n"
+            "KỊCH BẢN B – Nếu chủ đề KHÔNG thuộc kiến thức đã học (vượt cấp): "
+            "Hoàn toàn bình thường. An ủi: 'Đây là kiến thức lớp cao hơn, em chưa học là hoàn toàn bình thường. Thầy sẽ giải thích thật đơn giản...' rồi VẪN tiếp tục hướng dẫn học sinh làm bài — KHÔNG bỏ rơi học sinh."
+        )
+    
     if agent == "KNOWLEDGE_TRACING":
         topic = message.replace("là gì", "").replace("thầy ơi", "").replace("vậy thầy", "").strip()
         return (
@@ -598,7 +619,14 @@ class OrchestratorAgent:
                 routing_scratchpad=f"[Trụ1] Greeting pattern: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )
-
+        # 1.3b Học sinh tuyên bố chưa học — KHÔNG route KNOWLEDGE_TRACING, route SCAFFOLDING để xử lý context
+        if _detect_uncovered_claim(text_clean):
+            return RoutingResult(
+                selected_agent="SCAFFOLDING",
+                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                routing_scratchpad=f"[Trụ1] Uncovered claim detected: '{text_clean[:40]}'",
+                emotion_flag="GUIDING",
+            )
         # 1.4 Câu hỏi lý thuyết "X là gì?" / "thế nào là X"
         if self._theory_re.search(text_clean) or any(s in text_clean for s in self.THEORY_SIGNALS):
             return RoutingResult(
