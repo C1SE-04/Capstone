@@ -111,6 +111,7 @@ def process_query_with_orchestrator(
     background_tasks: BackgroundTasks,
     problem_context: Optional[dict] = None,
     answer_status: Optional[str] = None,
+    grade_level: Optional[int] = None,  # Task #132: lớp học của học sinh
 ):
     """
     Wrapper nối OrchestratorAgent với FastAPI.
@@ -203,7 +204,7 @@ def process_query_with_orchestrator(
 
     # Gọi AI stream với enriched_task_description
     full_reply = ""
-    for chunk in agent_router(target_agent, enriched_task_description, history_text, user_query, expected_answer):
+    for chunk in agent_router(target_agent, enriched_task_description, history_text, user_query, expected_answer, grade_level=grade_level):
         full_reply += chunk
         yield f"event: message\ndata: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
 

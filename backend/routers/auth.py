@@ -78,12 +78,13 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     db.commit()
     
     access_token = auth.create_access_token(
-        data={"sub": str(user.id), "email": user.email, "role": user.role}
+        data={"sub": str(user.id), "email": user.email, "role": user.role, "grade": user.grade}
     )
     return {
         "access_token": access_token,
         "refresh_token": raw_refresh_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "grade": user.grade,  # Task #132: trả về FE để hiển thị và lưu local
     }
 
 @router.post("/refresh", response_model=schemas.TokenResponse)
@@ -151,7 +152,8 @@ def refresh_access_token(
         data={
             "sub": str(user.id),
             "email": user.email,
-            "role": user.role
+            "role": user.role,
+            "grade": user.grade  # Task #132: cấp lại grade khi refresh token
         }
     )
 
@@ -160,5 +162,6 @@ def refresh_access_token(
     return {
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "grade": user.grade  # Task #132: trả về grade mới nhất
     }

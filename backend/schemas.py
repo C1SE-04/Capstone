@@ -24,6 +24,7 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    grade: Optional[int] = None  # Task #132: trả thêm grade_level về FE sau login
     
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -37,6 +38,7 @@ class GeminiRequest(BaseModel):
     prompt: str
     problem_context: Optional[dict] = None  # Ngữ cảnh bài toán (correctSolution, v.v.) — dùng cho Trụ 1
     answer_status: Optional[str] = None # 'wrong' hoặc 'correct' (để tính hint)
+    grade_level: Optional[int] = None  # Task #132: lớp học của học sinh, FE gửi lên sau login
 
 
 
