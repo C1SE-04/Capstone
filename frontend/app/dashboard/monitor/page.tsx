@@ -6,10 +6,12 @@
  * - Bộ lọc theo tuần (tuần trước/sau), không cho chọn qua tuần tương lai.
  * - Biểu đồ line chart số giờ học trong tuần.
  * - Thống kê số giờ học (tổng) và số câu hỏi trung bình.
+ * - Dữ liệu thật từ API /metrics/study-time
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useMonitorContext } from "./layout";
+import { useSession } from "next-auth/react";
 import { StatCard } from "@/components/monitor/StatCard";
 import { UserPlus, ChevronLeft, ChevronRight, Clock, HelpCircle } from "lucide-react";
 import {
@@ -27,77 +29,139 @@ import {
   startOfWeek,
   endOfWeek,
   eachDayOfInterval,
+  parseISO,
 } from "date-fns";
 import { vi } from "date-fns/locale";
 
-// Hàm sinh data mock theo tuần để test
-const generateMockWeekData = (weekStart: Date) => {
-  const days = eachDayOfInterval({
-    start: weekStart,
-    end: endOfWeek(weekStart, { weekStartsOn: 1 }), // Tuần bắt đầu từ Thứ 2
-  });
+// Shape dữ liệu trả về từ API
+interface DayMetric {
+  date: string;       // "2026-10-06"
+  minutes: number;
+}
 
-  return days.map((day: Date) => {
-    // Random mock values cho mỗi ngày
-    const hours = Math.round((Math.random() * 2 + 0.5) * 10) / 10; // 0.5 - 2.5 giờ
-    const questions = Math.floor(Math.random() * 15 + 5); // 5 - 20 câu
-    
-    // Nếu là ngày trong tương lai so với hôm nay thì cho 0
-    const isFuture = day > new Date();
-    
-    return {
-      date: day,
-      dayName: format(day, "EEEE", { locale: vi }), // Thứ Hai, Thứ Ba...
-      shortName: format(day, "E", { locale: vi }), // T2, T3...
-      fullDate: format(day, "dd/MM/yyyy"),
-      hours: isFuture ? 0 : hours,
-      questions: isFuture ? 0 : questions,
-    };
-  });
-};
+interface MetricsResponse {
+  mode: string;
+  week_start: string;
+  week_end: string;
+  data: DayMetric[];
+  total_minutes: number;
+}
+
+// Shape sau khi xử lý cho chart
+interface ChartItem {
+  date: Date;
+  dayName: string;
+  shortName: string;
+  fullDate: string;
+  hours: number;
+  minutes: number;
+}
 
 export default function MonitorPage() {
   const { selectedStudent } = useMonitorContext();
-  
+  const { data: session } = useSession();
+
   // State quản lý tuần đang xem (0: tuần hiện tại, -1: tuần trước, v.v...)
   const [weekOffset, setWeekOffset] = useState(0);
+  const [chartData, setChartData] = useState<ChartItem[]>([]);
+  const [totalMinutes, setTotalMinutes] = useState(0);
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
 
   // Tính toán thời gian của tuần đang chọn
-  const { weekStart, weekEnd, isCurrentWeek, chartData } = useMemo(() => {
+  const { weekStart, weekEnd, isCurrentWeek } = useMemo(() => {
     const today = new Date();
-    // Tính toán mốc tuần dựa vào weekOffset
     const targetWeek = addWeeks(today, weekOffset);
     const start = startOfWeek(targetWeek, { weekStartsOn: 1 });
     const end = endOfWeek(targetWeek, { weekStartsOn: 1 });
-    
-    // Kiểm tra xem có phải tuần hiện tại không
     const current = weekOffset === 0;
-    
-    // Sinh data mock (Trong thực tế sẽ truyền start, end lên API để fetch data)
-    const data = generateMockWeekData(start);
+    return { weekStart: start, weekEnd: end, isCurrentWeek: current };
+  }, [weekOffset]);
 
-    return { weekStart: start, weekEnd: end, isCurrentWeek: current, chartData: data };
-  }, [weekOffset, selectedStudent?.student_id]); // Trigger lại khi đổi học sinh hoặc đổi tuần
+  // Fetch dữ liệu thật từ API
+  const fetchMetrics = useCallback(async () => {
+    if (!selectedStudent || !session?.access_token) return;
+
+    setIsLoadingMetrics(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const startDateStr = format(weekStart, "yyyy-MM-dd");
+
+      const res = await fetch(
+        `${backendUrl}/metrics/study-time?student_id=${selectedStudent.student_id}&mode=weekly&start_date=${startDateStr}`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      if (!res.ok) throw new Error("Fetch metrics failed");
+
+      const json: MetricsResponse = await res.json();
+
+      // Chuyển data API → ChartItem (kèm tên ngày tiếng Việt)
+      const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
+      const dataMap: Record<string, number> = {};
+      json.data.forEach((item) => {
+        dataMap[item.date] = item.minutes;
+      });
+
+      const processed: ChartItem[] = days.map((day) => {
+        const dateStr = format(day, "yyyy-MM-dd");
+        const mins = dataMap[dateStr] ?? 0;
+        return {
+          date: day,
+          dayName: format(day, "EEEE", { locale: vi }),
+          shortName: format(day, "E", { locale: vi }),
+          fullDate: format(day, "dd/MM/yyyy"),
+          hours: Math.round((mins / 60) * 10) / 10,
+          minutes: mins,
+        };
+      });
+
+      setChartData(processed);
+      setTotalMinutes(json.total_minutes);
+    } catch (err) {
+      console.error("Lỗi fetch metrics:", err);
+      // Fallback: hiển thị mảng rỗng
+      const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
+      setChartData(
+        days.map((day) => ({
+          date: day,
+          dayName: format(day, "EEEE", { locale: vi }),
+          shortName: format(day, "E", { locale: vi }),
+          fullDate: format(day, "dd/MM/yyyy"),
+          hours: 0,
+          minutes: 0,
+        }))
+      );
+      setTotalMinutes(0);
+    } finally {
+      setIsLoadingMetrics(false);
+    }
+  }, [selectedStudent, session?.access_token, weekStart, weekEnd]);
+
+  // Trigger fetch khi đổi học sinh hoặc tuần
+  useEffect(() => {
+    fetchMetrics();
+  }, [fetchMetrics]);
 
   // Tổng hợp số liệu
-  const totalHours = useMemo(() => {
-    return chartData.reduce((sum: number, item: { hours: number; questions: number }) => sum + item.hours, 0).toFixed(1);
-  }, [chartData]);
+  const totalHours = (totalMinutes / 60).toFixed(1);
 
-  const avgQuestions = useMemo(() => {
-    const activeDays = chartData.filter((d: { hours: number; questions: number }) => d.questions > 0);
+  const avgMinutesPerActiveDay = useMemo(() => {
+    const activeDays = chartData.filter((d) => d.minutes > 0);
     if (activeDays.length === 0) return 0;
-    const totalQ = activeDays.reduce((sum: number, item: { hours: number; questions: number }) => sum + item.questions, 0);
-    return Math.round(totalQ / activeDays.length);
-  }, [chartData]);
+    return Math.round(totalMinutes / activeDays.length);
+  }, [chartData, totalMinutes]);
 
-  const handlePrevWeek = () => setWeekOffset(prev => prev - 1);
+  const handlePrevWeek = () => setWeekOffset((prev) => prev - 1);
   const handleNextWeek = () => {
-    if (!isCurrentWeek) setWeekOffset(prev => prev + 1);
+    if (!isCurrentWeek) setWeekOffset((prev) => prev + 1);
   };
 
   // --- RENDERING ---
-  
+
   if (!selectedStudent) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-5 text-center">
@@ -137,24 +201,24 @@ export default function MonitorPage() {
 
         {/* Weekly Filter Controls */}
         <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-xl border border-[#F1CCA6] shadow-sm">
-          <button 
+          <button
             onClick={handlePrevWeek}
             className="p-1.5 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] transition-colors"
           >
             <ChevronLeft size={20} />
           </button>
-          
+
           <div className="text-sm font-bold text-[#8C4905] min-w-[140px] text-center">
             {format(weekStart, "dd/MM")} - {format(weekEnd, "dd/MM/yyyy")}
             {isCurrentWeek && <span className="block text-xs text-[#C1762A] font-medium">(Tuần này)</span>}
           </div>
 
-          <button 
+          <button
             onClick={handleNextWeek}
             disabled={isCurrentWeek}
             className={`p-1.5 rounded-lg transition-colors ${
-              isCurrentWeek 
-                ? "text-gray-300 cursor-not-allowed" 
+              isCurrentWeek
+                ? "text-gray-300 cursor-not-allowed"
                 : "text-[#8C4905] hover:bg-[#F7ECE1]"
             }`}
           >
@@ -168,13 +232,13 @@ export default function MonitorPage() {
         <StatCard
           icon={<Clock size={24} className="text-[#C1762A]" />}
           label="Tổng thời gian học (Tuần)"
-          value={`${totalHours} giờ`}
+          value={isLoadingMetrics ? "..." : `${totalHours} giờ`}
           color="bg-white"
         />
         <StatCard
           icon={<HelpCircle size={24} className="text-[#C1762A]" />}
-          label="Số câu hỏi tương tác"
-          value={`~${avgQuestions} câu/ngày`}
+          label="Thời gian học trung bình/ngày"
+          value={isLoadingMetrics ? "..." : `~${avgMinutesPerActiveDay} phút/ngày`}
           color="bg-white"
         />
       </section>
@@ -184,26 +248,32 @@ export default function MonitorPage() {
         <h2 className="text-lg font-bold text-[#8C4905] mb-6 flex items-center gap-2">
           <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />
           Biểu đồ thời gian học
+          {isLoadingMetrics && (
+            <svg className="animate-spin h-4 w-4 text-[#C1762A] ml-2" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+          )}
         </h2>
-        
+
         <div className="h-[350px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1CCA6" />
-              <XAxis 
-                dataKey="shortName" 
+              <XAxis
+                dataKey="shortName"
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: '#8C4905', fontWeight: 600, fontSize: 12 }}
                 dy={10}
               />
-              <YAxis 
+              <YAxis
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: '#C1762A', fontSize: 12 }}
                 tickFormatter={(value) => `${value}h`}
               />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{ borderRadius: '12px', border: '1px solid #F1CCA6', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 labelStyle={{ fontWeight: 'bold', color: '#8C4905', marginBottom: '4px' }}
                 formatter={(value) => [`${value ?? 0} giờ`, 'Thời gian học']}
@@ -214,10 +284,10 @@ export default function MonitorPage() {
                   return label;
                 }}
               />
-              <Line 
-                type="monotone" 
-                dataKey="hours" 
-                stroke="#C1762A" 
+              <Line
+                type="monotone"
+                dataKey="hours"
+                stroke="#C1762A"
                 strokeWidth={4}
                 dot={{ r: 4, fill: "#8C4905", strokeWidth: 2, stroke: "#fff" }}
                 activeDot={{ r: 6, fill: "#C1762A", stroke: "#F7ECE1", strokeWidth: 3 }}
@@ -227,7 +297,6 @@ export default function MonitorPage() {
           </ResponsiveContainer>
         </div>
       </section>
-
     </div>
   );
 }
