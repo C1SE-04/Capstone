@@ -50,7 +50,9 @@ export default function DashboardLayout({
             <Menu size={22} />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold shadow-inner text-xs">SK</div>
+            <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1]">
+              <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
+            </div>
             <span className="text-base font-bold italic text-[#C1762A]">SocraticKid</span>
           </div>
         </header>

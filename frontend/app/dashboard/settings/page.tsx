@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 
 const GRADES = [4, 5, 6, 7, 8, 9];
+const PAIRING_CODE_TTL_SECONDS = 15 * 60; // 15 phút
 
 export default function SettingsPage() {
   const { data: session, update } = useSession();
@@ -18,11 +19,38 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  
+
   // Pairing Code states
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  // Countdown 15 phút (tính bằng giây)
+  const [countdown, setCountdown] = useState<number>(0);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Khởi động countdown khi có mã mới
+  const startCountdown = () => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    setCountdown(PAIRING_CODE_TTL_SECONDS);
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownRef.current!);
+          // Mã hết hạn → reset về trạng thái chưa có mã
+          setPairingCode(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  // Dọn dẹp interval khi unmount
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
 
   const handleGradeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newGrade = Number(e.target.value);
@@ -55,12 +83,11 @@ export default function SettingsPage() {
 
       // Sau khi DB cập nhật thành công, đồng bộ lại session NextAuth
       await update({ grade_level: pendingGrade });
-      
+
       // Cập nhật UI
       setSelectedGrade(pendingGrade);
       setSuccessMsg(` Đã đổi sang Lớp ${pendingGrade} thành công!`);
       setTimeout(() => setSuccessMsg(""), 3000);
-      
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Đã xảy ra lỗi hệ thống");
       setSelectedGrade(currentGrade);
@@ -95,6 +122,7 @@ export default function SettingsPage() {
 
       const data = await res.json();
       setPairingCode(data.pairing_code);
+      startCountdown();
     } catch (error) {
       console.error(error);
     } finally {
@@ -102,13 +130,30 @@ export default function SettingsPage() {
     }
   };
 
-
   const handleCopyCode = async () => {
     if (!pairingCode) return;
     await navigator.clipboard.writeText(pairingCode);
     setCopyFeedback(true);
     setTimeout(() => setCopyFeedback(false), 2000);
   };
+
+  // Format countdown thành mm:ss
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
+  // Tính % tiến trình (countdown càng giảm, bar càng cạn)
+  const countdownPercent = (countdown / PAIRING_CODE_TTL_SECONDS) * 100;
+
+  // Màu bar: xanh → vàng → đỏ
+  const barColor =
+    countdownPercent > 50
+      ? "#22c55e"   // xanh lá
+      : countdownPercent > 20
+      ? "#f59e0b"   // vàng
+      : "#ef4444";  // đỏ
 
   return (
     <div className="max-w-2xl mx-auto animate-in fade-in duration-500 pb-10">
@@ -144,7 +189,7 @@ export default function SettingsPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-[#F1CCA6] p-6">
         <h2 className="text-lg font-bold text-[#8C4905] mb-1 flex items-center gap-2">
           <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />
-          Đổi lớp học 
+          Đổi lớp học
         </h2>
         <p className="text-sm text-[#C1762A] mb-4 leading-relaxed">
           Socratic AI sẽ tự động điều chỉnh độ khó, xưng hô và kiến thức theo đúng trình độ lớp mới ngay sau khi bạn lưu.
@@ -184,7 +229,9 @@ export default function SettingsPage() {
         </p>
 
         {pairingCode ? (
-          <div className="bg-[#F7ECE1] p-4 rounded-xl border border-[#F1CCA6] space-y-3">
+          /* --- Đã có mã: hiển thị mã + countdown --- */
+          <div className="bg-[#F7ECE1] p-4 rounded-xl border border-[#F1CCA6] space-y-4 animate-in fade-in duration-300">
+            {/* Mã và nút copy */}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-[#8C4905] font-bold uppercase tracking-wider mb-1">Mã của bạn</p>
@@ -201,8 +248,40 @@ export default function SettingsPage() {
                 )}
               </button>
             </div>
+
+            {/* Countdown bar */}
+            <div className="space-y-1.5">
+              <div className="relative w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="absolute left-0 top-0 h-full rounded-full transition-all duration-1000 ease-linear"
+                  style={{
+                    width: `${countdownPercent}%`,
+                    backgroundColor: barColor,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-[#8C4905]/70 text-center">
+                Mã liên kết sẽ hết hạn sau{" "}
+                <span
+                  className="font-black"
+                  style={{ color: barColor }}
+                >
+                  {formatCountdown(countdown)}
+                </span>
+              </p>
+            </div>
+
+            {/* Nút tạo lại */}
+            <button
+              onClick={generatePairingCode}
+              disabled={isGeneratingCode}
+              className="w-full py-2 rounded-xl border-2 border-[#C1762A] text-[#C1762A] font-bold text-sm hover:bg-[#F1CCA6] transition-colors disabled:opacity-60 cursor-pointer"
+            >
+              {isGeneratingCode ? "Đang tạo mã mới..." : "Tạo mã mới"}
+            </button>
           </div>
         ) : (
+          /* --- Chưa có mã: hiện nút lấy mã --- */
           <button
             id="get-pairing-code-btn"
             onClick={generatePairingCode}

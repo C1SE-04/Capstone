@@ -7,7 +7,7 @@
  * - Bảo vệ route: chỉ role MONITOR mới được truy cập; STUDENT bị redirect về /dashboard.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import MonitorSidebar, {
@@ -43,6 +43,17 @@ export default function MonitorLayout({
     null
   );
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+
+  // Tách mount/unmount khỏi animation: show sau 1 tick để transition chạy
+  const openSidebar = () => {
+    setIsMobileSidebarOpen(true);
+    requestAnimationFrame(() => setSidebarVisible(true));
+  };
+  const closeSidebar = () => {
+    setSidebarVisible(false);
+    setTimeout(() => setIsMobileSidebarOpen(false), 300); // match duration-300
+  };
 
   // Bảo vệ route: chỉ MONITOR mới được vào
   useEffect(() => {
@@ -90,25 +101,32 @@ export default function MonitorLayout({
           />
         </div>
 
-        {/* Mobile: overlay sidebar */}
+        {/* Mobile: overlay sidebar with smooth transition */}
         {isMobileSidebarOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
+            {/* Overlay mờ dần */}
             <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setIsMobileSidebarOpen(false)}
+              className="absolute inset-0 bg-black/50 transition-opacity duration-300"
+              style={{ opacity: sidebarVisible ? 1 : 0 }}
+              onClick={closeSidebar}
             />
-            <div className="relative z-10 h-full">
+            {/* Sidebar trượt từ trái */}
+            <div
+              className="relative z-10 h-full transition-transform duration-300 ease-in-out"
+              style={{ transform: sidebarVisible ? "translateX(0)" : "translateX(-100%)" }}
+            >
               <MonitorSidebar
                 selectedStudentId={selectedStudent?.student_id ?? null}
                 onSelectStudent={(s) => {
                   setSelectedStudent(s);
-                  setIsMobileSidebarOpen(false);
+                  closeSidebar();
                 }}
               />
             </div>
             <button
-              onClick={() => setIsMobileSidebarOpen(false)}
-              className="absolute top-4 right-4 z-20 text-white"
+              onClick={closeSidebar}
+              className="absolute top-4 right-4 z-20 text-white transition-opacity duration-300"
+              style={{ opacity: sidebarVisible ? 1 : 0 }}
             >
               <X size={24} />
             </button>
@@ -120,8 +138,8 @@ export default function MonitorLayout({
           {/* Mobile header */}
           <header className="bg-white border-b border-[#F1CCA6] p-3 flex md:hidden items-center gap-3 shadow-sm">
             <button
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className="p-2 text-[#8C4905] hover:bg-[#F1CCA6]/50 rounded-lg"
+              onClick={openSidebar}
+              className="p-2 text-[#8C4905] hover:bg-[#F1CCA6]/50 rounded-lg transition-colors"
             >
               <Menu size={22} />
             </button>
