@@ -178,7 +178,7 @@ def process_query_with_orchestrator(
     enriched_task_description = f"{hint_instruction}\n\n{task_description}"
 
     emotion_flag = result.get("emotion_flag", "GUIDING")
-    print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0} | 🦉 emotion={emotion_flag}")
+    print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0} | emotion={emotion_flag}")
 
     # Lưu log ngầm
     background_tasks.add_task(save_orchestrator_log, db, user_query, target_agent, reason)
