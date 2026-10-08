@@ -41,7 +41,7 @@ async def generate_student_pairing_code(
     # Tránh spam mã mới liên tục
     existing_code = await redis.get(f"student_active_code:{student_id}")
     if existing_code:
-        code_str = existing_code.decode('utf-8')
+        code_str = existing_code
         ttl = await redis.ttl(f"pairing_code:{code_str}")
         return {"pairing_code": code_str, "expires_in": ttl if ttl > 0 else 0}
 
@@ -74,7 +74,7 @@ async def get_student_pairing_code(
     existing_code = await redis.get(f"student_active_code:{student_id}")
     
     if existing_code:
-        code_str = existing_code.decode('utf-8')
+        code_str = existing_code
         ttl = await redis.ttl(f"pairing_code:{code_str}")
         if ttl > 0:
             return {"pairing_code": code_str, "expires_in": ttl}
@@ -98,12 +98,12 @@ async def link_student_to_parent(
         raise HTTPException(status_code=403, detail="Chỉ phụ huynh mới có thể liên kết học sinh.")
         
     code = request.pairing_code.upper()
-    student_id_bytes = await redis.get(f"pairing_code:{code}")
+    student_id_redis = await redis.get(f"pairing_code:{code}")
     
-    if not student_id_bytes:
+    if not student_id_redis:
         raise HTTPException(status_code=404, detail="Mã liên kết đã hết hạn hoặc không tồn tại.")
         
-    student_id = student_id_bytes.decode('utf-8')
+    student_id = student_id_redis
     
     # Tìm học sinh trong DB để lấy email trả về
     student = db.query(User).filter(User.id == student_id, User.role == "STUDENT").first()
