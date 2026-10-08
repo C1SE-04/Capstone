@@ -46,6 +46,8 @@ app.include_router(chat.router)
 app.include_router(sessions.router)
 from routers import family
 app.include_router(family.router)
+from routers import metrics  # Task #121: API thống kê thời gian học
+app.include_router(metrics.router)
 
 @app.get("/")
 def read_root():

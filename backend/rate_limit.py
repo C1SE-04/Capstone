@@ -53,7 +53,14 @@ async def check_guest_rate_limit(
     if not session_id.startswith("guest-"):
         return
 
-    redis_key = f"guest_rate_limit:{session_id}"
+    # Lấy IP của người dùng (hỗ trợ cả trường hợp chạy sau Nginx/Proxy)
+    client_ip = request.client.host
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+
+    # Dùng IP thay vì session_id để chặn mánh khoé ẩn danh / xoá cache
+    redis_key = f"guest_rate_limit_ip:{client_ip}"
 
     try:
         # Tăng biến đếm lên 1 (INCR tự tạo key mới với giá trị 1 nếu chưa tồn tại)
