@@ -28,7 +28,7 @@ export const authOptions: NextAuthOptions = {
 
         try {
           // Gọi sang API của Backend (FastAPI) để xác thực
-          const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+          const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
           const res = await fetch(`${backendUrl}/login`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -44,7 +44,7 @@ export const authOptions: NextAuthOptions = {
 
           // Decode JWT payload (Access Token) từ Backend trả về để lấy thông tin user (ID, Email, Role)
           const payload = JSON.parse(
-            Buffer.from(data.access_token.split(".")[1], "base64").toString()
+            Buffer.from(data.access_token.split(".")[1], "base64").toString(),
           );
 
           // Trả về object user để NextAuth lưu vào phiên đăng nhập (Session)
@@ -62,7 +62,7 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 30 * 60 },
   pages: {
     signIn: "/",
   },
@@ -88,7 +88,10 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string | undefined;
-        session.user.grade_level = token.grade_level as string | number | undefined;
+        session.user.grade_level = token.grade_level as
+          | string
+          | number
+          | undefined;
         session.access_token = token.access_token as string | undefined;
       }
       return session;

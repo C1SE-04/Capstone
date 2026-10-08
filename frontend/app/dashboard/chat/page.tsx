@@ -63,6 +63,12 @@ export default function ChatPage() {
             headers: { Authorization: `Bearer ${token}` },
           });
 
+          if (res.status === 401 && isMounted) {
+            const { signOut } = await import("next-auth/react");
+            signOut({ callbackUrl: "/" });
+            return;
+          }
+
           if (res.ok && isMounted) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
