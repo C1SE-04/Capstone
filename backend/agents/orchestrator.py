@@ -85,11 +85,9 @@ def _build_task_description(
     if _detect_uncovered_claim(message):
         return (
             f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
-            "BẮT BUỘC phân loại ngữ cảnh và phản hồi đúng 1 trong 2 kịch bản sau:\n"
-            "KỊCH BẢN A – Nếu chủ đề học sinh nhắc đến THUỘC kiến thức lớp học sinh đang học (dựa vào danh sách kiến thức trong THÔNG TIN LỚP HỌC SINH ở phần đầu prompt): "
-            "Học sinh đang nói dối hoặc quên. TUYỆT ĐỐI KHÔNG xin lỗi. Nhẹ nhàng nhắc: 'Theo chương trình, đây là kiến thức lớp X mà em đã học. Thầy tin em có thể nhớ lại...' rồi tiếp tục hướng dẫn bình thường.\n"
-            "KỊCH BẢN B – Nếu chủ đề KHÔNG thuộc kiến thức đã học (vượt cấp): "
-            "Hoàn toàn bình thường. An ủi: 'Đây là kiến thức lớp cao hơn, em chưa học là hoàn toàn bình thường. Thầy sẽ giải thích thật đơn giản...' rồi VẪN tiếp tục hướng dẫn học sinh làm bài — KHÔNG bỏ rơi học sinh."
+            "BẮT BUỘC kiểm tra kỹ chủ đề toán này CÓ nằm trong danh sách THÔNG TIN LỚP HỌC SINH không, và chọn đúng 1 trong 2 kịch bản:\n"
+            "KỊCH BẢN A (CÓ trong danh sách) – Học sinh đang nói dối hoặc quên. TUYỆT ĐỐI KHÔNG xin lỗi. Nhẹ nhàng nhắc: 'Theo chương trình, đây là kiến thức cơ bản em đã học. Thầy tin em có thể nhớ lại...' rồi tiếp tục hướng dẫn.\n"
+            "KỊCH BẢN B (KHÔNG có trong danh sách) – Đây là kiến thức vượt cấp (VD: phương trình với HS tiểu học). BẮT BUỘC an ủi: 'Vì em đang học lớp [X] nên chưa quen với kiến thức lớp cao hơn này là bình thường...' rồi giải thích đơn giản hóa theo cấp học của em."
         )
     
     if agent == "KNOWLEDGE_TRACING":
