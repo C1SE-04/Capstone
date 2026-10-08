@@ -77,6 +77,10 @@ NHẮC LẠI NGUYÊN TẮC:
     prompt = base_prompt
 
     while current_attempt <= max_retries:
+        print("=== PROMPT CHUẨN BỊ GỬI AI ===")
+        print(prompt)
+        print("================================")
+        
         try:
             # Lấy toàn bộ văn bản để Reviewer có thể đánh giá (không stream trực tiếp)
             response = model.generate_content(prompt, stream=False)
