@@ -97,3 +97,21 @@ class LinkedStudentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# --- US 5.2: Metrics API Schemas ---
+
+class DailyMetric(BaseModel):
+    """Số liệu tổng hợp theo từng ngày (dùng cho biểu đồ tuần)."""
+    date: str           # "YYYY-MM-DD"
+    message_count: int  # Số tin nhắn học sinh gửi trong ngày
+    session_count: int  # Số phòng chat mở trong ngày
+
+class StudentMetricsResponse(BaseModel):
+    """Response trả về từ GET /family/students/{student_id}/metrics."""
+    student_id: str
+    week_start: str     # "YYYY-MM-DD"
+    week_end: str       # "YYYY-MM-DD"
+    total_messages: int         # Tổng tin nhắn cả tuần (COUNT trong SQL)
+    total_sessions: int         # Tổng phòng chat cả tuần (COUNT trong SQL)
+    avg_messages_per_day: float # Trung bình tin nhắn/ngày (AVG trong SQL)
+    daily: list[DailyMetric]    # Chi tiết từng ngày để vẽ biểu đồ
