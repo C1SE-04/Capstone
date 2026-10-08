@@ -8,8 +8,9 @@ const GRADES = [4, 5, 6, 7, 8, 9];
 export default function SettingsPage() {
   const { data: session, update } = useSession();
 
-  // Lấy lớp hiện tại từ session — đọc đúng trường grade_level (đã khai báo trong next-auth.d.ts)
-  const currentGrade = session?.user?.grade_level ?? null;
+  // Lấy lớp hiện tại từ session — parse sang number vì NextAuth có thể trả về string
+  const rawGrade = session?.user?.grade_level ?? null;
+  const currentGrade: number | null = rawGrade !== null ? Number(rawGrade) : null;
 
   const [selectedGrade, setSelectedGrade] = useState<number | null>(currentGrade);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
