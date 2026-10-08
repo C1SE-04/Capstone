@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 
 const GRADES = [4, 5, 6, 7, 8, 9];
@@ -22,9 +22,61 @@ export default function SettingsPage() {
   // Pairing Code states
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
-  const [codeExpiry, setCodeExpiry] = useState<Date | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [maxSeconds, setMaxSeconds] = useState<number>(900); // Mặc định 15 phút
+
+  // Lấy mã liên kết hiện tại nếu có (khi F5 reload trang)
+  useEffect(() => {
+    if (session?.access_token) {
+      fetchActivePairingCode();
+    }
+  }, [session?.access_token]);
+
+  const fetchActivePairingCode = async () => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/family/pairing-code`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const code: string = data.pairing_code;
+        const ttl: number = data.expires_in;
+        startCountdown(code, ttl);
+      }
+    } catch (error) {
+      console.error("No active pairing code found.", error);
+    }
+  };
+
+  const startCountdown = (code: string, ttl: number) => {
+    setPairingCode(code);
+    setMaxSeconds(900); // Code mới luôn tối đa 15 phút
+    const expiry = new Date(Date.now() + ttl * 1000);
+    
+    // Clear interval cũ nếu có
+    if ((window as any).pairingCodeInterval) {
+      clearInterval((window as any).pairingCodeInterval);
+    }
+
+    const tick = setInterval(() => {
+      const secs = Math.round((expiry.getTime() - Date.now()) / 1000);
+      if (secs <= 0) {
+        clearInterval(tick);
+        setPairingCode(null);
+        setSecondsLeft(null);
+      } else {
+        setSecondsLeft(secs);
+      }
+    }, 1000);
+
+    (window as any).pairingCodeInterval = tick;
+  };
 
   const handleGradeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newGrade = Number(e.target.value);
@@ -97,30 +149,9 @@ export default function SettingsPage() {
 
       const data = await res.json();
       const code: string = data.pairing_code;
-
-      /*
-      // --- MOCK FALLBACK (chỉ dùng khi chưa có BE) ---
-      await new Promise(resolve => setTimeout(resolve, 600));
-      const code = (Math.floor(100000 + Math.random() * 900000) | 0x1).toString();
-      */
-
-      // Hết hạn sau 5 phút (countdown UI)
-      const expiry = new Date(Date.now() + 5 * 60 * 1000);
-      setCodeExpiry(expiry);
-      setPairingCode(code);
-
-      // Đếm ngược
-      const tick = setInterval(() => {
-        const secs = Math.round((expiry.getTime() - Date.now()) / 1000);
-        if (secs <= 0) {
-          clearInterval(tick);
-          setPairingCode(null);
-          setCodeExpiry(null);
-          setSecondsLeft(null);
-        } else {
-          setSecondsLeft(secs);
-        }
-      }, 1000);
+      const ttl: number = data.expires_in || 900;
+      
+      startCountdown(code, ttl);
 
     } catch (error) {
       console.error(error);
@@ -240,7 +271,7 @@ export default function SettingsPage() {
                 <div className="h-1.5 flex-1 bg-[#F1CCA6] rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#C1762A] rounded-full transition-all duration-1000"
-                    style={{ width: `${(secondsLeft / 300) * 100}%` }}
+                    style={{ width: `${(secondsLeft / maxSeconds) * 100}%` }}
                   />
                 </div>
                 <span className="text-xs font-bold text-[#C1762A] tabular-nums">

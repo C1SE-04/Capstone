@@ -40,7 +40,9 @@ async def generate_student_pairing_code(
     # Tránh spam mã mới liên tục
     existing_code = await redis.get(f"student_active_code:{student_id}")
     if existing_code:
-        return {"pairing_code": existing_code.decode('utf-8')}
+        code_str = existing_code.decode('utf-8')
+        ttl = await redis.ttl(f"pairing_code:{code_str}")
+        return {"pairing_code": code_str, "expires_in": ttl if ttl > 0 else 0}
 
     # Tạo mã mới
     new_code = generate_pairing_code()
@@ -53,7 +55,32 @@ async def generate_student_pairing_code(
     # Lưu thêm 1 key ngược lại để biết học sinh này đang có mã nào active
     await redis.setex(f"student_active_code:{student_id}", 900, new_code)
         
-    return {"pairing_code": new_code}
+    return {"pairing_code": new_code, "expires_in": 900}
+
+@router.get("/pairing-code", response_model=schemas.PairingCodeResponse)
+async def get_student_pairing_code(
+    current_user: dict = Depends(get_current_user),
+    redis: aioredis.Redis = Depends(get_redis)
+):
+    """
+    Lấy mã Pairing Code hiện tại của học sinh nếu còn hạn.
+    Không tạo mã mới. Dùng để reload trang F5.
+    """
+    if current_user.get("role") != "STUDENT":
+        raise HTTPException(status_code=403, detail="Chỉ học sinh mới có thể xem mã liên kết.")
+        
+    student_id = current_user["id"]
+    existing_code = await redis.get(f"student_active_code:{student_id}")
+    
+    if existing_code:
+        code_str = existing_code.decode('utf-8')
+        ttl = await redis.ttl(f"pairing_code:{code_str}")
+        if ttl > 0:
+            return {"pairing_code": code_str, "expires_in": ttl}
+            
+    # Nếu không có mã nào active, trả về mã rỗng hoặc báo lỗi 404 cũng được.
+    # Ở đây chọn trả về HTTP 404 để FE dễ handle
+    raise HTTPException(status_code=404, detail="Không có mã liên kết nào đang hoạt động.")
 
 @router.post("/link-student", response_model=schemas.LinkedStudentResponse)
 async def link_student_to_parent(
