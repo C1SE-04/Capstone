@@ -263,6 +263,7 @@ class OrchestratorAgent:
         "help em", "help mình", "help thầy","gợi ý đi", "cho em gợi ý", "gợi ý nhỏ", "hint đi",
         "bước tiếp làm gì", "tiếp theo lm gì", "làm gì tiếp","lm gì tiếp", "tiếp theo là gì", "next step",
         "cho em ví dụ", "ví dụ đi", "ví dụ thế nào", "ví dụ cụ thể", "cho 1 vd đi", "1 vd đi", "cho vd đi", "vd đi",
+        "ví dụ", "vi du", "vd", "vdu", "dí dụ", "di du", "vidu", "mẫu", "bài mẫu", "làm mẫu", "giải mẫu",
         "không hiểu đề", "ko hiểu đề", "k hiểu đề", "chưa làm được", "chưa lm được",
         "bắt đầu từ đâu", "bắt đầu ntn", "bắt đầu từ đâu thầy","em làm vậy đúng k", "em làm vậy đúng ko", "em làm đúng chưa",
         "thầy xem giúp em", "thầy check giúp", "check hộ em", "em làm đến đây rồi", "em mới làm đến đây",
