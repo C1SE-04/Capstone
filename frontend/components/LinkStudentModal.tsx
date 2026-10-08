@@ -52,7 +52,7 @@ export default function LinkStudentModal({
   const isComplete = pairingCode.length === 6;
 
   const handleDigitChange = (index: number, value: string) => {
-    const cleaned = value.replace(/[^0-9]/g, "").slice(-1);
+    const cleaned = value.replace(/[^A-Z0-9]/gi, "").toUpperCase().slice(-1);
     const newDigits = [...digits];
     newDigits[index] = cleaned;
     setDigits(newDigits);
@@ -72,7 +72,7 @@ export default function LinkStudentModal({
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/[^0-9]/g, "").slice(0, 6);
+    const pasted = e.clipboardData.getData("text").replace(/[^A-Z0-9]/gi, "").toUpperCase().slice(0, 6);
     if (pasted) {
       const newDigits = [...digits];
       for (let i = 0; i < 6; i++) {
@@ -174,7 +174,7 @@ export default function LinkStudentModal({
               <h3 className="text-xl font-bold text-[#8C4905]">Thêm học sinh</h3>
             </div>
             <p className="text-sm text-[#C1762A] mb-6 leading-relaxed">
-              Nhập mã liên kết 6 chữ số từ trang{" "}
+              Nhập mã liên kết 6 ký tự từ trang{" "}
               <span className="font-bold text-[#8C4905]">Cài đặt</span> trên thiết bị của con bạn.
             </p>
 
@@ -189,7 +189,7 @@ export default function LinkStudentModal({
                     key={index}
                     ref={(el) => { inputRefs.current[index] = el; }}
                     type="text"
-                    inputMode="numeric"
+                    inputMode="text"
                     maxLength={1}
                     value={digit}
                     onChange={(e) => handleDigitChange(index, e.target.value)}
