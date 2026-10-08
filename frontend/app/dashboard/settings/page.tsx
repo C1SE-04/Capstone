@@ -8,9 +8,9 @@ const GRADES = [4, 5, 6, 7, 8, 9];
 export default function SettingsPage() {
   const { data: session, update } = useSession();
 
-  // Lấy lớp hiện tại từ session (nếu T5.7 chưa xong, ép kiểu để tạm không báo lỗi TS)
-  // Mặc định tạm thời là null nếu session chưa trả về grade
-  const currentGrade = (session?.user as any)?.grade ?? null;
+  // Lấy lớp hiện tại từ session — parse sang number vì NextAuth có thể trả về string
+  const rawGrade = session?.user?.grade_level ?? null;
+  const currentGrade: number | null = rawGrade !== null ? Number(rawGrade) : null;
 
   const [selectedGrade, setSelectedGrade] = useState<number | null>(currentGrade);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -39,13 +39,7 @@ export default function SettingsPage() {
     setErrorMsg("");
 
     try {
-      // ⚠️ MOCK API TẠM THỜI ⚠️
-      // Vì T5.3 (BE) chưa làm xong nên mình giả lập API delay 800ms
-      // Sau khi T5.3 có API thật, sẽ uncomment đoạn code fetch bên dưới
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      /*
-      // --- KHI CÓ API THẬT CỦA T5.3, HÃY DÙNG ĐOẠN NÀY ---
+      // Gọi API thật lên Backend để lưu lớp học mới vào NeonDB
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${backendUrl}/users/me/grade`, {
         method: "PATCH",
@@ -60,10 +54,9 @@ export default function SettingsPage() {
         const err = await res.json();
         throw new Error(err.detail || "Không thể cập nhật lớp học");
       }
-      */
 
-      // Cập nhật session (Yêu cầu T5.7 hoàn thành để hoạt động mượt)
-      await update({ grade: pendingGrade });
+      // Sau khi DB cập nhật thành công, đồng bộ lại session NextAuth
+      await update({ grade_level: pendingGrade });
       
       // Cập nhật UI
       setSelectedGrade(pendingGrade);
