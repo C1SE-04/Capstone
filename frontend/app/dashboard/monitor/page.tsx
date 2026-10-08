@@ -206,7 +206,7 @@ export default function MonitorPage() {
               <Tooltip 
                 contentStyle={{ borderRadius: '12px', border: '1px solid #F1CCA6', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 labelStyle={{ fontWeight: 'bold', color: '#8C4905', marginBottom: '4px' }}
-                formatter={(value: number) => [`${value} giờ`, 'Thời gian học']}
+                formatter={(value: number | string | undefined) => [`${value ?? 0} giờ`, 'Thời gian học']}
                 labelFormatter={(label, payload) => {
                   if (payload && payload.length > 0) {
                     return payload[0].payload.fullDate;
