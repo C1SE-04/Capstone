@@ -69,12 +69,17 @@ export const authOptions: NextAuthOptions = {
   // Các callback xử lý khi tạo Token và Session
   callbacks: {
     // Gọi khi tạo hoặc cập nhật JWT token
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
+      // Lần đăng nhập đầu tiên: map thông tin từ authorize()
       if (user) {
         token.id = user.id;
         token.role = user.role;
         token.grade_level = user.grade_level;
         token.access_token = user.access_token;
+      }
+      // Khi client gọi update({ grade_level: X }): cập nhật token ngay trong phiên hiện tại
+      if (trigger === "update" && session?.grade_level !== undefined) {
+        token.grade_level = session.grade_level;
       }
       return token;
     },
