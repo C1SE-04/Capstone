@@ -18,8 +18,9 @@ router = APIRouter(
 )
 
 def generate_pairing_code() -> str:
-    """Tạo mã liên kết 6 ký tự ngẫu nhiên (chữ IN HOA và số)"""
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    """Tạo mã liên kết 6 ký tự ngẫu nhiên (chữ IN HOA và số), loại bỏ các ký tự dễ nhầm lẫn (O, 0, I, 1)"""
+    safe_chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return ''.join(random.choices(safe_chars, k=6))
 
 @router.post("/pairing-code", response_model=schemas.PairingCodeResponse)
 async def generate_student_pairing_code(
