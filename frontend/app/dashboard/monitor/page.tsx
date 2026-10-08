@@ -37,7 +37,7 @@ const generateMockWeekData = (weekStart: Date) => {
     end: endOfWeek(weekStart, { weekStartsOn: 1 }), // Tuần bắt đầu từ Thứ 2
   });
 
-  return days.map((day) => {
+  return days.map((day: Date) => {
     // Random mock values cho mỗi ngày
     const hours = Math.round((Math.random() * 2 + 0.5) * 10) / 10; // 0.5 - 2.5 giờ
     const questions = Math.floor(Math.random() * 15 + 5); // 5 - 20 câu
@@ -81,13 +81,13 @@ export default function MonitorPage() {
 
   // Tổng hợp số liệu
   const totalHours = useMemo(() => {
-    return chartData.reduce((sum, item) => sum + item.hours, 0).toFixed(1);
+    return chartData.reduce((sum: number, item: { hours: number; questions: number }) => sum + item.hours, 0).toFixed(1);
   }, [chartData]);
 
   const avgQuestions = useMemo(() => {
-    const activeDays = chartData.filter(d => d.questions > 0);
+    const activeDays = chartData.filter((d: { hours: number; questions: number }) => d.questions > 0);
     if (activeDays.length === 0) return 0;
-    const totalQ = activeDays.reduce((sum, item) => sum + item.questions, 0);
+    const totalQ = activeDays.reduce((sum: number, item: { hours: number; questions: number }) => sum + item.questions, 0);
     return Math.round(totalQ / activeDays.length);
   }, [chartData]);
 
@@ -207,7 +207,7 @@ export default function MonitorPage() {
                 contentStyle={{ borderRadius: '12px', border: '1px solid #F1CCA6', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 labelStyle={{ fontWeight: 'bold', color: '#8C4905', marginBottom: '4px' }}
                 formatter={(value: number | string | undefined) => [`${value ?? 0} giờ`, 'Thời gian học']}
-                labelFormatter={(label, payload) => {
+                labelFormatter={(label: string, payload: Array<{ payload: { fullDate: string } }>) => {
                   if (payload && payload.length > 0) {
                     return payload[0].payload.fullDate;
                   }
