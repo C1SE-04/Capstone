@@ -13,8 +13,6 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False)
     grade = Column(Integer, nullable=True)  # Chỉ dùng cho STUDENT (lớp 4-9)
-    # Mã liên kết (Pairing Code) 6 ký tự để học sinh cung cấp cho phụ huynh
-    pairing_code = Column(String(6), unique=True, index=True, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Quan hệ Phụ huynh - Học sinh

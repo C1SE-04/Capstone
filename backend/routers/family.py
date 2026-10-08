@@ -9,6 +9,8 @@ from database import get_db
 from models import User, ParentStudentLink
 import schemas
 from dependencies import get_current_user
+from redis_client import get_redis
+import redis.asyncio as aioredis
 
 router = APIRouter(
     prefix="/family",
@@ -20,52 +22,65 @@ def generate_pairing_code() -> str:
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 @router.post("/pairing-code", response_model=schemas.PairingCodeResponse)
-def generate_student_pairing_code(
+async def generate_student_pairing_code(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis)
 ):
     """
     Học sinh (STUDENT) gọi API này để lấy mã Pairing Code.
-    Nếu chưa có, tự động tạo mới.
+    Mã sẽ được lưu vào Redis và có hạn 15 phút (900 giây).
     """
     if current_user.get("role") != "STUDENT":
         raise HTTPException(status_code=403, detail="Chỉ học sinh mới có thể tạo mã liên kết.")
     
-    # Lấy object User từ DB
-    user_db = db.query(User).filter(User.id == current_user["id"]).first()
-    if not user_db:
-        raise HTTPException(status_code=404, detail="Người dùng không tồn tại.")
+    student_id = current_user["id"]
+    
+    # Kiểm tra xem học sinh đã tạo mã nào chưa hết hạn không
+    # Tránh spam mã mới liên tục
+    existing_code = await redis.get(f"student_active_code:{student_id}")
+    if existing_code:
+        return {"pairing_code": existing_code.decode('utf-8')}
+
+    # Tạo mã mới
+    new_code = generate_pairing_code()
+    # Nếu mã ngẫu nhiên bị trùng (rất hiếm, nhưng check cho an toàn)
+    while await redis.exists(f"pairing_code:{new_code}"):
+        new_code = generate_pairing_code()
+            
+    # Lưu vào Redis: key là pairing_code, value là student_id, tồn tại 15 phút
+    await redis.setex(f"pairing_code:{new_code}", 900, student_id)
+    # Lưu thêm 1 key ngược lại để biết học sinh này đang có mã nào active
+    await redis.setex(f"student_active_code:{student_id}", 900, new_code)
         
-    if not user_db.pairing_code:
-        # Tạo mã mới và đảm bảo không bị trùng lặp
-        while True:
-            new_code = generate_pairing_code()
-            exists = db.query(User).filter(User.pairing_code == new_code).first()
-            if not exists:
-                break
-                
-        user_db.pairing_code = new_code
-        db.commit()
-        db.refresh(user_db)
-        
-    return {"pairing_code": user_db.pairing_code}
+    return {"pairing_code": new_code}
 
 @router.post("/link-student", response_model=schemas.LinkedStudentResponse)
-def link_student_to_parent(
+async def link_student_to_parent(
     request: schemas.LinkStudentRequest,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis)
 ):
     """
     Phụ huynh (MONITOR) nhập Pairing Code để liên kết với học sinh.
+    Lấy thông tin từ Redis, nếu hợp lệ thì lưu vào DB và xoá mã trên Redis.
     """
     if current_user.get("role") != "MONITOR":
         raise HTTPException(status_code=403, detail="Chỉ phụ huynh mới có thể liên kết học sinh.")
         
-    # Tìm học sinh bằng pairing code
-    student = db.query(User).filter(User.pairing_code == request.pairing_code, User.role == "STUDENT").first()
+    code = request.pairing_code.upper()
+    student_id_bytes = await redis.get(f"pairing_code:{code}")
+    
+    if not student_id_bytes:
+        raise HTTPException(status_code=404, detail="Mã liên kết đã hết hạn hoặc không tồn tại.")
+        
+    student_id = student_id_bytes.decode('utf-8')
+    
+    # Tìm học sinh trong DB để lấy email trả về
+    student = db.query(User).filter(User.id == student_id, User.role == "STUDENT").first()
     if not student:
-        raise HTTPException(status_code=404, detail="Mã liên kết không hợp lệ hoặc không tồn tại.")
+        raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu học sinh.")
         
     # Kiểm tra xem đã liên kết chưa
     existing_link = db.query(ParentStudentLink).filter(
@@ -85,6 +100,10 @@ def link_student_to_parent(
     db.add(new_link)
     db.commit()
     db.refresh(new_link)
+    
+    # Xoá mã khỏi Redis sau khi đã dùng (One-time use)
+    await redis.delete(f"pairing_code:{code}")
+    await redis.delete(f"student_active_code:{student_id}")
     
     return {
         "student_id": student.id,
