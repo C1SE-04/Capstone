@@ -45,7 +45,7 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
     ...(isMonitor
       ? [{ name: "Bảng phụ huynh", href: "/dashboard/monitor", icon: LayoutDashboard }]
       : []),
-    ...(!isMonitor
+    ...(!isMonitor && !pathname.startsWith("/dashboard/settings")
       ? [{ name: "Lịch sử", href: "/dashboard/history", icon: History }]
       : []),
     { name: "Cài đặt", href: "/dashboard/settings", icon: Settings2 },
