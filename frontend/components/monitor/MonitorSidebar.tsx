@@ -20,6 +20,7 @@ import {
   Trash2,
   User,
   Home,
+  Edit2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LinkStudentModal from "@/components/LinkStudentModal";
@@ -121,6 +122,35 @@ export default function MonitorSidebar({
     }
   };
 
+  const handleEditNickname = async (student: LinkedStudent) => {
+    const newName = window.prompt("Nhập biệt danh mới cho học sinh này:", student.nickname || "");
+    if (newName === null || newName.trim() === student.nickname) return;
+    
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/family/students/${student.student_id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ nickname: newName.trim() }),
+      });
+      if (res.ok) {
+        const updatedStudent = await res.json();
+        setStudents(prev => prev.map(s => s.student_id === student.student_id ? updatedStudent : s));
+        if (selectedStudentId === student.student_id) {
+          onSelectStudent(updatedStudent);
+        }
+      } else {
+        alert("Có lỗi xảy ra khi cập nhật biệt danh!");
+      }
+    } catch (err) {
+      console.error("Lỗi cập nhật biệt danh:", err);
+      alert("Lỗi kết nối tới máy chủ.");
+    }
+  };
+
   // Sau khi thêm con thành công → fetch lại danh sách
   const handleLinkSuccess = (_name: string) => {
     fetchStudents();
@@ -141,8 +171,8 @@ export default function MonitorSidebar({
             className="flex items-center gap-3 cursor-pointer"
             onClick={() => router.push("/")}
           >
-            <div className="w-10 h-10 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold shadow-inner hover:bg-[#F7AD62]/40 transition-colors">
-              SK
+            <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center hover:opacity-80 transition-opacity bg-[#F7ECE1]">
+              <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
             </div>
             <div>
               <h2 className="text-[#8C4905] font-extrabold italic text-lg tracking-tight leading-none">
@@ -235,45 +265,62 @@ export default function MonitorSidebar({
                     </p>
                   </div>
 
-                  {/* Nút xoá — chỉ hiện khi hover */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemoveStudent(student.student_id);
-                    }}
-                    disabled={removingId === student.student_id}
-                    className={cn(
-                      "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150",
-                      isActive
-                        ? "hover:bg-white/20 text-white"
-                        : "hover:bg-red-100 text-red-400"
-                    )}
-                    title="Huỷ liên kết"
-                  >
-                    {removingId === student.student_id ? (
-                      <svg
-                        className="animate-spin h-3.5 w-3.5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                        />
-                      </svg>
-                    ) : (
-                      <Trash2 size={14} />
-                    )}
-                  </button>
+                  {/* Nút xoá và sửa — chỉ hiện khi hover */}
+                  <div className="opacity-0 group-hover:opacity-100 transition-all duration-150 flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditNickname(student);
+                      }}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all duration-150",
+                        isActive
+                          ? "hover:bg-white/20 text-white"
+                          : "hover:bg-[#F1CCA6] text-[#C1762A]"
+                      )}
+                      title="Đổi biệt danh"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveStudent(student.student_id);
+                      }}
+                      disabled={removingId === student.student_id}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all duration-150",
+                        isActive
+                          ? "hover:bg-white/20 text-white"
+                          : "hover:bg-red-100 text-red-400"
+                      )}
+                      title="Huỷ liên kết"
+                    >
+                      {removingId === student.student_id ? (
+                        <svg
+                          className="animate-spin h-3.5 w-3.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                          />
+                        </svg>
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                    </button>
+                  </div>
                 </div>
               );
             })

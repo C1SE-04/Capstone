@@ -16,10 +16,10 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
         user_id: str = payload.get("sub")
         role: str = payload.get("role")
-        grade = payload.get("grade")  # Task #132: giải mã grade từ JWT
+        grade_level = payload.get("grade_level")  # Đọc grade_level từ JWT (đã đổi key từ auth router)
         if user_id is None or role is None:
             raise credentials_exception
-        return {"id": user_id, "role": role, "grade": grade}
+        return {"id": user_id, "role": role, "grade_level": grade_level}
     except JWTError:
         raise credentials_exception
 

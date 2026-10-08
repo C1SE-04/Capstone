@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import func, cast, Date
 import string
 import random
 from typing import List
@@ -220,3 +220,117 @@ def remove_student_link(
     db.commit()
     
     return {"message": "Đã hủy liên kết thành công"}
+
+
+# US 5.2: GET /family/students/{student_id}/metrics
+# Tối ưu: dùng COUNT + GROUP BY ngay tại DB, tránh N+1, tận dụng index thời gian
+@router.get("/students/{student_id}/metrics", response_model=schemas.StudentMetricsResponse)
+def get_student_metrics(
+    student_id: str,
+    week_start: str = Query(
+        default=None,
+        description="Ngày bắt đầu tuần cần xem (ISO: YYYY-MM-DD). Mặc định là tuần hiện tại."
+    ),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Phụ huynh lấy metrics tổng hợp của học sinh theo tuần.
+    
+    Tối ưu hóa:
+    - COUNT tin nhắn + GROUP BY ngày bằng 1 câu SQL duy nhất (không N+1)
+    - Lọc theo khoảng thời gian (7 ngày) để tận dụng composite index sẵn có
+    - Toàn bộ aggregation thực hiện tại NeonDB, Python chỉ format kết quả
+    """
+    from datetime import date, timedelta
+    import models
+
+    if current_user.get("role") != "MONITOR":
+        raise HTTPException(status_code=403, detail="Chỉ phụ huynh mới có thể xem metrics.")
+
+    # Kiểm tra phụ huynh có liên kết với học sinh này không
+    link = db.query(ParentStudentLink).filter(
+        ParentStudentLink.parent_id == current_user["id"],
+        ParentStudentLink.student_id == student_id,
+    ).first()
+    if not link:
+        raise HTTPException(status_code=403, detail="Bạn không có quyền xem dữ liệu của học sinh này.")
+
+    # --- Tính khoảng thời gian tuần ---
+    if week_start:
+        try:
+            w_start = date.fromisoformat(week_start)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Định dạng week_start không hợp lệ (YYYY-MM-DD).")
+    else:
+        today = date.today()
+        # Lấy thứ 2 của tuần hiện tại
+        w_start = today - timedelta(days=today.weekday())
+
+    w_end = w_start + timedelta(days=6)  # Thứ 2 → Chủ nhật
+
+    # -------------------------------------------------------------------
+    # QUERY TỐI ƯU #1: Đếm tin nhắn mỗi ngày bằng JOIN + COUNT + GROUP BY
+    # Tận dụng index: ix_sessions_user_updated (user_id) và ix_messages_session_created (created_at)
+    # Thay thế cho cách cũ: fetch all sessions → loop → fetch messages từng session (N+1)
+    # -------------------------------------------------------------------
+    daily_rows = (
+        db.query(
+            cast(models.Message.created_at, Date).label("day"),
+            func.count(models.Message.id).label("msg_count"),
+            func.count(func.distinct(models.Session.id)).label("session_count"),
+        )
+        .join(models.Session, models.Message.session_id == models.Session.id)
+        .filter(
+            models.Session.user_id == student_id,
+            # Lọc theo khoảng thời gian → NeonDB dùng index ix_messages_session_created
+            models.Message.created_at >= w_start,
+            models.Message.created_at <= w_end,
+        )
+        .group_by(cast(models.Message.created_at, Date))
+        .order_by(cast(models.Message.created_at, Date))
+        .all()
+    )
+
+    # -------------------------------------------------------------------
+    # QUERY TỐI ƯU #2: Tổng hợp toàn tuần bằng 1 câu COUNT duy nhất
+    # Không cần sum Python-side — DB tính sẵn
+    # -------------------------------------------------------------------
+    totals = (
+        db.query(
+            func.count(models.Message.id).label("total_messages"),
+            func.count(func.distinct(models.Session.id)).label("total_sessions"),
+        )
+        .join(models.Session, models.Message.session_id == models.Session.id)
+        .filter(
+            models.Session.user_id == student_id,
+            models.Message.created_at >= w_start,
+            models.Message.created_at <= w_end,
+        )
+        .one()
+    )
+
+    total_messages = totals.total_messages or 0
+    total_sessions = totals.total_sessions or 0
+    active_days = len(daily_rows)
+    avg_per_day = round(total_messages / active_days, 1) if active_days > 0 else 0.0
+
+    # Format daily breakdown cho FE vẽ biểu đồ
+    daily = [
+        schemas.DailyMetric(
+            date=str(row.day),
+            message_count=row.msg_count,
+            session_count=row.session_count,
+        )
+        for row in daily_rows
+    ]
+
+    return schemas.StudentMetricsResponse(
+        student_id=student_id,
+        week_start=str(w_start),
+        week_end=str(w_end),
+        total_messages=total_messages,
+        total_sessions=total_sessions,
+        avg_messages_per_day=avg_per_day,
+        daily=daily,
+    )

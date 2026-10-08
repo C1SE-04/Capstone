@@ -223,12 +223,14 @@ export default function ChatPage() {
     );
     try {
       let authHeader: Record<string, string> = {};
+      let gradeLevel: number | undefined = undefined;
       try {
         const { getSession } = await import("next-auth/react");
         const nextAuthSession = await getSession();
         const token = (nextAuthSession as { access_token?: string } | null)
           ?.access_token;
         if (token) authHeader = { Authorization: `Bearer ${token}` };
+        gradeLevel = (nextAuthSession as any)?.user?.grade_level;
       } catch {
         /* khong co session */
       }
@@ -242,6 +244,7 @@ export default function ChatPage() {
           session_id: conversationId,
           prompt,
           problem_context: null,
+          grade_level: gradeLevel ? Number(gradeLevel) : undefined,
         }),
       });
       if (!response.body) throw new Error("No stream");
@@ -400,6 +403,7 @@ export default function ChatPage() {
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
       let authHeader: Record<string, string> = {};
+      let gradeLevel: number | undefined = undefined;
       try {
         const { getSession } = await import("next-auth/react");
         const nextAuthSession = await getSession();
@@ -408,6 +412,7 @@ export default function ChatPage() {
         if (token) {
           authHeader = { Authorization: `Bearer ${token}` };
         }
+        gradeLevel = (nextAuthSession as any)?.user?.grade_level;
       } catch {
         // Không có session -> chat như khách
       }
@@ -436,6 +441,7 @@ export default function ChatPage() {
           prompt: userContent,
           problem_context: null,
           answer_status,
+          grade_level: gradeLevel ? Number(gradeLevel) : undefined,
         }),
       });
 

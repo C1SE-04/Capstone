@@ -13,7 +13,9 @@ export default function Home() {
       {/* Navigation Bar / Header */}
       <header className="w-full py-4 px-8 flex justify-between items-center relative z-10">
         {/* Logo Placeholder */}
-        <div className="w-12 h-12 bg-[#D9D9D9] rounded-lg"></div>
+        <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1]">
+          <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
+        </div>
 
         {/* Navigation Links */}
         <nav className="hidden md:flex absolute left-1/2 -translate-x-1/2 gap-12 text-[#C1762A] font-bold text-lg">
@@ -133,7 +135,9 @@ export default function Home() {
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Cột 1: Thương hiệu & Thông điệp */}
           <div className="flex flex-col gap-4">
-            <div className="w-12 h-12 bg-[#D9D9D9] rounded-lg"></div> {/* Logo Placeholder */}
+            <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1]">
+              <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
+            </div>
             <p className="font-medium text-sm md:text-base">
               &ldquo;Hệ thống AI Gia sư Socratic – Đồng hành cùng học sinh Việt Nam.&rdquo;
             </p>

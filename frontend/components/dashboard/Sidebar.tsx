@@ -45,7 +45,9 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
     ...(isMonitor
       ? [{ name: "Bảng phụ huynh", href: "/dashboard/monitor", icon: LayoutDashboard }]
       : []),
-    { name: "Lịch sử", href: "/dashboard/history", icon: History },
+    ...(!isMonitor
+      ? [{ name: "Lịch sử", href: "/dashboard/history", icon: History }]
+      : []),
     { name: "Cài đặt", href: "/dashboard/settings", icon: Settings2 },
   ];
 
@@ -53,12 +55,13 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
   return (
     <>
       {/* Mobile overlay */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
+      <div
+        className={cn(
+          "fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300",
+          isMobileOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setIsMobileOpen(false)}
+      />
 
       {/* Sidebar container */}
       <aside
@@ -78,10 +81,10 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
         {/* Logo Area — clicking navigates to Dashboard */}
         <div className="p-6 pt-8 md:pt-6 flex flex-col items-center border-b border-[#C1762A]/20">
           <div
-            className="w-16 h-16 bg-[#D9D9D9] rounded-2xl flex items-center justify-center text-[#8C4905] font-bold text-xl shadow-inner cursor-pointer hover:bg-[#F7AD62]/40 transition-colors"
+            className="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity bg-[#F7ECE1]"
             onClick={() => router.push("/dashboard")}
           >
-            SK
+            <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
           </div>
           <h2 className="mt-4 text-[#8C4905] font-extrabold italic text-2xl tracking-tight">
             SocraticKid

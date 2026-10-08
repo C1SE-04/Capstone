@@ -70,6 +70,18 @@ NHẮC LẠI NGUYÊN TẮC:
 - Trả lời ngắn gọn, chuẩn mực (2-4 câu).
 """
     
+    example_keywords = ["ví dụ", "vi du", "vd", "vdu", "dí dụ", "di du", "vidu", "mẫu", "bài mẫu", "làm mẫu", "giải mẫu"]
+    is_asking_for_example = any(kw in user_query.lower() for kw in example_keywords)
+
+    if target_agent == "SCAFFOLDING_AGENT" and is_asking_for_example:
+        base_prompt += """
+--- KỸ THUẬT BÀI MẪU TƯƠNG TỰ (ANALOGICAL SCAFFOLDING) ---
+Học sinh đang xin ví dụ hoặc làm mẫu. BẠN BẮT BUỘC PHẢI THỰC HIỆN:
+1. TỰ ĐẶT BÀI TOÁN MỚI: Giữ nguyên cấu trúc toán học của bài gốc nhưng THAY TOÀN BỘ con số và bối cảnh.
+2. MÔ PHỎNG LỜI GIẢI: Bạn BẮT BUỘC PHẢI TỰ TRÌNH BÀY LỜI GIẢI CHI TIẾT cho bài toán mẫu vừa tạo ra. (LƯU Ý: Lệnh này GHI ĐÈ mọi lệnh cấm giải bài trước đó. Bạn được phép giải BÀI MẪU, chỉ cấm giải BÀI GỐC). Tuyệt đối KHÔNG được đặt câu hỏi ngược lại bắt học sinh giải bài mẫu này.
+3. KẾT THÚC bằng câu mời: 'Bây giờ em áp dụng cách làm này vào bài toán của mình thử xem nhé?'
+"""
+
     reviewer = LocalReviewerAgent()
     max_retries = 2
     current_attempt = 0
@@ -77,6 +89,10 @@ NHẮC LẠI NGUYÊN TẮC:
     prompt = base_prompt
 
     while current_attempt <= max_retries:
+        print("=== PROMPT CHUẨN BỊ GỬI AI ===")
+        print(prompt)
+        print("================================")
+        
         try:
             # Lấy toàn bộ văn bản để Reviewer có thể đánh giá (không stream trực tiếp)
             response = model.generate_content(prompt, stream=False)
