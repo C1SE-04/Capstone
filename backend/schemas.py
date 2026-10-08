@@ -82,6 +82,7 @@ class ComprehensionRequest(BaseModel):
 
 class PairingCodeResponse(BaseModel):
     pairing_code: str
+    expires_in: Optional[int] = None
 
 class LinkStudentRequest(BaseModel):
     pairing_code: str

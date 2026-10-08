@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 
 const GRADES = [4, 5, 6, 7, 8, 9];
-const PAIRING_CODE_TTL_SECONDS = 15 * 60; // 15 phút
 
 export default function SettingsPage() {
   const { data: session, update } = useSession();
@@ -19,38 +18,65 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-
+  
   // Pairing Code states
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
-  // Countdown 15 phút (tính bằng giây)
-  const [countdown, setCountdown] = useState<number>(0);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [maxSeconds, setMaxSeconds] = useState<number>(900); // Mặc định 15 phút
 
-  // Khởi động countdown khi có mã mới
-  const startCountdown = () => {
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    setCountdown(PAIRING_CODE_TTL_SECONDS);
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(countdownRef.current!);
-          // Mã hết hạn → reset về trạng thái chưa có mã
-          setPairingCode(null);
-          return 0;
-        }
-        return prev - 1;
+  // Lấy mã liên kết hiện tại nếu có (khi F5 reload trang)
+  useEffect(() => {
+    if (session?.access_token) {
+      fetchActivePairingCode();
+    }
+  }, [session?.access_token]);
+
+  const fetchActivePairingCode = async () => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/family/pairing-code`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
       });
-    }, 1000);
+
+      if (res.ok) {
+        const data = await res.json();
+        const code: string = data.pairing_code;
+        const ttl: number = data.expires_in;
+        startCountdown(code, ttl);
+      }
+    } catch (error) {
+      console.error("No active pairing code found.", error);
+    }
   };
 
-  // Dọn dẹp interval khi unmount
-  useEffect(() => {
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, []);
+  const startCountdown = (code: string, ttl: number) => {
+    setPairingCode(code);
+    setMaxSeconds(900); // Code mới luôn tối đa 15 phút
+    const expiry = new Date(Date.now() + ttl * 1000);
+    
+    // Clear interval cũ nếu có
+    if ((window as any).pairingCodeInterval) {
+      clearInterval((window as any).pairingCodeInterval);
+    }
+
+    const tick = setInterval(() => {
+      const secs = Math.round((expiry.getTime() - Date.now()) / 1000);
+      if (secs <= 0) {
+        clearInterval(tick);
+        setPairingCode(null);
+        setSecondsLeft(null);
+      } else {
+        setSecondsLeft(secs);
+      }
+    }, 1000);
+
+    (window as any).pairingCodeInterval = tick;
+  };
 
   const handleGradeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newGrade = Number(e.target.value);
@@ -83,11 +109,12 @@ export default function SettingsPage() {
 
       // Sau khi DB cập nhật thành công, đồng bộ lại session NextAuth
       await update({ grade_level: pendingGrade });
-
+      
       // Cập nhật UI
       setSelectedGrade(pendingGrade);
       setSuccessMsg(` Đã đổi sang Lớp ${pendingGrade} thành công!`);
       setTimeout(() => setSuccessMsg(""), 3000);
+      
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Đã xảy ra lỗi hệ thống");
       setSelectedGrade(currentGrade);
@@ -121,14 +148,18 @@ export default function SettingsPage() {
       }
 
       const data = await res.json();
-      setPairingCode(data.pairing_code);
-      startCountdown();
+      const code: string = data.pairing_code;
+      const ttl: number = data.expires_in || 900;
+      
+      startCountdown(code, ttl);
+
     } catch (error) {
       console.error(error);
     } finally {
       setIsGeneratingCode(false);
     }
   };
+
 
   const handleCopyCode = async () => {
     if (!pairingCode) return;
@@ -137,23 +168,11 @@ export default function SettingsPage() {
     setTimeout(() => setCopyFeedback(false), 2000);
   };
 
-  // Format countdown thành mm:ss
   const formatCountdown = (secs: number) => {
     const m = Math.floor(secs / 60).toString().padStart(2, "0");
     const s = (secs % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
   };
-
-  // Tính % tiến trình (countdown càng giảm, bar càng cạn)
-  const countdownPercent = (countdown / PAIRING_CODE_TTL_SECONDS) * 100;
-
-  // Màu bar: xanh → vàng → đỏ
-  const barColor =
-    countdownPercent > 50
-      ? "#22c55e"   // xanh lá
-      : countdownPercent > 20
-      ? "#f59e0b"   // vàng
-      : "#ef4444";  // đỏ
 
   return (
     <div className="max-w-2xl mx-auto animate-in fade-in duration-500 pb-10">
@@ -189,7 +208,7 @@ export default function SettingsPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-[#F1CCA6] p-6">
         <h2 className="text-lg font-bold text-[#8C4905] mb-1 flex items-center gap-2">
           <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />
-          Đổi lớp học
+          Đổi lớp học 
         </h2>
         <p className="text-sm text-[#C1762A] mb-4 leading-relaxed">
           Socratic AI sẽ tự động điều chỉnh độ khó, xưng hô và kiến thức theo đúng trình độ lớp mới ngay sau khi bạn lưu.
@@ -229,9 +248,7 @@ export default function SettingsPage() {
         </p>
 
         {pairingCode ? (
-          /* --- Đã có mã: hiển thị mã + countdown --- */
-          <div className="bg-[#F7ECE1] p-4 rounded-xl border border-[#F1CCA6] space-y-4 animate-in fade-in duration-300">
-            {/* Mã và nút copy */}
+          <div className="bg-[#F7ECE1] p-4 rounded-xl border border-[#F1CCA6] space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-[#8C4905] font-bold uppercase tracking-wider mb-1">Mã của bạn</p>
@@ -248,40 +265,31 @@ export default function SettingsPage() {
                 )}
               </button>
             </div>
-
-            {/* Countdown bar */}
-            <div className="space-y-1.5">
-              <div className="relative w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="absolute left-0 top-0 h-full rounded-full transition-all duration-1000 ease-linear"
-                  style={{
-                    width: `${countdownPercent}%`,
-                    backgroundColor: barColor,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-[#8C4905]/70 text-center">
-                Mã liên kết sẽ hết hạn sau{" "}
-                <span
-                  className="font-black"
-                  style={{ color: barColor }}
-                >
-                  {formatCountdown(countdown)}
+            {/* Countdown */}
+            {secondsLeft !== null && (
+              <div className="flex items-center gap-2 pt-1">
+                <div className="h-1.5 flex-1 bg-[#F1CCA6] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#C1762A] rounded-full transition-all duration-1000"
+                    style={{ width: `${(secondsLeft / maxSeconds) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-[#C1762A] tabular-nums">
+                  {formatCountdown(secondsLeft)}
                 </span>
-              </p>
-            </div>
-
-            {/* Nút tạo lại */}
+              </div>
+            )}
+            <p className="text-xs text-[#8C4905]/60">
+              Mã hết hạn sau khi đồng hồ về 0:00 — nhấn &quot;Làm mới&quot; để tạo mã khác.
+            </p>
             <button
               onClick={generatePairingCode}
-              disabled={isGeneratingCode}
-              className="w-full py-2 rounded-xl border-2 border-[#C1762A] text-[#C1762A] font-bold text-sm hover:bg-[#F1CCA6] transition-colors disabled:opacity-60 cursor-pointer"
+              className="text-xs font-bold text-[#C1762A] hover:underline cursor-pointer"
             >
-              {isGeneratingCode ? "Đang tạo mã mới..." : "Tạo mã mới"}
+              Làm mới mã
             </button>
           </div>
         ) : (
-          /* --- Chưa có mã: hiện nút lấy mã --- */
           <button
             id="get-pairing-code-btn"
             onClick={generatePairingCode}
