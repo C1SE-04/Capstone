@@ -280,14 +280,8 @@ export default function SettingsPage() {
               </div>
             )}
             <p className="text-xs text-[#8C4905]/60">
-              Mã hết hạn sau khi đồng hồ về 0:00 — nhấn &quot;Làm mới&quot; để tạo mã khác.
+              Mã có hiệu lực trong 15 phút. Vui lòng cung cấp mã này cho phụ huynh để liên kết tài khoản.
             </p>
-            <button
-              onClick={generatePairingCode}
-              className="text-xs font-bold text-[#C1762A] hover:underline cursor-pointer"
-            >
-              Làm mới mã
-            </button>
           </div>
         ) : (
           <button

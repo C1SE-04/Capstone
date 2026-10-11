@@ -8,6 +8,8 @@ import { Sparkles, ArrowDown, WifiOff, RefreshCw } from "lucide-react";
 import { AssistantOwl, OwlEmotion } from "./AssistantOwl";
 // T6.15 – US 6.3: Hook phát hiện học sinh không tương tác 10 phút
 import { useIdleTimer } from "@/hooks/useIdleTimer";
+// T6.16 – US 6.3: Modal thông báo "Bạn vẫn đang học chứ?"
+import { IdleModal } from "./IdleModal";
 
 interface ChatWindowProps {
   messages: Message[];
@@ -26,6 +28,8 @@ interface ChatWindowProps {
    * Khi key thay đổi, ChatWindow sẽ scroll ngay xuống tin nhắn mới nhất.
    */
   selectedChatKey?: number;
+  /** T6.16: Session ID của cuộc hội thoại để gửi kèm restart timestamp */
+  sessionId?: string;
 }
 
 export function ChatWindow({
@@ -39,26 +43,43 @@ export function ChatWindow({
   onNotUnderstood,
   notUnderstoodCount = 0,
   selectedChatKey = 0,
+  sessionId,
 }: ChatWindowProps) {
   // Container cuộn của danh sách tin nhắn
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   // Ref dùng để xác định vị trí phần tử cuối cùng trong danh sách tin nhắn (phục vụ auto-scroll)
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
+  // T6.16 – US 6.3: Trạng thái hiển thị modal nhắc nhở khi học sinh idle
+  const [isIdleModalOpen, setIsIdleModalOpen] = useState(false);
+
   // T6.15 – US 6.3: Idle Timer 10 phút
   // Hook tự khởi động khi component mount; gọi reset() mỗi khi học sinh gửi tin.
+  // Khi timeout 10 phút → kích hoạt onIdle mở IdleModal.
   const { reset: resetIdleTimer } = useIdleTimer({
     timeout: 10 * 60 * 1000, // 10 phút theo đặc tả US 6.3
+    onIdle: () => setIsIdleModalOpen(true),
     enabled: true,
   });
 
   /**
+   * T6.16 – Khi học sinh bấm "Đang học" trong modal:
+   * 1. Reset timer về 0 để tiếp tục đếm 10 phút mới.
+   * 2. Đóng modal.
+   */
+  const handleContinueLearning = useCallback(() => {
+    resetIdleTimer();
+    setIsIdleModalOpen(false);
+  }, [resetIdleTimer]);
+
+  /**
    * T6.15 – Wrapper của onSendMessage:
-   * Reset idle timer trước khi chuyển tin nhắn lên ChatPage.
+   * Đóng modal (nếu đang mở), reset idle timer trước khi chuyển tin nhắn lên ChatPage.
    * Mọi nơi trong ChatWindow nên gọi handleSendMessage thay vì onSendMessage trực tiếp.
    */
   const handleSendMessage = useCallback(
     (content: string, isExplanation?: boolean) => {
+      setIsIdleModalOpen(false);
       resetIdleTimer(); // Reset 10 phút countdown
       onSendMessage(content, isExplanation);
     },
@@ -250,6 +271,13 @@ export function ChatWindow({
           />
         </div>
       </div>
+
+      {/* T6.16 – US 6.3: Modal thông báo "Bạn vẫn đang học chứ? 🦉" */}
+      <IdleModal
+        isOpen={isIdleModalOpen}
+        onContinue={handleContinueLearning}
+        sessionId={sessionId}
+      />
     </div>
   );
 }

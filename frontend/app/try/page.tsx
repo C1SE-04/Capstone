@@ -193,16 +193,45 @@ export default function TryPage() {
   const [showTrialExpired, setShowTrialExpired] = useState(false);
   const [showAuthForm, setShowAuthForm] = useState(false);
 
+  // US 4.3: Quản lý giới hạn 10 câu hỏi dùng thử & chống spam
+  const [trialCount, setTrialCount] = useState(0);
+  const [isTrialExpired, setIsTrialExpired] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const [sessionId, setSessionId] = useState("");
 
   // Task 89 - US 4.3: Lấy hoặc tạo Guest ID từ localStorage
-  // (persistent — tắt browser mở lại vẫn giữ nguyên ID để backend đếm tiếp)
+  // và kiểm tra số câu đã dùng (persistent trong 24h)
   useEffect(() => {
     const guestId = getOrCreateGuestId();
     if (guestId) setSessionId(guestId);
+
+    if (typeof window !== "undefined") {
+      const storedCount = parseInt(
+        localStorage.getItem("sk_trial_count") || "0",
+        10
+      );
+      const resetAt = parseInt(
+        localStorage.getItem("sk_trial_reset_at") || "0",
+        10
+      );
+      const now = Date.now();
+
+      if (resetAt && now > resetAt) {
+        localStorage.removeItem("sk_trial_count");
+        localStorage.removeItem("sk_trial_reset_at");
+        setTrialCount(0);
+        setIsTrialExpired(false);
+      } else {
+        setTrialCount(storedCount);
+        if (storedCount >= 10) {
+          setIsTrialExpired(true);
+          setShowTrialExpired(true);
+        }
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -218,6 +247,30 @@ export default function TryPage() {
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isTyping) return;
+
+    // Chặn gửi nếu đã hết lượt dùng thử (10 câu)
+    if (isTrialExpired || trialCount >= 10) {
+      setIsTrialExpired(true);
+      setShowTrialExpired(true);
+      return;
+    }
+
+    const currentCount = trialCount + 1;
+    setTrialCount(currentCount);
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sk_trial_count", currentCount.toString());
+      if (!localStorage.getItem("sk_trial_reset_at")) {
+        localStorage.setItem(
+          "sk_trial_reset_at",
+          (Date.now() + 24 * 60 * 60 * 1000).toString()
+        );
+      }
+    }
+
+    if (currentCount >= 10) {
+      setIsTrialExpired(true);
+    }
 
     const userMsg: Message = {
       id: createMessageId("user"),
@@ -252,7 +305,11 @@ export default function TryPage() {
       // ── Hết lượt dùng thử → hiện bảng thông báo (US 4.3 - AC1, AC2, AC3) ──
       if (response.status === 429) {
         setMessages((prev) => prev.filter((m) => m.id !== botId));
+        setIsTrialExpired(true);
         setShowTrialExpired(true);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("sk_trial_count", "10");
+        }
         return;
       }
 
@@ -298,11 +355,16 @@ export default function TryPage() {
       );
     } finally {
       setIsTyping(false);
-      inputRef.current?.focus();
+      if (currentCount >= 10) {
+        setShowTrialExpired(true);
+      } else {
+        inputRef.current?.focus();
+      }
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isTrialExpired) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage(inputValue);
@@ -404,14 +466,15 @@ export default function TryPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggestions (chỉ hiện khi mới vào) */}
-      {messages.length <= 1 && (
+      {/* Suggestions (chỉ hiện khi mới vào và chưa hết lượt) */}
+      {messages.length <= 1 && !isTrialExpired && (
         <div className="flex flex-wrap justify-center gap-2 px-4 pb-2 max-w-2xl mx-auto w-full">
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
               onClick={() => sendMessage(s)}
-              className="px-4 py-2 bg-[#F1CCA6] text-[#8C4905] rounded-full text-xs font-semibold hover:bg-[#F7AD62] hover:text-white transition-all"
+              disabled={isTrialExpired}
+              className="px-4 py-2 bg-[#F1CCA6] text-[#8C4905] rounded-full text-xs font-semibold hover:bg-[#F7AD62] hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {s}
             </button>
@@ -421,24 +484,67 @@ export default function TryPage() {
 
       {/* ── Input bar ── */}
       <div className="w-full max-w-2xl mx-auto px-4 pb-6 pt-2">
-        <div className="flex items-center bg-white border border-[#C1762A]/20 rounded-full px-5 py-3 shadow-sm focus-within:border-[#C1762A] focus-within:shadow-md transition-all gap-3">
+        {/* Banner cảnh báo hết hạn dùng thử */}
+        {isTrialExpired && (
+          <div className="mb-3 px-4 py-2.5 bg-amber-50 border border-[#F1CCA6] rounded-2xl flex items-center justify-between text-xs text-[#8C4905] animate-in fade-in shadow-sm">
+            <span>
+              🔒 Bạn đã sử dụng hết <strong>10/10 lượt dùng thử</strong> hôm nay.
+            </span>
+            <button
+              onClick={handleOpenAuth}
+              className="font-bold text-[#C1762A] hover:text-[#8C4905] hover:underline cursor-pointer"
+            >
+              Đăng nhập để tiếp tục →
+            </button>
+          </div>
+        )}
+
+        <div
+          onClick={() => {
+            if (isTrialExpired) {
+              setShowTrialExpired(true);
+            }
+          }}
+          className={`flex items-center bg-white border rounded-full px-5 py-3 shadow-sm transition-all gap-3 ${
+            isTrialExpired
+              ? "bg-gray-100/90 border-gray-300 opacity-70 cursor-not-allowed"
+              : "border-[#C1762A]/20 focus-within:border-[#C1762A] focus-within:shadow-md"
+          }`}
+        >
           <input
             ref={inputRef}
             id="try-page-input"
             type="text"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => {
+              if (!isTrialExpired) setInputValue(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
-            placeholder="Hỏi SocraticKid bất cứ điều gì..."
-            className="flex-1 bg-transparent text-[#000000] placeholder:text-[#8C4905]/40 outline-none font-medium text-sm"
-            disabled={isTyping}
+            placeholder={
+              isTrialExpired
+                ? "Đã hết 10 lượt dùng thử — Vui lòng đăng nhập để tiếp tục"
+                : `Hỏi SocraticKid bất cứ điều gì... (${trialCount}/10 lượt)`
+            }
+            className={`flex-1 bg-transparent text-[#000000] placeholder:text-[#8C4905]/40 outline-none font-medium text-sm ${
+              isTrialExpired ? "cursor-not-allowed select-none" : ""
+            }`}
+            disabled={isTyping || isTrialExpired}
+            readOnly={isTrialExpired}
           />
           <button
-            onClick={() => sendMessage(inputValue)}
-            disabled={!inputValue.trim() || isTyping}
+            onClick={() => {
+              if (isTrialExpired) {
+                setShowTrialExpired(true);
+              } else {
+                sendMessage(inputValue);
+              }
+            }}
+            disabled={(!inputValue.trim() && !isTrialExpired) || isTyping}
             className={`p-2 rounded-full transition-all ${
-              inputValue.trim() && !isTyping
-                ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105"
+              isTrialExpired
+                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                : inputValue.trim() && !isTyping
+                ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 cursor-pointer"
                 : "text-[#C1762A]/30 cursor-not-allowed"
             }`}
           >
