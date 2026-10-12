@@ -9,6 +9,7 @@ from router import agent_router
 from chat_utils import get_recent_chat_context
 from agents.orchestrator import _agent
 from sqlalchemy.sql import func
+from routers.metrics import update_session_active_interval
 
 # Các hằng số cho logic sư phạm
 WRONG_BEFORE_HINT = 2 # Nếu sai <= 2 lần thì mode = socratic. Sai > 2 lần thì mode = hint
@@ -142,6 +143,12 @@ def process_query_with_orchestrator(
             
         db.commit()
 
+        # Task #168 & #169: Cập nhật khoảng active khi học sinh gửi tin nhắn
+        try:
+            update_session_active_interval(db, session_id)
+        except Exception:
+            pass
+
         # 2. Cập nhật bộ đếm
         stats, computed_mode = update_stats_on_answer(db, session_id, answer_status)
 
@@ -220,6 +227,12 @@ def process_query_with_orchestrator(
             
         db.commit()
 
+        # Task #168: Cập nhật mốc kết thúc câu trả lời AI vào khoảng active
+        try:
+            update_session_active_interval(db, session_id)
+        except Exception:
+            pass
+
     # Trigger hỏi "Đã hiểu / Chưa hiểu" khi:
     # - Học sinh trả lời đúng (answer_status="correct"), HOẶC
     # - Hệ thống vừa reveal đáp án (teaching_mode="reveal")
@@ -261,9 +274,19 @@ def process_comprehension_response(
     stats = get_or_create_session_stats(db, session_id)
 
     if understood:
-        print(f"[Stats] Session {session_id}: DA HIEU")
+        # Task #160 (US 6.1): Kích hoạt tính điểm tự lực và lưu kết quả vào DB
+        from routers.independence import save_independence_score
+        independence_record = save_independence_score(db=db, session_id=session_id)
+        print(f"[Stats] Session {session_id}: DA HIEU -> Independence Score: {independence_record.score} ({independence_record.evaluation})")
         result = {
             "message": "Hoc sinh da hieu bai!",
+            "independence": {
+                "id": independence_record.id,
+                "score": independence_record.score,
+                "hints_used": independence_record.hints_used,
+                "not_understood_count": independence_record.not_understood_count,
+                "evaluation": independence_record.evaluation,
+            },
             "stats": {
                 "consecutive_wrong_count": stats.consecutive_wrong_count,
                 "hint_count": stats.hint_count,
@@ -271,6 +294,7 @@ def process_comprehension_response(
             }
         }
         yield f"event: comprehension_ack\ndata: {json.dumps(result, ensure_ascii=False)}\n\n"
+
     else:
         # Tăng bộ đếm "Chưa hiểu"
         stats.not_understood_count += 1

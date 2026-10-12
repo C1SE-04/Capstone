@@ -133,3 +133,80 @@ class SessionStats(Base):
     # Tổng số lần học sinh bấm "Chưa hiểu" trong toàn session
     not_understood_count = Column(Integer, default=0, nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class SessionActiveInterval(Base):
+    """
+    Bảng ghi nhận các khoảng thời gian học tập active (thực sự tương tác) trong session chat.
+    US 6.3 - Task #168 & #169:
+    - Loại trừ thời gian idle (học sinh không gửi tin nhắn > 10 phút).
+    - start_time: Thời điểm bắt đầu khoảng active (gửi tin hoặc bấm 'Đang học').
+    - end_time: Thời điểm kết thúc tương tác gần nhất trước khi idle.
+    - active_seconds: Số giây active thực tế trong khoảng này.
+    """
+    __tablename__ = "session_active_intervals"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    session_id = Column(
+        String,
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    user_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    start_time = Column(DateTime(timezone=True), nullable=False)
+    end_time = Column(DateTime(timezone=True), nullable=False)
+    active_seconds = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_active_intervals_user_start", "user_id", "start_time"),
+        Index("ix_active_intervals_session_end", "session_id", "end_time"),
+    )
+
+    session = relationship("Session", backref="active_intervals")
+
+
+class IndependenceScore(Base):
+    """
+    US 6.1 - Task #159 & #160:
+    Lưu trữ điểm Tự lực (Independence Score) của học sinh sau khi hoàn thành bài toán (bấm 'Đã hiểu').
+    - score: Điểm số từ 0 - 100
+    - hints_used: Số gợi ý đã dùng trong bài
+    - not_understood_count: Số lần bấm 'Chưa hiểu'
+    - evaluation: Đánh giá phân loại mức độ tự lực
+    """
+    __tablename__ = "independence_scores"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    session_id = Column(
+        String,
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    student_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    score = Column(Integer, nullable=False)
+    hints_used = Column(Integer, default=0, nullable=False)
+    not_understood_count = Column(Integer, default=0, nullable=False)
+    evaluation = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_independence_student_created", "student_id", "created_at"),
+        Index("ix_independence_session_created", "session_id", "created_at"),
+    )
+
+    session = relationship("Session", backref="independence_records")
+    student = relationship("User", backref="independence_records")
+

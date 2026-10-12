@@ -113,11 +113,23 @@ def submit_comprehension_feedback(
     ).first()
     
     if not stats:
-        # Náº¿u chÆ°a cÃ³ thÃ¬ táº¡o má»›i
+        # Nếu chưa có thì tạo mới
         stats = _models.SessionStats(session_id=req.session_id)
         db.add(stats)
         
+    independence_data = None
     if req.understood:
+        # Task #160 (US 6.1): Kích hoạt tính điểm tự lực và lưu kết quả vào DB
+        from routers.independence import save_independence_score
+        record = save_independence_score(db=db, session_id=req.session_id)
+        independence_data = {
+            "id": record.id,
+            "score": record.score,
+            "hints_used": record.hints_used,
+            "not_understood_count": record.not_understood_count,
+            "evaluation": record.evaluation,
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+        }
         stats.consecutive_wrong_count = 0
         stats.hint_count = 0
     else:
@@ -129,12 +141,14 @@ def submit_comprehension_feedback(
     return {
         "status": "success",
         "message": "Feedback recorded",
+        "independence": independence_data,
         "stats": {
             "consecutive_wrong_count": stats.consecutive_wrong_count,
             "hint_count": stats.hint_count,
             "not_understood_count": stats.not_understood_count
         }
     }
+
 
 @router.get("/chat/stats/{session_id}", response_model=schemas.SessionStatsResponse)
 def get_session_stats(session_id: str, db: Session = Depends(get_db)):

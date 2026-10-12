@@ -48,6 +48,8 @@ from routers import family
 app.include_router(family.router)
 from routers import metrics  # Task #121: API thống kê thời gian học
 app.include_router(metrics.router)
+from routers import independence  # Task #159 & #160: API điểm Tự Lực (Independence Score)
+app.include_router(independence.router)
 
 @app.get("/")
 def read_root():
