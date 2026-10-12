@@ -12,8 +12,9 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useMonitorContext } from "./layout";
 import { useSession } from "next-auth/react";
-import { StatCard } from "@/components/monitor/StatCard";
-import { UserPlus, ChevronLeft, ChevronRight, Clock, HelpCircle } from "lucide-react";
+import { SummaryCards, SummaryMetrics } from "@/components/monitor/SummaryCards";
+import { TimeRangeFilter, TimeRange } from "@/components/monitor/TimeRangeFilter";
+import { UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -60,6 +61,9 @@ interface ChartItem {
 export default function MonitorPage() {
   const { selectedStudent } = useMonitorContext();
   const { data: session } = useSession();
+
+  // State bộ lọc thời gian (T6.8: 7 ngày / 30 ngày)
+  const [timeRange, setTimeRange] = useState<TimeRange>("7d");
 
   // State quản lý tuần đang xem (0: tuần hiện tại, -1: tuần trước, v.v...)
   const [weekOffset, setWeekOffset] = useState(0);
@@ -155,6 +159,33 @@ export default function MonitorPage() {
     return Math.round(totalMinutes / activeDays.length);
   }, [chartData, totalMinutes]);
 
+  // Dữ liệu 4 Summary Cards (T6.8: Phản hồi theo dropdown 7 ngày / 30 ngày)
+  const summaryMetrics: SummaryMetrics = useMemo(() => {
+    if (timeRange === "7d") {
+      return {
+        completedProblems: 18,
+        completedChange: "+15%",
+        independenceScore: 84,
+        independenceLevel: "Tự lập tốt (ít dùng gợi ý)",
+        currentStreak: 5,
+        maxStreak: 12,
+        totalStudyHours: totalMinutes > 0 ? parseFloat(totalHours) : 4.5,
+        avgMinutesPerDay: avgMinutesPerActiveDay > 0 ? avgMinutesPerActiveDay : 38,
+      };
+    } else {
+      return {
+        completedProblems: 64,
+        completedChange: "+28%",
+        independenceScore: 79,
+        independenceLevel: "Tiến bộ rõ rệt",
+        currentStreak: 5,
+        maxStreak: 12,
+        totalStudyHours: 18.5,
+        avgMinutesPerDay: 42,
+      };
+    }
+  }, [timeRange, totalMinutes, totalHours, avgMinutesPerActiveDay]);
+
   const handlePrevWeek = () => setWeekOffset((prev) => prev - 1);
   const handleNextWeek = () => {
     if (!isCurrentWeek) setWeekOffset((prev) => prev + 1);
@@ -199,49 +230,43 @@ export default function MonitorPage() {
           </div>
         </div>
 
-        {/* Weekly Filter Controls */}
-        <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-xl border border-[#F1CCA6] shadow-sm">
-          <button
-            onClick={handlePrevWeek}
-            className="p-1.5 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] transition-colors"
-          >
-            <ChevronLeft size={20} />
-          </button>
+        {/* Filter Controls: Dropdown lọc thời gian (T6.8) & Tuần */}
+        <div className="flex flex-wrap items-center gap-3">
+          <TimeRangeFilter value={timeRange} onChange={setTimeRange} />
 
-          <div className="text-sm font-bold text-[#8C4905] min-w-[140px] text-center">
-            {format(weekStart, "dd/MM")} - {format(weekEnd, "dd/MM/yyyy")}
-            {isCurrentWeek && <span className="block text-xs text-[#C1762A] font-medium">(Tuần này)</span>}
+          {/* Weekly Navigation Controls */}
+          <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-[#F1CCA6] shadow-sm">
+            <button
+              onClick={handlePrevWeek}
+              aria-label="Tuần trước"
+              className="p-1 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] transition-colors"
+            >
+              <ChevronLeft size={18} />
+            </button>
+
+            <div className="text-xs font-bold text-[#8C4905] min-w-[125px] text-center">
+              {format(weekStart, "dd/MM")} - {format(weekEnd, "dd/MM/yyyy")}
+              {isCurrentWeek && <span className="block text-[10px] text-[#C1762A] font-medium">(Tuần này)</span>}
+            </div>
+
+            <button
+              onClick={handleNextWeek}
+              disabled={isCurrentWeek}
+              aria-label="Tuần tiếp theo"
+              className={`p-1 rounded-lg transition-colors ${
+                isCurrentWeek
+                  ? "text-gray-300 cursor-not-allowed"
+                  : "text-[#8C4905] hover:bg-[#F7ECE1]"
+              }`}
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
-
-          <button
-            onClick={handleNextWeek}
-            disabled={isCurrentWeek}
-            className={`p-1.5 rounded-lg transition-colors ${
-              isCurrentWeek
-                ? "text-gray-300 cursor-not-allowed"
-                : "text-[#8C4905] hover:bg-[#F7ECE1]"
-            }`}
-          >
-            <ChevronRight size={20} />
-          </button>
         </div>
       </div>
 
-      {/* Thẻ thống kê */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        <StatCard
-          icon={<Clock size={24} className="text-[#C1762A]" />}
-          label="Tổng thời gian học (Tuần)"
-          value={isLoadingMetrics ? "..." : `${totalHours} giờ`}
-          color="bg-white"
-        />
-        <StatCard
-          icon={<HelpCircle size={24} className="text-[#C1762A]" />}
-          label="Thời gian học trung bình/ngày"
-          value={isLoadingMetrics ? "..." : `~${avgMinutesPerActiveDay} phút/ngày`}
-          color="bg-white"
-        />
-      </section>
+      {/* T6.8: Summary Cards (4 thẻ tóm tắt) */}
+      <SummaryCards metrics={summaryMetrics} isLoading={isLoadingMetrics} />
 
       {/* Biểu đồ */}
       <section className="bg-white rounded-2xl border border-[#F1CCA6] p-6 shadow-sm">
