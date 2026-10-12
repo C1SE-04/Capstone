@@ -718,6 +718,7 @@ export default function ChatPage() {
             onNotUnderstood={handleNotUnderstood}
             notUnderstoodCount={notUnderstoodCount}
             selectedChatKey={selectedChatKey}
+            sessionId={activeChatId || undefined}
           />
         </main>
       </div>
