@@ -14,6 +14,7 @@ import { useMonitorContext } from "./layout";
 import { useSession } from "next-auth/react";
 import { SummaryCards, SummaryMetrics } from "@/components/monitor/SummaryCards";
 import { TimeRangeFilter, TimeRange } from "@/components/monitor/TimeRangeFilter";
+import { ActivityHeatmap, generateMockHeatmapData } from "@/components/monitor/ActivityHeatmap";
 import { UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   LineChart,
@@ -186,6 +187,11 @@ export default function MonitorPage() {
     }
   }, [timeRange, totalMinutes, totalHours, avgMinutesPerActiveDay]);
 
+  // Dữ liệu Activity Heatmap (T6.6: Hiển thị 12 tuần gần nhất ~ 84 ngày để thấy rõ mật độ học tập)
+  const heatmapData = useMemo(() => {
+    return generateMockHeatmapData(timeRange === "7d" ? 70 : 84);
+  }, [timeRange, selectedStudent?.student_id]);
+
   const handlePrevWeek = () => setWeekOffset((prev) => prev - 1);
   const handleNextWeek = () => {
     if (!isCurrentWeek) setWeekOffset((prev) => prev + 1);
@@ -322,6 +328,12 @@ export default function MonitorPage() {
           </ResponsiveContainer>
         </div>
       </section>
+
+      {/* T6.6: Biểu đồ nhiệt hoạt động học (Activity Heatmap) */}
+      <ActivityHeatmap
+        data={heatmapData}
+        isLoading={isLoadingMetrics}
+      />
     </div>
   );
 }
