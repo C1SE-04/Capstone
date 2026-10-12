@@ -116,3 +116,56 @@ class StudentMetricsResponse(BaseModel):
     total_sessions: int         # Tổng phòng chat cả tuần (COUNT trong SQL)
     avg_messages_per_day: float # Trung bình tin nhắn/ngày (AVG trong SQL)
     daily: list[DailyMetric]    # Chi tiết từng ngày để vẽ biểu đồ
+
+
+# --- US 6.3: Idle Detection & Active Metrics (Task #168 & #169) ---
+
+class RestartMetricRequest(BaseModel):
+    timestamp: Optional[int] = None
+    timestamp_ms: Optional[int] = None
+    restart_time: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+class RestartMetricResponse(BaseModel):
+    success: bool
+    message: str
+    session_id: Optional[str] = None
+    interval_id: Optional[str] = None
+    start_time: Optional[str] = None
+    active_seconds: int = 0
+
+
+# --- US 6.1: Independence / Mastery Score (Task #159 & #160) ---
+
+class IndependenceRecordCreate(BaseModel):
+    session_id: str
+    student_id: Optional[str] = None
+    score: Optional[int] = None
+    hints_used: Optional[int] = None
+    not_understood_count: Optional[int] = None
+    evaluation: Optional[str] = None
+
+
+class IndependenceRecordResponse(BaseModel):
+    id: str
+    session_id: str
+    student_id: str
+    score: int
+    hints_used: int
+    not_understood_count: int
+    evaluation: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class IndependenceSummaryResponse(BaseModel):
+    student_id: str
+    average_score: float
+    total_completed: int
+    latest_score: Optional[int] = None
+    evaluation_level: str
+    history: list[IndependenceRecordResponse] = []
+

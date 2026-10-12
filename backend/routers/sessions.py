@@ -21,7 +21,22 @@ def create_session(
     db.add(new_session)
     db.commit()
     db.refresh(new_session)
+
+    # Task #168 & #169: Khởi tạo khoảng active ban đầu cho session mới
+    from datetime import datetime, timezone
+    now_utc = datetime.now(timezone.utc)
+    initial_interval = models.SessionActiveInterval(
+        session_id=new_session.id,
+        user_id=current_user["id"],
+        start_time=now_utc,
+        end_time=now_utc,
+        active_seconds=0,
+    )
+    db.add(initial_interval)
+    db.commit()
+
     return new_session
+
 
 @router.get("/sessions", response_model=list[schemas.SessionResponse])
 def get_user_sessions(
