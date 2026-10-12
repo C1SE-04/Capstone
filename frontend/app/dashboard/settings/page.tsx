@@ -5,6 +5,10 @@ import { useSession } from "next-auth/react";
 
 const GRADES = [4, 5, 6, 7, 8, 9];
 
+// [Task T6.12] Kênh và sự kiện BroadcastChannel để đồng bộ khối lớp đa tab
+export const GRADE_SYNC_CHANNEL = "socratic_grade_sync";
+export const GRADE_UPDATED_EVENT = "GRADE_UPDATED";
+
 export default function SettingsPage() {
   const { data: session, update } = useSession();
 
@@ -18,6 +22,32 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Tự động đồng bộ selectedGrade khi currentGrade trong session thay đổi
+  useEffect(() => {
+    if (currentGrade !== null) {
+      setSelectedGrade(currentGrade);
+    }
+  }, [currentGrade]);
+
+  // [Task T6.12] Lắng nghe sự kiện đổi lớp từ các tab khác qua BroadcastChannel
+  useEffect(() => {
+    if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
+
+    const channel = new BroadcastChannel(GRADE_SYNC_CHANNEL);
+    channel.onmessage = (event) => {
+      if (event.data?.type === GRADE_UPDATED_EVENT && event.data.grade) {
+        const newGrade = Number(event.data.grade);
+        setSelectedGrade(newGrade);
+        // Đồng bộ lại session NextAuth của tab hiện tại
+        update({ grade_level: newGrade });
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
+  }, [update]);
   
   // Pairing Code states
   const [pairingCode, setPairingCode] = useState<string | null>(null);
@@ -107,8 +137,18 @@ export default function SettingsPage() {
         throw new Error(err.detail || "Không thể cập nhật lớp học");
       }
 
-      // Sau khi DB cập nhật thành công, đồng bộ lại session NextAuth
+      // Sau khi DB cập nhật thành công, đồng bộ lại session NextAuth ở tab hiện tại
       await update({ grade_level: pendingGrade });
+
+      // [Task T6.12] Phát sự kiện Broadcast sang các tab cùng browser để trigger update()
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        const channel = new BroadcastChannel(GRADE_SYNC_CHANNEL);
+        channel.postMessage({
+          type: GRADE_UPDATED_EVENT,
+          grade: pendingGrade,
+        });
+        channel.close();
+      }
       
       // Cập nhật UI
       setSelectedGrade(pendingGrade);

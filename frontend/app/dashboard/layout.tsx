@@ -7,7 +7,7 @@
  */
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { Menu } from "lucide-react";
@@ -23,9 +23,25 @@ export default function DashboardLayout({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   // useSession chỉ được dùng để lấy thông tin user hiển thị (avatar, tên).
   // Việc bảo vệ route (redirect nếu chưa đăng nhập) đã do middleware.ts xử lý.
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
   const pathname = usePathname();
   const router = useRouter();
+
+  // [Task T6.12] Lắng nghe sự kiện đổi lớp từ các tab khác qua BroadcastChannel để đồng bộ session toàn Dashboard
+  useEffect(() => {
+    if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
+
+    const channel = new BroadcastChannel("socratic_grade_sync");
+    channel.onmessage = (event) => {
+      if (event.data?.type === "GRADE_UPDATED" && event.data.grade) {
+        update({ grade_level: Number(event.data.grade) });
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
+  }, [update]);
 
   const isChatRoute = pathname === "/dashboard/chat";
   const isMonitorRoute = pathname.startsWith("/dashboard/monitor");
