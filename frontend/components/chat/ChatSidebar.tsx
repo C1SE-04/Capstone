@@ -6,6 +6,8 @@ import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Conversation } from "@/types/chat";
+// T6.5 – US 6.1: Thanh tiến trình Mastery tự lực
+import { MasteryProgressBar } from "./MasteryProgressBar";
 
 interface ChatSidebarProps {
   className?: string;
@@ -81,11 +83,14 @@ export function ChatSidebar({
 
           <button
             onClick={onNewChat}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-white text-[#8C4905] rounded-2xl font-bold shadow-sm hover:shadow transition-all border border-[#F1CCA6]"
+            className="w-full flex items-center justify-center gap-2 py-3 bg-white text-[#8C4905] rounded-2xl font-bold shadow-sm hover:shadow transition-all border border-[#F1CCA6] cursor-pointer"
           >
             <Plus size={18} />
             New chat
           </button>
+
+          {/* T6.5 – US 6.1: Thanh tiến trình Mastery tự lực */}
+          <MasteryProgressBar className="mt-0.5" />
         </div>
 
         {/* Chat History List */}

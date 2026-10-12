@@ -170,13 +170,41 @@ export default function ChatPage() {
     }
   };
 
-  // US4.1 - Handler: Hoc sinh nhan "Da hieu" -> them tin nhan chuc mung + doi dieu bo cu
-  const handleUnderstood = () => {
+  // US4.1 & US6.1 - Handler: Hoc sinh nhan "Da hieu" -> them tin nhan chuc mung + luu diem tu luc vao DB
+  const handleUnderstood = async () => {
     setNotUnderstoodCount(0);
-    console.log("[US4.1] Hoc sinh da hieu bai.");
+    console.log("[US4.1 & US6.1] Hoc sinh da hieu bai.");
 
     // Chỉ thêm message chúc mừng khi đang có cuộc trò chuyện
     if (!activeChatId) return;
+
+    // Gửi request lên Backend (Task #160 - T6.4) để kích hoạt tính điểm và lưu vào DB
+    try {
+      const BACKEND_URL =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${BACKEND_URL}/chat/comprehension`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: activeChatId,
+          understood: true,
+        }),
+      });
+
+      if (res.ok) {
+        const resData = await res.json();
+        // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time (T6.5)
+        if (resData.independence) {
+          window.dispatchEvent(
+            new CustomEvent("INDEPENDENCE_SCORE_UPDATED", {
+              detail: resData.independence,
+            })
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("[US6.1] Lỗi gửi comprehension feedback lên backend:", e);
+    }
 
     const congratsMessages = [
       "**Tuyệt vời!** Em đã hiểu rồi! Thầy rất vui vì em nắm được vấn đề. Hãy tiếp tục phát huy nhé!",
@@ -335,6 +363,23 @@ export default function ChatPage() {
   const handleNotUnderstood = () => {
     const newCount = notUnderstoodCount + 1;
     setNotUnderstoodCount(newCount);
+
+    if (activeChatId) {
+      // US6.1: Ghi nhận phản hồi "Chưa hiểu" lên backend để trừ điểm tự lực theo barem (-15đ)
+      const BACKEND_URL =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      fetch(`${BACKEND_URL}/chat/comprehension`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: activeChatId,
+          understood: false,
+        }),
+      }).catch((err) => {
+        console.warn("[US6.1] Lỗi gửi feedback Chưa hiểu:", err);
+      });
+    }
+
     if (newCount === 1 && activeChatId) {
       // Lan 1: Yeu cau AI giai thich lai theo cach khac
       triggerSilentReexplain(
