@@ -6,6 +6,8 @@ import { ChatInput } from "./ChatInput";
 import { Message } from "@/types/chat";
 import { Sparkles, ArrowDown, WifiOff, RefreshCw } from "lucide-react";
 import { AssistantOwl, OwlEmotion } from "./AssistantOwl";
+// T6.15 – US 6.3: Hook phát hiện học sinh không tương tác 10 phút
+import { useIdleTimer } from "@/hooks/useIdleTimer";
 
 interface ChatWindowProps {
   messages: Message[];
@@ -42,6 +44,26 @@ export function ChatWindow({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   // Ref dùng để xác định vị trí phần tử cuối cùng trong danh sách tin nhắn (phục vụ auto-scroll)
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
+
+  // T6.15 – US 6.3: Idle Timer 10 phút
+  // Hook tự khởi động khi component mount; gọi reset() mỗi khi học sinh gửi tin.
+  const { reset: resetIdleTimer } = useIdleTimer({
+    timeout: 10 * 60 * 1000, // 10 phút theo đặc tả US 6.3
+    enabled: true,
+  });
+
+  /**
+   * T6.15 – Wrapper của onSendMessage:
+   * Reset idle timer trước khi chuyển tin nhắn lên ChatPage.
+   * Mọi nơi trong ChatWindow nên gọi handleSendMessage thay vì onSendMessage trực tiếp.
+   */
+  const handleSendMessage = useCallback(
+    (content: string, isExplanation?: boolean) => {
+      resetIdleTimer(); // Reset 10 phút countdown
+      onSendMessage(content, isExplanation);
+    },
+    [resetIdleTimer, onSendMessage],
+  );
 
   // Xác định trạng thái cảm xúc của cú
   let currentEmotion: OwlEmotion = "idle";
@@ -181,7 +203,7 @@ export function ChatWindow({
                     {...(isLastAssistantMsg && {
                       onUnderstood,
                       onNotUnderstood,
-                      onSendExplanation: (text: string) => onSendMessage(text, true),
+                      onSendExplanation: (text: string) => handleSendMessage(text, true),
                       isAiLoading: isTyping,
                       notUnderstoodCount,
                     })}
@@ -222,7 +244,7 @@ export function ChatWindow({
         <AssistantOwl emotion={currentEmotion} />
         <div className="flex-1 min-w-0">
           <ChatInput
-            onSendMessage={onSendMessage}
+            onSendMessage={handleSendMessage}
             isLoading={isTyping}
             isOffline={!isOnline}
           />
