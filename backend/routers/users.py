@@ -46,10 +46,13 @@ def update_my_grade(
         raise HTTPException(status_code=404, detail="Người dùng không tồn tại.")
 
     user_db.grade = body.grade
+    user_db.session_version = (user_db.session_version or 1) + 1  # US 6.2: tăng version khi cập nhật lớp để vô hiệu hoá session cũ
     db.commit()
     db.refresh(user_db)
 
     return {
         "message": f"Đã cập nhật lớp học thành lớp {body.grade} thành công.",
-        "grade": user_db.grade
+        "grade": user_db.grade,
+        "session_version": user_db.session_version,
     }
+

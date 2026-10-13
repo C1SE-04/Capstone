@@ -77,15 +77,24 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     db.add(refresh_token_db)
     db.commit()
     
+    user_version = getattr(user, "session_version", 1) or 1
     access_token = auth.create_access_token(
-        data={"sub": str(user.id), "email": user.email, "role": user.role, "grade_level": user.grade}
+        data={
+            "sub": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "grade_level": user.grade,
+            "session_version": user_version,
+        }
     )
     return {
         "access_token": access_token,
         "refresh_token": raw_refresh_token,
         "token_type": "bearer",
         "grade": user.grade,  # Task #132: trả về FE để hiển thị và lưu local
+        "session_version": user_version,  # US 6.2: phiên bản session của user
     }
+
 
 @router.post("/refresh", response_model=schemas.TokenResponse)
 def refresh_access_token(
@@ -148,12 +157,14 @@ def refresh_access_token(
     db.add(new_refresh_token_db)
 
     # Tạo access token mới
+    user_version = getattr(user, "session_version", 1) or 1
     new_access_token = auth.create_access_token(
         data={
             "sub": str(user.id),
             "email": user.email,
             "role": user.role,
-            "grade_level": user.grade  # Task #132: cấp lại grade khi refresh token
+            "grade_level": user.grade,  # Task #132: cấp lại grade khi refresh token
+            "session_version": user_version,  # US 6.2: cấp lại session_version mới nhất từ DB
         }
     )
 
@@ -163,5 +174,7 @@ def refresh_access_token(
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
         "token_type": "bearer",
-        "grade": user.grade  # Task #132: trả về grade mới nhất
+        "grade": user.grade,  # Task #132: trả về grade mới nhất
+        "session_version": user_version,  # US 6.2: trả về session_version mới nhất
     }
+

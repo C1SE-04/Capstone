@@ -15,6 +15,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: str
     grade: Optional[int] = None  # Trả về lớp học nếu có
+    session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
 
     class Config:
         from_attributes = True
@@ -25,6 +26,7 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     grade: Optional[int] = None  # Task #132: trả thêm grade_level về FE sau login
+    session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
     
 class RefreshRequest(BaseModel):
     refresh_token: str
