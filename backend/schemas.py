@@ -168,4 +168,52 @@ class IndependenceSummaryResponse(BaseModel):
     latest_score: Optional[int] = None
     evaluation_level: str
     history: list[IndependenceRecordResponse] = []
-
+
+class SummaryCardsMetric(BaseModel):
+    completed_problems: int = 0
+    avg_independence_score: float = 0.0
+    mastery_level: str = "Chưa có dữ liệu"
+    streak_days: int = 0
+    total_active_minutes: int = 0
+    total_active_hours: float = 0.0
+
+
+class IndependenceTrendPoint(BaseModel):
+    """Điểm dữ liệu theo ngày cho Line Chart Recharts."""
+    date: str                  # "YYYY-MM-DD"
+    display_date: str          # "DD/MM" để hiển thị trục X Recharts
+    score: int                 # Điểm Independence trung bình trong ngày (10 - 100)
+    problems_count: int = 1    # Số bài giải trong ngày
+    avg_hints: float = 0.0     # Số gợi ý trung bình dùng
+
+
+class ActivityHeatmapPoint(BaseModel):
+    """Điểm dữ liệu cho Biểu đồ hoạt động học."""
+    date: str                  # "YYYY-MM-DD"
+    day_of_week: str           # "Thứ Hai", "Thứ Ba", ...
+    active_minutes: int = 0    # Số phút tương tác học tập thực tế
+    intensity_level: int = 0   # Mức nhiệt từ 0 (không học) đến 4 (học nhiều > 45p)
+
+
+class MasteryDistribution(BaseModel):
+    """Thống kê tỷ lệ phân bố các mức độ tự lực theo barem sư phạm."""
+    excellent_count: int = 0       # >= 80 điểm
+    good_count: int = 0            # 60 - 79 điểm
+    developing_count: int = 0      # 40 - 59 điểm
+    needs_support_count: int = 0   # < 40 điểm
+
+
+class ParentDashboardMetricsResponse(BaseModel):
+    """
+    Schema phản hồi tổng hợp cho API Dashboard Phụ Huynh."""
+    student_id: str
+    time_range: str = "7d"         # "7d" hoặc "30d"
+    start_date: str                # "YYYY-MM-DD"
+    end_date: str                  # "YYYY-MM-DD"
+    summary_cards: SummaryCardsMetric
+    independence_trend: list[IndependenceTrendPoint] = []
+    activity_heatmap: list[ActivityHeatmapPoint] = []
+    mastery_distribution: MasteryDistribution
+
+    class Config:
+        from_attributes = True
