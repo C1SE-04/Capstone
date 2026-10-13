@@ -13,6 +13,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False)
     grade = Column(Integer, nullable=True)  # Chỉ dùng cho STUDENT (lớp 4-9)
+    session_version = Column(Integer, default=1, nullable=False, server_default="1")  # US 6.2 (T6.10): version để đồng bộ session giữa các tab
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Quan hệ Phụ huynh - Học sinh

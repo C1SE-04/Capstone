@@ -25,7 +25,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Cấu hình CORS của team FE
+# Task T6.11 (US 6.2): Middleware kiểm tra session_version cho API /chat
+from middleware import ChatSessionVersionMiddleware
+app.add_middleware(ChatSessionVersionMiddleware)
+
+# Cấu hình CORS của team FE (bọc ngoài cùng để response từ middleware cũng có CORS headers)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
