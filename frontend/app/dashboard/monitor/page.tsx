@@ -15,6 +15,7 @@ import { useSession } from "next-auth/react";
 import { SummaryCards, SummaryMetrics } from "@/components/monitor/SummaryCards";
 import { TimeRangeFilter, TimeRange } from "@/components/monitor/TimeRangeFilter";
 import { ActivityHeatmap, generateMockHeatmapData } from "@/components/monitor/ActivityHeatmap";
+import { IndependenceChart, IndependencePoint } from "@/components/monitor/IndependenceChart";
 import { UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   LineChart,
@@ -71,6 +72,10 @@ export default function MonitorPage() {
   const [chartData, setChartData] = useState<ChartItem[]>([]);
   const [totalMinutes, setTotalMinutes] = useState(0);
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
+
+  // T6.9: State cho Line chart điểm Independence
+  const [independenceHistory, setIndependenceHistory] = useState<IndependencePoint[]>([]);
+  const [isLoadingIndependence, setIsLoadingIndependence] = useState(false);
 
   // Tính toán thời gian của tuần đang chọn
   const { weekStart, weekEnd, isCurrentWeek } = useMemo(() => {
@@ -146,10 +151,44 @@ export default function MonitorPage() {
     }
   }, [selectedStudent, session?.access_token, weekStart, weekEnd]);
 
+  // T6.9: Fetch lịch sử điểm Independence từ API /independence/summary
+  const fetchIndependence = useCallback(async () => {
+    if (!selectedStudent || !session?.access_token) return;
+    setIsLoadingIndependence(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(
+        `${backendUrl}/independence/summary?student_id=${selectedStudent.student_id}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      );
+      if (!res.ok) throw new Error("Fetch independence failed");
+      const json = await res.json();
+      // history: [{score, created_at, evaluation, ...}]
+      const mapped: IndependencePoint[] = (json.history ?? []).map(
+        (item: { created_at: string; score: number; evaluation: string }) => ({
+          date: item.created_at,
+          score: item.score,
+          evaluation: item.evaluation,
+        })
+      );
+      setIndependenceHistory(mapped);
+    } catch (err) {
+      console.error("Lỗi fetch independence:", err);
+      setIndependenceHistory([]);
+    } finally {
+      setIsLoadingIndependence(false);
+    }
+  }, [selectedStudent, session?.access_token]);
+
   // Trigger fetch khi đổi học sinh hoặc tuần
   useEffect(() => {
     fetchMetrics();
   }, [fetchMetrics]);
+
+  // T6.9: Trigger fetch independence khi đổi học sinh
+  useEffect(() => {
+    fetchIndependence();
+  }, [fetchIndependence]);
 
   // Tổng hợp số liệu
   const totalHours = (totalMinutes / 60).toFixed(1);
@@ -328,6 +367,12 @@ export default function MonitorPage() {
           </ResponsiveContainer>
         </div>
       </section>
+
+      {/* T6.9: Line Chart điểm Tự Lực (Independence Score) */}
+      <IndependenceChart
+        data={independenceHistory}
+        isLoading={isLoadingIndependence}
+      />
 
       {/* T6.6: Biểu đồ nhiệt hoạt động học (Activity Heatmap) */}
       <ActivityHeatmap
