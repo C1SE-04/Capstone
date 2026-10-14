@@ -15,7 +15,13 @@ interface ChatWindowProps {
   messages: Message[];
   isTyping: boolean;
   isOnline?: boolean;
-  onSendMessage: (content: string, isExplanation?: boolean) => void;
+  /**
+   * Callback chính khi học sinh gửi tin nhắn.
+   * @param content       - Nội dung text
+   * @param isExplanation - True khi gọi từ nút "Chưa hiểu" (UnderstandingButtons)
+   * @param image         - [T6.20] File ảnh đính kèm (từ ChatInput)
+   */
+  onSendMessage: (content: string, isExplanation?: boolean, image?: File) => void;
   onRetryMessage?: (messageId: string, content: string) => void;
   onReconnect?: () => void;
   /** US4.1: Callbacks cho nut Da hieu / Chua hieu */
@@ -73,15 +79,23 @@ export function ChatWindow({
   }, [resetIdleTimer]);
 
   /**
-   * T6.15 – Wrapper của onSendMessage:
-   * Đóng modal (nếu đang mở), reset idle timer trước khi chuyển tin nhắn lên ChatPage.
-   * Mọi nơi trong ChatWindow nên gọi handleSendMessage thay vì onSendMessage trực tiếp.
+   * T6.15/T6.20 – Wrapper tổng hợp của onSendMessage:
+   * - Reset idle timer và đóng modal mỗi khi học sinh gửi tin nhắn.
+   * - Truyền image (từ ChatInput) và isExplanation (từ UnderstandingButtons) lên ChatPage.
    */
   const handleSendMessage = useCallback(
-    (content: string, isExplanation?: boolean) => {
+    (content: string, isExplanationOrImage?: boolean | File, image?: File) => {
       setIsIdleModalOpen(false);
-      resetIdleTimer(); // Reset 10 phút countdown
-      onSendMessage(content, isExplanation);
+      resetIdleTimer();
+      // Phân biệt 2 luồng gọi:
+      // 1. Từ ChatInput: handleSendMessage(text, imageFile)
+      // 2. Từ UnderstandingButtons: handleSendMessage(text, true)
+      if (typeof isExplanationOrImage === "boolean") {
+        onSendMessage(content, isExplanationOrImage, image);
+      } else {
+        // isExplanationOrImage là File hoặc undefined → luồng ChatInput
+        onSendMessage(content, false, isExplanationOrImage);
+      }
     },
     [resetIdleTimer, onSendMessage],
   );
@@ -264,8 +278,9 @@ export function ChatWindow({
       <div className="flex flex-row items-end">
         <AssistantOwl emotion={currentEmotion} />
         <div className="flex-1 min-w-0">
+          {/* [T6.20/T6.21] ChatInput: nhận text + ảnh đính kèm từ người dùng */}
           <ChatInput
-            onSendMessage={handleSendMessage}
+            onSendMessage={(message, image) => handleSendMessage(message, image)}
             isLoading={isTyping}
             isOffline={!isOnline}
           />
