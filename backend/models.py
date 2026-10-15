@@ -89,7 +89,9 @@ class Session(Base):
         Index("ix_sessions_user_updated", "user_id", "updated_at"),
     )
 
-    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan", order_by="Message.created_at")
+    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan", passive_deletes=True, order_by="Message.created_at")
+    active_intervals = relationship("SessionActiveInterval", back_populates="session", cascade="all, delete-orphan", passive_deletes=True)
+    independence_records = relationship("IndependenceScore", back_populates="session", cascade="all, delete-orphan", passive_deletes=True)
 
 class Message(Base):
     __tablename__ = "messages"
@@ -174,7 +176,7 @@ class SessionActiveInterval(Base):
         Index("ix_active_intervals_session_end", "session_id", "end_time"),
     )
 
-    session = relationship("Session", backref="active_intervals")
+    session = relationship("Session", back_populates="active_intervals")
 
 
 class IndependenceScore(Base):
@@ -212,6 +214,6 @@ class IndependenceScore(Base):
         Index("ix_independence_session_created", "session_id", "created_at"),
     )
 
-    session = relationship("Session", backref="independence_records")
+    session = relationship("Session", back_populates="independence_records")
     student = relationship("User", backref="independence_records")
 
