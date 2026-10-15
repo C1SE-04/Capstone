@@ -30,6 +30,15 @@ export default function SettingsPage() {
     }
   }, [currentGrade]);
 
+  // Đồng bộ lại session khi người dùng focus lại tab
+  useEffect(() => {
+    const handleFocus = () => {
+      update();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [update]);
+
   // [Task T6.12] Lắng nghe sự kiện đổi lớp từ các tab khác qua BroadcastChannel
   useEffect(() => {
     if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;

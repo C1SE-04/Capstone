@@ -15,6 +15,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: str
     grade: Optional[int] = None  # Trả về lớp học nếu có
+    session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
 
     class Config:
         from_attributes = True
@@ -25,6 +26,7 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     grade: Optional[int] = None  # Task #132: trả thêm grade_level về FE sau login
+    session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
     
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -39,6 +41,7 @@ class GeminiRequest(BaseModel):
     problem_context: Optional[dict] = None  # Ngữ cảnh bài toán (correctSolution, v.v.) — dùng cho Trụ 1
     answer_status: Optional[str] = None # 'wrong' hoặc 'correct' (để tính hint)
     grade_level: Optional[int] = None  # Task #132: lớp học của học sinh, FE gửi lên sau login
+    attachment_url: Optional[str] = None  # US 6.4 - Task #173: URL ảnh Cloudinary đã upload (nếu có)
 
 
 
@@ -49,6 +52,7 @@ class MessageResponse(BaseModel):
     id: str
     sender_type: str
     content: str
+    attachment_url: Optional[str] = None  # US 6.4 - Task #173: URL ảnh đính kèm từ Cloudinary
     created_at: datetime
 
     class Config:
@@ -169,6 +173,9 @@ class IndependenceSummaryResponse(BaseModel):
     evaluation_level: str
     history: list[IndependenceRecordResponse] = []
 
+
+# --- US 6.1: Parent Dashboard Metrics Schemas (Task #6.7) ---
+
 class SummaryCardsMetric(BaseModel):
     completed_problems: int = 0
     avg_independence_score: float = 0.0
@@ -217,3 +224,26 @@ class ParentDashboardMetricsResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- US 6.4: Cloudinary Upload Schemas (Task #173) ---
+
+class CloudinaryUploadResponse(BaseModel):
+    """Response trả về sau khi upload ảnh lên Cloudinary thành công."""
+    success: bool
+    url: str                    # HTTPS URL công khai để FE hiển thị và lưu vào DB
+    public_id: str              # ID của file trên Cloudinary (dùng để xóa/quản lý sau này)
+    secure_url: str             # URL https:// (bao giờ cũng giống url khi upload secure=True)
+    format: str                 # Định dạng file: jpg, png, webp, v.v.
+    width: Optional[int] = None
+    height: Optional[int] = None
+    bytes: Optional[int] = None # Kích thước file (bytes)
+
+
+class CloudinarySignatureResponse(BaseModel):
+    """Response trả về chữ ký an toàn để FE upload thẳng lên Cloudinary (unsigned upload)."""
+    signature: str
+    timestamp: int
+    api_key: str
+    cloud_name: str
+    folder: str

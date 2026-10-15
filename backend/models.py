@@ -13,6 +13,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False)
     grade = Column(Integer, nullable=True)  # Chỉ dùng cho STUDENT (lớp 4-9)
+    session_version = Column(Integer, default=1, nullable=False, server_default="1")  # US 6.2 (T6.10): version để đồng bộ session giữa các tab
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Quan hệ Phụ huynh - Học sinh
@@ -88,7 +89,9 @@ class Session(Base):
         Index("ix_sessions_user_updated", "user_id", "updated_at"),
     )
 
-    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan", order_by="Message.created_at")
+    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan", passive_deletes=True, order_by="Message.created_at")
+    active_intervals = relationship("SessionActiveInterval", back_populates="session", cascade="all, delete-orphan", passive_deletes=True)
+    independence_records = relationship("IndependenceScore", back_populates="session", cascade="all, delete-orphan", passive_deletes=True)
 
 class Message(Base):
     __tablename__ = "messages"
@@ -102,6 +105,9 @@ class Message(Base):
     )
     sender_type = Column(String, nullable=False) # "USER", "AGENT_TUTOR", v.v.
     content = Column(String, nullable=False)
+    # US 6.4 - Task #173: Lưu đường link HTTPS Cloudinary của ảnh đính kèm (nếu có).
+    # DB chỉ lưu URL chuỗi, file thực tế được lưu trên Cloudinary.
+    attachment_url = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Composite index: tối ưu query lấy tin nhắn trong 1 session, sort theo thứ tự thời gian
@@ -110,6 +116,7 @@ class Message(Base):
     )
     
     session = relationship("Session", back_populates="messages")
+
 
 
 class SessionStats(Base):
@@ -169,7 +176,7 @@ class SessionActiveInterval(Base):
         Index("ix_active_intervals_session_end", "session_id", "end_time"),
     )
 
-    session = relationship("Session", backref="active_intervals")
+    session = relationship("Session", back_populates="active_intervals")
 
 
 class IndependenceScore(Base):
@@ -207,6 +214,6 @@ class IndependenceScore(Base):
         Index("ix_independence_session_created", "session_id", "created_at"),
     )
 
-    session = relationship("Session", backref="independence_records")
+    session = relationship("Session", back_populates="independence_records")
     student = relationship("User", backref="independence_records")
 

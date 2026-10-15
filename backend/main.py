@@ -25,7 +25,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Cấu hình CORS của team FE
+# Task T6.11 (US 6.2): Middleware kiểm tra session_version cho API /chat
+from middleware import ChatSessionVersionMiddleware
+app.add_middleware(ChatSessionVersionMiddleware)
+
+# Cấu hình CORS của team FE (bọc ngoài cùng để response từ middleware cũng có CORS headers)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -50,6 +54,8 @@ from routers import metrics  # Task #121: API thống kê thời gian học
 app.include_router(metrics.router)
 from routers import independence  # Task #159 & #160: API điểm Tự Lực (Independence Score)
 app.include_router(independence.router)
+from routers import upload  # US 6.4 - Task #173: Cloudinary upload & ký chữ ký ảnh
+app.include_router(upload.router)
 
 @app.get("/")
 def read_root():
