@@ -16,3 +16,4 @@ scikit-learn
 sympy
 joblib
 redis[asyncio]
+cloudinary

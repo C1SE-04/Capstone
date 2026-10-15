@@ -103,6 +103,9 @@ class Message(Base):
     )
     sender_type = Column(String, nullable=False) # "USER", "AGENT_TUTOR", v.v.
     content = Column(String, nullable=False)
+    # US 6.4 - Task #173: Lưu đường link HTTPS Cloudinary của ảnh đính kèm (nếu có).
+    # DB chỉ lưu URL chuỗi, file thực tế được lưu trên Cloudinary.
+    attachment_url = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Composite index: tối ưu query lấy tin nhắn trong 1 session, sort theo thứ tự thời gian
@@ -111,6 +114,7 @@ class Message(Base):
     )
     
     session = relationship("Session", back_populates="messages")
+
 
 
 class SessionStats(Base):
