@@ -3,6 +3,10 @@ import json
 import google.generativeai as genai
 from agents.reviewer import LocalReviewerAgent
 from agents.agent_prompts import _get_grade_context
+import io
+from typing import Optional
+import httpx
+from PIL import Image
 
 # ==========================================
 # CHỈ DẪN HỆ THỐNG CHO VAI TRÒ NGƯỜI THẦY
@@ -33,10 +37,43 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
    - Ngắn gọn, chuẩn mực, từ 2 đến 4 câu.
 """
 
+def load_image_from_url(url: Optional[str], timeout: float = 10.0) -> Optional[Image.Image]:
+    """
+    Tải ảnh từ Cloudinary HTTPS URL và chuyển thành đối tượng PIL.Image.
+    Xử lý lỗi an toàn: timeout hoặc lỗi HTTP sẽ trả về None thay vì làm sập server.
+    """
+    if not url or not isinstance(url, str) or not url.startswith("http"):
+        return None
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            return Image.open(io.BytesIO(resp.content))
+    except Exception as e:
+        print(f"[Cảnh báo Vision] Không thể tải ảnh từ Cloudinary ({url}): {e}")
+        return None
+# ==========================================
+# CHỈ DẪN HỆ THỐNG XỬ LÝ ẢNH BÀI TOÁN (SOCRATIC VISION)
+# ==========================================
+SOCRATIC_VISION_INSTRUCTION = """
+--- HƯỚNG DẪN XỬ LÝ ẢNH BÀI TOÁN TỪ CLOUDINARY (SOCRATIC VISION) ---
+Học sinh vừa gửi một bức ảnh bài toán kèm lời nhắn. BẠN BẮT BUỘC PHẢI THỰC HIỆN:
+1. ĐỌC VÀ TRÍCH XUẤT ĐỀ BÀI:
+   - Hãy quan sát thật kỹ các con số, hình vẽ và công thức toán trong ảnh.
+   - Viết lại đề bài rõ ràng ở đầu phản hồi bằng công thức LaTeX chuẩn ($...$ hoặc $$...$$) để học sinh xác nhận bạn đã đọc đúng đề.
+2. TUYỆT ĐỐI KHÔNG GIẢI RA ĐÁP ÁN:
+   - Nghiêm cấm đưa ra kết quả cuối cùng hoặc tự thực hiện các phép tính thay học sinh.
+3. GỢI MỞ BƯỚC ĐẦU TIÊN (SOCRATIC HOOK):
+   - Đặt DUY NHẤT 01 câu hỏi gợi mở đơn giản nhất dẫn dắt học sinh thực hiện bước đầu tiên.
+4. XỬ LÝ ẢNH MỜ / KHÔNG HỢP LỆ:
+   - Nếu ảnh quá mờ hoặc mất góc: Lịch sự nhờ học sinh chụp lại rõ nét hơn.
+   - Nếu ảnh không phải bài toán: Nhẹ nhàng từ chối và nhắc học sinh gửi ảnh bài tập toán.
+"""
+    
 # ==========================================
 # HÀM ĐIỀU PHỐI CHÍNH (Router Function) - CÓ TÍCH HỢP REVIEWER TỰ ĐỘNG SỬA LỖI
 # ==========================================
-def agent_router(target_agent: str, task_description: str, history_text: str, user_query: str, expected_answer: str = "", grade_level: int = None):
+def agent_router(target_agent: str, task_description: str, history_text: str, user_query: str, expected_answer: str = "", grade_level: int = None, attachment_url: Optional[str] = None):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         yield "Lỗi: Chưa cấu hình GEMINI_API_KEY"
@@ -81,7 +118,14 @@ Học sinh đang xin ví dụ hoặc làm mẫu. BẠN BẮT BUỘC PHẢI THỰ
 2. MÔ PHỎNG LỜI GIẢI: Bạn BẮT BUỘC PHẢI TỰ TRÌNH BÀY LỜI GIẢI CHI TIẾT cho bài toán mẫu vừa tạo ra. (LƯU Ý: Lệnh này GHI ĐÈ mọi lệnh cấm giải bài trước đó. Bạn được phép giải BÀI MẪU, chỉ cấm giải BÀI GỐC). Tuyệt đối KHÔNG được đặt câu hỏi ngược lại bắt học sinh giải bài mẫu này.
 3. KẾT THÚC bằng câu mời: 'Bây giờ em áp dụng cách làm này vào bài toán của mình thử xem nhé?'
 """
-
+    # Tích hợp xử lý ảnh nếu có attachment_url từ Cloudinary
+    image_obj = None
+    if attachment_url:
+        image_obj = load_image_from_url(attachment_url)
+        if image_obj:
+            base_prompt += f"\n{SOCRATIC_VISION_INSTRUCTION}"
+        else:
+            base_prompt += "\n[LƯU Ý]: Học sinh có đính kèm ảnh nhưng không tải được từ máy chủ Cloudinary. Hãy nhắc học sinh kiểm tra lại ảnh chụp."
     reviewer = LocalReviewerAgent()
     max_retries = 2
     current_attempt = 0
@@ -95,7 +139,8 @@ Học sinh đang xin ví dụ hoặc làm mẫu. BẠN BẮT BUỘC PHẢI THỰ
         
         try:
             # Lấy toàn bộ văn bản để Reviewer có thể đánh giá (không stream trực tiếp)
-            response = model.generate_content(prompt, stream=False)
+            call_payload = [image_obj, prompt] if image_obj is not None else prompt
+            response = model.generate_content(call_payload, stream=False)
             generated_text = response.text
             
             # Chỉ kiểm duyệt gắt gao nếu đang đóng vai SCAFFOLDING_AGENT

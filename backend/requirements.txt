@@ -17,3 +17,4 @@ sympy
 joblib
 redis[asyncio]
 cloudinary
+Pillow>=10.0.0

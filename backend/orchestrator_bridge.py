@@ -112,7 +112,8 @@ def process_query_with_orchestrator(
     background_tasks: BackgroundTasks,
     problem_context: Optional[dict] = None,
     answer_status: Optional[str] = None,
-    grade_level: Optional[int] = None,  # Task #132: lớp học của học sinh
+    grade_level: Optional[int] = None,  
+    attachment_url: Optional[str] = None,  # US 6.4: URL ảnh Cloudinary
 ):
     """
     Wrapper nối OrchestratorAgent với FastAPI.
@@ -133,7 +134,7 @@ def process_query_with_orchestrator(
 
     if session_id:
         # 1. Lưu tin nhắn của học sinh vào Database
-        user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query)
+        user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query, attachment_url=attachment_url)
         db.add(user_msg)
         
         # Cập nhật updated_at của session
@@ -211,7 +212,7 @@ def process_query_with_orchestrator(
 
     # Gọi AI stream với enriched_task_description
     full_reply = ""
-    for chunk in agent_router(target_agent, enriched_task_description, history_text, user_query, expected_answer, grade_level=grade_level):
+    for chunk in agent_router(target_agent, enriched_task_description, history_text, user_query, expected_answer, grade_level=grade_level,attachment_url=attachment_url):
         full_reply += chunk
         yield f"event: message\ndata: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
 
