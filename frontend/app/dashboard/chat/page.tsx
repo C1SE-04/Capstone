@@ -578,7 +578,9 @@ export default function ChatPage() {
   // Handler: Gửi prompt trong khung chat
   // isExplanation = true khi gui tu o UnderstandingButtons (onSendExplanation)
   // -> Khong reset notUnderstoodCount vi day la phan cua flow "Chua hieu"
-  const handleSendMessage = async (content: string, isExplanation = false) => {
+  // _image?: File - [T6.20] File ảnh đính kèm từ ChatInput (chờ backend T6.22 hoàn tất để upload)
+  const handleSendMessage = async (content: string, isExplanation = false, _image?: File) => {
+
     // US4.1: Chi reset dem "Chua hieu" khi hoc sinh tu go tin nhan moi hoan toan,
     // khong reset khi gui giai thich tu UnderstandingButtons
     if (!isExplanation) {
