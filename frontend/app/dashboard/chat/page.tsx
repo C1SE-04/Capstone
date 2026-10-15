@@ -6,6 +6,7 @@ import { ChatWindow } from "@/components/chat/ChatWindow";
 import { Conversation, Message } from "@/types/chat";
 import { Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { authFetch } from "@/lib/authFetch";
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -59,7 +60,8 @@ export default function ChatPage() {
         if (token) {
           const BACKEND_URL =
             process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
-          const res = await fetch(`${BACKEND_URL}/sessions`, {
+          // T6.13: dùng authFetch để tự refresh khi SESSION_STALE
+          const res = await authFetch(`${BACKEND_URL}/sessions`, {
             headers: { Authorization: `Bearer ${token}` },
           });
 
@@ -143,7 +145,11 @@ export default function ChatPage() {
       setActiveChatId(null);
     }
 
-    // 2. Gọi API để xóa trên Database
+    // 2. Gọi API để xóa trên Database (bỏ qua nếu là session tạm client chưa lưu DB)
+    if (id.startsWith("c-")) {
+      return;
+    }
+
     try {
       const { getSession } = await import("next-auth/react");
       const nextAuthSession = await getSession();
@@ -153,10 +159,14 @@ export default function ChatPage() {
       if (token) {
         const BACKEND_URL =
           process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
-        await fetch(`${BACKEND_URL}/sessions/${id}`, {
+        // T6.13: dùng authFetch để tự refresh khi SESSION_STALE
+        const res = await authFetch(`${BACKEND_URL}/sessions/${id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!res.ok && res.status !== 404) {
+          console.warn(`[handleDeleteChat] Server trả về status ${res.status}`);
+        }
       }
     } catch (e) {
       console.error("Lỗi xóa session trên Server:", e);
@@ -182,7 +192,8 @@ export default function ChatPage() {
     try {
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${BACKEND_URL}/chat/comprehension`, {
+      // T6.13: dùng authFetch để tự refresh khi SESSION_STALE
+      const res = await authFetch(`${BACKEND_URL}/chat/comprehension`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -271,7 +282,8 @@ export default function ChatPage() {
 
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
-      const response = await fetch(`${BACKEND_URL}/chat/orchestrator`, {
+      // T6.13: dùng authFetch để tự refresh khi SESSION_STALE
+      const response = await authFetch(`${BACKEND_URL}/chat/orchestrator`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
@@ -368,7 +380,8 @@ export default function ChatPage() {
       // US6.1: Ghi nhận phản hồi "Chưa hiểu" lên backend để trừ điểm tự lực theo barem (-15đ)
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
-      fetch(`${BACKEND_URL}/chat/comprehension`, {
+      // T6.13: dùng authFetch để tự refresh khi SESSION_STALE
+      authFetch(`${BACKEND_URL}/chat/comprehension`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -484,7 +497,8 @@ export default function ChatPage() {
         }
       }
 
-      const response = await fetch(`${BACKEND_URL}/chat/orchestrator`, {
+      // T6.13: dùng authFetch để tự refresh khi SESSION_STALE
+      const response = await authFetch(`${BACKEND_URL}/chat/orchestrator`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
@@ -613,7 +627,8 @@ export default function ChatPage() {
           ?.access_token;
 
         if (token) {
-          const res = await fetch(`${BACKEND_URL}/sessions`, {
+          // T6.13: dùng authFetch để tự refresh khi SESSION_STALE
+          const res = await authFetch(`${BACKEND_URL}/sessions`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

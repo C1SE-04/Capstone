@@ -55,6 +55,7 @@ export const authOptions: NextAuthOptions = {
             role: payload.role,
             grade_level: payload.grade_level,
             access_token: data.access_token,
+            refresh_token: data.refresh_token, // US 6.2 (T6.13): lưu refresh_token của Backend
           };
         } catch {
           return null;
@@ -76,10 +77,18 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role;
         token.grade_level = user.grade_level;
         token.access_token = user.access_token;
+        token.refresh_token = user.refresh_token; // US 6.2 (T6.13): lưu refresh_token
       }
       // Khi client gọi update({ grade_level: X }): cập nhật token ngay trong phiên hiện tại
       if (trigger === "update" && session?.grade_level !== undefined) {
         token.grade_level = session.grade_level;
+      }
+      // US 6.2 (T6.13): Khi authFetch gọi update({ access_token, refresh_token }) sau khi refresh thành công
+      if (trigger === "update" && session?.access_token) {
+        token.access_token = session.access_token;
+      }
+      if (trigger === "update" && session?.refresh_token) {
+        token.refresh_token = session.refresh_token;
       }
       return token;
     },
@@ -93,6 +102,7 @@ export const authOptions: NextAuthOptions = {
           | number
           | undefined;
         session.access_token = token.access_token as string | undefined;
+        session.refresh_token = token.refresh_token as string | undefined; // US 6.2 (T6.13): expose refresh_token cho authFetch
       }
       return session;
     },

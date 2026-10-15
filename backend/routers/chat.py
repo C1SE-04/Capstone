@@ -59,6 +59,13 @@ def chat_with_orchestrator(
     
 
 
+    effective_grade = request.grade_level
+    if not (request.session_id and request.session_id.startswith("guest-")):
+        if existing_session and existing_session.user_id and existing_session.user_id != "guest-user-id":
+            user_in_db = db.query(models.User).filter(models.User.id == existing_session.user_id).first()
+            if user_in_db and user_in_db.grade is not None:
+                effective_grade = user_in_db.grade
+
     return StreamingResponse(
         orchestrator_bridge.process_query_with_orchestrator(
             user_query=request.prompt, 
@@ -67,7 +74,7 @@ def chat_with_orchestrator(
             background_tasks=background_tasks,
             problem_context=request.problem_context,
             answer_status=request.answer_status,
-            grade_level=request.grade_level,  # Task #132: truyền lớp học vào AI
+            grade_level=effective_grade,  # US 6.2: lấy lớp học chuẩn xác từ DB
         ),
         media_type="text/event-stream"
     )

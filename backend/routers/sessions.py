@@ -74,6 +74,12 @@ def delete_session(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Không tìm thấy phòng chat hoặc không có quyền truy cập.")
         
+    # Xóa các bản ghi liên quan trước khi xóa session để tránh lỗi ForeignKey / NotNullViolation
+    db.query(models.SessionActiveInterval).filter(models.SessionActiveInterval.session_id == session.id).delete()
+    db.query(models.IndependenceScore).filter(models.IndependenceScore.session_id == session.id).delete()
+    db.query(models.SessionStats).filter(models.SessionStats.session_id == session.id).delete()
+    db.query(models.Message).filter(models.Message.session_id == session.id).delete()
+
     db.delete(session)
     db.commit()
     return None
