@@ -75,6 +75,7 @@ def chat_with_orchestrator(
             problem_context=request.problem_context,
             answer_status=request.answer_status,
             grade_level=effective_grade,  # US 6.2: lấy lớp học chuẩn xác từ DB
+            attachment_url=request.attachment_url, # US 6.4: Truyền link ảnh Cloudinary từ request
         ),
         media_type="text/event-stream"
     )
