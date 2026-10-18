@@ -29,11 +29,11 @@ def calculate_independence_score(hints_used: int, not_understood_count: int) -> 
     raw_score = 100 - deduction
     score = max(10, min(100, raw_score))
 
-    if score >= 85:
+    if score >= 80:
         level = "Tự lập xuất sắc (ít dùng gợi ý)"
-    elif score >= 70:
+    elif score >= 60:
         level = "Tự lập tốt (dùng 1-2 gợi ý)"
-    elif score >= 50:
+    elif score >= 40:
         level = "Đang tiến bộ (cần một số gợi ý)"
     else:
         level = "Cần thêm hỗ trợ sư phạm"
