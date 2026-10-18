@@ -17,83 +17,129 @@ export interface RefreshResult {
   grade?: number;
 }
 
-let pendingRefresh: Promise<RefreshResult | null> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type UpdateSessionFn = (data?: any) => Promise<any>;
 
-async function doRefresh(): Promise<RefreshResult | null> {
+let pendingRefresh: Promise<RefreshResult | null> | null = null;
+let lastRefreshTime = 0;
+
+/**
+ * Hàm chủ động làm mới session (gọi khi tab được focus hoặc khi cần đồng bộ giữa tab thường và tab ẩn danh).
+ */
+export async function refreshSession(
+  updateFn?: UpdateSessionFn,
+  force = false
+): Promise<RefreshResult | null> {
+  const now = Date.now();
+  // Giới hạn tần suất: tối thiểu 2 giây giữa các lần refresh để tránh spam request
+  if (!force && now - lastRefreshTime < 2000) {
+    return pendingRefresh || null;
+  }
+
+  if (!pendingRefresh) {
+    lastRefreshTime = now;
+    pendingRefresh = doRefresh(updateFn).finally(() => {
+      pendingRefresh = null;
+    });
+  } else if (updateFn) {
+    pendingRefresh.then(async (res) => {
+      if (res && res.grade !== undefined) {
+        try {
+          await updateFn({
+            access_token: res.token,
+            grade_level: res.grade,
+          });
+        } catch {
+          // Bỏ qua lỗi update
+        }
+      }
+    });
+  }
+  return pendingRefresh;
+}
+
+async function doRefresh(updateFn?: UpdateSessionFn): Promise<RefreshResult | null> {
   try {
     const nextAuth = await import("next-auth/react");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const update = (nextAuth as any).update;
     const getSession = nextAuth.getSession;
 
-    // 1. Lấy refresh_token từ NextAuth session hiện tại
+    // 1. Lấy thông tin session hiện tại
     const currentSession = await getSession();
     const refreshToken = (
       currentSession as { refresh_token?: string } | null
     )?.refresh_token;
-
-    if (!refreshToken) {
-      console.warn(
-        "[authFetch] Không tìm thấy refresh_token trong session hiện tại."
-      );
-      return null;
-    }
+    const currentAccessToken = (
+      currentSession as { access_token?: string } | null
+    )?.access_token;
 
     const BACKEND_URL =
       process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
-    // 2. Gửi request refresh lên Backend
-    const refreshRes = await fetch(`${BACKEND_URL}/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-
-    if (!refreshRes.ok) {
-      // Trường hợp tab khác đã refresh trước khiến token này bị thu hồi:
-      // Thử đọc lại session từ cookie NextAuth
-      console.warn(
-        `[authFetch] /refresh trả về ${refreshRes.status}. Kiểm tra lại session cookie...`
-      );
-      const freshSession = await getSession();
-      const fallbackToken = (
-        freshSession as { access_token?: string } | null
-      )?.access_token;
-      const fallbackGrade = (
-        freshSession as { user?: { grade_level?: number } } | null
-      )?.user?.grade_level;
-      if (fallbackToken) {
-        return {
-          token: fallbackToken,
-          grade: fallbackGrade ? Number(fallbackGrade) : undefined,
-        };
-      }
-      return null;
-    }
-
-    const refreshData = await refreshRes.json();
-    const newAccessToken: string = refreshData.access_token;
-    const newRefreshToken: string = refreshData.refresh_token;
-    const newGrade = refreshData.grade;
-
-    if (!newAccessToken) {
-      return null;
-    }
-
-    // 3. Đồng bộ lại JWT session của NextAuth
-    if (typeof update === "function") {
-      await update({
-        access_token: newAccessToken,
-        refresh_token: newRefreshToken,
-        grade_level: newGrade,
+    // 2. Gửi request refresh lên Backend nếu có refresh_token
+    if (refreshToken) {
+      const refreshRes = await fetch(`${BACKEND_URL}/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
       });
+
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        const newAccessToken: string = refreshData.access_token;
+        const newRefreshToken: string = refreshData.refresh_token;
+        const newGrade = refreshData.grade;
+
+        if (newAccessToken) {
+          // 3. Đồng bộ lại JWT session của NextAuth nếu có updateFn
+          if (typeof updateFn === "function") {
+            try {
+              await updateFn({
+                access_token: newAccessToken,
+                refresh_token: newRefreshToken,
+                grade_level: newGrade,
+              });
+            } catch (err) {
+              console.warn("[authFetch] Lỗi khi gọi updateFn:", err);
+            }
+          }
+
+          console.info(
+            "[authFetch] Tự động refresh token thành công ✓ (Lớp mới:",
+            newGrade,
+            ")"
+          );
+          return {
+            token: newAccessToken,
+            grade: newGrade !== undefined ? Number(newGrade) : undefined,
+          };
+        }
+      }
     }
 
-    console.info("[authFetch] Tự động refresh token thành công ✓ (Lớp mới:", newGrade, ")");
-    return {
-      token: newAccessToken,
-      grade: newGrade !== undefined ? Number(newGrade) : undefined,
-    };
+    // 4. Fallback: Tra cứu trực tiếp /users/me từ DB bằng access_token hiện tại
+    if (currentAccessToken) {
+      try {
+        const userRes = await fetch(`${BACKEND_URL}/users/me`, {
+          headers: { Authorization: `Bearer ${currentAccessToken}` },
+        });
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          if (userData?.grade !== undefined) {
+            if (typeof updateFn === "function") {
+              await updateFn({ grade_level: Number(userData.grade) });
+            }
+            return {
+              token: currentAccessToken,
+              grade: Number(userData.grade),
+            };
+          }
+        }
+      } catch {
+        // Bỏ qua lỗi fallback
+      }
+    }
+
+    return null;
   } catch (err) {
     console.error("[authFetch] Lỗi khi thực hiện refresh session:", err);
     return null;
