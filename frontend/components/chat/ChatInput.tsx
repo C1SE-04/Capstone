@@ -20,7 +20,15 @@ import {
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
-import { Send, Plus, X, Camera, ImageIcon, AlertCircle, Maximize2 } from "lucide-react";
+import {
+  Send,
+  Plus,
+  X,
+  Camera,
+  ImageIcon,
+  AlertCircle,
+  Maximize2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -51,7 +59,11 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatInputProps) {
+export function ChatInput({
+  onSendMessage,
+  isLoading,
+  isOffline = false,
+}: ChatInputProps) {
   // ── State ──
   const [content, setContent] = useState("");
   /** [T6.20] Ảnh đính kèm hiện tại (tối đa 1 ảnh) */
@@ -222,7 +234,9 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
 
   /** Có thể gửi khi: có text HOẶC có ảnh, VÀ không loading, VÀ không offline */
   const canSend =
-    (content.trim().length > 0 || attachment !== null) && !isLoading && !isOffline;
+    (content.trim().length > 0 || attachment !== null) &&
+    !isLoading &&
+    !isOffline;
 
   // ── Xử lý gửi tin nhắn ──
 
@@ -240,7 +254,6 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
 
   return (
     <div className="p-4 bg-transparent mt-auto relative z-10 w-full">
-
       {/* ── [T6.20/AC5] Cảnh báo lỗi tải ảnh (>5MB hoặc định dạng không hợp lệ) ── */}
       {errorMessage && (
         <div className="mb-2 ml-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -310,52 +323,55 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
       )}
 
       {/* ── Modal xem ảnh phóng to ở giữa màn hình khi đính kèm trong ô chat ── */}
-      {isPreviewOpen && isMounted && attachment && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
-          onClick={() => setIsPreviewOpen(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Xem trước ảnh bài toán"
-        >
+      {isPreviewOpen &&
+        isMounted &&
+        attachment &&
+        createPortal(
           <div
-            className="relative flex flex-col items-center max-w-[95vw] max-h-[92vh] animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+            onClick={() => setIsPreviewOpen(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Xem trước ảnh bài toán"
           >
-            {/* Thanh tiêu đề trên đầu */}
-            <div className="w-full flex items-center justify-between pb-3 px-1 text-white">
-              <span className="text-sm font-semibold tracking-wide text-white/90 drop-shadow">
-                Xem trước ảnh bài toán
-              </span>
-              <button
-                onClick={() => setIsPreviewOpen(false)}
-                className="p-1.5 rounded-full bg-white/15 hover:bg-red-500/80 text-white transition-colors cursor-pointer"
-                title="Đóng (hoặc nhấn Esc)"
-                aria-label="Đóng xem ảnh"
-              >
-                <X size={19} />
-              </button>
-            </div>
+            <div
+              className="relative flex flex-col items-center max-w-[95vw] max-h-[92vh] animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Thanh tiêu đề trên đầu */}
+              <div className="w-full flex items-center justify-between pb-3 px-1 text-white">
+                <span className="text-sm font-semibold tracking-wide text-white/90 drop-shadow">
+                  Xem trước ảnh bài toán
+                </span>
+                <button
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="p-1.5 rounded-full bg-white/15 hover:bg-red-500/80 text-white transition-colors cursor-pointer"
+                  title="Đóng (hoặc nhấn Esc)"
+                  aria-label="Đóng xem ảnh"
+                >
+                  <X size={19} />
+                </button>
+              </div>
 
-            {/* Ảnh hiển thị lớn ở giữa màn hình */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl bg-black/40 flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={attachment.previewUrl}
-                alt="Ảnh xem trước phóng to"
-                className="max-h-[82vh] w-auto max-w-[92vw] object-contain select-none"
-              />
+              {/* Ảnh hiển thị lớn ở giữa màn hình */}
+              <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl bg-black/40 flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={attachment.previewUrl}
+                  alt="Ảnh xem trước phóng to"
+                  className="max-h-[82vh] w-auto max-w-[92vw] object-contain select-none"
+                />
+              </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* ── Vùng background bo góc chứa các nút và ô nhập liệu ── */}
       <div
         className={cn(
           "relative flex items-end gap-2 bg-[#F1CCA6]/40 p-2 pl-4 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-all",
-          isOffline && "opacity-75 bg-gray-100 border-gray-300"
+          isOffline && "opacity-75 bg-gray-100 border-gray-300",
         )}
       >
         {/* ── [T6.20/T6.21] Nút + và Bottom Sheet ── */}
@@ -373,7 +389,7 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
             className={cn(
               "p-2.5 text-[#8C4905] hover:bg-[#F1CCA6] rounded-full transition-all duration-150",
               "disabled:opacity-40 disabled:cursor-not-allowed",
-              isSheetOpen && "bg-[#F1CCA6] rotate-45"
+              isSheetOpen && "bg-[#F1CCA6] rotate-45",
             )}
           >
             <Plus size={20} />
@@ -396,7 +412,7 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
                 className={cn(
                   "fixed bottom-0 left-0 right-0 z-40 md:hidden",
                   "bg-white rounded-t-2xl shadow-2xl border-t border-[#C1762A]/10",
-                  "animate-in slide-in-from-bottom duration-250 ease-out"
+                  "animate-in slide-in-from-bottom duration-250 ease-out",
                 )}
               >
                 {/* Handle bar kéo */}
@@ -411,7 +427,6 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
 
                 {/* Hai lựa chọn */}
                 <div className="flex gap-3 px-6 pb-8 pt-1">
-
                   {/* [T6.21] Camera — capture="environment" mở camera sau trên mobile */}
                   <button
                     id="chat-attach-camera-btn"
@@ -425,7 +440,9 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
                     <div className="w-12 h-12 rounded-full bg-[#F1CCA6] flex items-center justify-center">
                       <Camera size={22} className="text-[#8C4905]" />
                     </div>
-                    <span className="text-sm font-medium text-[#8C4905]">Camera</span>
+                    <span className="text-sm font-medium text-[#8C4905]">
+                      Camera
+                    </span>
                   </button>
 
                   {/* [T6.21] Thư viện — không có capture, mở thư viện ảnh hệ thống */}
@@ -441,7 +458,9 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
                     <div className="w-12 h-12 rounded-full bg-[#F1CCA6] flex items-center justify-center">
                       <ImageIcon size={22} className="text-[#8C4905]" />
                     </div>
-                    <span className="text-sm font-medium text-[#8C4905]">Thư viện</span>
+                    <span className="text-sm font-medium text-[#8C4905]">
+                      Thư viện
+                    </span>
                   </button>
                 </div>
               </div>
@@ -484,7 +503,7 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
           placeholder={
             isOffline
               ? "Mất kết nối. Đang chờ kết nối lại..."
-              : "Hỏi SocraticKid... (có thể dán ảnh)"
+              : "Hỏi SocraticKid..."
           }
           className="flex-1 max-h-[150px] min-h-[44px] py-3 bg-transparent text-[#000000] placeholder:text-[#8C4905]/60 outline-none resize-none overflow-y-auto font-medium disabled:cursor-not-allowed"
           rows={1}
@@ -500,7 +519,7 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
             "p-2.5 rounded-full flex items-center justify-center transition-all self-end mb-0.5 shadow-sm shrink-0",
             canSend
               ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105"
-              : "bg-[#D9D9D9] text-gray-400 cursor-not-allowed"
+              : "bg-[#D9D9D9] text-gray-400 cursor-not-allowed",
           )}
           title={isOffline ? "Không thể gửi khi mất kết nối" : "Gửi tin nhắn"}
         >

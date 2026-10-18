@@ -165,6 +165,28 @@ def process_query_with_orchestrator(
         chat_history = get_recent_chat_context(db, session_id, limit=5)
         history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in chat_history])
 
+        # 4b. Lấy toàn bộ các ảnh bài toán mà học sinh đã gửi trong phiên học này (tối đa 3 ảnh gần nhất)
+        session_images_query = (
+            db.query(models.Message.attachment_url)
+            .filter(
+                models.Message.session_id == session_id,
+                models.Message.sender_type == "USER",
+                models.Message.attachment_url.isnot(None),
+                models.Message.attachment_url != "",
+            )
+            .order_by(models.Message.created_at.asc())
+            .all()
+        )
+        session_image_urls = []
+        for (img_url,) in session_images_query:
+            if img_url and img_url not in session_image_urls:
+                session_image_urls.append(img_url)
+
+        if len(session_image_urls) > 3:
+            session_image_urls = session_image_urls[-3:]
+    else:
+        session_image_urls = [attachment_url] if attachment_url else []
+
     # 5. Phân luồng qua Orchestrator (Trụ 1 - StateMachine)
     result = _agent.route_sync(
         latest_message=user_query,
@@ -186,7 +208,7 @@ def process_query_with_orchestrator(
     enriched_task_description = f"{hint_instruction}\n\n{task_description}"
 
     emotion_flag = result.get("emotion_flag", "GUIDING")
-    print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0} | emotion={emotion_flag}")
+    print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0} | emotion={emotion_flag} | session_images={len(session_image_urls)}")
 
     # Lưu log ngầm
     background_tasks.add_task(save_orchestrator_log, db, user_query, target_agent, reason)
@@ -210,7 +232,7 @@ def process_query_with_orchestrator(
     if problem_context:
         expected_answer = str(problem_context.get("answer", problem_context.get("expected_answer", problem_context.get("correctSolution", problem_context.get("correct_solution", "")))))
 
-    # Gọi AI stream với enriched_task_description
+    # Gọi AI stream với enriched_task_description và bộ sưu tập ảnh phiên học
     full_reply = ""
     meta = {"has_comprehension": False}
     for chunk in agent_router(
@@ -222,6 +244,7 @@ def process_query_with_orchestrator(
         grade_level=grade_level,
         attachment_url=attachment_url,
         meta=meta,
+        session_image_urls=session_image_urls,
     ):
         full_reply += chunk
         yield f"event: message\ndata: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
