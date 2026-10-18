@@ -98,35 +98,35 @@ export function MasteryProgressBar({ className }: MasteryProgressBarProps) {
     };
   }, [fetchSummary]);
 
-  // Xác định màu sắc và biểu tượng theo thang điểm tự lực
+  // Xác định màu sắc và mức độ theo thang điểm tự lực từ DB
   const getLevelBadge = (score: number) => {
-    if (score >= 85) {
+    if (totalCompleted === 0 && score === 0) {
       return {
-        label: "Xuất sắc 🌟",
+        label: "Mới bắt đầu 🌱",
+        color: "text-stone-700 bg-stone-50 border-stone-200",
+      };
+    }
+    if (score >= 80) {
+      return {
+        label: "Tự lập xuất sắc 🌟",
         color: "text-emerald-700 bg-emerald-50 border-emerald-200",
       };
     }
-    if (score >= 70) {
+    if (score >= 60) {
       return {
         label: "Tự lập tốt 👍",
         color: "text-amber-800 bg-amber-50 border-amber-200",
       };
     }
-    if (score >= 50) {
+    if (score >= 40) {
       return {
-        label: "Đang tiến bộ 📈",
+        label: "Tự lập đang tiến bộ 📈",
         color: "text-orange-800 bg-orange-50 border-orange-200",
       };
     }
-    if (score > 0) {
-      return {
-        label: "Cần hỗ trợ 💡",
-        color: "text-rose-800 bg-rose-50 border-rose-200",
-      };
-    }
     return {
-      label: "Mới bắt đầu 🌱",
-      color: "text-stone-700 bg-stone-50 border-stone-200",
+      label: "Cần tiến bộ 💡",
+      color: "text-rose-800 bg-rose-50 border-rose-200",
     };
   };
 
@@ -146,9 +146,9 @@ export function MasteryProgressBar({ className }: MasteryProgressBarProps) {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#C1762A] to-[#F7AD62] flex items-center justify-center text-white shadow-xs">
-            {averageScore >= 85 ? (
+            {averageScore >= 80 ? (
               <Trophy className="w-4 h-4 text-amber-100" />
-            ) : averageScore >= 70 ? (
+            ) : averageScore >= 60 ? (
               <Award className="w-4 h-4 text-amber-100" />
             ) : (
               <Sparkles className="w-4 h-4 text-amber-100" />

@@ -57,11 +57,11 @@ function CustomTooltip({
   if (!active || !payload || payload.length === 0) return null;
   const { fullDate, score, evaluation } = payload[0].payload;
   const color =
-    score >= 85
+    score >= 80
       ? "text-emerald-600"
-      : score >= 70
+      : score >= 60
       ? "text-amber-600"
-      : score >= 50
+      : score >= 40
       ? "text-orange-600"
       : "text-red-500";
 
@@ -102,23 +102,23 @@ export function IndependenceChart({
       : 0;
 
   const getAvgBadge = (avg: number) => {
-    if (avg >= 85)
+    if (avg >= 80)
       return {
-        label: "Xuất sắc",
+        label: "Tự lập xuất sắc",
         cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
       };
-    if (avg >= 70)
+    if (avg >= 60)
       return {
-        label: "Khá tự lập",
+        label: "Tự lập tốt",
         cls: "bg-amber-50 text-amber-700 border-amber-200",
       };
-    if (avg >= 50)
+    if (avg >= 40)
       return {
-        label: "Đang tiến bộ",
+        label: "Tự lập đang tiến bộ",
         cls: "bg-orange-50 text-orange-700 border-orange-200",
       };
     return {
-      label: "Cần hỗ trợ",
+      label: "Cần tiến bộ",
       cls: "bg-red-50 text-red-600 border-red-200",
     };
   };

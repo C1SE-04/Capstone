@@ -207,15 +207,15 @@ def get_independence_summary(
     )
     latest_score = latest_record.score if latest_record else None
 
-    # 3. Phân loại mức độ
-    if avg_score >= 85:
-        level = "Tự lập xuất sắc (ít dùng gợi ý)"
-    elif avg_score >= 70:
-        level = "Tự lập tốt (dùng 1-2 gợi ý)"
-    elif avg_score >= 50:
-        level = "Đang tiến bộ (cần một số gợi ý)"
-    elif avg_score > 0:
-        level = "Cần thêm hỗ trợ sư phạm"
+    # 3. Phân loại mức độ theo thang điểm tự lực
+    if avg_score >= 80:
+        level = "Tự lập xuất sắc"
+    elif avg_score >= 60:
+        level = "Tự lập tốt"
+    elif avg_score >= 40:
+        level = "Tự lập đang tiến bộ"
+    elif total_completed > 0:
+        level = "Cần tiến bộ"
     else:
         level = "Chưa có dữ liệu"
 
