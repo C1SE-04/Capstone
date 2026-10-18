@@ -212,7 +212,17 @@ def process_query_with_orchestrator(
 
     # Gọi AI stream với enriched_task_description
     full_reply = ""
-    for chunk in agent_router(target_agent, enriched_task_description, history_text, user_query, expected_answer, grade_level=grade_level,attachment_url=attachment_url):
+    meta = {"has_comprehension": False}
+    for chunk in agent_router(
+        target_agent,
+        enriched_task_description,
+        history_text,
+        user_query,
+        expected_answer,
+        grade_level=grade_level,
+        attachment_url=attachment_url,
+        meta=meta,
+    ):
         full_reply += chunk
         yield f"event: message\ndata: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
 
@@ -234,13 +244,27 @@ def process_query_with_orchestrator(
         except Exception:
             pass
 
+    # Nếu Gemini nhận diện học sinh đã giải đúng bài toán:
+    # 1. Chuyển emotion_flag thành CORRECT để con cú vỗ tay/vui vẻ
+    # 2. Reset bộ đếm số lần sai trong session stats
+    is_gemini_comprehension = meta.get("has_comprehension", False)
+    if is_gemini_comprehension:
+        answer_status = "correct"
+        emotion_flag = "CORRECT"
+        if stats:
+            stats.consecutive_wrong_count = 0
+            stats.hint_count = 0
+            db.commit()
+            print(f"[Comprehension Trigger] Gemini xác nhận hoàn thành bài toán -> Reset stats cho session {session_id}")
+
     # Trigger hỏi "Đã hiểu / Chưa hiểu" khi:
+    # - Gemini phát hiện hoàn thành bài toán (is_gemini_comprehension), HOẶC
     # - Học sinh trả lời đúng (answer_status="correct"), HOẶC
     # - Hệ thống vừa reveal đáp án (teaching_mode="reveal")
-    should_ask_comprehension = (answer_status == "correct") or (teaching_mode == "reveal")
+    should_ask_comprehension = is_gemini_comprehension or (answer_status == "correct") or (teaching_mode == "reveal")
     if should_ask_comprehension:
         comprehension_event = {
-            "trigger": "correct_answer" if answer_status == "correct" else "auto_reveal",
+            "trigger": "correct_answer" if (answer_status == "correct" or is_gemini_comprehension) else "auto_reveal",
             "message": "Hoi hoc sinh da hieu chua",
             "stats": {
                 "consecutive_wrong_count": stats.consecutive_wrong_count if stats else 0,
