@@ -510,6 +510,17 @@ export default function ChatPage() {
         }),
       });
 
+      if (!response.ok) {
+        let errMsg = `Lỗi từ máy chủ (${response.status})`;
+        try {
+          const errData = await response.json();
+          if (errData?.detail) errMsg = errData.detail;
+        } catch {
+          // ignore
+        }
+        throw new Error(errMsg);
+      }
+
       if (!response.body) throw new Error("Không có phản hồi từ server");
 
       const reader = response.body.getReader();
@@ -570,12 +581,12 @@ export default function ChatPage() {
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Lỗi khi kết nối backend:", error);
       const errorMsg: Message = {
         id: Date.now().toString(),
         role: "assistant",
-        content: "Xin lỗi, đã có lỗi kết nối tới máy chủ.",
+        content: error?.message || "Xin lỗi, đã có lỗi kết nối tới máy chủ.",
       };
       setConversations((prev) =>
         prev.map((c) =>

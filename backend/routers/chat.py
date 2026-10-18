@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 import google.generativeai as genai
 from sqlalchemy.orm import Session
 
+import models
 import schemas
 import agents.orchestrator as orchestrator
 import orchestrator_bridge
@@ -20,9 +21,9 @@ def chat_with_orchestrator(
     db: Session = Depends(get_db),
     _: None = Depends(check_guest_rate_limit),  # Task: Rate-limit 10 câu/24h cho Guest
 ):
+    existing_session = None
     # --- AUTO-CREATE GUEST SESSION IF NEEDED ---
     if request.session_id and request.session_id.startswith("guest-"):
-        import models
         guest_user = db.query(models.User).filter(models.User.id == "guest-user-id").first()
         if not guest_user:
             guest_user = models.User(
@@ -39,21 +40,20 @@ def chat_with_orchestrator(
             guest_session = models.Session(
                 id=request.session_id, 
                 user_id="guest-user-id", 
-                title="Cháº¿ Ä‘á»™ dÃ¹ng thá»­ (Má»›i)"
+                title="Chế độ dùng thử (Mới)"
             )
             db.add(guest_session)
             db.commit()
     else:
-        # Vá»›i session tháº­t: kiá»ƒm tra session_id cÃ³ tá»“n táº¡i trong DB khÃ´ng
-        # Náº¿u khÃ´ng tá»“n táº¡i (vÃ­ dá»¥ FE dÃ¹ng ID local chÆ°a táº¡o qua /sessions), bÃ¡o 404
-        import models as _models
-        existing_session = db.query(_models.Session).filter(
-            _models.Session.id == request.session_id
+        # Với session thật: kiểm tra session_id có tồn tại trong DB không
+        # Nếu không tồn tại (ví dụ FE dùng ID local chưa tạo qua /sessions), tự tạo hoặc báo lỗi
+        existing_session = db.query(models.Session).filter(
+            models.Session.id == request.session_id
         ).first()
         if not existing_session:
             raise HTTPException(
                 status_code=404,
-                detail=f"Session '{request.session_id}' khÃ´ng tá»“n táº¡i. HÃ£y táº¡o session qua POST /sessions trÆ°á»›c."
+                detail=f"Session '{request.session_id}' không tồn tại. Hãy tạo session qua POST /sessions trước."
             )
     # -------------------------------------------
     
