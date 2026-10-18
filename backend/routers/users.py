@@ -12,6 +12,23 @@ router = APIRouter(tags=["Users"])
 def get_current_user_info(current_user: dict = Depends(dependencies.get_current_user)):
     return {"message": "Thông tin người dùng hiện tại", "user": current_user}
 
+@router.get("/users/me")
+def get_current_user_profile(
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Lấy thông tin mới nhất từ DB của user hiện tại (bao gồm grade và session_version)."""
+    user_db = db.query(models.User).filter(models.User.id == current_user["id"]).first()
+    if not user_db:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại.")
+    return {
+        "id": user_db.id,
+        "email": user_db.email,
+        "role": user_db.role,
+        "grade": user_db.grade,
+        "session_version": user_db.session_version,
+    }
+
 @router.get("/monitor/dashboard")
 def monitor_dashboard(current_user: dict = Depends(dependencies.require_role(["MONITOR"]))):
     return {"message": "Chào mừng cán sự lớp", "user": current_user}

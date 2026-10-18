@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { authFetch, refreshSession } from "@/lib/authFetch";
 
 const GRADES = [4, 5, 6, 7, 8, 9];
 
@@ -30,13 +31,31 @@ export default function SettingsPage() {
     }
   }, [currentGrade]);
 
-  // Đồng bộ lại session khi người dùng focus lại tab
+  // Đồng bộ session & khối lớp khi người dùng focus lại tab (xử lý giữa tab thường và tab ẩn danh)
   useEffect(() => {
-    const handleFocus = () => {
-      update();
+    const handleFocus = async () => {
+      try {
+        const res = await refreshSession(update);
+        if (res?.grade !== undefined) {
+          setSelectedGrade(Number(res.grade));
+        }
+      } catch (err) {
+        console.warn("Lỗi đồng bộ session on focus:", err);
+      }
     };
+
     window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleFocus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [update]);
 
   // [Task T6.12] Lắng nghe sự kiện đổi lớp từ các tab khác qua BroadcastChannel
@@ -130,9 +149,9 @@ export default function SettingsPage() {
     setErrorMsg("");
 
     try {
-      // Gọi API thật lên Backend để lưu lớp học mới vào NeonDB
+      // Gọi API thật lên Backend để lưu lớp học mới vào NeonDB (dùng authFetch để tự xử lý SESSION_STALE)
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${backendUrl}/users/me/grade`, {
+      const res = await authFetch(`${backendUrl}/users/me/grade`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
