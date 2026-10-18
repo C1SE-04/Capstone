@@ -67,10 +67,10 @@ def test_independence_scoring_algorithm():
     assert res1["score"] == 90
     print(f"[OK] 1 gợi ý: {res1['score']}đ")
 
-    # 2 gợi ý: 80đ
+    # 2 gợi ý: 80đ (ngưỡng >= 80 là Tự lập xuất sắc)
     res2 = calculate_independence_score(hints_used=2, not_understood_count=0)
     assert res2["score"] == 80
-    assert "Tự lập tốt" in res2["level"]
+    assert "Tự lập xuất sắc" in res2["level"]
     print(f"[OK] 2 gợi ý: {res2['score']}đ ({res2['level']})")
 
     # AC2: Bấm 'Chưa hiểu' 3 lần, dùng 2 hints: 100 - (2*10) - (3*15) = 35đ
