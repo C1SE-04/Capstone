@@ -19,7 +19,8 @@ import {
   ClipboardEvent,
   useCallback,
 } from "react";
-import { Send, Plus, X, Camera, ImageIcon, AlertCircle } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Send, Plus, X, Camera, ImageIcon, AlertCircle, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -59,6 +60,31 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   /** [T6.20/AC5] Thông báo lỗi validation ảnh (VD: vượt quá 5MB hoặc sai định dạng) */
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  /** Trạng thái mở modal xem trước ảnh to ở giữa màn hình */
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Lắng nghe phím Escape và khóa cuộn trang khi đang xem trước ảnh
+  useEffect(() => {
+    if (!isPreviewOpen) return;
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsPreviewOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isPreviewOpen]);
 
   // ── Refs ──
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -105,6 +131,7 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
   /** Xóa ảnh đính kèm và revoke object URL để tránh memory leak */
   const removeAttachment = useCallback(() => {
     setErrorMessage(null);
+    setIsPreviewOpen(false);
     setAttachment((prev) => {
       if (prev) URL.revokeObjectURL(prev.previewUrl);
       return null;
@@ -233,23 +260,36 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
       {attachment && (
         <div className="mb-2 ml-1 flex items-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div className="relative group inline-block">
-            {/* Thumbnail ảnh */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={attachment.previewUrl}
-              alt="Ảnh đính kèm"
-              className="h-20 w-20 object-cover rounded-xl border-2 border-[#C1762A]/30 shadow-md"
-            />
+            {/* Thumbnail ảnh — có thể bấm vào để xem to ở giữa màn hình */}
+            <div
+              onClick={() => setIsPreviewOpen(true)}
+              className="relative cursor-pointer overflow-hidden rounded-xl group/thumb"
+              title="Bấm để xem ảnh phóng to"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={attachment.previewUrl}
+                alt="Ảnh đính kèm"
+                className="h-20 w-20 object-cover rounded-xl border-2 border-[#C1762A]/30 shadow-md group-hover/thumb:brightness-95 transition-all"
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/25 rounded-xl transition-all flex items-center justify-center opacity-0 group-hover/thumb:opacity-100">
+                <Maximize2 size={16} className="text-white drop-shadow" />
+              </div>
+            </div>
+
             {/* Nút X xóa ảnh — hiện khi hover/focus */}
             <button
-              onClick={removeAttachment}
+              onClick={(e) => {
+                e.stopPropagation();
+                removeAttachment();
+              }}
               aria-label="Xóa ảnh đính kèm"
               className={[
-                "absolute -top-2 -right-2 w-5 h-5",
+                "absolute -top-2 -right-2 w-5 h-5 z-10",
                 "bg-[#8C4905] text-white rounded-full",
                 "flex items-center justify-center shadow-md",
                 "opacity-0 group-hover:opacity-100 focus:opacity-100",
-                "transition-opacity duration-150 hover:bg-red-600",
+                "transition-opacity duration-150 hover:bg-red-600 cursor-pointer",
               ].join(" ")}
             >
               <X size={11} strokeWidth={3} />
@@ -267,6 +307,48 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
             </span>
           </div>
         </div>
+      )}
+
+      {/* ── Modal xem ảnh phóng to ở giữa màn hình khi đính kèm trong ô chat ── */}
+      {isPreviewOpen && isMounted && attachment && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setIsPreviewOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Xem trước ảnh bài toán"
+        >
+          <div
+            className="relative flex flex-col items-center max-w-[95vw] max-h-[92vh] animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Thanh tiêu đề trên đầu */}
+            <div className="w-full flex items-center justify-between pb-3 px-1 text-white">
+              <span className="text-sm font-semibold tracking-wide text-white/90 drop-shadow">
+                Xem trước ảnh bài toán
+              </span>
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="p-1.5 rounded-full bg-white/15 hover:bg-red-500/80 text-white transition-colors cursor-pointer"
+                title="Đóng (hoặc nhấn Esc)"
+                aria-label="Đóng xem ảnh"
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            {/* Ảnh hiển thị lớn ở giữa màn hình */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl bg-black/40 flex items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={attachment.previewUrl}
+                alt="Ảnh xem trước phóng to"
+                className="max-h-[82vh] w-auto max-w-[92vw] object-contain select-none"
+              />
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Vùng background bo góc chứa các nút và ô nhập liệu ── */}

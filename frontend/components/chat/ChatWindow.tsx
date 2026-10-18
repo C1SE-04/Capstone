@@ -120,10 +120,20 @@ export function ChatWindow({
   // Lưu số lượng tin nhắn trước đó để phát hiện tin nhắn mới
   const prevMessagesCountRef = useRef(messages.length);
 
-  // Hàm tự động cuộn xuống dưới cùng của danh sách với hiệu ứng mượt
+  // Hàm tự động cuộn xuống dưới cùng của danh sách
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    endOfMessagesRef.current?.scrollIntoView({ behavior });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior,
+      });
+    } else {
+      endOfMessagesRef.current?.scrollIntoView({ behavior });
+    }
+    // Khi đã gọi hàm cuộn xuống đáy -> chủ động ẩn nút và tắt cờ báo
+    setShowScrollBottom(false);
     setHasNewMessage(false);
+    setIsAutoScrollEnabled(true);
   }, []);
 
   // Xử lý sự kiện scroll để phát hiện vị trí người dùng
@@ -135,15 +145,15 @@ export function ChatWindow({
     const scrollBottomOffset =
       container.scrollHeight - container.scrollTop - container.clientHeight;
 
-    // Nếu cách đáy hơn 20px thì coi như người dùng đang cuộn lên để đọc
-    const isScrolledUp = scrollBottomOffset > 20;
+    // Ngưỡng phát hiện cuộn lên: chỉ khi người dùng cuộn lên cách đáy > 100px mới hiện nút
+    const isScrolledUp = scrollBottomOffset > 100;
     setShowScrollBottom(isScrolledUp);
-    // Bật tắt auto-scroll theo hành vi cuộn của người dùng
     setIsAutoScrollEnabled(!isScrolledUp);
 
-    // Khi người dùng đã cuộn lại gần đáy thì tự động xóa huy hiệu tin nhắn mới
+    // Khi người dùng đã cuộn lại gần đáy (cách đáy <= 100px) thì tự động ẩn nút và xóa huy hiệu tin nhắn mới
     if (!isScrolledUp) {
       setHasNewMessage(false);
+      setShowScrollBottom(false);
     }
   };
 
@@ -165,11 +175,20 @@ export function ChatWindow({
     const isNewMessageAdded = messages.length > prevMessagesCountRef.current;
     prevMessagesCountRef.current = messages.length;
 
-    // Nếu người dùng đang theo dõi phần mới nhất -> tự động cuộn
-    if (isAutoScrollEnabled) {
+    const lastMsg = messages[messages.length - 1];
+    const isUserJustSent = isNewMessageAdded && lastMsg?.role === "user";
+
+    if (isUserJustSent) {
+      // 1. Học sinh vừa gửi tin nhắn mới -> Luôn bật auto-scroll và cuộn ngay xuống đáy
+      setIsAutoScrollEnabled(true);
+      setShowScrollBottom(false);
+      setHasNewMessage(false);
       scrollToBottom("smooth");
+    } else if (isAutoScrollEnabled) {
+      // 2. AI đang stream từng từ -> Cuộn trực tiếp (auto) để bám đáy 100%, không bị hủy animation giữa chừng
+      scrollToBottom(isTyping ? "auto" : "smooth");
     } else if (isNewMessageAdded) {
-      // Nếu người dùng đang đọc ở trên -> không cưỡng bức cuộn, mà hiện thông báo tin nhắn mới
+      // 3. Người dùng đang chủ động cuộn lên xem lịch sử -> hiện huy hiệu có tin nhắn mới
       setHasNewMessage(true);
     }
   }, [messages, isTyping, isAutoScrollEnabled, scrollToBottom]);
@@ -202,7 +221,7 @@ export function ChatWindow({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth relative"
+        className="flex-1 overflow-y-auto p-4 md:p-6 relative"
       >
         <div className="max-w-4xl mx-auto flex flex-col min-h-full">
           {/* Hiển thị màn hình khởi tạo khi chưa có tin nhắn (New Chat) */}

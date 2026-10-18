@@ -7,11 +7,13 @@
  */
 "use client";
 
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm"; // Hỗ trợ cú pháp GitHub Flavored Markdown (như table, strikethrough)
 import remarkMath from "remark-math"; // Hỗ trợ cú pháp toán học (dấu $ hoặc $$)
 import rehypeKatex from "rehype-katex"; // Biến đổi cú pháp toán học thành HTML chuẩn KaTeX
-import { AlertCircle, RotateCcw, Loader2 } from "lucide-react";
+import { AlertCircle, RotateCcw, Loader2, Maximize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Message } from "@/types/chat";
 import { UnderstandingButtons } from "./UnderstandingButtons";
@@ -45,6 +47,32 @@ export function ChatMessage({
   const isError = message.status === "error";
   const isSending = message.status === "sending";
 
+  // State quản lý xem ảnh phóng to ở giữa màn hình
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Lắng nghe phím Escape và khóa cuộn trang khi đang mở ảnh
+  useEffect(() => {
+    if (!isPreviewOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsPreviewOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isPreviewOpen]);
+
   return (
     // Wrap chính: flex để đẩy bong bóng sang phải (user) hoặc trái (assistant)
     <div className={cn("flex w-full mb-6", isUser ? "justify-end" : "justify-start")}>
@@ -64,11 +92,86 @@ export function ChatMessage({
           )}
         >
           {isUser ? (
-            // Tin nhắn của user: giữ nguyên ngắt dòng tự nhiên bằng whitespace-pre-wrap
-            <div className="whitespace-pre-wrap flex items-start gap-2">
-              <span className="flex-1">{message.content}</span>
-              {isSending && (
-                <Loader2 size={16} className="animate-spin text-white/80 shrink-0 mt-1" />
+            // Tin nhắn của user: hỗ trợ hiển thị ảnh đính kèm và giữ nguyên ngắt dòng tự nhiên
+            <div className="flex flex-col gap-2">
+              {message.attachment_url && (
+                <>
+                  <div
+                    onClick={() => setIsPreviewOpen(true)}
+                    className="group relative rounded-xl overflow-hidden max-w-[260px] max-h-[260px] bg-black/10 border border-white/20 shadow-sm cursor-pointer"
+                    title="Bấm để xem ảnh đề bài phóng to"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={message.attachment_url}
+                      alt="Ảnh đính kèm bài toán"
+                      className="w-full h-auto max-h-[240px] object-contain rounded-xl transition-all duration-200 group-hover:scale-[1.02] group-hover:brightness-95"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <span className="bg-black/70 backdrop-blur-sm text-white text-xs font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md">
+                        <Maximize2 size={13} />
+                        Xem đề bài
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Modal phóng to ảnh ở giữa màn hình */}
+                  {isPreviewOpen && isMounted && createPortal(
+                    <div
+                      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+                      onClick={() => setIsPreviewOpen(false)}
+                      role="dialog"
+                      aria-modal="true"
+                      aria-label="Xem ảnh bài toán"
+                    >
+                      {/* Container Modal */}
+                      <div
+                        className="relative flex flex-col items-center max-w-[95vw] max-h-[92vh] animate-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Thanh điều khiển trên đầu */}
+                        <div className="w-full flex items-center justify-between pb-3 px-1 text-white">
+                          <span className="text-sm font-semibold tracking-wide text-white/90 drop-shadow">
+                            Ảnh đề bài đã gửi
+                          </span>
+                          <button
+                            onClick={() => setIsPreviewOpen(false)}
+                            className="p-1.5 rounded-full bg-white/15 hover:bg-red-500/80 text-white transition-colors cursor-pointer"
+                            title="Đóng (hoặc nhấn Esc)"
+                            aria-label="Đóng xem ảnh"
+                          >
+                            <X size={19} />
+                          </button>
+                        </div>
+
+                        {/* Ảnh hiển thị lớn ở giữa màn hình */}
+                        <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl bg-black/40 flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={message.attachment_url}
+                            alt="Ảnh bài toán phóng to"
+                            className="max-h-[82vh] w-auto max-w-[92vw] object-contain select-none"
+                          />
+                        </div>
+                      </div>
+                    </div>,
+                    document.body
+                  )}
+                </>
+              )}
+              {message.content && (
+                <div className="whitespace-pre-wrap flex items-start gap-2">
+                  <span className="flex-1">{message.content}</span>
+                  {isSending && (
+                    <Loader2 size={16} className="animate-spin text-white/80 shrink-0 mt-1" />
+                  )}
+                </div>
+              )}
+              {!message.content && isSending && (
+                <div className="flex items-center gap-2 text-white/80 text-xs">
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Đang gửi ảnh bài toán...</span>
+                </div>
               )}
             </div>
           ) : message.content === "" ? (

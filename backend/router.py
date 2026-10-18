@@ -35,6 +35,12 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
 
 5. ĐỘ DÀI:
    - Ngắn gọn, chuẩn mực, từ 2 đến 4 câu.
+
+6. ĐÁNH GIÁ HOÀN THÀNH BÀI TOÁN (COMPREHENSION TRIGGER):
+   - Khi học sinh đã trả lời ĐÚNG đáp án cuối cùng của bài toán (ví dụ: chọn đúng đáp án trắc nghiệm A/B/C/D, hoặc tính ra kết quả số cuối cùng đúng), HOẶC khi bạn vừa trình bày xong toàn bộ lời giải chi tiết cho bài toán (ở chế độ giải bài):
+     -> BẮT BUỘC chèn thêm tag đặc biệt [COMPREHENSION_CHECK] vào CUỐI CÙNG của câu trả lời.
+   - Khi học sinh mới trả lời một câu hỏi gợi mở trung gian, định nghĩa khái niệm, hoặc bài toán chưa giải xong:
+     -> TUYỆT ĐỐI KHÔNG chèn tag [COMPREHENSION_CHECK].
 """
 
 def load_image_from_url(url: Optional[str], timeout: float = 10.0) -> Optional[Image.Image]:
@@ -73,7 +79,16 @@ Học sinh vừa gửi một bức ảnh bài toán kèm lời nhắn. BẠN B�
 # ==========================================
 # HÀM ĐIỀU PHỐI CHÍNH (Router Function) - CÓ TÍCH HỢP REVIEWER TỰ ĐỘNG SỬA LỖI
 # ==========================================
-def agent_router(target_agent: str, task_description: str, history_text: str, user_query: str, expected_answer: str = "", grade_level: int = None, attachment_url: Optional[str] = None):
+def agent_router(
+    target_agent: str,
+    task_description: str,
+    history_text: str,
+    user_query: str,
+    expected_answer: str = "",
+    grade_level: int = None,
+    attachment_url: Optional[str] = None,
+    meta: Optional[dict] = None,
+):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         yield "Lỗi: Chưa cấu hình GEMINI_API_KEY"
@@ -105,6 +120,11 @@ NHẮC LẠI NGUYÊN TẮC:
 - Bạn là THẦY GIÁO, xưng "thầy" gọi "em", TUYỆT ĐỐI KHÔNG xưng "Dạ".
 - Chỉ nhắc nhở thái độ khi học sinh dùng từ XÚC PHẠM THỰC SỰ (mày, tao, chửi thề) — câu ngắn, không chào hỏi, không có chủ ngữ là BÌNH THƯỜNG, không nhắc.
 - Trả lời ngắn gọn, chuẩn mực (2-4 câu).
+- ĐÁNH GIÁ HOÀN THÀNH BÀI TOÁN (COMPREHENSION CHECK):
+  + Nếu học sinh vừa trả lời ĐÚNG đáp án cuối cùng của bài toán (ví dụ: chọn đúng đáp án trắc nghiệm A/B/C/D, hoặc tính ra kết quả cuối cùng đúng), HOẶC bạn vừa hoàn thành giải thích toàn bộ bài toán cho học sinh (ở chế độ Reveal):
+    -> BẮT BUỘC gắn tag [COMPREHENSION_CHECK] ở CUỐI CÙNG của câu trả lời.
+  + Nếu bài toán CHƯA XONG (học sinh mới trả lời một câu hỏi phụ, định nghĩa trung gian, hoặc thực hiện một bước nhỏ):
+    -> TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK].
 """
     
     example_keywords = ["ví dụ", "vi du", "vd", "vdu", "dí dụ", "di du", "vidu", "mẫu", "bài mẫu", "làm mẫu", "giải mẫu"]
@@ -131,6 +151,7 @@ Học sinh đang xin ví dụ hoặc làm mẫu. BẠN BẮT BUỘC PHẢI THỰ
     current_attempt = 0
     final_text = ""
     prompt = base_prompt
+    is_comprehension_detected = False
 
     while current_attempt <= max_retries:
         print("=== PROMPT CHUẨN BỊ GỬI AI ===")
@@ -141,11 +162,33 @@ Học sinh đang xin ví dụ hoặc làm mẫu. BẠN BẮT BUỘC PHẢI THỰ
             # Lấy toàn bộ văn bản để Reviewer có thể đánh giá (không stream trực tiếp)
             call_payload = [image_obj, prompt] if image_obj is not None else prompt
             response = model.generate_content(call_payload, stream=False)
-            generated_text = response.text
+            generated_text = response.text or ""
             
+            # 1. Bóc tách tag [COMPREHENSION_CHECK] do Gemini phát hiện
+            has_comp_tag = (
+                "[COMPREHENSION_CHECK]" in generated_text
+                or "COMPREHENSION_CHECK" in generated_text
+            )
+            cleaned_text = (
+                generated_text.replace("[COMPREHENSION_CHECK]", "")
+                .replace("COMPREHENSION_CHECK", "")
+                .strip()
+            )
+
+            # 2. Cơ chế Fallback nhận diện nếu Gemini xác nhận đúng đáp án bài toán
+            praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em")
+            is_praise = any(p in cleaned_text.lower() for p in praise_markers)
+            has_conclusive_done = is_praise and (
+                any(k in cleaned_text.lower() for k in ("đáp án", "kết quả", "chọn đúng", "đáp án c", "đáp án a", "đáp án b", "đáp án d"))
+                or not cleaned_text.strip().endswith("?")
+            )
+
+            if has_comp_tag or has_conclusive_done:
+                is_comprehension_detected = True
+
             # Chỉ kiểm duyệt gắt gao nếu đang đóng vai SCAFFOLDING_AGENT
             if target_agent == "SCAFFOLDING_AGENT":
-                review_result = reviewer.review(user_query, expected_answer, generated_text)
+                review_result = reviewer.review(user_query, expected_answer, cleaned_text)
                 if not review_result["is_approved"]:
                     current_attempt += 1
                     print(f"[Reviewer Agent 🛑] Từ chối (Lần {current_attempt}/{max_retries}): {review_result['feedback']}")
@@ -153,18 +196,23 @@ Học sinh đang xin ví dụ hoặc làm mẫu. BẠN BẮT BUỘC PHẢI THỰ
                     
                     # Nạp lại lời mắng vào prompt để ép AI phải sửa lỗi
                     prompt += f"\n\n[HỆ THỐNG KIỂM DUYỆT CẢNH BÁO]: Câu trả lời vừa rồi của bạn bị TỪ CHỐI vì lý do: {review_result['feedback']}. \nHãy sinh lại câu trả lời khác và TUYỆT ĐỐI KHÔNG vi phạm lỗi này nữa."
-                    final_text = generated_text  # Backup lỡ như hết số lần thử vẫn ngu
+                    final_text = cleaned_text  # Backup lỡ như hết số lần thử vẫn ngu
                     continue
             
             # Nếu pass qua được Reviewer hoặc không phải Scaffolding thì chốt đáp án
-            final_text = generated_text
+            final_text = cleaned_text
             break
             
         except Exception as e:
             yield f" [Lỗi khi gọi AI: {str(e)}]"
             return
 
+    # Lưu kết quả phát hiện comprehension vào meta object
+    if meta is not None:
+        meta["has_comprehension"] = is_comprehension_detected
+
     # Sau khi chốt được văn bản xịn, chẻ nhỏ ra để giả lập luồng Stream trả về Frontend cho mượt
     words = final_text.split(" ")
     for i, word in enumerate(words):
         yield word + (" " if i < len(words) - 1 else "")
+

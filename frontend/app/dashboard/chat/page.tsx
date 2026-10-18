@@ -88,6 +88,7 @@ export default function ChatPage() {
                     id: m.id,
                     role: m.sender_type === "USER" ? "user" : "assistant",
                     content: m.content,
+                    attachment_url: m.attachment_url || undefined,
                   }))
                   // Loc bo cac prompt ngam de khong bi lo khi reload trang
                   .filter((m: any) => !(
@@ -414,6 +415,7 @@ export default function ChatPage() {
     targetConversationId: string,
     userMessageId: string,
     userContent: string,
+    attachmentUrl?: string,
   ) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setConversations((prev) =>
@@ -481,32 +483,16 @@ export default function ChatPage() {
         // Không có session -> chat như khách
       }
 
-      // Dummy problem_context (thực tế lấy từ state/context của ứng dụng)
-      const problem_context = {
-        correctSolution: "4",
-      };
-
-      let answer_status: string | null = null;
-      // Trích xuất con số đầu tiên tìm thấy trong message
-      const numberMatch = userContent.match(/\d+/);
-      if (numberMatch) {
-        if (numberMatch[0] === problem_context.correctSolution) {
-          answer_status = "correct";
-        } else {
-          answer_status = "wrong";
-        }
-      }
-
       // T6.13: dùng authFetch để tự refresh khi SESSION_STALE
       const response = await authFetch(`${BACKEND_URL}/chat/orchestrator`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
           session_id: targetConversationId,
-          prompt: userContent,
+          prompt: userContent.trim() || (attachmentUrl ? "Em gửi ảnh bài toán, nhờ thầy hướng dẫn giúp em với ạ." : ""),
           problem_context: null,
-          answer_status,
           grade_level: gradeLevel ? Number(gradeLevel) : undefined,
+          attachment_url: attachmentUrl || undefined,
         }),
       });
 
@@ -603,9 +589,8 @@ export default function ChatPage() {
   // Handler: Gửi prompt trong khung chat
   // isExplanation = true khi gui tu o UnderstandingButtons (onSendExplanation)
   // -> Khong reset notUnderstoodCount vi day la phan cua flow "Chua hieu"
-  // _image?: File - [T6.20] File ảnh đính kèm từ ChatInput (chờ backend T6.22 hoàn tất để upload)
-  const handleSendMessage = async (content: string, isExplanation = false, _image?: File) => {
-
+  // imageFile?: File - File ảnh đính kèm từ ChatInput (US 6.4: Tích hợp upload Cloudinary)
+  const handleSendMessage = async (content: string, isExplanation = false, imageFile?: File) => {
     // US4.1: Chi reset dem "Chua hieu" khi hoc sinh tu go tin nhan moi hoan toan,
     // khong reset khi gui giai thich tu UnderstandingButtons
     if (!isExplanation) {
@@ -613,10 +598,13 @@ export default function ChatPage() {
     }
 
     const messageId = Date.now().toString();
+    const localPreviewUrl = imageFile ? URL.createObjectURL(imageFile) : undefined;
+
     const userMsg: Message = {
       id: messageId,
       role: "user",
       content,
+      attachment_url: localPreviewUrl,
       status: isOnline ? "sending" : "error",
     };
 
@@ -627,7 +615,7 @@ export default function ChatPage() {
       const title =
         content.trim().length > 25
           ? content.trim().slice(0, 25) + "..."
-          : content.trim();
+          : content.trim() || (imageFile ? "Bài toán từ ảnh" : "Phòng chat mới");
 
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -693,12 +681,75 @@ export default function ChatPage() {
       return;
     }
 
-    triggerBotResponse(targetId, messageId, content);
+    // US 6.4 (Task #173): Upload ảnh lên Cloudinary nếu người dùng có đính kèm file
+    let uploadedAttachmentUrl: string | undefined = undefined;
+    if (imageFile) {
+      try {
+        const BACKEND_URL =
+          process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+        const { getSession } = await import("next-auth/react");
+        const nextAuthSession = await getSession();
+        const token = (nextAuthSession as { access_token?: string } | null)
+          ?.access_token;
+
+        const uploadHeaders: Record<string, string> = {};
+        if (token) {
+          uploadHeaders["Authorization"] = `Bearer ${token}`;
+        }
+
+        const formData = new FormData();
+        formData.append("file", imageFile);
+
+        const uploadRes = await authFetch(`${BACKEND_URL}/upload/image`, {
+          method: "POST",
+          headers: uploadHeaders,
+          body: formData,
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          uploadedAttachmentUrl = uploadData.secure_url || uploadData.url;
+
+          // Cập nhật lại URL Cloudinary chính thức vào message trong state
+          if (uploadedAttachmentUrl) {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === targetId
+                  ? {
+                      ...c,
+                      messages: c.messages.map((m) =>
+                        m.id === messageId
+                          ? { ...m, attachment_url: uploadedAttachmentUrl }
+                          : m,
+                      ),
+                    }
+                  : c,
+              ),
+            );
+          }
+        } else {
+          console.error("Lỗi upload ảnh lên Cloudinary:", await uploadRes.text());
+        }
+      } catch (uploadErr) {
+        console.error("Lỗi kết nối khi upload ảnh:", uploadErr);
+      }
+    }
+
+    triggerBotResponse(targetId, messageId, content, uploadedAttachmentUrl);
   };
 
   // Handler: Thử lại (Retry) khi gửi tin nhắn thất bại
   const handleRetryMessage = (messageId: string, content: string) => {
     if (!activeChatId) return;
+
+    let targetAttachmentUrl: string | undefined = undefined;
+    const currentConv = conversations.find((c) => c.id === activeChatId);
+    if (currentConv) {
+      const msg = currentConv.messages.find((m) => m.id === messageId);
+      if (msg?.attachment_url && !msg.attachment_url.startsWith("blob:")) {
+        targetAttachmentUrl = msg.attachment_url;
+      }
+    }
 
     setConversations((prev) =>
       prev.map((c) =>
@@ -713,7 +764,7 @@ export default function ChatPage() {
       ),
     );
 
-    triggerBotResponse(activeChatId, messageId, content);
+    triggerBotResponse(activeChatId, messageId, content, targetAttachmentUrl);
   };
 
   if (!isHydrated) {
