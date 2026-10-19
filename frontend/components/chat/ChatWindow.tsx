@@ -58,14 +58,18 @@ export function ChatWindow({
 
   // T6.16 – US 6.3: Trạng thái hiển thị modal nhắc nhở khi học sinh idle
   const [isIdleModalOpen, setIsIdleModalOpen] = useState(false);
+  // Trạng thái khi học sinh bấm "Không học" -> ngừng đếm giờ học & không hiện thông báo idle nữa
+  const [isStudyPaused, setIsStudyPaused] = useState(false);
 
   // T6.15 – US 6.3: Idle Timer 10 phút
-  // Hook tự khởi động khi component mount; gọi reset() mỗi khi học sinh gửi tin.
-  // Khi timeout 10 phút → kích hoạt onIdle mở IdleModal.
   const { reset: resetIdleTimer } = useIdleTimer({
     timeout: 10 * 60 * 1000, // 10 phút theo đặc tả US 6.3
-    onIdle: () => setIsIdleModalOpen(true),
-    enabled: true,
+    onIdle: () => {
+      if (!isStudyPaused) {
+        setIsIdleModalOpen(true);
+      }
+    },
+    enabled: !isStudyPaused,
   });
 
   /**
@@ -74,9 +78,21 @@ export function ChatWindow({
    * 2. Đóng modal.
    */
   const handleContinueLearning = useCallback(() => {
+    setIsStudyPaused(false);
     resetIdleTimer();
     setIsIdleModalOpen(false);
   }, [resetIdleTimer]);
+
+  /**
+   * Khi học sinh bấm "Không học" trong modal:
+   * 1. Ngừng tính thời gian học (không gọi restart).
+   * 2. Đặt isStudyPaused = true để không hiện lại thông báo idle nữa.
+   * 3. Đóng modal.
+   */
+  const handleStopLearning = useCallback(() => {
+    setIsStudyPaused(true);
+    setIsIdleModalOpen(false);
+  }, []);
 
   /**
    * T6.15/T6.20 – Wrapper tổng hợp của onSendMessage:
@@ -86,6 +102,28 @@ export function ChatWindow({
   const handleSendMessage = useCallback(
     (content: string, isExplanationOrImage?: boolean | File, image?: File) => {
       setIsIdleModalOpen(false);
+
+      // Nếu trước đó học sinh bấm "Không học" nhưng nay gửi bài mới -> tiếp tục tính giờ học
+      if (isStudyPaused) {
+        setIsStudyPaused(false);
+        // Gửi timestamp restart lên BE để ghi nhận khoảng thời gian học mới
+        const now = Date.now();
+        fetch("/api/metrics/restart", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            timestamp: Math.floor(now / 1000),
+            timestamp_ms: now,
+            restart_time: new Date(now).toISOString(),
+            session_id: sessionId || null,
+          }),
+        }).catch((err) => {
+          console.warn("[ChatWindow] Lỗi gửi restart timestamp khi gửi bài mới:", err);
+        });
+      }
+
       resetIdleTimer();
       // Phân biệt 2 luồng gọi:
       // 1. Từ ChatInput: handleSendMessage(text, imageFile)
@@ -97,7 +135,7 @@ export function ChatWindow({
         onSendMessage(content, false, isExplanationOrImage);
       }
     },
-    [resetIdleTimer, onSendMessage],
+    [isStudyPaused, sessionId, resetIdleTimer, onSendMessage],
   );
 
   // Xác định trạng thái cảm xúc của cú
@@ -310,6 +348,7 @@ export function ChatWindow({
       <IdleModal
         isOpen={isIdleModalOpen}
         onContinue={handleContinueLearning}
+        onStopLearning={handleStopLearning}
         sessionId={sessionId}
       />
     </div>

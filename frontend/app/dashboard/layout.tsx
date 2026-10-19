@@ -13,6 +13,7 @@ import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { Menu } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
+import { refreshSession } from "@/lib/authFetch";
 
 export default function DashboardLayout({
   children,
@@ -40,6 +41,30 @@ export default function DashboardLayout({
 
     return () => {
       channel.close();
+    };
+  }, [update]);
+
+  // Đồng bộ session & khối lớp khi focus lại tab (giúp tab ẩn danh tự cập nhật theo tab thường)
+  useEffect(() => {
+    const handleFocus = async () => {
+      try {
+        await refreshSession(update);
+      } catch (err) {
+        console.warn("Lỗi đồng bộ session layout on focus:", err);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleFocus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [update]);
 

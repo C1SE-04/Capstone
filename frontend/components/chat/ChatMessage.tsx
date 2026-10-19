@@ -13,10 +13,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm"; // Hỗ trợ cú pháp GitHub Flavored Markdown (như table, strikethrough)
 import remarkMath from "remark-math"; // Hỗ trợ cú pháp toán học (dấu $ hoặc $$)
 import rehypeKatex from "rehype-katex"; // Biến đổi cú pháp toán học thành HTML chuẩn KaTeX
-import { AlertCircle, RotateCcw, Loader2, Maximize2, X } from "lucide-react";
+import { AlertCircle, RotateCcw, Loader2, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Message } from "@/types/chat";
 import { UnderstandingButtons } from "./UnderstandingButtons";
+import { ImageZoomModal } from "./ImageZoomModal";
 
 export type MessageProps = Message;
 
@@ -115,48 +116,13 @@ export function ChatMessage({
                     </div>
                   </div>
 
-                  {/* Modal phóng to ảnh ở giữa màn hình */}
-                  {isPreviewOpen && isMounted && createPortal(
-                    <div
-                      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
-                      onClick={() => setIsPreviewOpen(false)}
-                      role="dialog"
-                      aria-modal="true"
-                      aria-label="Xem ảnh bài toán"
-                    >
-                      {/* Container Modal */}
-                      <div
-                        className="relative flex flex-col items-center max-w-[95vw] max-h-[92vh] animate-in zoom-in-95 duration-200"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {/* Thanh điều khiển trên đầu */}
-                        <div className="w-full flex items-center justify-between pb-3 px-1 text-white">
-                          <span className="text-sm font-semibold tracking-wide text-white/90 drop-shadow">
-                            Ảnh đề bài đã gửi
-                          </span>
-                          <button
-                            onClick={() => setIsPreviewOpen(false)}
-                            className="p-1.5 rounded-full bg-white/15 hover:bg-red-500/80 text-white transition-colors cursor-pointer"
-                            title="Đóng (hoặc nhấn Esc)"
-                            aria-label="Đóng xem ảnh"
-                          >
-                            <X size={19} />
-                          </button>
-                        </div>
-
-                        {/* Ảnh hiển thị lớn ở giữa màn hình */}
-                        <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl bg-black/40 flex items-center justify-center">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={message.attachment_url}
-                            alt="Ảnh bài toán phóng to"
-                            className="max-h-[82vh] w-auto max-w-[92vw] object-contain select-none"
-                          />
-                        </div>
-                      </div>
-                    </div>,
-                    document.body
-                  )}
+                  {/* Modal phóng to ảnh chuyên dụng đầy đủ tính năng */}
+                  <ImageZoomModal
+                    isOpen={isPreviewOpen}
+                    imageUrl={message.attachment_url || null}
+                    imageTitle="Ảnh bài toán đề bài"
+                    onClose={() => setIsPreviewOpen(false)}
+                  />
                 </>
               )}
               {message.content && (

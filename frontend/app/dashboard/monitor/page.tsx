@@ -226,9 +226,9 @@ export default function MonitorPage() {
     }
   }, [timeRange, totalMinutes, totalHours, avgMinutesPerActiveDay]);
 
-  // Dữ liệu Activity Heatmap (T6.6: Hiển thị 12 tuần gần nhất ~ 84 ngày để thấy rõ mật độ học tập)
+  // Dữ liệu Activity Heatmap chuẩn GitHub (Hiển thị 16-24 tuần gần nhất ~ 112 - 168 ngày)
   const heatmapData = useMemo(() => {
-    return generateMockHeatmapData(timeRange === "7d" ? 70 : 84);
+    return generateMockHeatmapData(timeRange === "7d" ? 112 : 168);
   }, [timeRange, selectedStudent?.student_id]);
 
   const handlePrevWeek = () => setWeekOffset((prev) => prev - 1);

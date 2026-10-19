@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useEffect, useSyncExternalStore } from "react";
+import { useState, useEffect, useMemo, useSyncExternalStore } from "react";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatWindow } from "@/components/chat/ChatWindow";
+import { ChatRightSidebar, ExerciseImage } from "@/components/chat/ChatRightSidebar";
+import { ImageZoomModal } from "@/components/chat/ImageZoomModal";
+import { FileTooLargeToast } from "@/components/chat/FileTooLargeToast";
 import { Conversation, Message } from "@/types/chat";
-import { Menu } from "lucide-react";
+import { Menu, PanelRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/authFetch";
+import { cn } from "@/lib/utils";
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -40,6 +44,21 @@ export default function ChatPage() {
   // Key tăng mỗi khi người dùng chọn chat cũ từ Sidebar
   // ChatWindow lắng nghe key này để trigger scroll-to-bottom ngay lập tức
   const [selectedChatKey, setSelectedChatKey] = useState(0);
+
+  // Trạng thái mở/đóng thanh sidebar bên phải (Right Sidebar chứa ảnh bài tập giống Zalo)
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
+  // URL ảnh đang được phóng to trong ImageZoomModal
+  const [selectedZoomImageUrl, setSelectedZoomImageUrl] = useState<string | null>(null);
+  // Trạng thái thông báo nổi khi gửi ảnh quá 5MB
+  const [fileTooLargeState, setFileTooLargeState] = useState<{
+    isOpen: boolean;
+    sizeMb: number;
+    message?: string;
+  }>({
+    isOpen: false,
+    sizeMb: 0,
+  });
+
   const isOnline = useSyncExternalStore(
     subscribeOnline,
     getOnlineSnapshot,
@@ -121,6 +140,18 @@ export default function ChatPage() {
   const currentMessages = currentConversation
     ? currentConversation.messages
     : [];
+
+  // Danh sách tất cả ảnh bài tập được gửi trong cuộc hội thoại hiện tại
+  const currentImages: ExerciseImage[] = useMemo(() => {
+    if (!currentConversation) return [];
+    return currentConversation.messages
+      .filter((m) => Boolean(m.attachment_url))
+      .map((m) => ({
+        id: m.id,
+        url: m.attachment_url!,
+        role: m.role,
+      }));
+  }, [currentConversation]);
 
   // Handler: Chọn phiên chat từ Sidebar
   // Tăng selectedChatKey để ChatWindow nhận biết và scroll xuống tin nhắn mới nhất
@@ -597,6 +628,22 @@ export default function ChatPage() {
       setNotUnderstoodCount(0);
     }
 
+    // Kiểm tra dung lượng ảnh: gửi thông báo khi ảnh quá 5MB
+    if (imageFile) {
+      if (imageFile.size > 5 * 1024 * 1024) {
+        const sizeMb = imageFile.size / (1024 * 1024);
+        setFileTooLargeState({
+          isOpen: true,
+          sizeMb,
+          message: `Ảnh bạn gửi có dung lượng ${sizeMb.toFixed(1)}MB, vượt quá giới hạn 5MB của hệ thống. Vui lòng chọn ảnh nhỏ hơn 5MB!`,
+        });
+        return;
+      }
+
+      // Sau khi học sinh gửi ảnh bài tập -> luôn hiện/mở thanh sidebar bên phải (giống Zalo)
+      setIsRightSidebarOpen(true);
+    }
+
     const messageId = Date.now().toString();
     const localPreviewUrl = imageFile ? URL.createObjectURL(imageFile) : undefined;
 
@@ -810,7 +857,7 @@ export default function ChatPage() {
                   setIsSidebarCollapsed(!isSidebarCollapsed);
                 }
               }}
-              className="p-2 text-[#8C4905] hover:bg-[#F1CCA6]/50 rounded-lg transition-colors"
+              className="p-2 text-[#8C4905] hover:bg-[#F1CCA6]/50 rounded-lg transition-colors cursor-pointer"
               title="Đóng / mở thanh bên"
             >
               <Menu size={22} />
@@ -826,6 +873,35 @@ export default function ChatPage() {
                 SocraticKid
               </span>
             </div>
+          </div>
+
+          {/* Nút bật/tắt thanh ảnh bài tập bên phải (giống Zalo) */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsRightSidebarOpen((prev) => !prev)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all border cursor-pointer",
+                isRightSidebarOpen
+                  ? "bg-[#C1762A] text-white border-[#C1762A] shadow-sm"
+                  : "bg-white text-[#8C4905] border-[#F1CCA6] hover:bg-[#F1CCA6]/40"
+              )}
+              title="Đóng / mở thanh ảnh bài tập bên phải (giống Zalo)"
+            >
+              <PanelRight size={17} />
+              <span className="hidden sm:inline">Ảnh bài tập</span>
+              {currentImages.length > 0 && (
+                <span
+                  className={cn(
+                    "px-1.5 py-0.5 rounded-full text-[11px] font-bold leading-none",
+                    isRightSidebarOpen
+                      ? "bg-white/25 text-white"
+                      : "bg-[#F1CCA6] text-[#8C4905]"
+                  )}
+                >
+                  {currentImages.length}
+                </span>
+              )}
+            </button>
           </div>
         </header>
 
@@ -846,6 +922,34 @@ export default function ChatPage() {
           />
         </main>
       </div>
+
+      {/* Thanh sidebar bên phải hiển thị ảnh bài tập (giống Zalo) */}
+      <ChatRightSidebar
+        isOpen={isRightSidebarOpen}
+        onClose={() => setIsRightSidebarOpen(false)}
+        images={currentImages}
+        onZoomImage={(url) => setSelectedZoomImageUrl(url)}
+        onUploadClick={() => {
+          const btn = document.getElementById("chat-attach-btn");
+          btn?.click();
+        }}
+      />
+
+      {/* Modal phóng to ảnh bài tập */}
+      <ImageZoomModal
+        isOpen={Boolean(selectedZoomImageUrl)}
+        imageUrl={selectedZoomImageUrl}
+        imageTitle="Ảnh bài tập đã chọn"
+        onClose={() => setSelectedZoomImageUrl(null)}
+      />
+
+      {/* Thông báo nổi khi dung lượng ảnh vượt quá 5MB */}
+      <FileTooLargeToast
+        isOpen={fileTooLargeState.isOpen}
+        fileSizeMb={fileTooLargeState.sizeMb}
+        message={fileTooLargeState.message}
+        onClose={() => setFileTooLargeState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
