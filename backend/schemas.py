@@ -226,6 +226,55 @@ class ParentDashboardMetricsResponse(BaseModel):
         from_attributes = True
 
 
+# --- US 7.1: Dashboard Heatmap & Summary Schemas ---
+
+class HeatmapDayItem(BaseModel):
+    """Điểm dữ liệu ngày trong Heatmap, tương thích 100% với HeatmapDay ở Frontend."""
+    date: str                  # "YYYY-MM-DD"
+    minutes: int = 0           # số phút học thực tế (0 = không học)
+    active_minutes: int = 0    # alias cho số phút
+    intensity_level: int = 0   # 0 (0p), 1 (1-20p), 2 (21-45p), 3 (46-75p), 4 (>75p)
+
+
+class ActivityHeatmapResponse(BaseModel):
+    """Phản hồi API GET /metrics/heatmap theo chuẩn GitHub Contribution Graph."""
+    student_id: str
+    weeks: int
+    days: int
+    start_date: str
+    end_date: str
+    total_active_minutes: int
+    total_study_hours: float
+    data: list[HeatmapDayItem] = []
+
+
+class SummaryCardsResponse(BaseModel):
+    """Phản hồi API GET /metrics/summary chứa số liệu thật thay thế mock data."""
+    student_id: str
+    time_range: str
+    start_date: str
+    end_date: str
+    # Snake_case
+    completed_problems: int
+    completed_change: Optional[str] = "+0%"
+    independence_score: int
+    independence_level: str
+    current_streak: int
+    max_streak: int
+    total_study_hours: float
+    avg_minutes_per_day: int
+    total_active_minutes: int
+    # CamelCase aliases (tương thích trực tiếp với interface SummaryMetrics ở Frontend)
+    completedProblems: int
+    completedChange: Optional[str] = "+0%"
+    independenceScore: int
+    independenceLevel: str
+    currentStreak: int
+    maxStreak: int
+    totalStudyHours: float
+    avgMinutesPerDay: int
+
+
 # --- US 6.4: Cloudinary Upload Schemas (Task #173) ---
 
 class CloudinaryUploadResponse(BaseModel):

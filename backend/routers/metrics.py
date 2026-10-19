@@ -426,3 +426,399 @@ def get_metrics_alias(
         current_user=current_user,
         db=db,
     )
+
+
+# ==============================================================================
+# US 7.1 (Task T7.4 & T7.5): NÂNG CẤP TOÀN DIỆN DASHBOARD PHỤ HUYNH
+# ==============================================================================
+
+def calculate_student_streak(student_id: str, db: Session) -> tuple[int, int]:
+    """
+    Tính chuỗi ngày học liên tục (current_streak, max_streak).
+    Một ngày được ghi nhận có hoạt động học nếu:
+    - Có ít nhất 1 khoảng active trong session_active_intervals
+    - HOẶC có bản ghi bài toán hoàn thành trong independence_scores
+    - HOẶC có session học tạo trong ngày
+    """
+    # 1. Các ngày từ session_active_intervals
+    interval_dates = (
+        db.query(cast(models.SessionActiveInterval.start_time, Date).label("d"))
+        .filter(models.SessionActiveInterval.user_id == student_id)
+        .distinct()
+        .all()
+    )
+
+    # 2. Các ngày từ independence_scores
+    score_dates = (
+        db.query(cast(models.IndependenceScore.created_at, Date).label("d"))
+        .filter(models.IndependenceScore.student_id == student_id)
+        .distinct()
+        .all()
+    )
+
+    # 3. Các ngày từ sessions (legacy)
+    session_dates = (
+        db.query(cast(models.Session.created_at, Date).label("d"))
+        .filter(models.Session.user_id == student_id)
+        .distinct()
+        .all()
+    )
+
+    all_dates: set[date] = set()
+    for row in interval_dates:
+        if row.d:
+            all_dates.add(row.d)
+    for row in score_dates:
+        if row.d:
+            all_dates.add(row.d)
+    for row in session_dates:
+        if row.d:
+            all_dates.add(row.d)
+
+    if not all_dates:
+        return 0, 0
+
+    sorted_dates = sorted(all_dates, reverse=True)
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+
+    # 4. Tính current_streak:
+    # Nếu ngày học gần nhất là hôm nay: đếm từ hôm nay lùi về trước.
+    # Nếu ngày học gần nhất là hôm qua: đếm từ hôm qua lùi về trước (vì ngày hôm nay vẫn đang diễn ra).
+    # Nếu ngày gần nhất < hôm qua: streak đã đứt (current_streak = 0).
+    current_streak = 0
+    if sorted_dates[0] == today:
+        current_streak = 1
+        expected = yesterday
+        for d in sorted_dates[1:]:
+            if d == expected:
+                current_streak += 1
+                expected -= timedelta(days=1)
+            else:
+                break
+    elif sorted_dates[0] == yesterday:
+        current_streak = 1
+        expected = yesterday - timedelta(days=1)
+        for d in sorted_dates[1:]:
+            if d == expected:
+                current_streak += 1
+                expected -= timedelta(days=1)
+            else:
+                break
+    else:
+        current_streak = 0
+
+    # 5. Tính max_streak (chuỗi ngày liên tiếp kỷ lục trong toàn bộ lịch sử)
+    asc_dates = sorted(all_dates)
+    max_streak = 1
+    running = 1
+    for i in range(1, len(asc_dates)):
+        if asc_dates[i] == asc_dates[i - 1] + timedelta(days=1):
+            running += 1
+            if running > max_streak:
+                max_streak = running
+        elif asc_dates[i] > asc_dates[i - 1] + timedelta(days=1):
+            running = 1
+
+    return current_streak, max(max_streak, current_streak)
+
+
+@router.get("/metrics/heatmap", response_model=schemas.ActivityHeatmapResponse)
+def get_activity_heatmap(
+    student_id: str = Query(..., description="ID của học sinh cần xem"),
+    weeks: int = Query(24, ge=1, le=52, description="Số tuần cần quét (16 - 24 tuần, mặc định 24 tuần ~ 168 ngày)"),
+    days: Optional[int] = Query(None, ge=7, le=365, description="Số ngày cần quét (ưu tiên hơn weeks nếu truyền)"),
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    US 7.1 - Task T7.4:
+    API quét bảng session_active_intervals tính tổng thời gian active từng ngày trong 16-24 tuần.
+    - Chuẩn format GitHub Contribution Graph: mảng các ngày liên tục kèm số phút tương tác thực tế.
+    - Tự động gán 5 mức nhiệt intensity_level (0 - 4) chuẩn bảng màu Socratic / GitHub.
+    - Có fallback hỗ trợ phiên học cũ trước khi có bảng session_active_intervals.
+    """
+    # 1. Kiểm tra quyền truy cập (STUDENT xem chính mình, MONITOR xem học sinh liên kết)
+    _verify_access_to_student(current_user, student_id, db)
+
+    total_days = days if days is not None else (weeks * 7)
+    today = date.today()
+    start_date = today - timedelta(days=total_days - 1)
+    end_date = today
+
+    # 2. Query tổng active_seconds từ session_active_intervals
+    interval_rows = (
+        db.query(
+            cast(models.SessionActiveInterval.start_time, Date).label("day"),
+            func.coalesce(func.sum(models.SessionActiveInterval.active_seconds), 0).label("total_seconds"),
+        )
+        .filter(
+            models.SessionActiveInterval.user_id == student_id,
+            cast(models.SessionActiveInterval.start_time, Date) >= start_date,
+            cast(models.SessionActiveInterval.start_time, Date) <= end_date,
+        )
+        .group_by(cast(models.SessionActiveInterval.start_time, Date))
+        .all()
+    )
+
+    # 3. Fallback cho các session cũ chưa có record trong session_active_intervals
+    recorded_session_subquery = (
+        db.query(models.SessionActiveInterval.session_id)
+        .filter(models.SessionActiveInterval.user_id == student_id)
+        .distinct()
+    )
+
+    legacy_rows = (
+        db.query(
+            cast(models.Session.created_at, Date).label("day"),
+            func.coalesce(
+                func.sum(
+                    func.extract("epoch", models.Session.updated_at)
+                    - func.extract("epoch", models.Session.created_at)
+                ),
+                0,
+            ).label("total_seconds"),
+        )
+        .filter(
+            models.Session.user_id == student_id,
+            cast(models.Session.created_at, Date) >= start_date,
+            cast(models.Session.created_at, Date) <= end_date,
+            ~models.Session.id.in_(recorded_session_subquery),
+        )
+        .group_by(cast(models.Session.created_at, Date))
+        .all()
+    )
+
+    data_map: dict[str, int] = {}
+    for r in interval_rows:
+        d_str = str(r.day)
+        secs = float(r.total_seconds or 0)
+        data_map[d_str] = data_map.get(d_str, 0) + max(0, round(secs / 60))
+
+    for r in legacy_rows:
+        d_str = str(r.day)
+        secs = float(r.total_seconds or 0)
+        data_map[d_str] = data_map.get(d_str, 0) + max(0, round(secs / 60))
+
+    # 4. Sinh đầy đủ chuỗi ngày liên tục từ start_date đến end_date (112 - 168 ngày)
+    heatmap_days: list[schemas.HeatmapDayItem] = []
+    total_active_mins = 0
+
+    for i in range(total_days):
+        d = start_date + timedelta(days=i)
+        d_str = str(d)
+        mins = data_map.get(d_str, 0)
+        total_active_mins += mins
+
+        # Phân loại 5 cấp độ mật độ (intensity_level: 0 -> 4) chuẩn GitHub / Socratic
+        if mins <= 0:
+            intensity = 0       # Không học
+        elif mins <= 20:
+            intensity = 1       # 1 - 20 phút
+        elif mins <= 45:
+            intensity = 2       # 21 - 45 phút
+        elif mins <= 75:
+            intensity = 3       # 46 - 75 phút
+        else:
+            intensity = 4       # > 75 phút
+
+        heatmap_days.append(
+            schemas.HeatmapDayItem(
+                date=d_str,
+                minutes=mins,
+                active_minutes=mins,
+                intensity_level=intensity,
+            )
+        )
+
+    return schemas.ActivityHeatmapResponse(
+        student_id=student_id,
+        weeks=round(total_days / 7),
+        days=total_days,
+        start_date=str(start_date),
+        end_date=str(end_date),
+        total_active_minutes=total_active_mins,
+        total_study_hours=round(total_active_mins / 60, 1),
+        data=heatmap_days,
+    )
+
+
+@router.get("/metrics/summary", response_model=schemas.SummaryCardsResponse)
+def get_summary_metrics(
+    student_id: str = Query(..., description="ID của học sinh cần xem"),
+    time_range: str = Query("7d", description="Khoảng thời gian: '7d', '30d' hoặc 'all'"),
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    US 7.1 - Task T7.5:
+    API tính toán 100% số liệu thật từ Database thay thế mock data cho Summary Cards:
+    - completed_problems: Tổng số bài hoàn thành quét từ bảng independence_scores
+    - completed_change: Tỷ lệ tăng/giảm so với chu kỳ trước (+15%, -8%, v.v.)
+    - independence_score & level: Điểm tự lực trung bình và đánh giá theo barem chuẩn 80-60-40
+    - current_streak & max_streak: Chuỗi ngày học liên tục thật tính từ các mốc hoạt động
+    - total_study_hours & avg_minutes_per_day: Thời gian học thực tế (loại bỏ idle)
+    """
+    # 1. Kiểm tra quyền truy cập
+    _verify_access_to_student(current_user, student_id, db)
+
+    today = date.today()
+
+    if time_range == "7d":
+        start_date = today - timedelta(days=6)
+        prev_start = start_date - timedelta(days=7)
+        prev_end = start_date - timedelta(days=1)
+    elif time_range == "30d":
+        start_date = today - timedelta(days=29)
+        prev_start = start_date - timedelta(days=30)
+        prev_end = start_date - timedelta(days=1)
+    else:  # "all"
+        start_date = date(2020, 1, 1)
+        prev_start = None
+        prev_end = None
+
+    # 2. Tổng số bài toán hoàn thành từ bảng independence_scores
+    completed_problems = (
+        db.query(func.count(models.IndependenceScore.id))
+        .filter(
+            models.IndependenceScore.student_id == student_id,
+            cast(models.IndependenceScore.created_at, Date) >= start_date,
+            cast(models.IndependenceScore.created_at, Date) <= today,
+        )
+        .scalar()
+    ) or 0
+
+    # 3. Tính tỷ lệ thay đổi (completed_change) so với chu kỳ tương đương trước đó
+    if prev_start and prev_end:
+        prev_completed = (
+            db.query(func.count(models.IndependenceScore.id))
+            .filter(
+                models.IndependenceScore.student_id == student_id,
+                cast(models.IndependenceScore.created_at, Date) >= prev_start,
+                cast(models.IndependenceScore.created_at, Date) <= prev_end,
+            )
+            .scalar()
+        ) or 0
+
+        if prev_completed == 0:
+            completed_change = f"+{completed_problems} bài" if completed_problems > 0 else "+0%"
+        else:
+            diff = completed_problems - prev_completed
+            pct = round((diff / prev_completed) * 100)
+            completed_change = f"{'+' if pct >= 0 else ''}{pct}%"
+    else:
+        completed_change = "+0%"
+
+    # 4. Điểm Independence trung bình và phân loại mức độ theo barem 80 - 60 - 40
+    score_query = (
+        db.query(func.avg(models.IndependenceScore.score))
+        .filter(
+            models.IndependenceScore.student_id == student_id,
+            cast(models.IndependenceScore.created_at, Date) >= start_date,
+            cast(models.IndependenceScore.created_at, Date) <= today,
+        )
+        .scalar()
+    )
+
+    if score_query is not None:
+        avg_score = round(float(score_query))
+    else:
+        # Fallback điểm trung bình all-time nếu kỳ này chưa giải bài nào
+        all_time_score = (
+            db.query(func.avg(models.IndependenceScore.score))
+            .filter(models.IndependenceScore.student_id == student_id)
+            .scalar()
+        )
+        avg_score = round(float(all_time_score)) if all_time_score is not None else 0
+
+    if avg_score >= 80:
+        independence_level = "Tự lập xuất sắc (ít dùng gợi ý)"
+    elif avg_score >= 60:
+        independence_level = "Tự lập tốt (dùng 1-2 gợi ý)"
+    elif avg_score >= 40:
+        independence_level = "Đang tiến bộ (cần một số gợi ý)"
+    elif avg_score > 0:
+        independence_level = "Cần thêm hỗ trợ sư phạm"
+    else:
+        independence_level = "Chưa có dữ liệu"
+
+    # 5. Tính chuỗi ngày học Streak thật từ DB
+    current_streak, max_streak = calculate_student_streak(student_id, db)
+
+    # 6. Tính thời gian học thực tế (active_seconds loại trừ idle)
+    total_active_seconds = (
+        db.query(func.coalesce(func.sum(models.SessionActiveInterval.active_seconds), 0))
+        .filter(
+            models.SessionActiveInterval.user_id == student_id,
+            cast(models.SessionActiveInterval.start_time, Date) >= start_date,
+            cast(models.SessionActiveInterval.start_time, Date) <= today,
+        )
+        .scalar()
+    ) or 0
+
+    recorded_session_subquery = (
+        db.query(models.SessionActiveInterval.session_id)
+        .filter(models.SessionActiveInterval.user_id == student_id)
+        .distinct()
+    )
+    legacy_seconds = (
+        db.query(
+            func.coalesce(
+                func.sum(
+                    func.extract("epoch", models.Session.updated_at)
+                    - func.extract("epoch", models.Session.created_at)
+                ),
+                0,
+            )
+        )
+        .filter(
+            models.Session.user_id == student_id,
+            cast(models.Session.created_at, Date) >= start_date,
+            cast(models.Session.created_at, Date) <= today,
+            ~models.Session.id.in_(recorded_session_subquery),
+        )
+        .scalar()
+    ) or 0
+
+    total_seconds = float(total_active_seconds) + float(legacy_seconds)
+    total_active_minutes = max(0, round(total_seconds / 60))
+    total_study_hours = round(total_active_minutes / 60, 1)
+
+    # Đếm số ngày có học thực tế trong chu kỳ
+    active_days_count = (
+        db.query(cast(models.SessionActiveInterval.start_time, Date))
+        .filter(
+            models.SessionActiveInterval.user_id == student_id,
+            cast(models.SessionActiveInterval.start_time, Date) >= start_date,
+            cast(models.SessionActiveInterval.start_time, Date) <= today,
+        )
+        .distinct()
+        .count()
+    )
+    avg_minutes_per_day = round(total_active_minutes / active_days_count) if active_days_count > 0 else 0
+
+    return schemas.SummaryCardsResponse(
+        student_id=student_id,
+        time_range=time_range,
+        start_date=str(start_date),
+        end_date=str(today),
+        # Snake_case
+        completed_problems=completed_problems,
+        completed_change=completed_change,
+        independence_score=avg_score,
+        independence_level=independence_level,
+        current_streak=current_streak,
+        max_streak=max_streak,
+        total_study_hours=total_study_hours,
+        avg_minutes_per_day=avg_minutes_per_day,
+        total_active_minutes=total_active_minutes,
+        # CamelCase
+        completedProblems=completed_problems,
+        completedChange=completed_change,
+        independenceScore=avg_score,
+        independenceLevel=independence_level,
+        currentStreak=current_streak,
+        maxStreak=max_streak,
+        totalStudyHours=total_study_hours,
+        avgMinutesPerDay=avg_minutes_per_day,
+    )
