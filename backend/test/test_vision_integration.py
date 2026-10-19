@@ -116,6 +116,39 @@ class TestGeminiVisionIntegration(unittest.TestCase):
         self.assertNotIn("HƯỚNG DẪN XỬ LÝ ẢNH BÀI TOÁN TỪ CLOUDINARY", call_args)
         self.assertGreater(len(chunks), 0)
 
+    @patch("router.load_image_from_url")
+    @patch("google.generativeai.GenerativeModel.generate_content")
+    def test_agent_router_with_session_image_gallery(self, mock_generate, mock_load):
+        """Khi có nhiều ảnh trong session_image_urls, agent_router phải đóng gói đa ảnh kèm chỉ dẫn phân biệt."""
+        img1 = Image.new("RGB", (50, 50), color="blue")
+        img2 = Image.new("RGB", (50, 50), color="red")
+        mock_load.side_effect = [img1, img2]
+
+        mock_response = MagicMock()
+        mock_response.text = "Chào em! Ở bài 3a trong ảnh đầu tiên, ta cần rút gọn biểu thức."
+        mock_generate.return_value = mock_response
+
+        chunks = list(agent_router(
+            target_agent="SCAFFOLDING_AGENT",
+            task_description="Hướng dẫn gợi mở",
+            history_text="",
+            user_query="thầy ơi câu 3a trong ảnh đầu làm sao",
+            session_image_urls=[
+                "https://res.cloudinary.com/demo/image/upload/anh1.jpg",
+                "https://res.cloudinary.com/demo/image/upload/anh2.jpg"
+            ]
+        ))
+
+        mock_generate.assert_called()
+        call_args = mock_generate.call_args[0][0]
+        # Payload phải là list chứa 2 ảnh + prompt
+        self.assertIsInstance(call_args, list)
+        self.assertEqual(len(call_args), 3) # [img1, img2, prompt]
+        self.assertEqual(call_args[0], img1)
+        self.assertEqual(call_args[1], img2)
+        self.assertIn("BỘ SƯU TẬP ẢNH ĐỀ BÀI TRONG PHIÊN HỌC (2 ẢNH)", call_args[2])
+        self.assertGreater(len(chunks), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

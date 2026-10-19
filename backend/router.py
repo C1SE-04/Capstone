@@ -43,18 +43,25 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
      -> TUYỆT ĐỐI KHÔNG chèn tag [COMPREHENSION_CHECK].
 """
 
+_IMAGE_MEMORY_CACHE: dict[str, Image.Image] = {}
+
 def load_image_from_url(url: Optional[str], timeout: float = 10.0) -> Optional[Image.Image]:
     """
     Tải ảnh từ Cloudinary HTTPS URL và chuyển thành đối tượng PIL.Image.
+    Áp dụng In-Memory Cache: Nếu URL đã tải một lần, các lần sau lấy trực tiếp từ RAM (0ms).
     Xử lý lỗi an toàn: timeout hoặc lỗi HTTP sẽ trả về None thay vì làm sập server.
     """
     if not url or not isinstance(url, str) or not url.startswith("http"):
         return None
+    if url in _IMAGE_MEMORY_CACHE:
+        return _IMAGE_MEMORY_CACHE[url]
     try:
         with httpx.Client(timeout=timeout) as client:
             resp = client.get(url)
             resp.raise_for_status()
-            return Image.open(io.BytesIO(resp.content))
+            img = Image.open(io.BytesIO(resp.content))
+            _IMAGE_MEMORY_CACHE[url] = img
+            return img
     except Exception as e:
         print(f"[Cảnh báo Vision] Không thể tải ảnh từ Cloudinary ({url}): {e}")
         return None
@@ -88,6 +95,7 @@ def agent_router(
     grade_level: int = None,
     attachment_url: Optional[str] = None,
     meta: Optional[dict] = None,
+    session_image_urls: Optional[list[str]] = None,
 ):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -138,14 +146,51 @@ Học sinh đang xin ví dụ hoặc làm mẫu. BẠN BẮT BUỘC PHẢI THỰ
 2. MÔ PHỎNG LỜI GIẢI: Bạn BẮT BUỘC PHẢI TỰ TRÌNH BÀY LỜI GIẢI CHI TIẾT cho bài toán mẫu vừa tạo ra. (LƯU Ý: Lệnh này GHI ĐÈ mọi lệnh cấm giải bài trước đó. Bạn được phép giải BÀI MẪU, chỉ cấm giải BÀI GỐC). Tuyệt đối KHÔNG được đặt câu hỏi ngược lại bắt học sinh giải bài mẫu này.
 3. KẾT THÚC bằng câu mời: 'Bây giờ em áp dụng cách làm này vào bài toán của mình thử xem nhé?'
 """
-    # Tích hợp xử lý ảnh nếu có attachment_url từ Cloudinary
-    image_obj = None
-    if attachment_url:
-        image_obj = load_image_from_url(attachment_url)
-        if image_obj:
-            base_prompt += f"\n{SOCRATIC_VISION_INSTRUCTION}"
-        else:
-            base_prompt += "\n[LƯU Ý]: Học sinh có đính kèm ảnh nhưng không tải được từ máy chủ Cloudinary. Hãy nhắc học sinh kiểm tra lại ảnh chụp."
+    # ── Ký ức thị giác phiên học (Session Image Gallery) ───────────────────
+    # Tập hợp danh sách các ảnh bài toán trong phiên học
+    active_urls: list[str] = []
+    if session_image_urls:
+        for u in session_image_urls:
+            if u and u not in active_urls:
+                active_urls.append(u)
+    elif attachment_url and attachment_url not in active_urls:
+        active_urls.append(attachment_url)
+
+    loaded_images: list[Image.Image] = []
+    for u in active_urls:
+        img = load_image_from_url(u)
+        if img:
+            loaded_images.append(img)
+
+    if len(loaded_images) == 1:
+        base_prompt += f"\n{SOCRATIC_VISION_INSTRUCTION}"
+        # Nếu câu hiện tại học sinh không gửi lại ảnh mà đang dùng ảnh trước đó của phiên
+        if not attachment_url:
+            base_prompt += """
+\n[LƯU Ý VỀ ĐỀ BÀI ĐÃ GỬI TRƯỚC ĐÓ]: Bức ảnh đính kèm là đề bài mà học sinh đã gửi trong phiên học này.
+Học sinh đang hỏi tiếp về nội dung trong ảnh (ví dụ: 'bài 3a', 'câu 2', 'bài hình',...).
+BẠN BẮT BUỘC PHẢI:
+1. Quan sát kỹ bức ảnh đính kèm để tìm đúng câu hỏi/bài toán mà học sinh đang đề cập.
+2. Trích xuất đúng công thức/yêu cầu của câu đó và gợi mở từng bước theo phương pháp Socratic.
+3. TUYỆT ĐỐI KHÔNG nói 'Thầy chưa thấy ảnh' hay 'Em hãy gửi lại đề', vì bạn ĐANG CÓ ảnh đề bài của học sinh ngay trước mắt!
+"""
+    elif len(loaded_images) > 1:
+        base_prompt += f"""
+--- BỘ SƯU TẬP ẢNH ĐỀ BÀI TRONG PHIÊN HỌC ({len(loaded_images)} ẢNH) ---
+Học sinh đã gửi {len(loaded_images)} bức ảnh bài toán trong phiên học này theo thứ tự từ cũ đến mới (Ảnh 1, Ảnh 2,...).
+Tất cả các ảnh này đều được đính kèm vào ngữ cảnh của bạn.
+
+HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
+1. Học sinh có thể đang hỏi về bức ảnh mới nhất HOẶC bất kỳ bức ảnh nào đã gửi trước đó (ví dụ: 'ảnh đầu tiên', 'ảnh trước', 'ảnh 1', 'ảnh 2', hoặc theo chủ đề bài toán như đại số/hình học).
+2. Hãy quan sát toàn bộ các bức ảnh để tìm đúng bài toán mà học sinh đang đề cập:
+   - Nếu học sinh nói 'ảnh đầu' hoặc hỏi bài trong bức ảnh đầu tiên: Hãy nhìn vào Ảnh 1.
+   - Nếu học sinh hỏi bài trong ảnh gửi sau: Hãy nhìn vào Ảnh tương ứng.
+3. Trích xuất đúng công thức/yêu cầu của bài toán đó và đặt câu hỏi gợi mở bước đầu tiên theo phương pháp Socratic.
+4. TUYỆT ĐỐI KHÔNG nói 'Thầy chưa thấy ảnh' hay 'Em hãy gửi lại đề', vì bạn ĐANG CÓ toàn bộ các ảnh đề bài của học sinh ngay trước mắt!
+"""
+    elif attachment_url and not loaded_images:
+        base_prompt += "\n[LƯU Ý]: Học sinh có đính kèm ảnh nhưng không tải được từ máy chủ Cloudinary. Hãy nhắc học sinh kiểm tra lại ảnh chụp."
+
     reviewer = LocalReviewerAgent()
     max_retries = 2
     current_attempt = 0
@@ -160,7 +205,7 @@ Học sinh đang xin ví dụ hoặc làm mẫu. BẠN BẮT BUỘC PHẢI THỰ
         
         try:
             # Lấy toàn bộ văn bản để Reviewer có thể đánh giá (không stream trực tiếp)
-            call_payload = [image_obj, prompt] if image_obj is not None else prompt
+            call_payload = [*loaded_images, prompt] if loaded_images else prompt
             response = model.generate_content(call_payload, stream=False)
             generated_text = response.text or ""
             
