@@ -23,6 +23,8 @@ export interface IdleModalProps {
   isOpen?: boolean;
   /** Callback được gọi khi học sinh bấm "Đang học" */
   onContinue: () => void;
+  /** Callback được gọi khi học sinh bấm "Không học" */
+  onStopLearning?: () => void;
   /** ID của phiên học hiện tại (nếu có) để gửi kèm timestamp restart lên BE */
   sessionId?: string;
   /** Cho phép tự lắng nghe event IDLE_DETECTED trên window (uncontrolled mode, mặc định: true) */
@@ -32,6 +34,7 @@ export interface IdleModalProps {
 export function IdleModal({
   isOpen: controlledIsOpen,
   onContinue,
+  onStopLearning,
   sessionId,
   listenToIdleEvent = true,
 }: IdleModalProps) {
@@ -86,6 +89,12 @@ export function IdleModal({
     }
   }, [sessionId, onContinue]);
 
+  // Xử lý khi học sinh chọn "Không học"
+  const handleStopLearning = useCallback(() => {
+    setInternalIsOpen(false);
+    onStopLearning?.();
+  }, [onStopLearning]);
+
   if (!isOpen) return null;
 
   return (
@@ -127,25 +136,38 @@ export function IdleModal({
           tính giờ học. Hãy bấm nút bên dưới để tiếp tục học cùng Cú nhé!
         </p>
 
-        {/* Nút "Đang học" để tiếp tục tính giờ học */}
-        <button
-          type="button"
-          onClick={handleContinueLearning}
-          disabled={isSubmitting}
-          className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-[#E07A5F] to-[#D96B43] hover:from-[#d56d52] hover:to-[#c85e37] text-white font-bold text-base shadow-lg shadow-[#E07A5F]/30 hover:shadow-xl hover:shadow-[#E07A5F]/40 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed cursor-pointer"
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Đang kết nối lại...</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5 text-amber-200 animate-pulse" />
-              <span>Đang học</span>
-            </>
-          )}
-        </button>
+        {/* Cụm 2 nút: "Không học" & "Đang học" */}
+        <div className="flex items-center gap-3 w-full">
+          {/* Nút "Không học" */}
+          <button
+            type="button"
+            onClick={handleStopLearning}
+            disabled={isSubmitting}
+            className="flex-1 py-3 px-4 rounded-2xl bg-[#F7ECE1] hover:bg-[#F1CCA6]/70 text-[#8C4905] font-bold text-sm border border-[#F1CCA6] transition-all active:scale-[0.98] cursor-pointer disabled:opacity-60"
+          >
+            Không học
+          </button>
+
+          {/* Nút "Đang học" để tiếp tục tính giờ học */}
+          <button
+            type="button"
+            onClick={handleContinueLearning}
+            disabled={isSubmitting}
+            className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-[#E07A5F] to-[#D96B43] hover:from-[#d56d52] hover:to-[#c85e37] text-white font-bold text-sm shadow-md shadow-[#E07A5F]/20 hover:shadow-lg hover:shadow-[#E07A5F]/30 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-75 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Đang kết nối...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-amber-200" />
+                <span>Đang học</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

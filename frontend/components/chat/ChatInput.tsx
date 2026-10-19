@@ -22,6 +22,8 @@ import {
 import { createPortal } from "react-dom";
 import { Send, Plus, X, Camera, ImageIcon, AlertCircle, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FileTooLargeToast } from "./FileTooLargeToast";
+import { ImageZoomModal } from "./ImageZoomModal";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -63,6 +65,15 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
   /** Trạng thái mở modal xem trước ảnh to ở giữa màn hình */
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  /** Cảnh báo nổi khi dung lượng file > 5MB */
+  const [fileTooLargeInfo, setFileTooLargeInfo] = useState<{
+    isOpen: boolean;
+    sizeMb: number;
+    message?: string;
+  }>({
+    isOpen: false,
+    sizeMb: 0,
+  });
 
   useEffect(() => {
     setIsMounted(true);
@@ -118,8 +129,18 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
    */
   const attachImage = useCallback((file: File) => {
     setErrorMessage(null);
-    if (!file.type.startsWith("image/") || file.size > MAX_FILE_SIZE) {
-      setErrorMessage("Chỉ hỗ trợ ảnh dưới 5MB");
+    if (!file.type.startsWith("image/")) {
+      setErrorMessage("Vui lòng chỉ chọn định dạng file hình ảnh (PNG, JPG, WEBP...)");
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      const sizeMb = file.size / (1024 * 1024);
+      setFileTooLargeInfo({
+        isOpen: true,
+        sizeMb,
+        message: `Ảnh bạn chọn có dung lượng ${sizeMb.toFixed(1)}MB, vượt quá giới hạn 5MB của hệ thống. Vui lòng chọn hoặc nén ảnh dưới 5MB nhé!`,
+      });
+      setErrorMessage(`Dung lượng ảnh (${sizeMb.toFixed(1)}MB) vượt quá giới hạn 5MB`);
       return;
     }
     setAttachment((prev) => {
@@ -309,47 +330,21 @@ export function ChatInput({ onSendMessage, isLoading, isOffline = false }: ChatI
         </div>
       )}
 
-      {/* ── Modal xem ảnh phóng to ở giữa màn hình khi đính kèm trong ô chat ── */}
-      {isPreviewOpen && isMounted && attachment && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
-          onClick={() => setIsPreviewOpen(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Xem trước ảnh bài toán"
-        >
-          <div
-            className="relative flex flex-col items-center max-w-[95vw] max-h-[92vh] animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Thanh tiêu đề trên đầu */}
-            <div className="w-full flex items-center justify-between pb-3 px-1 text-white">
-              <span className="text-sm font-semibold tracking-wide text-white/90 drop-shadow">
-                Xem trước ảnh bài toán
-              </span>
-              <button
-                onClick={() => setIsPreviewOpen(false)}
-                className="p-1.5 rounded-full bg-white/15 hover:bg-red-500/80 text-white transition-colors cursor-pointer"
-                title="Đóng (hoặc nhấn Esc)"
-                aria-label="Đóng xem ảnh"
-              >
-                <X size={19} />
-              </button>
-            </div>
+      {/* ── [T6.20/Feature] Thông báo nổi khi dung lượng ảnh vượt quá 5MB ── */}
+      <FileTooLargeToast
+        isOpen={fileTooLargeInfo.isOpen}
+        fileSizeMb={fileTooLargeInfo.sizeMb}
+        message={fileTooLargeInfo.message}
+        onClose={() => setFileTooLargeInfo((prev) => ({ ...prev, isOpen: false }))}
+      />
 
-            {/* Ảnh hiển thị lớn ở giữa màn hình */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl bg-black/40 flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={attachment.previewUrl}
-                alt="Ảnh xem trước phóng to"
-                className="max-h-[82vh] w-auto max-w-[92vw] object-contain select-none"
-              />
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* ── Modal xem ảnh phóng to ở giữa màn hình khi đính kèm trong ô chat ── */}
+      <ImageZoomModal
+        isOpen={isPreviewOpen}
+        imageUrl={attachment?.previewUrl || null}
+        imageTitle={`Ảnh đính kèm: ${attachment?.file.name || "Bài tập"}`}
+        onClose={() => setIsPreviewOpen(false)}
+      />
 
       {/* ── Vùng background bo góc chứa các nút và ô nhập liệu ── */}
       <div

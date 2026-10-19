@@ -48,7 +48,7 @@ interface UseIdleTimerReturn {
   reset: () => void;
 }
 
-const DEFAULT_TIMEOUT = 10 * 60 * 1000; // 10 phút
+const DEFAULT_TIMEOUT = 10 * 60 * 1000; // 10 phút theo đặc tả US 6.3
 
 export function useIdleTimer({
   timeout = DEFAULT_TIMEOUT,
