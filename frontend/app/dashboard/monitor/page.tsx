@@ -14,7 +14,7 @@ import { useMonitorContext } from "./layout";
 import { useSession } from "next-auth/react";
 import { SummaryCards, SummaryMetrics } from "@/components/monitor/SummaryCards";
 import { TimeRangeFilter, TimeRange } from "@/components/monitor/TimeRangeFilter";
-import { ActivityHeatmap, generateMockHeatmapData } from "@/components/monitor/ActivityHeatmap";
+import { ActivityHeatmap, HeatmapDay } from "@/components/monitor/ActivityHeatmap";
 import { IndependenceChart, IndependencePoint } from "@/components/monitor/IndependenceChart";
 import { UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import {
@@ -76,6 +76,14 @@ export default function MonitorPage() {
   // T6.9: State cho Line chart điểm Independence
   const [independenceHistory, setIndependenceHistory] = useState<IndependencePoint[]>([]);
   const [isLoadingIndependence, setIsLoadingIndependence] = useState(false);
+
+  // T7.8: State cho Summary Cards thật (thay mock)
+  const [summaryData, setSummaryData] = useState<SummaryMetrics | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+
+  // T7.8: State cho Heatmap thật (thay generateMockHeatmapData)
+  const [heatmapData, setHeatmapData] = useState<HeatmapDay[]>([]);
+  const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
 
   // Tính toán thời gian của tuần đang chọn
   const { weekStart, weekEnd, isCurrentWeek } = useMemo(() => {
@@ -180,6 +188,66 @@ export default function MonitorPage() {
     }
   }, [selectedStudent, session?.access_token]);
 
+  // T7.8: Fetch Summary Cards thật từ /metrics/summary
+  const fetchSummary = useCallback(async () => {
+    if (!selectedStudent || !session?.access_token) return;
+    setIsLoadingSummary(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(
+        `${backendUrl}/metrics/summary?student_id=${selectedStudent.student_id}&time_range=${timeRange}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      );
+      if (!res.ok) throw new Error("Fetch summary failed");
+      const json = await res.json();
+      // Backend trả về camelCase aliases sẵn → map trực tiếp vào SummaryMetrics
+      setSummaryData({
+        completedProblems: json.completedProblems ?? 0,
+        completedChange: json.completedChange ?? "+0%",
+        independenceScore: json.independenceScore ?? 0,
+        independenceLevel: json.independenceLevel ?? "Chưa có dữ liệu",
+        currentStreak: json.currentStreak ?? 0,
+        maxStreak: json.maxStreak ?? 0,
+        totalStudyHours: json.totalStudyHours ?? 0,
+        avgMinutesPerDay: json.avgMinutesPerDay ?? 0,
+      });
+    } catch (err) {
+      console.error("Lỗi fetch summary:", err);
+      setSummaryData(null);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, [selectedStudent, session?.access_token, timeRange]);
+
+  // T7.8: Fetch Heatmap thật từ /metrics/heatmap
+  const fetchHeatmap = useCallback(async () => {
+    if (!selectedStudent || !session?.access_token) return;
+    setIsLoadingHeatmap(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const weeksParam = timeRange === "7d" ? 16 : 24;
+      const res = await fetch(
+        `${backendUrl}/metrics/heatmap?student_id=${selectedStudent.student_id}&weeks=${weeksParam}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      );
+      if (!res.ok) throw new Error("Fetch heatmap failed");
+      const json = await res.json();
+      // json.data: [{date, minutes, intensity_level}] → lấy {date, minutes} cho HeatmapDay
+      const mapped: HeatmapDay[] = (json.data ?? []).map(
+        (item: { date: string; minutes: number }) => ({
+          date: item.date,
+          minutes: item.minutes,
+        })
+      );
+      setHeatmapData(mapped);
+    } catch (err) {
+      console.error("Lỗi fetch heatmap:", err);
+      setHeatmapData([]);
+    } finally {
+      setIsLoadingHeatmap(false);
+    }
+  }, [selectedStudent, session?.access_token, timeRange]);
+
   // Trigger fetch khi đổi học sinh hoặc tuần
   useEffect(() => {
     fetchMetrics();
@@ -190,6 +258,16 @@ export default function MonitorPage() {
     fetchIndependence();
   }, [fetchIndependence]);
 
+  // T7.8: Trigger fetch Summary Cards khi đổi học sinh hoặc timeRange
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
+
+  // T7.8: Trigger fetch Heatmap khi đổi học sinh hoặc timeRange
+  useEffect(() => {
+    fetchHeatmap();
+  }, [fetchHeatmap]);
+
   // Tổng hợp số liệu
   const totalHours = (totalMinutes / 60).toFixed(1);
 
@@ -199,37 +277,17 @@ export default function MonitorPage() {
     return Math.round(totalMinutes / activeDays.length);
   }, [chartData, totalMinutes]);
 
-  // Dữ liệu 4 Summary Cards (T6.8: Phản hồi theo dropdown 7 ngày / 30 ngày)
-  const summaryMetrics: SummaryMetrics = useMemo(() => {
-    if (timeRange === "7d") {
-      return {
-        completedProblems: 18,
-        completedChange: "+15%",
-        independenceScore: 84,
-        independenceLevel: "Tự lập tốt (ít dùng gợi ý)",
-        currentStreak: 5,
-        maxStreak: 12,
-        totalStudyHours: totalMinutes > 0 ? parseFloat(totalHours) : 4.5,
-        avgMinutesPerDay: avgMinutesPerActiveDay > 0 ? avgMinutesPerActiveDay : 38,
-      };
-    } else {
-      return {
-        completedProblems: 64,
-        completedChange: "+28%",
-        independenceScore: 79,
-        independenceLevel: "Tiến bộ rõ rệt",
-        currentStreak: 5,
-        maxStreak: 12,
-        totalStudyHours: 18.5,
-        avgMinutesPerDay: 42,
-      };
-    }
-  }, [timeRange, totalMinutes, totalHours, avgMinutesPerActiveDay]);
-
-  // Dữ liệu Activity Heatmap chuẩn GitHub (Hiển thị 16-24 tuần gần nhất ~ 112 - 168 ngày)
-  const heatmapData = useMemo(() => {
-    return generateMockHeatmapData(timeRange === "7d" ? 112 : 168);
-  }, [timeRange, selectedStudent?.student_id]);
+  // T7.8: Summary Cards dùng dữ liệu thật từ /metrics/summary (xóa mock cũ)
+  const summaryMetrics: SummaryMetrics = summaryData ?? {
+    completedProblems: 0,
+    completedChange: "+0%",
+    independenceScore: 0,
+    independenceLevel: "Chưa có dữ liệu",
+    currentStreak: 0,
+    maxStreak: 0,
+    totalStudyHours: 0,
+    avgMinutesPerDay: 0,
+  };
 
   const handlePrevWeek = () => setWeekOffset((prev) => prev - 1);
   const handleNextWeek = () => {
@@ -310,8 +368,8 @@ export default function MonitorPage() {
         </div>
       </div>
 
-      {/* T6.8: Summary Cards (4 thẻ tóm tắt) */}
-      <SummaryCards metrics={summaryMetrics} isLoading={isLoadingMetrics} />
+      {/* T6.8 / T7.8: Summary Cards dùng dữ liệu thật từ /metrics/summary */}
+      <SummaryCards metrics={summaryMetrics} isLoading={isLoadingSummary} />
 
       {/* Biểu đồ */}
       <section className="bg-white rounded-2xl border border-[#F1CCA6] p-6 shadow-sm">
@@ -374,10 +432,10 @@ export default function MonitorPage() {
         isLoading={isLoadingIndependence}
       />
 
-      {/* T6.6: Biểu đồ nhiệt hoạt động học (Activity Heatmap) */}
+      {/* T6.6 / T7.8: Biểu đồ nhiệt dùng dữ liệu thật từ /metrics/heatmap */}
       <ActivityHeatmap
         data={heatmapData}
-        isLoading={isLoadingMetrics}
+        isLoading={isLoadingHeatmap}
       />
     </div>
   );
