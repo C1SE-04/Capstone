@@ -822,3 +822,104 @@ def get_summary_metrics(
         totalStudyHours=total_study_hours,
         avgMinutesPerDay=avg_minutes_per_day,
     )
+
+
+# ==============================================================================
+# US 7.1 (Task T7.6): API /parent/child-problems
+# Phụ huynh xem danh sách bài toán con đã giải kèm ảnh đề bài, điểm tự lực
+# và đoạn chat tóm tắt — hiển thị trên tab "Bài Toán" của Dashboard.
+# ==============================================================================
+
+@router.get("/parent/child-problems", response_model=schemas.ChildProblemsResponse)
+def get_child_problems(
+    student_id: str = Query(..., description="ID của học sinh cần xem"),
+    page: int = Query(default=1, ge=1, description="Trang hiện tại (bắt đầu từ 1)"),
+    page_size: int = Query(default=10, ge=1, le=50, description="Số bài mỗi trang"),
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Phụ huynh (MONITOR) lấy danh sách bài toán học sinh đã hoàn thành.
+
+    Mỗi bài trả về:
+    - Thời điểm hoàn thành, điểm tự lực, số gợi ý đã dùng, đánh giá mức độ
+    - Ảnh đề bài từ Cloudinary (nếu học sinh upload ảnh trong session đó)
+    - Tóm tắt đoạn chat: 3 tin nhắn USER đầu tiên của session
+    """
+    if current_user.get("role") != "MONITOR":
+        raise HTTPException(status_code=403, detail="Chỉ phụ huynh mới có thể xem dữ liệu này.")
+
+    # Xác minh liên kết phụ huynh – học sinh
+    link = db.query(models.ParentStudentLink).filter(
+        models.ParentStudentLink.parent_id == current_user["id"],
+        models.ParentStudentLink.student_id == student_id,
+    ).first()
+    if not link:
+        raise HTTPException(status_code=403, detail="Bạn không có quyền xem dữ liệu của học sinh này.")
+
+    # --- Đếm tổng số bài đã hoàn thành ---
+    total = (
+        db.query(func.count(models.IndependenceScore.id))
+        .filter(models.IndependenceScore.student_id == student_id)
+        .scalar()
+    ) or 0
+
+    # --- Lấy danh sách bài theo trang, sắp xếp mới nhất lên đầu ---
+    offset = (page - 1) * page_size
+    score_rows = (
+        db.query(models.IndependenceScore, models.Session)
+        .join(models.Session, models.IndependenceScore.session_id == models.Session.id)
+        .filter(models.IndependenceScore.student_id == student_id)
+        .order_by(models.IndependenceScore.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+
+    items: list[schemas.ChildProblemItem] = []
+
+    for score, session in score_rows:
+        # --- Lấy tất cả tin nhắn USER trong session (tối đa 5 để tìm ảnh + tóm tắt) ---
+        user_messages = (
+            db.query(models.Message)
+            .filter(
+                models.Message.session_id == session.id,
+                models.Message.sender_type == "USER",
+            )
+            .order_by(models.Message.created_at.asc())
+            .limit(5)
+            .all()
+        )
+
+        # Ảnh đề bài: ưu tiên tin nhắn USER có attachment_url đầu tiên
+        attachment_url: Optional[str] = None
+        for msg in user_messages:
+            if msg.attachment_url:
+                attachment_url = msg.attachment_url
+                break
+
+        # Tóm tắt đoạn chat: ghép nội dung 3 tin nhắn USER đầu tiên
+        summary_parts = [msg.content for msg in user_messages[:3] if msg.content]
+        chat_summary: Optional[str] = " | ".join(summary_parts) if summary_parts else None
+
+        items.append(
+            schemas.ChildProblemItem(
+                session_id=session.id,
+                session_title=session.title,
+                completed_at=score.created_at,
+                score=score.score,
+                hints_used=score.hints_used,
+                not_understood_count=score.not_understood_count,
+                evaluation=score.evaluation,
+                attachment_url=attachment_url,
+                chat_summary=chat_summary,
+            )
+        )
+
+    return schemas.ChildProblemsResponse(
+        student_id=student_id,
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items,
+    )
