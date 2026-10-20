@@ -6,6 +6,9 @@ import { ChatWindow } from "@/components/chat/ChatWindow";
 import { ChatRightSidebar, ExerciseImage } from "@/components/chat/ChatRightSidebar";
 import { ImageZoomModal } from "@/components/chat/ImageZoomModal";
 import { FileTooLargeToast } from "@/components/chat/FileTooLargeToast";
+// T7.18 (US 7.2): Streak Flame & Badge Modal
+import { StreakBadge } from "@/components/chat/StreakBadge";
+import { BadgeModal, BadgeItem } from "@/components/chat/BadgeModal";
 import { Conversation, Message } from "@/types/chat";
 import { Menu, PanelRight } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -58,6 +61,10 @@ export default function ChatPage() {
     isOpen: false,
     sizeMb: 0,
   });
+
+  // T7.18 (US 7.2): Trạng thái mở modal chúc mừng huy hiệu
+  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
+  const [unlockedBadge, setUnlockedBadge] = useState<Partial<BadgeItem> | undefined>(undefined);
 
   const isOnline = useSyncExternalStore(
     subscribeOnline,
@@ -243,6 +250,20 @@ export default function ChatPage() {
               detail: resData.independence,
             })
           );
+
+          // T7.18 (US 7.2): Nếu đạt 100 điểm tự lập -> Mở khóa huy hiệu "Tự lập nhí"
+          if (resData.independence.score === 100 || notUnderstoodCount === 0) {
+            setUnlockedBadge({
+              id: "independence_100",
+              type: "independence_100",
+              title: "Tự Lập Nhí 🏅",
+              subtitle: "Đạt 100 điểm tự lập",
+              description: "Em đã hoàn thành xuất sắc bài toán với 100 điểm tự lực, không cần bất kỳ gợi ý nào!",
+              iconUrl: "/badges/orange_star_badge.svg",
+              unlocked: true,
+            });
+            setIsBadgeModalOpen(true);
+          }
         }
       }
     } catch (e) {
@@ -875,8 +896,16 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Nút bật/tắt thanh ảnh bài tập bên phải (giống Zalo) */}
+          {/* Khu vực Streak ngọn lửa & Nút bật/tắt thanh ảnh bài tập bên phải */}
           <div className="flex items-center gap-2">
+            {/* T7.18: Biểu tượng ngọn lửa hoạt hình Streak 🔥 */}
+            <StreakBadge
+              onClick={() => {
+                setUnlockedBadge(undefined); // Mở xem bộ sưu tập huy hiệu
+                setIsBadgeModalOpen(true);
+              }}
+            />
+
             <button
               onClick={() => setIsRightSidebarOpen((prev) => !prev)}
               className={cn(
@@ -949,6 +978,13 @@ export default function ChatPage() {
         fileSizeMb={fileTooLargeState.sizeMb}
         message={fileTooLargeState.message}
         onClose={() => setFileTooLargeState((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* T7.18: Modal chúc mừng mở khóa Huy hiệu với hiệu ứng pháo hoa */}
+      <BadgeModal
+        isOpen={isBadgeModalOpen}
+        onClose={() => setIsBadgeModalOpen(false)}
+        activeBadge={unlockedBadge}
       />
     </div>
   );

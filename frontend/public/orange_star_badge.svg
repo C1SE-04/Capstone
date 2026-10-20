@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <!-- Nền ruy băng đuôi phía sau -->
+  <g>
+    <!-- Đuôi ruy băng bên trái -->
+    <path d="M 230 430 L 160 520 L 250 490 L 275 455 Z" fill="#B33614"/>
+    <path d="M 160 520 L 250 490 L 230 430 Z" fill="#8C240B"/>
+    
+    <!-- Đuôi ruy băng bên phải -->
+    <path d="M 570 430 L 640 520 L 550 490 L 525 455 Z" fill="#B33614"/>
+    <path d="M 640 520 L 550 490 L 570 430 Z" fill="#8C240B"/>
+
+    <!-- Vòng tròn nền ngoài cùng (Cam đậm) -->
+    <circle cx="400" cy="290" r="210" fill="#E65100"/>
+    
+    <!-- Viền nổi màu cam vàng -->
+    <circle cx="400" cy="290" r="185" fill="#F57C00" stroke="#FFA726" stroke-width="16"/>
+
+    <!-- Vòng tròn trung tâm (Cam sáng) -->
+    <circle cx="400" cy="290" r="155" fill="#FF9800"/>
+
+    <!-- Nửa bóng đổ tinh tế cho khối huy hiệu -->
+    <path d="M 400 135 A 155 155 0 0 1 400 445 Z" fill="#E65100" opacity="0.25"/>
+
+    <!-- Biểu tượng Ngôi sao ở giữa -->
+    <polygon points="400,165 435,245 520,245 451,296 477,378 400,327 323,378 349,296 280,245 365,245" 
+             fill="#FFE082" stroke="#FFB300" stroke-width="8" stroke-linejoin="round"/>
+             
+    <!-- Nửa đổ bóng ngôi sao -->
+    <path d="M 400,165 L 435,245 L 520,245 L 451,296 L 477,378 L 400,327 Z" 
+          fill="#FFB300" opacity="0.35"/>
+
+    <!-- Dải ruy băng chính phía trước -->
+    <path d="M 210 405 Q 400 460 590 405 L 600 465 Q 400 525 200 465 Z" fill="#FF5722"/>
+    <!-- Viền trên ruy băng tạo độ sáng -->
+    <path d="M 210 405 Q 400 460 590 405 L 595 415 Q 400 470 205 415 Z" fill="#FF8A65" opacity="0.6"/>
+    <!-- Viền dưới ruy băng tạo bóng đổ -->
+    <path d="M 200 465 Q 400 525 600 465 L 598 457 Q 400 517 202 457 Z" fill="#D84315" opacity="0.5"/>
+  </g>
+</svg>
