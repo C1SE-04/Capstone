@@ -26,19 +26,70 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-@keyframes fade-in-down {
+@keyframes message-pop-in {
   0% {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(8px) scale(0.98);
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
+@keyframes drawer-slide-right {
+  0% {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes modal-scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes subtle-fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Các lớp tiện ích animation chuyển động tự nhiên theo chuẩn Emil Kowalski */
+.animate-message-pop {
+  animation: message-pop-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-drawer-in {
+  animation: drawer-slide-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform;
+}
+
+.animate-modal-in {
+  animation: modal-scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-fade-in {
+  animation: subtle-fade-in 0.2s ease-out forwards;
+}
+
 .animate-fade-in-down {
-  animation: fade-in-down 0.3s ease-out;
+  animation: fade-in-down 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Đảm bảo tất cả các thành phần có thể bấm được đều hiện dấu tay (cursor pointer) */

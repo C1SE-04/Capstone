@@ -71,7 +71,7 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
       {/* Sidebar container */}
       <aside
         className={cn(
-          "fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#F1CCA6] flex flex-col h-full transform transition-transform duration-300 ease-in-out border-r border-[#C1762A]/20",
+          "fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#F1CCA6] flex flex-col h-full transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-[#C1762A]/20",
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           className
         )}

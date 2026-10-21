@@ -130,13 +130,13 @@ export function BookmarkChatDrawer({
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop mờ nền */}
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-200"
+        className="fixed inset-0 bg-black/40 backdrop-blur-[2px] animate-fade-in"
         onClick={onClose}
       />
 
       {/* Drawer trượt từ bên phải */}
       <div
-        className="relative w-full max-w-xl h-full bg-[#F7ECE1] shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-200 border-l border-[#F1CCA6]"
+        className="relative w-full max-w-xl h-full bg-[#F7ECE1] shadow-2xl flex flex-col z-10 animate-drawer-in border-l border-[#F1CCA6]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header */}

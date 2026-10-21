@@ -79,8 +79,8 @@ export function ChatMessage({
   }, [isPreviewOpen]);
 
   return (
-    // Wrap chính: flex để đẩy bong bóng sang phải (user) hoặc trái (assistant)
-    <div className={cn("flex w-full mb-6", isUser ? "justify-end" : "justify-start")}>
+    // Wrap chính: flex để đẩy bong bóng sang phải (user) hoặc trái (assistant) với hiệu ứng pop-in mượt mà
+    <div className={cn("flex w-full mb-5 animate-message-pop", isUser ? "justify-end" : "justify-start")}>
       <div className={cn("flex flex-col max-w-[85%] md:max-w-[75%]", isUser ? "items-end" : "items-start")}>
         {/* Bong bóng chat */}
         <div

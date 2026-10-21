@@ -848,11 +848,12 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[100dvh] w-screen bg-[#F7ECE1] overflow-hidden font-sans">
-      {/* Sidebar bên trái */}
+      {/* Sidebar bên trái với transition trượt thu gọn / mở rộng mượt mà */}
       <div
-        className={`${
-          isSidebarCollapsed ? "hidden" : "flex"
-        } transition-all duration-300 h-full`}
+        className={cn(
+          "h-full overflow-hidden transition-[width,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          isSidebarCollapsed ? "w-0 opacity-0 pointer-events-none" : "w-64 opacity-100"
+        )}
       >
         <ChatSidebar
           isMobileOpen={isMobileOpen}
