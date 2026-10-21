@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional
 import os
 import json
 import google.generativeai as genai
+from schemas import AiInsightReportResponse
 
 # ==========================================
 # 1. HẰNG SỐ SYSTEM INSTRUCTION SƯ PHẠM
@@ -160,24 +161,27 @@ def generate_parent_learning_insights(
         response = model.generate_content(prompt_content)
         raw_text = response.text.strip()
 
-        # Dọn dẹp markdown nếu có (phòng hờ)
+        # Dọn dẹp markdown nếu có
         if raw_text.startswith("```json"):
             raw_text = raw_text[7:]
         if raw_text.endswith("```"):
             raw_text = raw_text[:-3]
         raw_text = raw_text.strip()
 
-        result_json = json.loads(raw_text)
-        return result_json
-
+        result_dict = json.loads(raw_text)
+        
+        # Xác thực cấu trúc dữ liệu trước khi trả về
+        validated_report = AiInsightReportResponse.model_validate(result_dict)
+        return validated_report.model_dump()
     except Exception as e:
         print(f"[Cảnh báo AI Insights] Lỗi khi gọi Gemini sinh nhận xét sư phạm: {e}")
-        return _fallback_insights(
+        fallback_data = _fallback_insights(
             student_name=student_name,
             total_problems=total_problems_completed,
             score=average_independence_score,
             reason=str(e)
         )
+        return AiInsightReportResponse.model_validate(fallback_data).model_dump()
 
 
 def _fallback_insights(student_name: str, total_problems: int, score: float, reason: str = "") -> Dict[str, Any]:
