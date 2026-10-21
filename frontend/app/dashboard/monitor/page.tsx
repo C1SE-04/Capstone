@@ -13,6 +13,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useMonitorContext } from "./layout";
 import { useSession } from "next-auth/react";
 import { SummaryCards, SummaryMetrics } from "@/components/monitor/SummaryCards";
+import { AIInsightsCard } from "@/components/monitor/AIInsightsCard";
 import { TimeRangeFilter, TimeRange } from "@/components/monitor/TimeRangeFilter";
 import { ActivityHeatmap, HeatmapDay } from "@/components/monitor/ActivityHeatmap";
 import { IndependenceChart, IndependencePoint } from "@/components/monitor/IndependenceChart";
@@ -371,6 +372,13 @@ export default function MonitorPage() {
 
       {/* T6.8 / T7.8: Summary Cards dùng dữ liệu thật từ /metrics/summary */}
       <SummaryCards metrics={summaryMetrics} isLoading={isLoadingSummary} />
+
+      {/* T7.7: Khối nhận xét AI thông minh (AI Learning Insights) */}
+      <AIInsightsCard
+        key={`insights-${selectedStudent.student_id}`}
+        studentId={selectedStudent.student_id}
+        studentName={displayName}
+      />
 
       {/* Biểu đồ */}
       <section className="bg-white rounded-2xl border border-[#F1CCA6] p-6 shadow-sm">
