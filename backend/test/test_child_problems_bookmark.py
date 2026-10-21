@@ -1,4 +1,4 @@
-﻿# US 7.1 (Task T7.6) & US 7.2 (Task T7.7): Tests cho API /parent/child-problems và schema Bookmark
+# US 7.1 (Task T7.6) & US 7.2 (Task T7.7): Tests cho API /parent/child-problems và schema Bookmark
 # Kiểm tra:
 # 1. GET /parent/child-problems trả đúng dữ liệu (score, ảnh, chat tóm tắt)
 # 2. Phân quyền: MONITOR xem được, STUDENT bị chặn, MONITOR không có link bị chặn
@@ -217,6 +217,46 @@ def test_bookmark_unique_index_exists():
     print(f"  [OK] UNIQUE index: {row[0]}")
 
 
+def test_bookmark_student_created_index_exists():
+    """US 7.2 - Task 7.21: Composite index ix_bookmarks_student_created tồn tại và tối ưu DESC."""
+    from sqlalchemy import text
+    from database import engine
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT indexname, indexdef
+            FROM pg_indexes
+            WHERE tablename = 'problem_bookmarks'
+              AND indexname = 'ix_bookmarks_student_created';
+        """))
+        row = result.fetchone()
+    assert row is not None, "Composite index ix_bookmarks_student_created không tồn tại!"
+    indexdef = row[1]
+    assert "student_id" in indexdef, "Index thiếu cột student_id"
+    assert "created_at" in indexdef, "Index thiếu cột created_at"
+    assert "DESC" in indexdef.upper(), "Index chưa được tối ưu với created_at DESC"
+    print(f"  [OK] Composite index tối ưu: {row[0]} -> {indexdef}")
+
+
+def test_bookmark_query_plan_performance():
+    """US 7.2 - Task 7.21: Verify query EXPLAIN sử dụng ix_bookmarks_student_created không bị Seq Scan."""
+    from sqlalchemy import text
+    from database import engine
+    with engine.connect() as conn:
+        conn.execute(text("SET enable_bitmapscan = off;"))
+        result = conn.execute(text("""
+            EXPLAIN (ANALYZE, BUFFERS)
+            SELECT * FROM problem_bookmarks
+            WHERE student_id = :student_id
+            ORDER BY created_at DESC
+            LIMIT 10;
+        """), {"student_id": TEST_STUDENT_ID})
+        plan_lines = [r[0] for r in result.fetchall()]
+        plan_text = " ".join(plan_lines)
+    assert "ix_bookmarks_student_created" in plan_text, f"Query không sử dụng index ix_bookmarks_student_created: {plan_text}"
+    assert "Seq Scan" not in plan_text, f"Query bị rơi vào Seq Scan: {plan_text}"
+    print(f"  [OK] EXPLAIN plan tối ưu Index Scan thành công: {plan_lines[0]}")
+
+
 if __name__ == "__main__":
     tests = [
         test_child_problems_success,
@@ -227,6 +267,8 @@ if __name__ == "__main__":
         test_child_problems_no_link_forbidden,
         test_bookmark_table_exists,
         test_bookmark_unique_index_exists,
+        test_bookmark_student_created_index_exists,
+        test_bookmark_query_plan_performance,
     ]
     passed = 0
     failed = 0
@@ -241,3 +283,4 @@ if __name__ == "__main__":
             failed += 1
     print(f"\n{'='*50}")
     print(f"Results: {passed} PASSED, {failed} FAILED")
+
