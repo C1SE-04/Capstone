@@ -452,3 +452,32 @@ class BadgeCheckResponse(BaseModel):
     max_streak: int = 0
     total_problems: int = 0
     avg_independence_score: int = 0
+
+
+class BoundaryMessageItem(BaseModel):
+    """Một tin nhắn nằm trong phạm vi ranh giới bài toán đã được lọc sạch."""
+    index: int
+    sender_type: str                     # "USER" hoặc "AGENT_TUTOR"
+    content: str
+    attachment_url: Optional[str] = None
+    created_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ProblemBoundaryResult(BaseModel):
+    """
+    Kết quả trích xuất ranh giới bài toán từ Gemini.
+    Đảm bảo loại bỏ bài cũ bỏ dở và giữ đúng phạm vi bài vừa hoàn thành.
+    """
+    extracted_problem: str               # Đề bài toán sạch của bài vừa hoàn thành
+    boundary_start_index: int            # Vị trí tin nhắn bắt đầu bài toán trong session
+    boundary_end_index: int              # Vị trí tin nhắn kết thúc bài toán
+    filtered_messages: list[BoundaryMessageItem] = []  # Danh sách tin nhắn chỉ thuộc bài này
+    has_abandoned_problem: bool = False  # Có bài cũ bị bỏ dở trước đó không
+    abandoned_problem_summary: Optional[str] = None    # Tóm tắt bài bị bỏ dở (nếu có)
+    is_fallback: bool = False
+
+    class Config:
+        from_attributes = True

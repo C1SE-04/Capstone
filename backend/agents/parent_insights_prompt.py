@@ -130,9 +130,9 @@ def generate_parent_learning_insights(
 
     genai.configure(api_key=key)
 
-    # Sử dụng model gemini-2.5-flash hoặc gemini-3.5-flash-lite có sẵn trong dự án
+    # Sử dụng model gemini-3.5-flash-lite đồng bộ toàn dự án
     # Nhiệt độ thấp (0.25) để báo cáo mang tính sư phạm chuẩn xác, không bịa đặt số liệu
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
     
     generation_config = {
         "temperature": 0.25,
