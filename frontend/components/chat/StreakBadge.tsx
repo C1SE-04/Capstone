@@ -102,60 +102,38 @@ export function StreakBadge({
         onClick={onClick}
         aria-label={`Chuỗi ngày học: ${streak} ngày`}
         className={cn(
-          "group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-300 border shadow-sm select-none cursor-pointer transform active:scale-95",
+          "group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-150 border select-none cursor-pointer active:scale-95",
           hasStreak
-            ? "bg-gradient-to-r from-amber-500/15 via-orange-500/20 to-amber-500/15 text-[#C1762A] border-[#F7AD62] hover:border-[#C1762A] hover:shadow-orange-200/60 hover:shadow-md"
-            : "bg-white text-gray-500 border-gray-200 hover:border-orange-300 hover:text-gray-700",
+            ? "bg-white text-stone-900 border-[#C1762A]/40 shadow-xs hover:border-[#C1762A] hover:bg-[#F7ECE1]/30"
+            : "bg-white text-stone-400 border-stone-200 hover:border-stone-300 hover:text-stone-600",
           className
         )}
       >
         {/* Khối Hoạt hình Ngọn lửa */}
-        <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
-          {lottieAnimation ? (
-            <div className="w-6 h-6 -my-1 pointer-events-none">
-              <Lottie
-                animationData={lottieAnimation}
-                loop={true}
-                autoplay={true}
-                style={{ width: "100%", height: "100%" }}
-              />
-            </div>
-          ) : (
-            // Animated SVG Flame Fallback (Mượt mà 60fps, bập bùng rực lửa)
-            <div className="relative flex items-center justify-center">
-              {/* Vầng sáng phía sau */}
-              {hasStreak && (
-                <span className="absolute inset-0 rounded-full bg-orange-400/40 blur-xs animate-ping duration-1000" />
-              )}
-              <Flame
-                size={18}
-                className={cn(
-                  "transition-all duration-300",
-                  hasStreak
-                    ? "fill-orange-500 text-amber-500 drop-shadow-[0_2px_4px_rgba(249,115,22,0.4)] animate-pulse"
-                    : "text-gray-400 fill-transparent"
-                )}
-              />
-              {/* Đốm lửa nhỏ nhấp nháy */}
-              {hasStreak && (
-                <span className="absolute -top-1 -right-0.5 w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce" />
-              )}
-            </div>
-          )}
+        <div className="relative w-4 h-4 flex items-center justify-center shrink-0">
+          <Flame
+            size={16}
+            className={cn(
+              "transition-colors duration-200",
+              hasStreak
+                ? "fill-[#C1762A] text-[#8C4905]"
+                : "text-stone-300 fill-transparent"
+            )}
+          />
         </div>
 
         {/* Số ngày Streak */}
         <span
           className={cn(
-            "font-black tracking-tight text-sm",
-            hasStreak ? "text-[#C1762A]" : "text-gray-500"
+            "font-bold tracking-tight text-sm tabular-nums",
+            hasStreak ? "text-[#8C4905]" : "text-stone-400"
           )}
         >
           {streak}
         </span>
 
         {/* Nhãn chữ trên desktop */}
-        <span className="hidden md:inline font-semibold text-xs text-[#8C4905]/80">
+        <span className="hidden md:inline font-medium text-xs text-stone-600">
           ngày
         </span>
       </button>
@@ -169,8 +147,8 @@ export function StreakBadge({
           </div>
           <p className="text-gray-600 mb-2 leading-relaxed">
             {hasStreak
-              ? `Bạn đã học liên tục ${streak} ngày! Duy trì mỗi ngày để không bị mất ngọn lửa 🔥`
-              : "Học bài ngay hôm nay để thắp sáng chuỗi ngày học liên tục! 🔥"}
+              ? `Bạn đã học liên tục ${streak} ngày! Hãy duy trì mỗi ngày để giữ vững chuỗi học tập.`
+              : "Học bài ngay hôm nay để bắt đầu chuỗi ngày học liên tục!"}
           </p>
           {maxStreak > 0 && (
             <div className="flex items-center gap-1.5 pt-1.5 border-t border-gray-100 text-[11px] text-[#C1762A] font-semibold">

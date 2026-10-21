@@ -497,7 +497,7 @@ export function ChatInput({
               ? "Mất kết nối. Đang chờ kết nối lại..."
               : "Hỏi SocraticKid..."
           }
-          className="flex-1 max-h-[150px] min-h-[44px] py-3 bg-transparent text-[#000000] placeholder:text-[#8C4905]/60 outline-none resize-none overflow-y-auto font-medium disabled:cursor-not-allowed"
+          className="flex-1 max-h-[150px] min-h-[44px] py-3 bg-transparent text-stone-900 placeholder:text-[#8C4905]/60 outline-none resize-none overflow-y-auto font-medium disabled:cursor-not-allowed"
           rows={1}
           disabled={isLoading || isOffline}
         />
@@ -510,7 +510,7 @@ export function ChatInput({
           className={cn(
             "p-2.5 rounded-full flex items-center justify-center transition-all self-end mb-0.5 shadow-sm shrink-0",
             canSend
-              ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105"
+              ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 active:scale-95 cursor-pointer"
               : "bg-[#D9D9D9] text-gray-400 cursor-not-allowed",
           )}
           title={isOffline ? "Không thể gửi khi mất kết nối" : "Gửi tin nhắn"}

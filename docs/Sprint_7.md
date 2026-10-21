@@ -95,7 +95,7 @@
     5. **Giám sát An toàn & Chất lượng AI** (`admin/safety/page.tsx`): Danh sách cảnh báo vi phạm ngôn từ, nhật ký các câu hỏi bị chặn bởi Safety Agent, thống kê tỷ lệ học sinh bấm "Chưa hiểu".
     6. **Cài đặt Hệ thống** (`admin/settings/page.tsx`): Giao diện cấu hình tham số AI (chọn Model, giới hạn token, nhiệt độ sáng tạo temperature) và thông tin phiên bản.
 - **Tasks:**
-  - **T7.23** [Bảo] [Design] Thiết kế toàn bộ Design System & Mockup Figma cho Admin Portal: Hệ màu quản trị (Dark slate / Royal blue), typography, bộ icon, các layout con. (3h)
+  - **T7.23** [Bảo] [Design] Thiết kế toàn bộ Design System & Mockup Figma cho Admin Portal: Chuẩn hóa hệ màu nhận diện SocraticKid (Cam chủ đạo #C1762A, hover #8C4905, nền kem #F7ECE1, #F1CCA6), typography, bộ icon, các layout con. (3h)
   - **T7.24** [Thiên] [FE] Dựng khung Admin Layout tổng thể (`admin/layout.tsx`, `AdminSidebar.tsx`, `AdminHeader.tsx`, `Breadcrumbs.tsx`) với cơ chế chuyển tab mượt mà. (2.5h)
   - **T7.25** [Thiên] [FE] Code Trang Dashboard Thống kê Tổng quan (`admin/page.tsx` - 280 dòng): 4 thẻ KPI tổng, biểu đồ DAU/MAU và biểu đồ tiêu thụ Token AI (Recharts). (2.5h)
   - **T7.26** [Bảo] [FE] Code Trang Quản lý Người dùng (`admin/users/page.tsx` - 320 dòng): Data Table danh sách user, thanh search, bộ lọc role, badge trạng thái, modal chi tiết user và nút Khóa/Mở tài khoản. (3h)

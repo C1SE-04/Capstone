@@ -57,7 +57,7 @@ export function LessonCard({ id, title, description, thumbnail, progress, onClic
         <h3 className="text-xl font-bold text-[#8C4905] mb-2 line-clamp-1 group-hover:text-[#CB6600] transition-colors">
           {title}
         </h3>
-        <p className="text-[#000000]/70 text-sm mb-5 flex-1 line-clamp-2 leading-relaxed">
+        <p className="text-stone-600 text-sm mb-5 flex-1 line-clamp-2 leading-relaxed">
           {description}
         </p>
 

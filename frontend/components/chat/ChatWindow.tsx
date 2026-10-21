@@ -291,6 +291,7 @@ export function ChatWindow({
                   <ChatMessage
                     key={msg.id}
                     message={msg}
+                    sessionId={sessionId}
                     onRetry={onRetryMessage}
                     {...(isLastAssistantMsg && {
                       onUnderstood,

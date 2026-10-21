@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Message } from "@/types/chat";
 import { UnderstandingButtons } from "./UnderstandingButtons";
 import { ImageZoomModal } from "./ImageZoomModal";
+import { SaveBookmarkButton } from "./SaveBookmarkButton";
 
 export type MessageProps = Message;
 
@@ -32,6 +33,8 @@ interface ChatMessageProps {
   isAiLoading?: boolean;
   /** US4.1: So lan nhan Chua hieu (tu ChatPage, khong bi reset khi remount) */
   notUnderstoodCount?: number;
+  /** T7.17: Session ID hien tai de luu vao So tay */
+  sessionId?: string | null;
 }
 
 export function ChatMessage({
@@ -42,6 +45,7 @@ export function ChatMessage({
   onSendExplanation,
   isAiLoading,
   notUnderstoodCount = 0,
+  sessionId,
 }: ChatMessageProps) {
   // Biến cờ kiểm tra xem tin nhắn có phải của user hay không
   const isUser = message.role === "user";
@@ -87,8 +91,8 @@ export function ChatMessage({
                 ? "bg-red-50 text-red-900 border border-red-300 rounded-tr-sm"
                 : "bg-[#C1762A] text-white rounded-tr-sm"
               : message.emotion === "correct"
-              ? "bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 text-[#000000] rounded-tl-sm animate-in fade-in zoom-in-95 duration-500"
-              : "bg-white border border-[#F1CCA6] text-[#000000] rounded-tl-sm",
+              ? "bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 text-stone-900 rounded-tl-sm animate-in fade-in zoom-in-95 duration-500"
+              : "bg-white border border-[#F1CCA6] text-stone-900 rounded-tl-sm",
             isSending && "opacity-80"
           )}
         >
@@ -151,7 +155,7 @@ export function ChatMessage({
           ) : (
             // Tin nhắn của assistant: Cần render thành Markdown và Toán học.
             // Sử dụng các class `prose-*` của Tailwind (hoặc tùy chỉnh thủ công) để định dạng các thẻ HTML (h1, p, pre, code, table) bên trong Markdown.
-            <div className="markdown-prose prose-sm max-w-none text-[#000000] 
+            <div className="markdown-prose prose-sm max-w-none text-stone-900 
               prose-p:leading-relaxed prose-p:mb-3 
               prose-pre:bg-[#D9D9D9]/30 prose-pre:text-[#8C4905] prose-pre:p-3 prose-pre:rounded-lg
               prose-code:text-[#CB6600] prose-code:bg-[#F1CCA6]/40 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
@@ -173,6 +177,11 @@ export function ChatMessage({
             </div>
           )}
         </div>
+
+        {/* T7.17: Nút ⭐ "Lưu vào Sổ tay" xuất hiện ngay dưới bong bóng chúc mừng khi học sinh đã hiểu */}
+        {!isUser && message.emotion === "correct" && (
+          <SaveBookmarkButton sessionId={sessionId} />
+        )}
 
         {/* US4.1: Nut Da hieu / Chua hieu - chi hien duoi tin nhan cuoi cung cua AI */}
         {!isUser && onUnderstood && onNotUnderstood && onSendExplanation && (

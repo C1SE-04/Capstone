@@ -23,7 +23,7 @@ export const DEFAULT_BADGES: BadgeItem[] = [
   {
     id: "independence_100",
     type: "independence_100",
-    title: "Tự Lập Nhí 🏅",
+    title: "Tự Lập Nhí",
     subtitle: "Đạt 100 điểm tự lập",
     description: "Hoàn thành trọn vẹn bài toán với 100 điểm tự lực, không cần đến bất kỳ gợi ý nào!",
     iconUrl: "/badges/orange_star_badge.svg",
@@ -32,7 +32,7 @@ export const DEFAULT_BADGES: BadgeItem[] = [
   {
     id: "streak_3",
     type: "streak_3",
-    title: "Kiên Trì Bền Bỉ 🔥",
+    title: "Kiên Trì Bền Bỉ",
     subtitle: "Học 3 ngày liên tiếp",
     description: "Duy trì ngọn lửa học tập liên tục trong 3 ngày không gián đoạn!",
     iconUrl: "/badges/orange_star_badge.svg",
@@ -41,7 +41,7 @@ export const DEFAULT_BADGES: BadgeItem[] = [
   {
     id: "photo_solver",
     type: "photo_solver",
-    title: "Thám Tử Hình Ảnh 📸",
+    title: "Thám Tử Hình Ảnh",
     subtitle: "Giải bài toán bằng ảnh",
     description: "Tải lên và chinh phục thành công bài toán đầu tiên bằng ảnh chụp!",
     iconUrl: "/badges/orange_star_badge.svg",
@@ -76,7 +76,7 @@ export function BadgeModal({
   const currentBadge: BadgeItem = {
     id: activeBadge?.id || "independence_100",
     type: activeBadge?.type || "independence_100",
-    title: activeBadge?.title || "Tự Lập Nhí 🏅",
+    title: activeBadge?.title || "Tự Lập Nhí",
     subtitle: activeBadge?.subtitle || "Đạt 100 điểm tự lập",
     description:
       activeBadge?.description ||
@@ -191,28 +191,28 @@ export function BadgeModal({
         </button>
 
         {/* Thanh chọn Tab: Chúc mừng vừa mở / Bộ sưu tập */}
-        <div className="flex items-center justify-center gap-2 p-1 bg-[#F7ECE1] rounded-2xl mb-6 mx-auto w-fit">
+        <div className="flex items-center justify-center gap-1.5 p-1 bg-[#F7ECE1] rounded-2xl mb-6 mx-auto w-fit">
           <button
             onClick={() => setActiveTab("unlock")}
             className={cn(
-              "px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+              "px-4 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer",
               activeTab === "unlock"
-                ? "bg-white text-[#C1762A] shadow-xs"
-                : "text-[#8C4905]/70 hover:text-[#8C4905]"
+                ? "bg-white text-stone-900 shadow-xs"
+                : "text-stone-500 hover:text-stone-800"
             )}
           >
-            Huy hiệu mới 🎉
+            Huy hiệu mới
           </button>
           <button
             onClick={() => setActiveTab("collection")}
             className={cn(
-              "px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+              "px-4 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5",
               activeTab === "collection"
-                ? "bg-white text-[#C1762A] shadow-xs"
-                : "text-[#8C4905]/70 hover:text-[#8C4905]"
+                ? "bg-white text-stone-900 shadow-xs"
+                : "text-stone-500 hover:text-stone-800"
             )}
           >
-            <Trophy size={13} />
+            <Trophy size={13} className="text-[#C1762A]" />
             Bộ sưu tập
           </button>
         </div>
@@ -220,31 +220,9 @@ export function BadgeModal({
         {/* TAB 1: HIỂN THỊ CHÚC MỪNG MỞ KHÓA */}
         {activeTab === "unlock" && (
           <div className="flex flex-col items-center">
-            {/* Vầng hào quang ánh sáng xoay tròn phía sau Huy hiệu */}
-            <div className="relative w-40 h-40 flex items-center justify-center my-2">
-              {/* Sunburst Glow Halo */}
-              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-yellow-300/40 via-amber-400/30 to-orange-500/20 blur-xl animate-pulse" />
-              
-              {/* Vòng tia sáng */}
-              <div
-                className="absolute inset-[-12px] rounded-full border-2 border-dashed border-amber-300/60 animate-spin"
-                style={{ animationDuration: "14s" }}
-              />
-
-              {/* Ngôi sao lấp lánh xung quanh */}
-              <Sparkles
-                size={24}
-                className="absolute top-2 left-3 text-amber-400 animate-bounce"
-                style={{ animationDelay: "0.2s" }}
-              />
-              <Sparkles
-                size={20}
-                className="absolute bottom-3 right-4 text-orange-400 animate-bounce"
-                style={{ animationDelay: "0.5s" }}
-              />
-
-              {/* Hình Huy Hiệu SVG với hiệu ứng Pop-in Scale */}
-              <div className="relative z-10 w-32 h-32 transform transition-transform hover:scale-105 duration-300 drop-shadow-[0_10px_20px_rgba(230,81,0,0.35)] animate-in zoom-in-50 duration-500">
+            {/* Khung hiển thị huy hiệu thanh lịch */}
+            <div className="relative w-36 h-36 flex items-center justify-center my-3 rounded-3xl bg-[#F7ECE1]/50 border border-[#F1CCA6]/60">
+              <div className="relative z-10 w-24 h-24 transform transition-transform hover:scale-105 duration-300">
                 <img
                   src={currentBadge.iconUrl}
                   alt={currentBadge.title}
@@ -253,29 +231,29 @@ export function BadgeModal({
               </div>
             </div>
 
-            {/* Tiêu đề chúc mừng */}
-            <span className="inline-block mt-2 px-3 py-1 bg-amber-100 text-[#C1762A] text-xs font-black uppercase tracking-wider rounded-full border border-amber-200">
-              Mở Khóa Thành Tựu Mới
+            {/* Nhãn trạng thái */}
+            <span className="inline-block mt-2 px-3 py-1 bg-[#F7ECE1] text-[#8C4905] text-[11px] font-bold uppercase tracking-wider rounded-full border border-[#F1CCA6]">
+              Mở khóa thành tựu
             </span>
 
-            <h3 className="text-2xl font-black text-[#8C4905] mt-2 mb-1">
-              {currentBadge.title}
+            <h3 className="text-xl font-bold text-stone-900 mt-2.5 mb-1">
+              {currentBadge.title.replace(/[^\p{L}\s]/gu, "").trim()}
             </h3>
 
-            <p className="text-sm font-bold text-[#C1762A] mb-2">
+            <p className="text-xs font-semibold text-[#C1762A] mb-2">
               {currentBadge.subtitle}
             </p>
 
-            <p className="text-xs text-gray-600 max-w-xs leading-relaxed mb-6">
+            <p className="text-xs text-stone-600 max-w-xs leading-relaxed mb-6 font-normal">
               {currentBadge.description}
             </p>
 
-            {/* Nút hành động chính */}
+            {/* Nút hành động chính chuẩn thiết kế SocraticKid */}
             <button
               onClick={onClose}
-              className="w-full py-3.5 px-6 bg-gradient-to-r from-[#C1762A] via-[#E65100] to-[#F7AD62] hover:from-[#A45E1B] hover:to-[#E65100] text-white font-black text-sm rounded-2xl shadow-lg hover:shadow-orange-200/80 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+              className="w-full py-3 px-6 bg-[#C1762A] hover:bg-[#8C4905] text-white font-bold text-sm rounded-xl transition-colors cursor-pointer active:scale-[0.99]"
             >
-              Tuyệt vời, tiếp tục học!
+              Tiếp tục học bài
             </button>
           </div>
         )}
@@ -283,55 +261,60 @@ export function BadgeModal({
         {/* TAB 2: BỘ SƯU TẬP 3 HUY HIỆU CỐT LÕI */}
         {activeTab === "collection" && (
           <div className="text-left">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
-              <h4 className="font-black text-[#8C4905] text-sm">
-                Danh hiệu Gamification SocraticKid
-              </h4>
-              <span className="text-xs font-bold text-[#C1762A] bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
+            <div className="flex items-center justify-between mb-4 pb-2.5 border-b border-stone-100">
+              <div>
+                <h4 className="font-bold text-stone-900 text-sm">
+                  Thành tích học tập
+                </h4>
+                <p className="text-[11px] text-stone-500 font-medium">
+                  Cột mốc ghi nhận sự nỗ lực và tự lập của bạn
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-[#8C4905] bg-[#F7ECE1] px-2.5 py-1 rounded-full border border-[#F1CCA6]">
                 {allBadges.filter((b) => b.unlocked).length}/{allBadges.length} đã đạt
               </span>
             </div>
 
-            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
               {allBadges.map((badge) => (
                 <div
                   key={badge.id}
                   className={cn(
                     "flex items-center gap-3 p-3 rounded-2xl border transition-all",
                     badge.unlocked
-                      ? "bg-gradient-to-r from-amber-500/10 to-orange-500/5 border-[#F7AD62]/60 shadow-2xs"
-                      : "bg-gray-50/80 border-gray-200 opacity-60"
+                      ? "bg-white border-[#F1CCA6] shadow-xs"
+                      : "bg-stone-50/70 border-stone-200/80 opacity-60"
                   )}
                 >
-                  <div className="w-12 h-12 shrink-0 relative flex items-center justify-center">
+                  <div className="w-11 h-11 shrink-0 relative flex items-center justify-center rounded-xl bg-[#F7ECE1]/60 p-1">
                     <img
                       src={badge.iconUrl}
                       alt={badge.title}
                       className={cn(
                         "w-full h-full object-contain",
-                        !badge.unlocked && "grayscale contrast-75"
+                        !badge.unlocked && "grayscale contrast-50 opacity-40"
                       )}
                     />
                     {!badge.unlocked && (
-                      <div className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center">
-                        <Lock size={16} className="text-white drop-shadow" />
+                      <div className="absolute inset-0 bg-stone-900/20 backdrop-blur-[1px] rounded-xl flex items-center justify-center">
+                        <Lock size={15} className="text-stone-700" />
                       </div>
                     )}
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-black text-xs text-[#8C4905] truncate">
-                        {badge.title}
+                      <span className="font-bold text-xs text-stone-900 truncate">
+                        {badge.title.replace(/[^\p{L}\s]/gu, "").trim()}
                       </span>
                       {badge.unlocked && (
-                        <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                        <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
                       )}
                     </div>
                     <p className="text-[11px] text-[#C1762A] font-semibold">
                       {badge.subtitle}
                     </p>
-                    <p className="text-[10px] text-gray-500 line-clamp-2 mt-0.5">
+                    <p className="text-[11px] text-stone-500 line-clamp-2 mt-0.5 leading-normal">
                       {badge.description}
                     </p>
                   </div>
@@ -341,7 +324,7 @@ export function BadgeModal({
 
             <button
               onClick={onClose}
-              className="w-full mt-5 py-2.5 bg-[#F7ECE1] hover:bg-[#F1CCA6] text-[#8C4905] font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              className="w-full mt-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
             >
               Đóng
             </button>

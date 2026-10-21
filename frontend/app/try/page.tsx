@@ -488,7 +488,7 @@ export default function TryPage() {
         {isTrialExpired && (
           <div className="mb-3 px-4 py-2.5 bg-amber-50 border border-[#F1CCA6] rounded-2xl flex items-center justify-between text-xs text-[#8C4905] animate-in fade-in shadow-sm">
             <span>
-              🔒 Bạn đã sử dụng hết <strong>10/10 lượt dùng thử</strong> hôm nay.
+              Bạn đã sử dụng hết <strong>10/10 lượt dùng thử</strong> hôm nay.
             </span>
             <button
               onClick={handleOpenAuth}
@@ -525,7 +525,7 @@ export default function TryPage() {
                 ? "Đã hết 10 lượt dùng thử — Vui lòng đăng nhập để tiếp tục"
                 : `Hỏi SocraticKid bất cứ điều gì... (${trialCount}/10 lượt)`
             }
-            className={`flex-1 bg-transparent text-[#000000] placeholder:text-[#8C4905]/40 outline-none font-medium text-sm ${
+            className={`flex-1 bg-transparent text-stone-900 placeholder:text-[#8C4905]/40 outline-none font-medium text-sm ${
               isTrialExpired ? "cursor-not-allowed select-none" : ""
             }`}
             disabled={isTyping || isTrialExpired}

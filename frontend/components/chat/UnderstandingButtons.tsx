@@ -207,7 +207,7 @@ export function UnderstandingButtons({
               onKeyDown={handleKeyDown}
               placeholder="Ví dụ: Chưa hiểu: tại sao phải chuyển vế ở bước 2..."
               rows={1}
-              className="flex-1 max-h-[120px] min-h-[40px] py-2.5 bg-transparent text-[#000000] placeholder:text-[#8C4905]/50 outline-none resize-none overflow-y-auto text-sm font-medium"
+              className="flex-1 max-h-[120px] min-h-[40px] py-2.5 bg-transparent text-stone-900 placeholder:text-[#8C4905]/50 outline-none resize-none overflow-y-auto text-sm font-medium"
               disabled={isLoading}
             />
             {/* Nut Gui */}

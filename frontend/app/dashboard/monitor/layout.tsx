@@ -66,7 +66,7 @@ export default function MonitorLayout({
 
   if (status === "loading") {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#F7ECE1]">
+      <div className="flex h-[100dvh] items-center justify-center bg-[#F7ECE1]">
         <svg
           className="animate-spin h-10 w-10 text-[#C1762A]"
           viewBox="0 0 24 24"
@@ -92,7 +92,7 @@ export default function MonitorLayout({
 
   return (
     <MonitorContext.Provider value={{ selectedStudent, setSelectedStudent }}>
-      <div className="flex h-screen bg-[#F7ECE1] overflow-hidden font-sans">
+      <div className="flex h-[100dvh] bg-[#F7ECE1] overflow-hidden font-sans">
         {/* Sidebar — Desktop */}
         <div className="hidden md:flex h-full">
           <MonitorSidebar
