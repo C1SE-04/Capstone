@@ -302,6 +302,7 @@ class CloudinarySignatureResponse(BaseModel):
 
 class ChildProblemItem(BaseModel):
     """Thông tin 1 bài toán con đã giải, trả về cho Dashboard Phụ Huynh."""
+    id: Optional[str] = None                 # ID bản ghi IndependenceScore (duy nhất)
     session_id: str                          # ID session chứa bài toán
     session_title: Optional[str] = None      # Tiêu đề phòng chat (nếu có)
     completed_at: datetime                   # Thời điểm hoàn thành (timestamp IndependenceScore)

@@ -16,6 +16,7 @@ import { SummaryCards, SummaryMetrics } from "@/components/monitor/SummaryCards"
 import { TimeRangeFilter, TimeRange } from "@/components/monitor/TimeRangeFilter";
 import { ActivityHeatmap, HeatmapDay } from "@/components/monitor/ActivityHeatmap";
 import { IndependenceChart, IndependencePoint } from "@/components/monitor/IndependenceChart";
+import { ChildProblemHistory } from "@/components/monitor/ChildProblemHistory";
 import { UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   LineChart,
@@ -436,6 +437,12 @@ export default function MonitorPage() {
       <ActivityHeatmap
         data={heatmapData}
         isLoading={isLoadingHeatmap}
+      />
+
+      {/* T7.9: Sổ theo dõi bài tập của con (Child Problem & Session History) */}
+      <ChildProblemHistory
+        key={selectedStudent.student_id}
+        studentId={selectedStudent.student_id}
       />
     </div>
   );

@@ -904,6 +904,7 @@ def get_child_problems(
 
         items.append(
             schemas.ChildProblemItem(
+                id=score.id,
                 session_id=session.id,
                 session_title=session.title,
                 completed_at=score.created_at,
