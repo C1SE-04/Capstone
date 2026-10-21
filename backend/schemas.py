@@ -396,3 +396,59 @@ class ParentAiInsightResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ================================================================
+# --- US 7.3: Background Service AI Insights (Task T7.8) ---
+# ================================================================
+
+class WeeklyInsightServiceResult(BaseModel):
+    """Kết quả trả về từ việc chạy background service cho 1 học sinh."""
+    student_id: str
+    student_name: str
+    status: str                     # "success" | "skipped" | "error"
+    reason: Optional[str] = None    # Lý do skip hoặc lỗi (nếu có)
+    is_fallback: Optional[bool] = None
+    insight_id: Optional[str] = None   # ID record vừa được lưu vào DB
+
+
+class WeeklyInsightBatchResponse(BaseModel):
+    """Kết quả tổng hợp sau khi chạy batch cho toàn bộ học sinh."""
+    total_students: int
+    success_count: int
+    skipped_count: int
+    error_count: int
+    results: list[WeeklyInsightServiceResult] = []
+
+
+# ================================================================
+# --- US 7.4: Badge System (Task T7.9) ---
+# ================================================================
+
+class BadgeResponse(BaseModel):
+    """Thông tin 1 huy hiệu học sinh đã mở khóa."""
+    id: str
+    student_id: str
+    badge_key: str
+    badge_name: str
+    badge_description: Optional[str] = None
+    category: str
+    unlocked_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class BadgeCheckResponse(BaseModel):
+    """
+    Kết quả kiểm tra và trao huy hiệu mới khi học sinh đạt ngưỡng.
+    - newly_unlocked: Danh sách huy hiệu VỪA mở khóa trong lần check này.
+    - all_badges: Toàn bộ huy hiệu học sinh đang sở hữu.
+    """
+    student_id: str
+    newly_unlocked: list[BadgeResponse] = []
+    all_badges: list[BadgeResponse] = []
+    current_streak: int = 0
+    max_streak: int = 0
+    total_problems: int = 0
+    avg_independence_score: int = 0

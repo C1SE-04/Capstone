@@ -264,4 +264,99 @@ class ProblemBookmark(Base):
 
     student = relationship("User", backref="bookmarks")
     session = relationship("Session", backref="bookmark")
+
+
+class ParentAiInsight(Base):
+    """
+    US 7.3 (Task T7.8):
+    Lưu kết quả báo cáo AI Learning Insights do background service sinh ra.
+    - Mỗi record tương ứng với 1 lần chạy weekly scan cho 1 học sinh.
+    - report_json: Nội dung JSON đầy đủ của AiInsightReportResponse.
+    - period_start / period_end: Khoảng thời gian dữ liệu được phân tích (thường là 7 ngày).
+    - is_fallback: True nếu Gemini gặp lỗi và dùng báo cáo dự phòng.
+    """
+    __tablename__ = "parent_ai_insights"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    student_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Khoảng thời gian phân tích (start → end, mặc định 7 ngày gần nhất)
+    period_start = Column(DateTime(timezone=True), nullable=False)
+    period_end = Column(DateTime(timezone=True), nullable=False)
+    # Toàn bộ JSON báo cáo (summary, strengths, weak_points, recommendations, mastery_assessment)
+    report_json = Column(String, nullable=False)
+    # Điểm tự lực trung bình trong kỳ (lưu riêng để query nhanh, không cần parse JSON)
+    avg_independence_score = Column(Integer, nullable=True)
+    # Tổng số bài giải trong kỳ
+    total_problems = Column(Integer, default=0, nullable=False)
+    # True nếu Gemini lỗi và dùng báo cáo fallback
+    is_fallback = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Tối ưu query lấy insight mới nhất của 1 học sinh
+        Index("ix_ai_insights_student_created", "student_id", "created_at"),
+    )
+
+    student = relationship("User", backref="ai_insights")
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 7.4 (Task T7.9): Hệ thống Huy Hiệu (Badge System)
+# ────────────────────────────────────────────────────────────────────────────
+
+# Danh mục tất cả huy hiệu trong hệ thống
+BADGE_CATALOG = {
+    # ── Huy hiệu theo Streak ──────────────────────────────────────────────
+    "streak_3":   {"name": "Ngọn Lửa Nhỏ",   "description": "Học 3 ngày liên tiếp",  "category": "streak",  "threshold": 3},
+    "streak_7":   {"name": "Tuần Bứt Phá",    "description": "Học 7 ngày liên tiếp",  "category": "streak",  "threshold": 7},
+    "streak_14":  {"name": "Kiên Định 2 Tuần","description": "Học 14 ngày liên tiếp", "category": "streak",  "threshold": 14},
+    "streak_30":  {"name": "Siêu Sao Tháng",  "description": "Học 30 ngày liên tiếp", "category": "streak",  "threshold": 30},
+    # ── Huy hiệu theo số bài hoàn thành ──────────────────────────────────
+    "problems_5":   {"name": "Người Bắt Đầu",   "description": "Hoàn thành 5 bài toán",   "category": "problems", "threshold": 5},
+    "problems_20":  {"name": "Người Chăm Chỉ",  "description": "Hoàn thành 20 bài toán",  "category": "problems", "threshold": 20},
+    "problems_50":  {"name": "Nhà Toán Học",    "description": "Hoàn thành 50 bài toán",  "category": "problems", "threshold": 50},
+    "problems_100": {"name": "Huyền Thoại",     "description": "Hoàn thành 100 bài toán", "category": "problems", "threshold": 100},
+    # ── Huy hiệu theo điểm Tự Lực ────────────────────────────────────────
+    "independence_60": {"name": "Tự Lực Tốt",      "description": "Đạt điểm tự lực TB >= 60", "category": "independence", "threshold": 60},
+    "independence_80": {"name": "Tự Lực Xuất Sắc", "description": "Đạt điểm tự lực TB >= 80", "category": "independence", "threshold": 80},
+}
+
+
+class StudentBadge(Base):
+    """
+    US 7.4 (Task T7.9):
+    Lưu các huy hiệu học sinh đã mở khóa.
+    - badge_key: Khóa định danh huy hiệu (VD: "streak_7", "problems_50")
+    - Mỗi học sinh chỉ nhận mỗi huy hiệu 1 lần (unique constraint).
+    """
+    __tablename__ = "student_badges"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    student_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Khóa huy hiệu (tham chiếu BADGE_CATALOG, VD: "streak_7")
+    badge_key = Column(String, nullable=False)
+    # Tên huy hiệu (lưu snapshot để không phụ thuộc BADGE_CATALOG)
+    badge_name = Column(String, nullable=False)
+    # Mô tả huy hiệu
+    badge_description = Column(String, nullable=True)
+    # Phân loại (streak / problems / independence)
+    category = Column(String, nullable=False)
+    # Thời điểm mở khóa
+    unlocked_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Mỗi học sinh chỉ nhận mỗi huy hiệu 1 lần
+        Index("ix_student_badges_unique", "student_id", "badge_key", unique=True),
+        Index("ix_student_badges_student", "student_id", "unlocked_at"),
+    )
 
