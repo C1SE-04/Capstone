@@ -56,6 +56,9 @@ from routers import independence  # Task #159 & #160: API điểm Tự Lực (In
 app.include_router(independence.router)
 from routers import upload  # US 6.4 - Task #173: Cloudinary upload & ký chữ ký ảnh
 app.include_router(upload.router)
+from routers import insights  # US 7.3 & 7.4: AI Insights background service + Badge system
+app.include_router(insights.router)
+
 
 @app.get("/")
 def read_root():
