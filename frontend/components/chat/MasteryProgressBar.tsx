@@ -102,30 +102,30 @@ export function MasteryProgressBar({ className }: MasteryProgressBarProps) {
   const getLevelBadge = (score: number) => {
     if (totalCompleted === 0 && score === 0) {
       return {
-        label: "Mới bắt đầu 🌱",
+        label: "Mới bắt đầu",
         color: "text-stone-700 bg-stone-50 border-stone-200",
       };
     }
     if (score >= 80) {
       return {
-        label: "Tự lập xuất sắc 🌟",
+        label: "Tự lập xuất sắc",
         color: "text-emerald-700 bg-emerald-50 border-emerald-200",
       };
     }
     if (score >= 60) {
       return {
-        label: "Tự lập tốt 👍",
+        label: "Tự lập tốt",
         color: "text-amber-800 bg-amber-50 border-amber-200",
       };
     }
     if (score >= 40) {
       return {
-        label: "Tự lập đang tiến bộ 📈",
+        label: "Đang tiến bộ",
         color: "text-orange-800 bg-orange-50 border-orange-200",
       };
     }
     return {
-      label: "Cần tiến bộ 💡",
+      label: "Cần rèn luyện thêm",
       color: "text-rose-800 bg-rose-50 border-rose-200",
     };
   };
@@ -135,81 +135,80 @@ export function MasteryProgressBar({ className }: MasteryProgressBarProps) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#FFFDF9] via-[#FAF1E6] to-[#F5E6D3] p-3.5 border border-[#F1CCA6] shadow-xs transition-all duration-300 hover:shadow-md group",
+        "rounded-xl bg-white p-2.5 border border-[#F1CCA6]/70 shadow-2xs transition-all duration-200 hover:border-[#C1762A]/40",
         className
       )}
     >
-      {/* Họa tiết trang trí góc trên */}
-      <div className="absolute -top-6 -right-6 w-16 h-16 bg-[#F7AD62]/15 rounded-full blur-xl pointer-events-none" />
-
-      {/* Header: Icon + Tiêu đề + Điểm số */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#C1762A] to-[#F7AD62] flex items-center justify-center text-white shadow-xs">
+      {/* Header gọn gàng: Tiêu đề + Điểm số trên cùng 1 hàng */}
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="w-5 h-5 rounded-md bg-[#F7ECE1] flex items-center justify-center text-[#8C4905] shrink-0">
             {averageScore >= 80 ? (
-              <Trophy className="w-4 h-4 text-amber-100" />
+              <Trophy className="w-3 h-3 text-[#C1762A]" />
             ) : averageScore >= 60 ? (
-              <Award className="w-4 h-4 text-amber-100" />
+              <Award className="w-3 h-3 text-[#C1762A]" />
             ) : (
-              <Sparkles className="w-4 h-4 text-amber-100" />
+              <Sparkles className="w-3 h-3 text-[#C1762A]" />
             )}
           </div>
-          <div>
-            <span className="block text-[10px] font-bold text-[#8C4905]/70 uppercase tracking-wider leading-none">
-              Tiến trình tự lực
-            </span>
-            <span className="text-xs font-black text-[#8C4905]">
-              Mastery Score
-            </span>
-          </div>
+          <span className="text-[11px] font-bold text-stone-900 truncate">
+            Điểm tự lực
+          </span>
         </div>
 
         {/* Điểm số */}
-        <div className="text-right">
-          <div className="flex items-baseline justify-end gap-0.5">
-            <span className="text-base font-black text-[#8C4905] tabular-nums">
-              {isLoading ? "--" : averageScore}
-            </span>
-            <span className="text-[10px] font-bold text-[#C1762A]">/100</span>
-          </div>
+        <div className="text-right shrink-0">
+          <span className="text-sm font-extrabold text-[#8C4905] tabular-nums tracking-tight">
+            {isLoading ? "--" : averageScore}
+          </span>
+          <span className="text-[10px] font-semibold text-stone-400 ml-0.5">/100</span>
         </div>
       </div>
 
-      {/* Progress Bar với shimmer animation */}
-      <div className="relative w-full h-2.5 bg-white/90 rounded-full overflow-hidden border border-[#F1CCA6]/60 p-[1.5px] shadow-inner mb-2">
+      {/* Progress Bar siêu gọn */}
+      <div className="w-full h-1.5 bg-[#F7ECE1] rounded-full overflow-hidden mb-1.5">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-[#F7AD62] via-[#E07A5F] to-[#C1762A] transition-all duration-1000 ease-out relative"
-          style={{ width: `${Math.min(100, Math.max(averageScore > 0 ? averageScore : 4, 4))}%` }}
-        >
-          {/* Vệt sáng chuyển động */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent animate-pulse" />
-        </div>
+          className="h-full rounded-full bg-[#C1762A] transition-all duration-500 ease-out"
+          style={{ width: `${Math.min(100, Math.max(averageScore > 0 ? averageScore : 0, 0))}%` }}
+        />
       </div>
 
-      {/* Thông tin mức độ & số bài hoàn thành */}
-      <div className="flex items-center justify-between text-[11px] leading-tight">
+      {/* Footer nhỏ gọn */}
+      <div className="flex items-center justify-between text-[10px] leading-none">
         <span
           className={cn(
-            "px-2 py-0.5 rounded-full font-bold border text-[10px] transition-all",
-            levelInfo.color
+            "inline-flex items-center px-1.5 py-0.5 rounded font-medium text-[9.5px]",
+            averageScore >= 80
+              ? "bg-emerald-50 text-emerald-700"
+              : averageScore >= 60
+              ? "bg-amber-50 text-amber-700"
+              : "bg-stone-100 text-stone-600"
           )}
         >
-          {levelInfo.label}
+          {levelInfo.label.replace(/[^\p{L}\s]/gu, "").trim()}
         </span>
 
-        <span className="text-[10px] font-semibold text-[#8C4905]/80 tabular-nums">
-          {totalCompleted} bài xong
+        <span className="text-[10px] font-medium text-stone-500 tabular-nums">
+          {isLoading ? (
+            "--"
+          ) : totalCompleted > 0 ? (
+            <>
+              <strong className="text-stone-700 font-semibold">{totalCompleted}</strong> bài xong
+            </>
+          ) : (
+            "0 bài"
+          )}
         </span>
       </div>
 
       {/* Thông báo điểm mới về real-time */}
       {recentGain && (
-        <div className="mt-2 pt-1.5 border-t border-[#F1CCA6]/40 flex items-center justify-between animate-in fade-in slide-in-from-top-1 duration-300">
-          <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+        <div className="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between animate-in fade-in slide-in-from-top-1 duration-300">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700">
             <TrendingUp className="w-3.5 h-3.5" />
             <span>{recentGain.text}</span>
           </div>
-          <span className="text-[10px] text-[#8C4905]/60 font-medium">Đã lưu DB</span>
+          <span className="text-[10px] text-stone-400 font-medium">Đã cập nhật</span>
         </div>
       )}
     </div>

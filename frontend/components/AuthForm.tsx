@@ -156,13 +156,13 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       {/* Success Toast */}
       {showSuccessToast && (
-        <div className="fixed top-4 right-4 z-[60] bg-white border-l-4 border-green-500 shadow-lg rounded-lg px-6 py-4 animate-fade-in-down flex items-center gap-3">
-          <div className="bg-green-100 rounded-full p-1">
-            <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="fixed top-4 right-4 z-[60] bg-white border border-emerald-200/80 shadow-lg rounded-xl px-5 py-3.5 animate-fade-in-down flex items-center gap-3">
+          <div className="bg-emerald-50 rounded-full p-1 text-emerald-600">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-gray-800 font-medium">{toastMessage}</p>
+          <p className="text-stone-800 text-sm font-medium">{toastMessage}</p>
         </div>
       )}
 
@@ -201,7 +201,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
                 }`}
               disabled={isLoading}
             />
@@ -217,7 +217,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.password ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.password ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
                 }`}
               disabled={isLoading}
             />
@@ -234,7 +234,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
                   }`}
                 disabled={isLoading}
               />
@@ -282,7 +282,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                 value={grade ?? ""}
                 onChange={(e) => setGrade(e.target.value ? Number(e.target.value) : null)}
                 disabled={isLoading}
-                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 cursor-pointer ${
+                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 cursor-pointer ${
                   errors.grade
                     ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]'
                     : 'focus:ring-[#F7AD62] border-transparent'
@@ -329,7 +329,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full mt-4 bg-[#000000] text-[#F7ECE1] font-bold py-3 rounded-xl hover:bg-gray-800 transition-colors flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-md cursor-pointer"
+            className="w-full mt-4 bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold py-3.5 rounded-xl hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-md cursor-pointer"
           >
             {isLoading ? (
               <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

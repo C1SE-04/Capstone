@@ -78,7 +78,7 @@ export default function DashboardLayout({
 
 
   return (
-    <div className="flex h-screen bg-[#F7ECE1] overflow-hidden font-sans">
+    <div className="flex h-[100dvh] bg-[#F7ECE1] overflow-hidden font-sans">
       <Sidebar isMobileOpen={isMobileOpen} setIsMobileOpen={setIsMobileOpen} />
 
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">

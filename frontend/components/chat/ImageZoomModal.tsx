@@ -260,7 +260,7 @@ export function ImageZoomModal({
         className="w-full py-2.5 px-4 text-center text-xs text-white/50 bg-gradient-to-t from-black/80 to-transparent z-20 flex items-center justify-center gap-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <span>💡 Cuộn chuột hoặc bấm +/- để phóng to/thu nhỏ</span>
+        <span>Cuộn chuột hoặc bấm +/- để phóng to/thu nhỏ</span>
         <span>•</span>
         <span>Kéo chuột để di chuyển ảnh</span>
         <span>•</span>

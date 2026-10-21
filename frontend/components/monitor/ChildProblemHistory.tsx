@@ -366,7 +366,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                         {item.chat_summary && (
                           <div className="mt-3 p-3 rounded-xl bg-white border border-[#F1CCA6]/70 text-xs text-[#8C4905] line-clamp-2 italic leading-relaxed">
                             <span className="font-bold text-[#C1762A] not-italic mr-1.5">
-                              💬 Con hỏi:
+                              Con hỏi:
                             </span>
                             &ldquo;{item.chat_summary.split(" | ")[0]}&rdquo;
                           </div>

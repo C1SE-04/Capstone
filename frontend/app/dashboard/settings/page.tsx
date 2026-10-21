@@ -289,7 +289,7 @@ export default function SettingsPage() {
           value={selectedGrade ?? ""}
           onChange={handleGradeChange}
           disabled={isLoading}
-          className="w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] border border-transparent focus:outline-none focus:ring-2 focus:ring-[#F7AD62] cursor-pointer disabled:opacity-60 transition-shadow"
+          className="w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 border border-transparent focus:outline-none focus:ring-2 focus:ring-[#F7AD62] cursor-pointer disabled:opacity-60 transition-shadow"
         >
           <option value="" disabled>-- Chọn khối lớp --</option>
           {GRADES.map((g) => (

@@ -344,7 +344,7 @@ export default function MonitorPage() {
             <button
               onClick={handlePrevWeek}
               aria-label="Tuần trước"
-              className="p-1 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] transition-colors"
+              className="p-1 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 transition-all cursor-pointer"
             >
               <ChevronLeft size={18} />
             </button>
@@ -358,10 +358,10 @@ export default function MonitorPage() {
               onClick={handleNextWeek}
               disabled={isCurrentWeek}
               aria-label="Tuần tiếp theo"
-              className={`p-1 rounded-lg transition-colors ${
+              className={`p-1 rounded-lg transition-all ${
                 isCurrentWeek
                   ? "text-gray-300 cursor-not-allowed"
-                  : "text-[#8C4905] hover:bg-[#F7ECE1]"
+                  : "text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 cursor-pointer"
               }`}
             >
               <ChevronRight size={18} />

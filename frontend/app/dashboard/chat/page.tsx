@@ -256,7 +256,7 @@ export default function ChatPage() {
             setUnlockedBadge({
               id: "independence_100",
               type: "independence_100",
-              title: "Tự Lập Nhí 🏅",
+              title: "Tự Lập Nhí",
               subtitle: "Đạt 100 điểm tự lập",
               description: "Em đã hoàn thành xuất sắc bài toán với 100 điểm tự lực, không cần bất kỳ gợi ý nào!",
               iconUrl: "/badges/orange_star_badge.svg",
@@ -837,7 +837,7 @@ export default function ChatPage() {
 
   if (!isHydrated) {
     return (
-      <div className="flex h-screen w-screen bg-[#F7ECE1] items-center justify-center">
+      <div className="flex h-[100dvh] w-screen bg-[#F7ECE1] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-4 border-[#8C4905] border-t-transparent rounded-full animate-spin"></div>
           <p className="text-[#8C4905] font-medium">Đang tải dữ liệu...</p>
@@ -847,7 +847,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-[#F7ECE1] overflow-hidden font-sans">
+    <div className="flex h-[100dvh] w-screen bg-[#F7ECE1] overflow-hidden font-sans">
       {/* Sidebar bên trái */}
       <div
         className={`${

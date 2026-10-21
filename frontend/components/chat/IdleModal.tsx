@@ -123,17 +123,17 @@ export function IdleModal({
         {/* Tiêu đề & Nội dung theo đặc tả US 6.3 */}
         <h3
           id="idle-modal-title"
-          className="text-2xl font-bold text-[#8C4905] mb-2 tracking-tight"
+          className="text-xl font-bold text-stone-900 mb-2 tracking-tight"
         >
-          Bạn vẫn đang học chứ? 🦉
+          Bạn vẫn đang học chứ?
         </h3>
 
         <p
           id="idle-modal-desc"
-          className="text-sm text-[#8C4905]/80 mb-6 leading-relaxed"
+          className="text-sm text-stone-600 mb-6 leading-relaxed"
         >
-          Hệ thống nhận thấy bạn đã không tương tác trong 10 phút và đã tạm dừng
-          tính giờ học. Hãy bấm nút bên dưới để tiếp tục học cùng Cú nhé!
+          Hệ thống nhận thấy bạn đã không tương tác trong một khoảng thời gian.
+          Hãy bấm nút bên dưới để tiếp tục nhé!
         </p>
 
         {/* Cụm 2 nút: "Không học" & "Đang học" */}
