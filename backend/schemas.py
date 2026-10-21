@@ -481,3 +481,18 @@ class ProblemBoundaryResult(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class FlashcardContent(BaseModel):
+    """
+    Nội dung Thẻ Flashcard thông minh do Gemini đúc kết từ bài toán đã giải.
+    Được hiển thị trong tab Sổ tay (Notebook) của học sinh.
+    """
+    problem_statement: str              # Đề bài toán sạch (chuẩn hóa LaTeX)
+    key_takeaway: str                   # Bí kíp cốt lõi (1-2 công thức hoặc phương pháp giải then chốt)
+    final_answer: str                   # Đáp số chốt cuối cùng (ngắn gọn, chính xác)
+    topic_tag: str                      # Dạng toán (Phân số, Tìm X, Hình học, Số học, v.v.)
+    is_fallback: bool = False
+
+    class Config:
+        from_attributes = True
