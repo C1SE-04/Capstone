@@ -216,4 +216,52 @@ class IndependenceScore(Base):
 
     session = relationship("Session", back_populates="independence_records")
     student = relationship("User", backref="independence_records")
+
+
+class ProblemBookmark(Base):
+    """
+    US 7.2 - Task T7.7:
+    Sổ Tay Bài Toán Yêu Thích (Bookmark Notebook).
+    Lưu snapshot của bài toán khi học sinh bấm "Lưu vào Sổ tay" sau khi bấm "Đã hiểu".
+    - problem_snapshot: Nội dung đề bài (tin nhắn USER đầu tiên trong session)
+    - attachment_url: URL ảnh đề bài trên Cloudinary (nếu có)
+    - chat_summary: Đoạn chat tóm tắt (3 tin nhắn USER đầu tiên, nối bằng " | ")
+    - independence_score: Điểm tự lực tại thời điểm lưu
+    - note: Ghi chú tuỳ ý của học sinh
+    """
+    __tablename__ = "problem_bookmarks"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    student_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    session_id = Column(
+        String,
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    # Snapshot đề bài tại thời điểm lưu (tin nhắn USER đầu tiên trong session)
+    problem_snapshot = Column(String, nullable=True)
+    # URL ảnh đề bài Cloudinary (nếu học sinh upload ảnh)
+    attachment_url = Column(String, nullable=True)
+    # Tóm tắt đoạn chat (3 tin nhắn USER đầu tiên, giúp học sinh nhớ lại bài)
+    chat_summary = Column(String, nullable=True)
+    # Điểm tự lực (Independence Score) tại thời điểm lưu
+    independence_score = Column(Integer, nullable=True)
+    # Ghi chú tuỳ ý của học sinh
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Mỗi học sinh chỉ lưu 1 lần / session (tránh trùng lặp)
+        Index("ix_bookmarks_student_session", "student_id", "session_id", unique=True),
+        Index("ix_bookmarks_student_created", "student_id", "created_at"),
+    )
+
+    student = relationship("User", backref="bookmarks")
+    session = relationship("Session", backref="bookmark")
 

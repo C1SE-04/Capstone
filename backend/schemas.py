@@ -287,6 +287,62 @@ class CloudinarySignatureResponse(BaseModel):
     folder: str
 
 
+# --- US 7.1: Child Problems API (Task T7.6) ---
+
+class ChildProblemItem(BaseModel):
+    """Thông tin 1 bài toán con đã giải, trả về cho Dashboard Phụ Huynh."""
+    session_id: str                          # ID session chứa bài toán
+    session_title: Optional[str] = None      # Tiêu đề phòng chat (nếu có)
+    completed_at: datetime                   # Thời điểm hoàn thành (timestamp IndependenceScore)
+    score: int                               # Điểm tự lực (0–100)
+    hints_used: int                          # Số gợi ý đã dùng
+    not_understood_count: int                # Số lần bấm "Chưa hiểu"
+    evaluation: Optional[str] = None        # Nhãn đánh giá mức độ ("Xuất sắc", "Khá", ...)
+    attachment_url: Optional[str] = None    # Ảnh đề bài từ Cloudinary (nếu có)
+    chat_summary: Optional[str] = None      # Đoạn chat tóm tắt (3 tin nhắn USER đầu tiên)
+
+    class Config:
+        from_attributes = True
+
+
+class ChildProblemsResponse(BaseModel):
+    """Phản hồi API GET /parent/child-problems."""
+    student_id: str
+    total: int                               # Tổng số bài đã giải
+    page: int
+    page_size: int
+    items: list[ChildProblemItem] = []
+
+
+# --- US 7.2: Bookmark / Notebook Schema (Task T7.7) ---
+
+class BookmarkCreate(BaseModel):
+    """Body gửi lên khi học sinh lưu bài toán vào Sổ Tay."""
+    session_id: str
+    note: Optional[str] = None              # Ghi chú tuỳ ý của học sinh
+
+
+class BookmarkResponse(BaseModel):
+    """Thông tin 1 bookmark trả về."""
+    id: str
+    student_id: str
+    session_id: str
+    session_title: Optional[str] = None
+    problem_snapshot: Optional[str] = None  # Đề bài (nội dung tin nhắn USER đầu tiên)
+    attachment_url: Optional[str] = None    # Ảnh đề bài Cloudinary
+    chat_summary: Optional[str] = None      # Tóm tắt đoạn chat khi lưu
+    independence_score: Optional[int] = None
+    note: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ========================================================
+# --- US 7.1: AI Learning Insights Schemas (Task T7.2) ---
+# ========================================================
+
 class TopicBreakdownItem(BaseModel):
     """Thống kê chi tiết kết quả học theo từng dạng toán cụ thể."""
     topic_name: str
