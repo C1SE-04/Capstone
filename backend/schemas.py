@@ -82,7 +82,6 @@ class ComprehensionRequest(BaseModel):
     session_id: str
     understood: bool
 
-# --- US 5.2: Parent Dashboard Schemas ---
 
 class PairingCodeResponse(BaseModel):
     pairing_code: str
@@ -103,7 +102,6 @@ class LinkedStudentResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# --- US 5.2: Metrics API Schemas ---
 
 class DailyMetric(BaseModel):
     """Số liệu tổng hợp theo từng ngày (dùng cho biểu đồ tuần)."""
@@ -122,7 +120,6 @@ class StudentMetricsResponse(BaseModel):
     daily: list[DailyMetric]    # Chi tiết từng ngày để vẽ biểu đồ
 
 
-# --- US 6.3: Idle Detection & Active Metrics (Task #168 & #169) ---
 
 class RestartMetricRequest(BaseModel):
     timestamp: Optional[int] = None
@@ -139,8 +136,6 @@ class RestartMetricResponse(BaseModel):
     start_time: Optional[str] = None
     active_seconds: int = 0
 
-
-# --- US 6.1: Independence / Mastery Score (Task #159 & #160) ---
 
 class IndependenceRecordCreate(BaseModel):
     session_id: str
@@ -173,8 +168,6 @@ class IndependenceSummaryResponse(BaseModel):
     evaluation_level: str
     history: list[IndependenceRecordResponse] = []
 
-
-# --- US 6.1: Parent Dashboard Metrics Schemas (Task #6.7) ---
 
 class SummaryCardsMetric(BaseModel):
     completed_problems: int = 0
@@ -226,8 +219,6 @@ class ParentDashboardMetricsResponse(BaseModel):
         from_attributes = True
 
 
-# --- US 7.1: Dashboard Heatmap & Summary Schemas ---
-
 class HeatmapDayItem(BaseModel):
     """Điểm dữ liệu ngày trong Heatmap, tương thích 100% với HeatmapDay ở Frontend."""
     date: str                  # "YYYY-MM-DD"
@@ -275,8 +266,6 @@ class SummaryCardsResponse(BaseModel):
     avgMinutesPerDay: int
 
 
-# --- US 6.4: Cloudinary Upload Schemas (Task #173) ---
-
 class CloudinaryUploadResponse(BaseModel):
     """Response trả về sau khi upload ảnh lên Cloudinary thành công."""
     success: bool
@@ -296,3 +285,57 @@ class CloudinarySignatureResponse(BaseModel):
     api_key: str
     cloud_name: str
     folder: str
+
+
+class TopicBreakdownItem(BaseModel):
+    """Thống kê chi tiết kết quả học theo từng dạng toán cụ thể."""
+    topic_name: str
+    problems_solved: int = 0
+    avg_independence: float = 0.0
+    hints_used: int = 0
+    not_understood: int = 0
+
+
+class AiInsightReportResponse(BaseModel):
+    """
+    Schema phản hồi cốt lõi của Báo Cáo Nhận Xét Sư Phạm từ AI.
+    Được sinh ra từ Gemini và kiểm duyệt qua Pydantic v2.
+    """
+    summary: str
+    strengths: list[str] = []
+    weak_points: list[str] = []
+    recommendations: list[str] = []
+    mastery_assessment: Optional[str] = "Đang tiến bộ"
+    is_fallback: Optional[bool] = False
+    fallback_reason: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AiInsightGenerateRequest(BaseModel):
+    """Dữ liệu đầu vào yêu cầu sinh Báo Cáo Nhận Xét Sư Phạm cho 1 học sinh."""
+    student_id: str
+    student_name: str
+    grade_level: int
+    period_description: Optional[str] = "7 ngày gần nhất"
+    total_problems_completed: int
+    average_independence_score: float
+    total_hints_used: int = 0
+    total_not_understood_count: int = 0
+    topic_breakdown: list[TopicBreakdownItem] = []
+
+
+class ParentAiInsightResponse(BaseModel):
+    """
+    Schema đầy đủ trả về cho Frontend Parent Dashboard (API GET /parent/insights).
+    Tương thích với giao diện <AIInsightsCard />.
+    """
+    student_id: str
+    student_name: Optional[str] = None
+    period_description: str = "Tuần này"
+    insight: AiInsightReportResponse
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
