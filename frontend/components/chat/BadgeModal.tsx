@@ -180,7 +180,7 @@ export function BadgeModal({
       </div>
 
       {/* Lớp 3: Hộp Thẻ Modal Huy Hiệu (z-20 nằm nổi trên cùng) */}
-      <div className="relative z-20 bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border-2 border-[#F1CCA6] animate-in zoom-in-95 duration-300 text-center overflow-hidden">
+      <div className="relative z-20 bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border-2 border-[#F1CCA6] animate-modal-in text-center overflow-hidden">
         {/* Nút đóng góc phải */}
         <button
           onClick={onClose}

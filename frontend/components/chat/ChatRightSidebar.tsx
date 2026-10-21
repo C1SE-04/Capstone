@@ -44,18 +44,22 @@ export function ChatRightSidebar({
   return (
     <>
       {/* Mobile backdrop overlay khi mở sidebar trên màn hình nhỏ */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/40 z-40 md:hidden animate-in fade-in duration-200"
-          onClick={onClose}
-        />
-      )}
+      <div
+        className={cn(
+          "fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+        onClick={onClose}
+      />
 
-      {/* Right Sidebar Container */}
+      {/* Right Sidebar Container với transition trượt thu gọn / mở rộng mượt mà */}
       <aside
         className={cn(
-          "fixed md:static inset-y-0 right-0 z-50 w-80 md:w-84 bg-[#FDF8F3] border-l border-[#C1762A]/20 flex flex-col h-full transform transition-transform duration-300 ease-in-out flex-shrink-0 shadow-lg md:shadow-none",
-          isOpen ? "translate-x-0" : "translate-x-full md:hidden",
+          "fixed md:static inset-y-0 right-0 z-50 bg-[#FDF8F3] border-l border-[#C1762A]/20 flex flex-col h-full flex-shrink-0 shadow-lg md:shadow-none overflow-hidden",
+          "transition-[width,transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          isOpen
+            ? "w-80 md:w-84 translate-x-0 opacity-100"
+            : "w-0 md:w-0 translate-x-full md:translate-x-0 opacity-0 pointer-events-none border-l-0",
           className
         )}
       >

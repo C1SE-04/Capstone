@@ -103,9 +103,9 @@ export function IdleModal({
       aria-modal="true"
       aria-labelledby="idle-modal-title"
       aria-describedby="idle-modal-desc"
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
     >
-      <div className="relative bg-white rounded-3xl shadow-2xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md border-2 border-[#F1CCA6] text-center overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="relative bg-white rounded-3xl shadow-2xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md border-2 border-[#F1CCA6] text-center overflow-hidden animate-modal-in">
         {/* Họa tiết trang trí nền ấm áp */}
         <div className="absolute -top-12 -right-12 w-32 h-32 bg-[#FFF6EB] rounded-full blur-2xl pointer-events-none" />
         <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-[#FEEED8] rounded-full blur-2xl pointer-events-none" />
@@ -153,7 +153,7 @@ export function IdleModal({
             type="button"
             onClick={handleContinueLearning}
             disabled={isSubmitting}
-            className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-[#E07A5F] to-[#D96B43] hover:from-[#d56d52] hover:to-[#c85e37] text-white font-bold text-sm shadow-md shadow-[#E07A5F]/20 hover:shadow-lg hover:shadow-[#E07A5F]/30 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-75 disabled:cursor-not-allowed cursor-pointer"
+            className="flex-1 py-3 px-4 rounded-2xl bg-[#C1762A] hover:bg-[#8C4905] text-white font-bold text-sm shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.98] flex items-center justify-center gap-1.5 disabled:opacity-75 disabled:cursor-not-allowed cursor-pointer"
           >
             {isSubmitting ? (
               <>

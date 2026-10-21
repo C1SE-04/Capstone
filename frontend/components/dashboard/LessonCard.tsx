@@ -34,7 +34,7 @@ export function LessonCard({ id, title, description, thumbnail, progress, onClic
   return (
     <div 
       onClick={handleClick}
-      className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-[1.02] cursor-pointer flex flex-col h-full border border-[#F1CCA6]/50 group"
+      className="bg-white rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-[box-shadow,border-color] duration-200 cursor-pointer flex flex-col h-full border border-[#F1CCA6]/70 hover:border-[#C1762A] group"
     >
       {/* Thumbnail Area */}
       <div className="relative w-full h-48 overflow-hidden bg-[#D9D9D9]">
