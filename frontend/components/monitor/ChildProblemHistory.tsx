@@ -10,7 +10,7 @@
  * - Dữ liệu thật từ API GET /parent/child-problems.
  */
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import {
   BookOpen,
@@ -181,19 +181,8 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
     };
   };
 
-  // Lọc bài tập phía client theo filter tab
-  const filteredProblems = useMemo(() => {
-    if (filter === "WITH_IMAGE") {
-      return problems.filter((p) => Boolean(p.attachment_url));
-    }
-    if (filter === "EXCELLENT") {
-      return problems.filter((p) => p.score >= 80);
-    }
-    if (filter === "NEEDS_SUPPORT") {
-      return problems.filter((p) => p.score < 65);
-    }
-    return problems;
-  }, [problems, filter]);
+  // Danh sách bài tập hiển thị (Backend API /parent/child-problems đã thực hiện lọc và phân trang chuẩn theo filter_type)
+  const filteredProblems = problems;
 
   // Format ngày an toàn
   const formatProblemDate = (dateStr: string) => {

@@ -146,6 +146,14 @@ def _extract_bookmark_dialogue(
             )
         )
 
+    # Nếu bài toán kế thừa attachment_url và đối thoại chưa có tin nhắn nào có ảnh,
+    # gán attachment_url cho tin nhắn USER đầu tiên
+    if attachment_url and not any(d.attachment_url for d in dialogue):
+        for d in dialogue:
+            if d.sender_type == "USER":
+                d.attachment_url = attachment_url
+                break
+
     return dialogue
 
 
@@ -220,6 +228,35 @@ def _build_bookmark_snapshot(
         if msg.attachment_url:
             attachment_url = msg.attachment_url
             break
+
+    # Nếu bài toán này không đính kèm ảnh riêng, kế thừa ảnh đã gửi trong cùng session
+    if not attachment_url:
+        prev_attachment = (
+            db.query(models.Message.attachment_url)
+            .filter(
+                models.Message.session_id == session_id,
+                models.Message.created_at <= end_time if end_time else True,
+                models.Message.attachment_url.isnot(None),
+                models.Message.attachment_url != "",
+            )
+            .order_by(models.Message.created_at.desc())
+            .first()
+        )
+        if prev_attachment and prev_attachment[0]:
+            attachment_url = prev_attachment[0]
+        else:
+            any_attachment = (
+                db.query(models.Message.attachment_url)
+                .filter(
+                    models.Message.session_id == session_id,
+                    models.Message.attachment_url.isnot(None),
+                    models.Message.attachment_url != "",
+                )
+                .order_by(models.Message.created_at.asc())
+                .first()
+            )
+            if any_attachment and any_attachment[0]:
+                attachment_url = any_attachment[0]
 
     # Snapshot = nội dung tin nhắn USER đầu tiên của bài này
     problem_snapshot: Optional[str] = user_messages[0].content if user_messages else None

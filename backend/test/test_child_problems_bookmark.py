@@ -181,6 +181,88 @@ def test_child_problems_no_link_forbidden():
     print(f"  [OK] MONITOR không link bị chặn đúng (403)")
 
 
+def test_child_problems_multi_problems_inherit_image_and_filter():
+    """
+    Khi làm 2 bài trong cùng 1 session có gửi ảnh ở bài 1:
+    - Bài 1 có attachment_url trực tiếp từ tin nhắn.
+    - Bài 2 không gửi lại ảnh nhưng kế thừa attachment_url từ session.
+    - dialogue_messages của Bài 2 có attachment_url trên tin nhắn USER đầu tiên.
+    - Bộ lọc WITH_IMAGE trả về cả 2 bài riêng biệt (total=2, len(items)=2).
+    """
+    global current_mock_user
+    current_mock_user = {"id": TEST_PARENT_ID, "role": "MONITOR"}
+    db = SessionLocal()
+    try:
+        cleanup_db(db)
+        sess_id = seed_db(db)
+
+        # Thêm bài toán thứ 2 vào cùng session (sau mốc 8:15)
+        # Tin nhắn bài 2 không có attachment_url riêng
+        m4 = models.Message(
+            id=uuid.uuid4().hex,
+            session_id=sess_id,
+            sender_type="USER",
+            content="giải câu 4",
+            attachment_url=None,
+            created_at=datetime(2026, 10, 1, 8, 20, 0, tzinfo=timezone.utc),
+        )
+        m5 = models.Message(
+            id=uuid.uuid4().hex,
+            session_id=sess_id,
+            sender_type="AGENT_TUTOR",
+            content="Câu 4 yêu cầu tính chu vi, em nhớ công thức không?",
+            attachment_url=None,
+            created_at=datetime(2026, 10, 1, 8, 21, 0, tzinfo=timezone.utc),
+        )
+        score2 = models.IndependenceScore(
+            id=uuid.uuid4().hex,
+            session_id=sess_id,
+            student_id=TEST_STUDENT_ID,
+            score=90,
+            hints_used=0,
+            not_understood_count=0,
+            evaluation="Xuất sắc",
+            created_at=datetime(2026, 10, 1, 8, 25, 0, tzinfo=timezone.utc),
+        )
+        db.add_all([m4, m5, score2])
+        db.commit()
+    finally:
+        db.close()
+
+    # 1. Gọi GET /parent/child-problems (filter=ALL)
+    resp = client.get(f"/parent/child-problems?student_id={TEST_STUDENT_ID}&filter_type=ALL")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert len(data["items"]) == 2
+
+    # Sắp xếp theo created_at desc: items[0] là Bài 2 (8:25), items[1] là Bài 1 (8:15)
+    p2 = data["items"][0]
+    p1 = data["items"][1]
+
+    # Kiểm tra Bài 1 có ảnh
+    assert p1["attachment_url"] == "https://res.cloudinary.com/test/image/upload/abc.jpg"
+
+    # Kiểm tra Bài 2 kế thừa ảnh dùng chung trong session
+    assert p2["attachment_url"] == "https://res.cloudinary.com/test/image/upload/abc.jpg"
+    assert "giải câu 4" in p2["chat_summary"]
+
+    # Kiểm tra dialogue_messages của Bài 2 có attachment_url trên tin nhắn USER đầu tiên
+    first_user_d = next((d for d in p2["dialogue_messages"] if d["sender_type"] == "USER"), None)
+    assert first_user_d is not None
+    assert first_user_d["attachment_url"] == "https://res.cloudinary.com/test/image/upload/abc.jpg"
+
+    # 2. Gọi GET /parent/child-problems với filter_type=WITH_IMAGE
+    resp_img = client.get(f"/parent/child-problems?student_id={TEST_STUDENT_ID}&filter_type=WITH_IMAGE")
+    assert resp_img.status_code == 200
+    data_img = resp_img.json()
+    # Phải có đủ cả 2 bài, không bị gộp hay loại bỏ
+    assert data_img["total"] == 2
+    assert len(data_img["items"]) == 2
+    assert {item["id"] for item in data_img["items"]} == {p1["id"], p2["id"]}
+    print("  [OK] Multi-problems inherit session image and filter WITH_IMAGE passed!")
+
+
 def test_bookmark_table_exists():
     """Bảng problem_bookmarks đã được tạo trên DB với đúng cột."""
     from sqlalchemy import text
