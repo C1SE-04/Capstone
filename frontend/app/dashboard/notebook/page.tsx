@@ -308,7 +308,7 @@ export default function NotebookPage() {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         sessionId={selectedBookmark?.session_id || null}
-        problemTitle={selectedBookmark?.session_title}
+        problemTitle={selectedBookmark?.problem_snapshot || selectedBookmark?.session_title}
         independenceScore={selectedBookmark?.independence_score}
         createdAt={selectedBookmark?.created_at}
         dialogueMessages={selectedBookmark?.dialogue_messages}

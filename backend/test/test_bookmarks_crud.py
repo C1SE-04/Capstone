@@ -173,25 +173,33 @@ def test_bookmark_unique_constraint():
     try:
         session = _create_test_session(db, student.id)
 
+        # Bài toán 1 trong session
         b1 = models.ProblemBookmark(
             id=make_id(), student_id=student.id, session_id=session.id,
-            problem_snapshot="Đề bài", chat_summary="Đề bài",
+            problem_snapshot="Bài 1: Tính diện tích hình tròn r = 3",
+            chat_summary="Tính diện tích hình tròn",
+            independence_score=90,
         )
         db.add(b1)
         db.commit()
 
+        # Bài toán 2 trong cùng session -> Hỗ trợ lưu nhiều bài trong 1 lịch sử chat
         b2 = models.ProblemBookmark(
             id=make_id(), student_id=student.id, session_id=session.id,
-            problem_snapshot="Đề bài lần 2",
+            problem_snapshot="Bài 2: Tính chu vi hình tròn r = 3",
+            chat_summary="Tính chu vi hình tròn",
+            independence_score=85,
         )
         db.add(b2)
-        try:
-            db.commit()
-            db.rollback()
-            assert False, "Phải raise IntegrityError khi lưu trùng session"
-        except IntegrityError:
-            db.rollback()
-            print("[PASS] Test 4: Unique constraint student+session hoạt động đúng")
+        db.commit()
+
+        # Kiểm tra cả 2 bài đều tồn tại trong DB cho cùng 1 session
+        saved_bms = db.query(models.ProblemBookmark).filter(
+            models.ProblemBookmark.student_id == student.id,
+            models.ProblemBookmark.session_id == session.id,
+        ).all()
+        assert len(saved_bms) == 2, f"Kỳ vọng 2 bài trong session, thực tế: {len(saved_bms)}"
+        print("[PASS] Test 4: Hỗ trợ lưu nhiều bài trong cùng 1 session thành công")
     finally:
         _cleanup(db, student.id)
         db.close()
