@@ -10,7 +10,7 @@ import { FileTooLargeToast } from "@/components/chat/FileTooLargeToast";
 // T7.18 (US 7.2): Streak Flame & Badge Modal
 import { StreakBadge } from "@/components/chat/StreakBadge";
 import { BadgeModal, BadgeItem, DEFAULT_BADGES } from "@/components/chat/BadgeModal";
-import { getMergedBadges, saveStoredBadge } from "@/lib/badgeStorage";
+import { getMergedBadges, saveStoredBadge, resetStoredBadge } from "@/lib/badgeStorage";
 import { Conversation, Message } from "@/types/chat";
 import { Menu, PanelRight } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -76,6 +76,13 @@ export default function ChatPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       setAllBadges(getMergedBadges(userId));
+
+      // Hỗ trợ kiểm thử: cho phép Dev/QA reset huy hiệu qua Console
+      (window as any).resetSocraticBadges = (badgeId?: string) => {
+        resetStoredBadge(badgeId, userId);
+        setAllBadges(getMergedBadges(userId));
+        console.log(`[Badge] Đã reset huy hiệu ${badgeId || "tất cả"} cho user ${userId}`);
+      };
     }
   }, [userId]);
 
@@ -814,8 +821,6 @@ export default function ChatPage() {
     // US 6.4 (Task #173): Upload ảnh lên Cloudinary nếu người dùng có đính kèm file
     let uploadedAttachmentUrl: string | undefined = undefined;
     if (imageFile) {
-      // US 7.2: Học sinh tải ảnh bài toán lên để giải -> Kích hoạt huy hiệu "Thám Tử Hình Ảnh" (hiện 1 lần duy nhất)
-      triggerUnlockBadge("photo_solver");
       try {
         const BACKEND_URL =
           process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";

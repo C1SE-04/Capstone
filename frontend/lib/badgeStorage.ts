@@ -61,6 +61,26 @@ export function saveStoredBadge(badgeId: string, userId?: string | null): boolea
 }
 
 /**
+ * Đặt lại trạng thái mở khóa của huy hiệu (phục vụ test lại)
+ */
+export function resetStoredBadge(badgeId?: string, userId?: string | null): void {
+  if (typeof window === "undefined") return;
+  const safeId = userId || "student_guest";
+  const key = `${BADGE_STORAGE_PREFIX}${safeId}`;
+  try {
+    if (!badgeId) {
+      localStorage.removeItem(key);
+    } else {
+      const current = getStoredBadges(userId);
+      delete current[badgeId];
+      localStorage.setItem(key, JSON.stringify(current));
+    }
+  } catch (e) {
+    console.error("[badgeStorage] Lỗi xóa localStorage:", e);
+  }
+}
+
+/**
  * Kết hợp danh mục huy hiệu mẫu với trạng thái mở khóa thực tế từ LocalStorage
  */
 export function getMergedBadges(userId?: string | null): BadgeItem[] {
