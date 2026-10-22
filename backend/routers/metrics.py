@@ -902,6 +902,17 @@ def get_child_problems(
         summary_parts = [msg.content for msg in user_messages[:3] if msg.content]
         chat_summary: Optional[str] = " | ".join(summary_parts) if summary_parts else None
 
+        eval_text = score.evaluation
+        EVAL_MAP = {
+            "Tu lap xuat sac (it dung goi y)": "Tự lập xuất sắc (ít dùng gợi ý)",
+            "Tu lap tot (dung 1-2 goi y)": "Tự lập tốt (dùng 1-2 gợi ý)",
+            "Dang tien bo (can mot so goi y)": "Đang tiến bộ (cần một số gợi ý)",
+            "Can them ho tro su pham": "Cần thêm hỗ trợ sư phạm",
+            "Xuat sac": "Xuất sắc",
+        }
+        if eval_text in EVAL_MAP:
+            eval_text = EVAL_MAP[eval_text]
+
         items.append(
             schemas.ChildProblemItem(
                 id=score.id,
@@ -911,7 +922,7 @@ def get_child_problems(
                 score=score.score,
                 hints_used=score.hints_used,
                 not_understood_count=score.not_understood_count,
-                evaluation=score.evaluation,
+                evaluation=eval_text,
                 attachment_url=attachment_url,
                 chat_summary=chat_summary,
             )
