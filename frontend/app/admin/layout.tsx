@@ -32,7 +32,7 @@ export default function AdminLayout({
   const isRealAdmin = userRole === "ADMIN";
 
   // Màn hình Loading hoặc Chặn quyền truy cập nếu không phải ADMIN
-  if (status === "loading" || status === "unauthenticated" || !isRealAdmin) {
+  if ((status === "loading" && !session) || status === "unauthenticated" || !isRealAdmin) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#F7ECE1] select-none">
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#C1762A] to-[#8C4905] text-white flex items-center justify-center font-extrabold text-2xl shadow-lg animate-bounce">
