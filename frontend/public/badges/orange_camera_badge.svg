@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <g>
+    <!-- Đuôi ruy băng -->
+    <path d="M 230 430 L 160 525 L 250 495 L 275 455 Z" fill="#B33614" />
+    <path d="M 160 525 L 250 495 L 230 430 Z" fill="#8C240B" />
+    <path d="M 570 430 L 640 525 L 550 495 L 525 455 Z" fill="#B33614" />
+    <path d="M 640 525 L 550 495 L 570 430 Z" fill="#8C240B" />
+
+    <!-- Vòng tròn huy hiệu nền cam -->
+    <circle cx="400" cy="275" r="205" fill="#E65100" />
+    <circle cx="400" cy="275" r="180" fill="#F57C00" stroke="#FFA726" stroke-width="15" />
+    <circle cx="400" cy="275" r="150" fill="#FF9800" />
+    <path d="M 400 125 A 150 150 0 0 1 400 425 Z" fill="#E65100" opacity="0.25" />
+
+    <!-- BIỂU TƯỢNG MÁY ẢNH -->
+    <g transform="translate(400, 260) scale(1.15)">
+      <rect x="-85" y="-35" width="170" height="110" rx="20" ry="20" fill="#FFE082" stroke="#FFB300" stroke-width="8" stroke-linejoin="round" />
+      <path d="M 0 -35 L 65 -35 C 76 -35 85 -26 85 -15 L 85 55 C 85 66 76 75 65 75 L 0 75 Z" fill="#FFB300" opacity="0.3" />
+      <path d="M -35 -35 L -20 -60 L 20 -60 L 35 -35 Z" fill="#FFE082" stroke="#FFB300" stroke-width="8" stroke-linejoin="round" />
+      <path d="M 0 -60 L 20 -60 L 35 -35 L 0 -35 Z" fill="#FFB300" opacity="0.3" />
+      <rect x="42" y="-48" width="22" height="12" rx="4" fill="#FFB300" />
+      <circle cx="-55" cy="-12" r="8" fill="#FF9800" />
+      <circle cx="0" cy="20" r="42" fill="#FFE082" stroke="#FFB300" stroke-width="8" />
+      <circle cx="0" cy="20" r="32" fill="#E65100" />
+      <circle cx="0" cy="20" r="22" fill="#BF360C" />
+      <path d="M -16 6 A 22 22 0 0 1 16 6" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" fill="none" />
+      <circle cx="10" cy="30" r="4" fill="#FFFFFF" opacity="0.8" />
+    </g>
+
+    <!-- Dải ruy băng chính phía trước -->
+    <g id="ribbon-front">
+      <path d="M 190 405 Q 400 465 610 405 L 620 480 Q 400 540 180 480 Z" fill="#FF5722" />
+      <path d="M 190 405 Q 400 465 610 405 L 616 418 Q 400 477 186 418 Z" fill="#FF8A65" opacity="0.6" />
+      <path d="M 180 480 Q 400 540 620 480 L 617 468 Q 400 528 183 468 Z" fill="#D84315" opacity="0.5" />
+    </g>
+  </g>
+</svg>
