@@ -28,6 +28,13 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
+  // Chặn Quản trị viên (ADMIN) vào các trang Dashboard của người dùng thường
+  useEffect(() => {
+    if (session && (session.user as any)?.role === "ADMIN") {
+      router.replace("/admin");
+    }
+  }, [session, router]);
+
   const isChatRoute = pathname === "/dashboard/chat";
   const isMonitorRoute = pathname.startsWith("/dashboard/monitor");
   const isStudent = (session?.user as any)?.role === "STUDENT";
