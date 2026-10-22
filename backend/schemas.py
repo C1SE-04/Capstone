@@ -289,6 +289,17 @@ class CloudinarySignatureResponse(BaseModel):
 
 # --- US 7.1: Child Problems API (Task T7.6) ---
 
+class ProblemDialogueMessage(BaseModel):
+    """Một bước hội thoại giữa Học sinh hoặc Hệ thống trong quá trình giải bài."""
+    sender_type: str                         # "USER" hoặc "AGENT_TUTOR"
+    content: str                             # Nội dung tin nhắn
+    attachment_url: Optional[str] = None    # Ảnh đính kèm (nếu có)
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ChildProblemItem(BaseModel):
     """Thông tin 1 bài toán con đã giải, trả về cho Dashboard Phụ Huynh."""
     id: Optional[str] = None                 # ID bản ghi IndependenceScore (duy nhất)
@@ -300,7 +311,8 @@ class ChildProblemItem(BaseModel):
     not_understood_count: int                # Số lần bấm "Chưa hiểu"
     evaluation: Optional[str] = None        # Nhãn đánh giá mức độ ("Xuất sắc", "Khá", ...)
     attachment_url: Optional[str] = None    # Ảnh đề bài từ Cloudinary (nếu có)
-    chat_summary: Optional[str] = None      # Đoạn chat tóm tắt (3 tin nhắn USER đầu tiên)
+    chat_summary: Optional[str] = None      # Đoạn chat tóm tắt
+    dialogue_messages: list[ProblemDialogueMessage] = [] # Danh sách đầy đủ các bước đối thoại giữa con và hệ thống
 
     class Config:
         from_attributes = True
@@ -335,6 +347,7 @@ class BookmarkResponse(BaseModel):
     independence_score: Optional[int] = None
     note: Optional[str] = None
     created_at: datetime
+    dialogue_messages: list[ProblemDialogueMessage] = []
 
     class Config:
         from_attributes = True

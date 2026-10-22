@@ -311,6 +311,7 @@ export default function NotebookPage() {
         problemTitle={selectedBookmark?.session_title}
         independenceScore={selectedBookmark?.independence_score}
         createdAt={selectedBookmark?.created_at}
+        dialogueMessages={selectedBookmark?.dialogue_messages}
       />
     </div>
   );

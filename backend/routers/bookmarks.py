@@ -10,6 +10,7 @@
 
 import uuid
 from typing import Optional
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -24,26 +25,144 @@ router = APIRouter(prefix="/bookmarks", tags=["Bookmarks"])
 
 
 # ==============================================================================
-# HELPER: Tự động điền snapshot/summary khi tạo bookmark
+# HELPER: Tự động điền snapshot/summary & trích xuất đối thoại chuẩn từng bài
 # ==============================================================================
+
+HIDDEN_PROMPTS = (
+    "Hoc sinh chua hieu cach giai thich tren. Hay giai thich lai theo cach khac, don gian va de hieu hon.",
+    "Hoc sinh van chua hieu sau nhieu lan giai thich. Hay dua ra dap an chinh xac va giai thich tung buoc that ro rang.",
+)
+
+def _extract_bookmark_dialogue(
+    session_id: str,
+    bookmark_created_at: Optional[datetime],
+    db: Session,
+) -> list[schemas.ProblemDialogueMessage]:
+    """
+    Trích xuất toàn bộ chuỗi đối thoại của riêng bài toán được bookmark:
+    Từ câu hỏi / đề bài ban đầu của con -> các bước AI gợi mở Socratic -> con suy luận -> đến khi ra đáp án.
+    Tái sử dụng cơ chế phân định ranh giới bài toán theo mốc IndependenceScore.
+    """
+    score_query = (
+        db.query(models.IndependenceScore)
+        .filter(models.IndependenceScore.session_id == session_id)
+    )
+    if bookmark_created_at:
+        score_query = score_query.filter(
+            models.IndependenceScore.created_at <= bookmark_created_at + timedelta(seconds=15)
+        )
+    target_score = score_query.order_by(models.IndependenceScore.created_at.desc()).first()
+
+    prev_time = None
+    end_time = None
+
+    if target_score:
+        end_time = target_score.created_at + timedelta(seconds=5)
+        prev_score = (
+            db.query(models.IndependenceScore)
+            .filter(
+                models.IndependenceScore.session_id == session_id,
+                models.IndependenceScore.created_at < target_score.created_at,
+            )
+            .order_by(models.IndependenceScore.created_at.desc())
+            .first()
+        )
+        if prev_score:
+            prev_time = prev_score.created_at
+    elif bookmark_created_at:
+        end_time = bookmark_created_at + timedelta(seconds=5)
+
+    msg_query = db.query(models.Message).filter(models.Message.session_id == session_id)
+    if end_time:
+        msg_query = msg_query.filter(models.Message.created_at <= end_time)
+    if prev_time:
+        msg_query = msg_query.filter(models.Message.created_at > prev_time)
+
+    raw_msgs = msg_query.order_by(models.Message.created_at.asc()).all()
+
+    if not raw_msgs:
+        raw_msgs = (
+            db.query(models.Message)
+            .filter(models.Message.session_id == session_id)
+            .order_by(models.Message.created_at.asc())
+            .all()
+        )
+
+    dialogue: list[schemas.ProblemDialogueMessage] = []
+    for m in raw_msgs:
+        if m.sender_type not in ("USER", "AGENT_TUTOR"):
+            continue
+        if not m.content:
+            continue
+        content_str = m.content.strip()
+        if any(hp in content_str for hp in HIDDEN_PROMPTS):
+            continue
+        if content_str.startswith("[") and content_str.endswith("]") and "Chua hieu" in content_str:
+            continue
+        dialogue.append(
+            schemas.ProblemDialogueMessage(
+                sender_type=m.sender_type,
+                content=m.content,
+                attachment_url=m.attachment_url,
+                created_at=m.created_at,
+            )
+        )
+
+    return dialogue
+
 
 def _build_bookmark_snapshot(session_id: str, db: Session) -> dict:
     """
     Đọc các tin nhắn của session để tạo snapshot đề bài và tóm tắt chat.
-    - problem_snapshot: nội dung tin nhắn USER đầu tiên có text (đề bài)
-    - attachment_url: ảnh Cloudinary từ tin nhắn USER đầu tiên có ảnh
-    - chat_summary: 3 tin nhắn USER đầu tiên nối bằng " | "
+    Tự động phân định ranh giới nếu trong session có nhiều bài toán đã giải.
+    - problem_snapshot: nội dung tin nhắn USER đầu tiên của bài toán này
+    - attachment_url: ảnh Cloudinary từ tin nhắn USER đầu tiên có ảnh của bài này
+    - chat_summary: các tin nhắn USER của bài toán này nối bằng " | "
     """
-    user_messages = (
+    # Tìm IndependenceScore gần nhất để xác định bài vừa hoàn thành
+    latest_score = (
+        db.query(models.IndependenceScore)
+        .filter(models.IndependenceScore.session_id == session_id)
+        .order_by(models.IndependenceScore.created_at.desc())
+        .first()
+    )
+    prev_time = None
+    if latest_score:
+        prev_score = (
+            db.query(models.IndependenceScore)
+            .filter(
+                models.IndependenceScore.session_id == session_id,
+                models.IndependenceScore.created_at < latest_score.created_at,
+            )
+            .order_by(models.IndependenceScore.created_at.desc())
+            .first()
+        )
+        if prev_score:
+            prev_time = prev_score.created_at
+
+    msg_query = (
         db.query(models.Message)
         .filter(
             models.Message.session_id == session_id,
             models.Message.sender_type == "USER",
         )
-        .order_by(models.Message.created_at.asc())
-        .limit(5)
-        .all()
     )
+    if prev_time:
+        msg_query = msg_query.filter(models.Message.created_at > prev_time)
+
+    user_messages = msg_query.order_by(models.Message.created_at.asc()).all()
+
+    if not user_messages:
+        user_messages = (
+            db.query(models.Message)
+            .filter(
+                models.Message.session_id == session_id,
+                models.Message.sender_type == "USER",
+            )
+            .order_by(models.Message.created_at.asc())
+            .limit(5)
+            .all()
+        )
 
     # Lấy ảnh đề bài từ tin nhắn USER đầu tiên có attachment
     attachment_url: Optional[str] = None
@@ -52,10 +171,10 @@ def _build_bookmark_snapshot(session_id: str, db: Session) -> dict:
             attachment_url = msg.attachment_url
             break
 
-    # Snapshot = nội dung tin nhắn USER đầu tiên
+    # Snapshot = nội dung tin nhắn USER đầu tiên của bài này
     problem_snapshot: Optional[str] = user_messages[0].content if user_messages else None
 
-    # Chat summary = 3 tin nhắn USER đầu nối " | "
+    # Chat summary = các tin nhắn USER đầu nối " | "
     summary_parts = [m.content for m in user_messages[:3] if m.content]
     chat_summary: Optional[str] = " | ".join(summary_parts) if summary_parts else None
 
@@ -120,6 +239,7 @@ def create_bookmark(
     )
     if existing:
         # Trả về bookmark đã có (idempotent, không lỗi)
+        dialogue_messages = _extract_bookmark_dialogue(existing.session_id, existing.created_at, db)
         return schemas.BookmarkResponse(
             id=existing.id,
             student_id=existing.student_id,
@@ -131,6 +251,7 @@ def create_bookmark(
             independence_score=existing.independence_score,
             note=existing.note,
             created_at=existing.created_at,
+            dialogue_messages=dialogue_messages,
         )
 
     # Tự động điền snapshot + score
@@ -155,6 +276,7 @@ def create_bookmark(
         db.rollback()
         raise HTTPException(status_code=409, detail="Bài toán này đã có trong Sổ Tay của bạn.")
 
+    dialogue_messages = _extract_bookmark_dialogue(bookmark.session_id, bookmark.created_at, db)
     return schemas.BookmarkResponse(
         id=bookmark.id,
         student_id=bookmark.student_id,
@@ -166,6 +288,7 @@ def create_bookmark(
         independence_score=bookmark.independence_score,
         note=bookmark.note,
         created_at=bookmark.created_at,
+        dialogue_messages=dialogue_messages,
     )
 
 
@@ -238,6 +361,7 @@ def list_bookmarks(
     result = []
     for bm in bookmarks:
         session = sessions.get(bm.session_id)
+        dialogue_messages = _extract_bookmark_dialogue(bm.session_id, bm.created_at, db)
         result.append(
             schemas.BookmarkResponse(
                 id=bm.id,
@@ -250,6 +374,7 @@ def list_bookmarks(
                 independence_score=bm.independence_score,
                 note=bm.note,
                 created_at=bm.created_at,
+                dialogue_messages=dialogue_messages,
             )
         )
     return result
@@ -275,6 +400,7 @@ def get_bookmark(
         raise HTTPException(status_code=403, detail="Bạn không có quyền xem bookmark này.")
 
     session = db.query(models.Session).filter(models.Session.id == bm.session_id).first()
+    dialogue_messages = _extract_bookmark_dialogue(bm.session_id, bm.created_at, db)
 
     return schemas.BookmarkResponse(
         id=bm.id,
@@ -287,6 +413,7 @@ def get_bookmark(
         independence_score=bm.independence_score,
         note=bm.note,
         created_at=bm.created_at,
+        dialogue_messages=dialogue_messages,
     )
 
 
@@ -326,6 +453,7 @@ def update_bookmark_note(
     db.refresh(bm)
 
     session = db.query(models.Session).filter(models.Session.id == bm.session_id).first()
+    dialogue_messages = _extract_bookmark_dialogue(bm.session_id, bm.created_at, db)
 
     return schemas.BookmarkResponse(
         id=bm.id,
@@ -338,6 +466,7 @@ def update_bookmark_note(
         independence_score=bm.independence_score,
         note=bm.note,
         created_at=bm.created_at,
+        dialogue_messages=dialogue_messages,
     )
 
 

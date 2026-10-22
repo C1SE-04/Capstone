@@ -178,8 +178,19 @@ export function ChatMessage({
           )}
         </div>
 
-        {/* T7.17: Nút ⭐ "Lưu vào Sổ tay" xuất hiện ngay dưới bong bóng chúc mừng khi học sinh đã hiểu */}
-        {!isUser && message.emotion === "correct" && (
+        {/* T7.17: Nút ⭐ "Lưu vào Sổ tay" CHỈ xuất hiện DUY NHẤT dưới bong bóng chúc mừng (Giỏi lắm, Tuyệt vời, Xuất sắc) khi học sinh đã bấm "Đã hiểu" */}
+        {!isUser && (
+          Boolean(message.isCongrats) ||
+          (typeof message.id === "string" && message.id.startsWith("congrats-")) ||
+          (typeof message.content === "string" && (
+            message.content.trim().toLowerCase().startsWith("**giỏi lắm!**") ||
+            message.content.trim().toLowerCase().startsWith("**tuyệt vời!**") ||
+            message.content.trim().toLowerCase().startsWith("**xuất sắc!**") ||
+            message.content.trim().toLowerCase().startsWith("giỏi lắm!") ||
+            message.content.trim().toLowerCase().startsWith("tuyệt vời!") ||
+            message.content.trim().toLowerCase().startsWith("xuất sắc!")
+          ))
+        ) && (
           <SaveBookmarkButton sessionId={sessionId} />
         )}
 

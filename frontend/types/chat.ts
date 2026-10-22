@@ -6,6 +6,7 @@ export interface Message {
   status?: "sending" | "sent" | "error";
   emotion?: "idle" | "thinking" | "suggesting" | "correct" | "incorrect" | string;
   isAnswerRevealed?: boolean;
+  isCongrats?: boolean;
 }
 
 export interface Conversation {
