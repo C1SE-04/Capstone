@@ -415,6 +415,8 @@ export default function MonitorPage() {
       <IndependenceChart
         data={independenceHistory}
         isLoading={isLoadingIndependence}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
       />
 
       {/* T7.9: Sổ theo dõi bài tập của con (Child Problem & Session History) */}
