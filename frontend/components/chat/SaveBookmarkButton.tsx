@@ -35,6 +35,8 @@ export function SaveBookmarkButton({
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
+      const token = (session as { access_token?: string } | null)?.access_token;
+
       let isoCreatedAt: string | undefined = undefined;
       if (messageCreatedAt) {
         try {
