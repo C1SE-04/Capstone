@@ -151,6 +151,13 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
           badgeClass: "bg-rose-50 text-rose-800 border-rose-300",
           icon: <HeartHandshake className="w-5 h-5 text-rose-600" />,
         };
+      case "Chưa có dữ liệu":
+        return {
+          label: "Chưa có dữ liệu",
+          subtitle: "Chưa hoàn thành bài tập nào",
+          badgeClass: "bg-[#F7ECE1] text-[#8C4905] border-[#F1CCA6]",
+          icon: <Info className="w-5 h-5 text-[#C1762A]" />,
+        };
       case "Đang tiến bộ":
       default:
         return {
@@ -208,6 +215,10 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
   }
 
   const insight = insightData?.insight;
+  const isNoData =
+    insight?.mastery_assessment === "Chưa có dữ liệu" ||
+    insightData?.period_description === "Chưa có dữ liệu học tập" ||
+    (!insight?.strengths?.length && !insight?.weak_points?.length);
   const masteryConfig = getMasteryBadgeConfig(insight?.mastery_assessment);
 
   // Format ngày tạo
@@ -297,119 +308,176 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
         </div>
       </div>
 
-      {/* 3 CỘT PHÂN TÍCH TRỰC QUAN */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-5">
-        {/* 1. ĐIỂM MẠNH & SỰ KIÊN TRÌ */}
-        <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-2xl p-4 md:p-5 flex flex-col justify-between hover:border-emerald-300 transition-colors">
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                <CheckCircle2 size={16} className="stroke-[2.5]" />
-              </div>
-              <div>
-                <h4 className="text-sm font-extrabold text-emerald-900 leading-tight">
-                  Điểm mạnh & Kiên trì
-                </h4>
-                <p className="text-[11px] text-emerald-700 font-medium">
-                  Chủ đề con tự tin làm chủ
-                </p>
-              </div>
+      {/* NỘI DUNG NHẬN XÉT: EMPTY STATE HOẶC 3 CỘT PHÂN TÍCH */}
+      {isNoData ? (
+        <div className="bg-[#FFFBF7] border border-[#F1CCA6] rounded-2xl p-5 md:p-6 mb-5">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mb-5 pb-5 border-b border-[#F7ECE1]">
+            <div className="w-12 h-12 rounded-2xl bg-[#F7ECE1] text-[#8C4905] flex items-center justify-center shrink-0">
+              <BookOpen size={24} className="text-[#8C4905]" />
             </div>
-
-            {insight?.strengths && insight.strengths.length > 0 ? (
-              <ul className="space-y-2 mt-2">
-                {insight.strengths.map((item, idx) => (
-                  <li
-                    key={idx}
-                    className="flex items-start gap-2 text-xs text-emerald-950 font-medium leading-relaxed bg-white/70 p-2.5 rounded-xl border border-emerald-100/60 shadow-2xs"
-                  >
-                    <span className="text-emerald-500 font-bold mt-0.5">✔</span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-emerald-700/80 italic mt-2">
-                Chưa có dữ liệu bài tập đạt điểm tự lập cao.
+            <div>
+              <h4 className="text-base font-extrabold text-[#8C4905]">
+                Chưa có dữ liệu bài tập trong đợt này
+              </h4>
+              <p className="text-xs text-[#5C3203] font-medium mt-1 leading-relaxed">
+                Học sinh chưa hoàn thành bài toán nào cùng gia sư Socratic. Khi con bắt đầu trao đổi bài tập và giải toán, hệ thống AI sẽ tự động phân tích năng lực tư duy, điểm mạnh và các dạng bài con còn lúng túng.
               </p>
-            )}
-          </div>
-        </div>
-
-        {/* 2. DẠNG BÀI CÒN LÚNG TÚNG */}
-        <div className="bg-amber-50/50 border border-amber-200/80 rounded-2xl p-4 md:p-5 flex flex-col justify-between hover:border-amber-300 transition-colors">
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
-                <AlertCircle size={16} className="stroke-[2.5]" />
-              </div>
-              <div>
-                <h4 className="text-sm font-extrabold text-amber-900 leading-tight">
-                  Điểm cần lưu ý
-                </h4>
-                <p className="text-[11px] text-amber-700 font-medium">
-                  Dạng bài con còn xin gợi ý
-                </p>
-              </div>
             </div>
-
-            {insight?.weak_points && insight.weak_points.length > 0 ? (
-              <ul className="space-y-2 mt-2">
-                {insight.weak_points.map((item, idx) => (
-                  <li
-                    key={idx}
-                    className="flex items-start gap-2 text-xs text-amber-950 font-medium leading-relaxed bg-white/70 p-2.5 rounded-xl border border-amber-100/60 shadow-2xs"
-                  >
-                    <span className="text-amber-500 font-bold mt-0.5">●</span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-amber-700/80 italic mt-2">
-                Con không gặp vướng mắc đáng kể ở các bài đã làm.
-              </p>
-            )}
           </div>
-        </div>
 
-        {/* 3. LỜI KHUYÊN SƯ PHẠM CHO CHA MẸ */}
-        <div className="bg-[#FFFBF7] border border-[#F1CCA6] rounded-2xl p-4 md:p-5 flex flex-col justify-between hover:border-[#C1762A] transition-colors">
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-7 h-7 rounded-lg bg-[#F7ECE1] text-[#8C4905] flex items-center justify-center">
                 <Lightbulb size={16} className="stroke-[2.5]" />
               </div>
-              <div>
-                <h4 className="text-sm font-extrabold text-[#8C4905] leading-tight">
-                  Lời khuyên cho Cha Mẹ
-                </h4>
-                <p className="text-[11px] text-[#C1762A] font-medium">
-                  Hành động thực tế hỗ trợ tại nhà
-                </p>
-              </div>
+              <h5 className="text-sm font-extrabold text-[#8C4905]">
+                Gợi ý cho Cha Mẹ giúp con bắt đầu
+              </h5>
             </div>
 
             {insight?.recommendations && insight.recommendations.length > 0 ? (
-              <ul className="space-y-2 mt-2">
+              <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {insight.recommendations.map((item, idx) => (
                   <li
                     key={idx}
-                    className="flex items-start gap-2 text-xs text-[#5C3203] font-medium leading-relaxed bg-white p-2.5 rounded-xl border border-[#F1CCA6]/60 shadow-2xs"
+                    className="flex items-start gap-2.5 text-xs text-[#5C3203] font-medium leading-relaxed bg-white p-3 rounded-xl border border-[#F1CCA6]/60 shadow-2xs"
                   >
-                    <Compass size={14} className="text-[#C1762A] shrink-0 mt-0.5" />
+                    <Compass size={15} className="text-[#C1762A] shrink-0 mt-0.5" />
                     <span>{item}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-xs text-[#C1762A] italic mt-2">
-                Khuyến khích con tiếp tục đặt câu hỏi khi gặp bài khó.
+              <p className="text-xs text-[#C1762A] italic">
+                Khuyến khích con chụp ảnh bài toán trên lớp hoặc đặt câu hỏi với gia sư AI để bắt đầu buổi học đầu tiên.
               </p>
             )}
           </div>
         </div>
-      </div>
+      ) : (
+        /* 3 CỘT PHÂN TÍCH TRỰC QUAN */
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-5">
+          {/* 1. ĐIỂM MẠNH & SỰ KIÊN TRÌ */}
+          <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-2xl p-4 md:p-5 flex flex-col justify-between hover:border-emerald-300 transition-colors">
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <CheckCircle2 size={16} className="stroke-[2.5]" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-extrabold text-emerald-900 leading-tight">
+                    Điểm mạnh & Kiên trì
+                  </h4>
+                  <p className="text-[11px] text-emerald-700 font-medium">
+                    Chủ đề con tự tin làm chủ
+                  </p>
+                </div>
+              </div>
+
+              {insight?.strengths && insight.strengths.length > 0 ? (
+                <ul className="space-y-2 mt-2">
+                  {insight.strengths.map((item, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-start gap-2 text-xs text-emerald-950 font-medium leading-relaxed bg-white/70 p-2.5 rounded-xl border border-emerald-100/60 shadow-2xs"
+                    >
+                      <span className="text-emerald-500 font-bold mt-0.5">✔</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-emerald-700/80 italic mt-2">
+                  Chưa có dữ liệu bài tập đạt điểm tự lập cao.
+                </p>
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-emerald-200/60 text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5">
+              <span>Hãy khen ngợi để con duy trì sự hứng thú học tập.</span>
+            </div>
+          </div>
+
+          {/* 2. DẠNG BÀI CÒN LÚNG TÚNG */}
+          <div className="bg-amber-50/50 border border-amber-200/80 rounded-2xl p-4 md:p-5 flex flex-col justify-between hover:border-amber-300 transition-colors">
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                  <AlertCircle size={16} className="stroke-[2.5]" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-extrabold text-amber-900 leading-tight">
+                    Điểm cần lưu ý
+                  </h4>
+                  <p className="text-[11px] text-amber-700 font-medium">
+                    Dạng bài con còn xin gợi ý
+                  </p>
+                </div>
+              </div>
+
+              {insight?.weak_points && insight.weak_points.length > 0 ? (
+                <ul className="space-y-2 mt-2">
+                  {insight.weak_points.map((item, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-start gap-2 text-xs text-amber-950 font-medium leading-relaxed bg-white/70 p-2.5 rounded-xl border border-amber-100/60 shadow-2xs"
+                    >
+                      <span className="text-amber-500 font-bold mt-0.5">●</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-amber-700/80 italic mt-2">
+                  Con không gặp vướng mắc đáng kể ở các bài đã làm.
+                </p>
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-amber-200/60 text-[11px] text-amber-700 font-semibold flex items-center gap-1.5">
+              <span>Khó khăn là cơ hội để con rèn luyện tư duy độc lập.</span>
+            </div>
+          </div>
+
+          {/* 3. LỜI KHUYÊN SƯ PHẠM CHO CHA MẸ */}
+          <div className="bg-[#FFFBF7] border border-[#F1CCA6] rounded-2xl p-4 md:p-5 flex flex-col justify-between hover:border-[#C1762A] transition-colors">
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-[#F7ECE1] text-[#8C4905] flex items-center justify-center">
+                  <Lightbulb size={16} className="stroke-[2.5]" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-extrabold text-[#8C4905] leading-tight">
+                    Lời khuyên cho Cha Mẹ
+                  </h4>
+                  <p className="text-[11px] text-[#C1762A] font-medium">
+                    Hành động thực tế hỗ trợ tại nhà
+                  </p>
+                </div>
+              </div>
+
+              {insight?.recommendations && insight.recommendations.length > 0 ? (
+                <ul className="space-y-2 mt-2">
+                  {insight.recommendations.map((item, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-start gap-2 text-xs text-[#5C3203] font-medium leading-relaxed bg-white p-2.5 rounded-xl border border-[#F1CCA6]/60 shadow-2xs"
+                    >
+                      <Compass size={14} className="text-[#C1762A] shrink-0 mt-0.5" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-[#C1762A] italic mt-2">
+                  Khuyến khích con tiếp tục đặt câu hỏi khi gặp bài khó.
+                </p>
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-[#F1CCA6]/60 text-[11px] text-[#8C4905] font-semibold flex items-center gap-1.5">
+              <span>Phương pháp Socratic: Hỏi gợi mở, không làm thay.</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FOOTER & METADATA */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 text-[11px] text-[#C1762A]/80 border-t border-[#F7ECE1]">

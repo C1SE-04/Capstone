@@ -113,7 +113,9 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           const currentSession = await getSession();
           const userRole = (currentSession?.user as any)?.role;
           
-          if (userRole === "MONITOR") {
+          if (userRole === "ADMIN") {
+            router.push("/admin");
+          } else if (userRole === "MONITOR") {
             router.push("/dashboard/monitor");
           } else {
             router.push("/dashboard/chat");

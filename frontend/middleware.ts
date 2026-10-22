@@ -23,7 +23,15 @@ export async function middleware(request: NextRequest) {
   const role = token.role as string;
   const path = request.nextUrl.pathname;
 
-  // 2. Định tuyến mặc định khi vào thẳng /dashboard
+  // 2. Chặn Quản trị viên (ADMIN) truy cập vào Chat hoặc bất kỳ trang nào của Dashboard
+  if (path.startsWith("/dashboard") || path.startsWith("/chat")) {
+    if (role === "ADMIN") {
+      url.pathname = "/admin";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // 3. Định tuyến mặc định khi vào thẳng /dashboard
   if (path === "/dashboard") {
     if (role === "STUDENT") {
       url.pathname = "/dashboard/chat";
@@ -31,18 +39,21 @@ export async function middleware(request: NextRequest) {
     } else if (role === "MONITOR") {
       url.pathname = "/dashboard/monitor";
       return NextResponse.redirect(url);
+    } else if (role === "ADMIN") {
+      url.pathname = "/admin";
+      return NextResponse.redirect(url);
     }
   }
 
-  // 3. Chặn Phụ huynh (MONITOR) vào trang của Học sinh
-  if (path.startsWith("/dashboard/chat")) {
+  // 4. Chặn Phụ huynh (MONITOR) vào trang Chat của Học sinh
+  if (path.startsWith("/dashboard/chat") || path.startsWith("/chat")) {
     if (role === "MONITOR") {
       url.pathname = "/dashboard/monitor"; // Bắn ngược về trang giám sát
       return NextResponse.redirect(url);
     }
   }
 
-  // 4. Chặn Học sinh (STUDENT) vào trang của Phụ huynh
+  // 5. Chặn Học sinh (STUDENT) vào trang của Phụ huynh
   if (path.startsWith("/dashboard/monitor")) {
     if (role === "STUDENT") {
       url.pathname = "/dashboard/chat"; // Bắn ngược về trang chat
@@ -50,7 +61,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 5. Chặn tuyệt đối mọi Role khác ADMIN truy cập vào các trang /admin
+  // 6. Chặn tuyệt đối mọi Role khác ADMIN truy cập vào các trang /admin
   if (path === "/admin" || path.startsWith("/admin/")) {
     if (role !== "ADMIN") {
       if (role === "STUDENT") {

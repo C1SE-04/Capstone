@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
@@ -8,6 +8,16 @@ export default function Home() {
   const { data: session } = useSession();
   const router = useRouter();
   const [showAuthForm, setShowAuthForm] = useState(false);
+
+  // Nếu người dùng có role ADMIN, tự động chuyển hướng thẳng vào dashboard admin
+  useEffect(() => {
+    if (session) {
+      const role = (session.user as any)?.role;
+      if (role === "ADMIN") {
+        router.replace("/admin");
+      }
+    }
+  }, [session, router]);
   return (
     <div className="min-h-screen bg-[#F7ECE1] font-sans flex flex-col">
       {/* Navigation Bar / Header */}
@@ -80,15 +90,25 @@ export default function Home() {
         <button 
           onClick={() => {
             if (session) {
-              const isMonitor = (session.user as any)?.role === "MONITOR";
-              router.push(isMonitor ? "/dashboard/monitor" : "/dashboard/chat");
+              const role = (session.user as any)?.role;
+              if (role === "ADMIN") {
+                router.push("/admin");
+              } else if (role === "MONITOR") {
+                router.push("/dashboard/monitor");
+              } else {
+                router.push("/dashboard/chat");
+              }
             } else {
               router.push("/try");
             }
           }}
           className="bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold text-lg py-3.5 px-10 rounded-xl hover:brightness-105 active:scale-95 transition-all shadow-md cursor-pointer">
           {session 
-            ? ((session.user as any)?.role === "MONITOR" ? "Vào Dashboard" : "Vô khung chat") 
+            ? ((session.user as any)?.role === "ADMIN" 
+                ? "Vào Dashboard Quản Trị" 
+                : (session.user as any)?.role === "MONITOR" 
+                  ? "Vào Dashboard" 
+                  : "Vô khung chat") 
             : "Dùng thử ngay"}
         </button>
       </main>
