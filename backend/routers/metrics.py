@@ -835,6 +835,7 @@ def get_child_problems(
     student_id: str = Query(..., description="ID của học sinh cần xem"),
     page: int = Query(default=1, ge=1, description="Trang hiện tại (bắt đầu từ 1)"),
     page_size: int = Query(default=10, ge=1, le=50, description="Số bài mỗi trang"),
+    filter_type: Optional[str] = Query(default="ALL", description="Bộ lọc: ALL, WITH_IMAGE, EXCELLENT, NEEDS_SUPPORT"),
     current_user: dict = Depends(dependencies.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -845,6 +846,7 @@ def get_child_problems(
     - Thời điểm hoàn thành, điểm tự lực, số gợi ý đã dùng, đánh giá mức độ
     - Ảnh đề bài từ Cloudinary (nếu học sinh upload ảnh trong session đó)
     - Tóm tắt đoạn chat: 3 tin nhắn USER đầu tiên của session
+    - Hỗ trợ filter_type: ALL, WITH_IMAGE, EXCELLENT, NEEDS_SUPPORT
     """
     if current_user.get("role") != "MONITOR":
         raise HTTPException(status_code=403, detail="Chỉ phụ huynh mới có thể xem dữ liệu này.")
@@ -857,19 +859,38 @@ def get_child_problems(
     if not link:
         raise HTTPException(status_code=403, detail="Bạn không có quyền xem dữ liệu của học sinh này.")
 
-    # --- Đếm tổng số bài đã hoàn thành ---
-    total = (
-        db.query(func.count(models.IndependenceScore.id))
+    # --- Query cơ bản ---
+    base_query = (
+        db.query(models.IndependenceScore, models.Session)
+        .join(models.Session, models.IndependenceScore.session_id == models.Session.id)
         .filter(models.IndependenceScore.student_id == student_id)
-        .scalar()
-    ) or 0
+    )
+
+    # --- Áp dụng bộ lọc ---
+    normalized_filter = (filter_type or "ALL").upper()
+    if normalized_filter == "WITH_IMAGE":
+        has_image_subquery = (
+            db.query(models.Message.session_id)
+            .filter(
+                models.Message.attachment_url.isnot(None),
+                models.Message.attachment_url != "",
+            )
+            .distinct()
+            .subquery()
+        )
+        base_query = base_query.filter(models.IndependenceScore.session_id.in_(has_image_subquery))
+    elif normalized_filter == "EXCELLENT":
+        base_query = base_query.filter(models.IndependenceScore.score >= 80)
+    elif normalized_filter == "NEEDS_SUPPORT":
+        base_query = base_query.filter(models.IndependenceScore.score < 65)
+
+    # --- Đếm tổng số bài đã hoàn thành phù hợp bộ lọc ---
+    total = base_query.count()
 
     # --- Lấy danh sách bài theo trang, sắp xếp mới nhất lên đầu ---
     offset = (page - 1) * page_size
     score_rows = (
-        db.query(models.IndependenceScore, models.Session)
-        .join(models.Session, models.IndependenceScore.session_id == models.Session.id)
-        .filter(models.IndependenceScore.student_id == student_id)
+        base_query
         .order_by(models.IndependenceScore.created_at.desc())
         .offset(offset)
         .limit(page_size)
