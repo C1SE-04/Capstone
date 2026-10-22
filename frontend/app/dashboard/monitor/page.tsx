@@ -454,6 +454,8 @@ export default function MonitorPage() {
       <IndependenceChart
         data={independenceHistory}
         isLoading={isLoadingIndependence}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
       />
 
       {/* T6.6 / T7.8: Biểu đồ nhiệt dùng dữ liệu thật từ /metrics/heatmap */}
