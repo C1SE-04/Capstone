@@ -12,6 +12,7 @@ import { BadgeModal, BadgeItem } from "@/components/chat/BadgeModal";
 import { Conversation, Message } from "@/types/chat";
 import { Menu, PanelRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { authFetch } from "@/lib/authFetch";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,14 @@ function getOnlineServerSnapshot() {
 
 export default function ChatPage() {
   const router = useRouter();
+  const { data: session } = useSession();
+
+  // Chặn tuyệt đối Quản trị viên (ADMIN) vào chat, đẩy thẳng về /admin
+  useEffect(() => {
+    if (session && (session.user as any)?.role === "ADMIN") {
+      router.replace("/admin");
+    }
+  }, [session, router]);
 
   // Khởi tạo state trống để đợi load từ DB
   const [conversations, setConversations] = useState<Conversation[]>([]);

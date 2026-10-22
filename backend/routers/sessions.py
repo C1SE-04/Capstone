@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import models, schemas, dependencies
 from database import get_db
@@ -13,7 +13,13 @@ def create_session(
 ):
     """
     Tạo một phòng chat (Session) mới cho người dùng đang đăng nhập.
+    Quản trị viên (ADMIN) không được phép tham gia chat.
     """
+    if current_user.get("role") == "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản Quản trị viên không thể tham gia phiên chat học sinh."
+        )
     new_session = models.Session(
         user_id=current_user["id"],
         title=session_data.title
@@ -45,8 +51,14 @@ def get_user_sessions(
 ):
     """
     Lấy danh sách tất cả phòng chat (Session) của người dùng đang đăng nhập,
-    sắp xếp theo thời gian cập nhật mới nhất.
+    sắp xếp theo thời gian cập nhật mới nhất. Quản trị viên không có session chat.
     """
+    if current_user.get("role") == "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản Quản trị viên không có phiên chat học sinh."
+        )
+
     from sqlalchemy.orm import joinedload
     sessions = db.query(models.Session).options(
         joinedload(models.Session.messages)
@@ -65,14 +77,19 @@ def delete_session(
     """
     Xóa một phòng chat (Session) và toàn bộ tin nhắn bên trong.
     """
+    if current_user.get("role") == "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản Quản trị viên không thể thao tác trên phiên chat."
+        )
+
     session = db.query(models.Session).filter(
         models.Session.id == session_id,
         models.Session.user_id == current_user["id"]
     ).first()
     
     if not session:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Không tìm thấy phòng chat hoặc không có quyền truy cập.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phòng chat hoặc không có quyền truy cập.")
         
     # Xóa các bản ghi liên quan trước khi xóa session để tránh lỗi ForeignKey / NotNullViolation
     db.query(models.SessionActiveInterval).filter(models.SessionActiveInterval.session_id == session.id).delete()

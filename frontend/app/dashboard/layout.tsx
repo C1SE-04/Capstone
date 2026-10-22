@@ -28,6 +28,13 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
+  // Chặn Quản trị viên (ADMIN) vào các trang Dashboard của người dùng thường
+  useEffect(() => {
+    if (session && (session.user as any)?.role === "ADMIN") {
+      router.replace("/admin");
+    }
+  }, [session, router]);
+
   // [Task T6.12] Lắng nghe sự kiện đổi lớp từ các tab khác qua BroadcastChannel để đồng bộ session toàn Dashboard
   useEffect(() => {
     if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
