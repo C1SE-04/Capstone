@@ -156,14 +156,16 @@ export default function MonitorPage() {
     }
   }, [selectedStudent, session?.access_token, weekStart, weekEnd]);
 
-  // T6.9: Fetch lịch sử điểm Independence từ API /independence/summary
+  // T6.9: Fetch lịch sử điểm Independence từ API /independence/summary theo tuần được chọn
   const fetchIndependence = useCallback(async () => {
     if (!selectedStudent || !session?.access_token) return;
     setIsLoadingIndependence(true);
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const startDateStr = format(weekStart, "yyyy-MM-dd");
+      const endDateStr = format(weekEnd, "yyyy-MM-dd");
       const res = await fetch(
-        `${backendUrl}/independence/summary?student_id=${selectedStudent.student_id}`,
+        `${backendUrl}/independence/summary?student_id=${selectedStudent.student_id}&start_date=${startDateStr}&end_date=${endDateStr}`,
         { headers: { Authorization: `Bearer ${session.access_token}` } }
       );
       if (!res.ok) throw new Error("Fetch independence failed");
@@ -183,9 +185,9 @@ export default function MonitorPage() {
     } finally {
       setIsLoadingIndependence(false);
     }
-  }, [selectedStudent, session?.access_token]);
+  }, [selectedStudent, session?.access_token, weekStart, weekEnd]);
 
-  // T7.8: Fetch Summary Cards thật từ /metrics/summary
+  // T7.8: Fetch Summary Cards thật từ /metrics/summary (chỉ chịu ảnh hưởng bởi timeRange 7d/30d)
   const fetchSummary = useCallback(async () => {
     if (!selectedStudent || !session?.access_token) return;
     setIsLoadingSummary(true);
@@ -216,24 +218,16 @@ export default function MonitorPage() {
     }
   }, [selectedStudent, session?.access_token, timeRange]);
 
-
-
-  // Trigger fetch khi đổi học sinh hoặc tuần
+  // Trigger fetch cả 2 biểu đồ (Thời gian học & Điểm tự lực) khi đổi học sinh hoặc tuần
   useEffect(() => {
     fetchMetrics();
-  }, [fetchMetrics]);
-
-  // T6.9: Trigger fetch independence khi đổi học sinh
-  useEffect(() => {
     fetchIndependence();
-  }, [fetchIndependence]);
+  }, [fetchMetrics, fetchIndependence]);
 
-  // T7.8: Trigger fetch Summary Cards khi đổi học sinh hoặc timeRange
+  // Trigger fetch Summary Cards khi đổi học sinh hoặc timeRange (chỉ ảnh hưởng 4 thẻ summary)
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
-
-
 
   // Tổng hợp số liệu
   const totalHours = (totalMinutes / 60).toFixed(1);
@@ -300,38 +294,9 @@ export default function MonitorPage() {
           </div>
         </div>
 
-        {/* Filter Controls: Dropdown lọc thời gian (T6.8) & Tuần */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Filter Controls: Dropdown lọc thời gian (chỉ ảnh hưởng 4 thẻ summary) */}
+        <div className="flex items-center">
           <TimeRangeFilter value={timeRange} onChange={setTimeRange} />
-
-          {/* Weekly Navigation Controls */}
-          <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-[#F1CCA6] shadow-sm">
-            <button
-              onClick={handlePrevWeek}
-              aria-label="Tuần trước"
-              className="p-1 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 transition-all cursor-pointer"
-            >
-              <ChevronLeft size={18} />
-            </button>
-
-            <div className="text-xs font-bold text-[#8C4905] min-w-[125px] text-center">
-              {format(weekStart, "dd/MM")} - {format(weekEnd, "dd/MM/yyyy")}
-              {isCurrentWeek && <span className="block text-[10px] text-[#C1762A] font-medium">(Tuần này)</span>}
-            </div>
-
-            <button
-              onClick={handleNextWeek}
-              disabled={isCurrentWeek}
-              aria-label="Tuần tiếp theo"
-              className={`p-1 rounded-lg transition-all ${
-                isCurrentWeek
-                  ? "text-gray-300 cursor-not-allowed"
-                  : "text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 cursor-pointer"
-              }`}
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
         </div>
       </div>
 
@@ -345,7 +310,53 @@ export default function MonitorPage() {
         studentName={displayName}
       />
 
-      {/* Biểu đồ */}
+      {/* Bộ điều hướng tuần cho cả 2 biểu đồ (Thời gian học & Điểm tự lực) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-8 mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-[#8C4905] flex items-center gap-2">
+            <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />
+            Biểu đồ học tập theo tuần
+          </h2>
+          <p className="text-xs text-[#C1762A] mt-0.5 ml-3.5 font-medium">
+            Áp dụng cho Biểu đồ thời gian học & Điểm tự lực
+          </p>
+        </div>
+
+        {/* Weekly Navigation Controls */}
+        <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-[#F1CCA6] shadow-sm self-start sm:self-auto">
+          <button
+            onClick={handlePrevWeek}
+            aria-label="Tuần trước"
+            className="p-1 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 transition-all cursor-pointer"
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <div className="text-xs font-bold text-[#8C4905] min-w-[130px] text-center select-none">
+            {format(weekStart, "dd/MM")} - {format(weekEnd, "dd/MM/yyyy")}
+            {isCurrentWeek && (
+              <span className="block text-[10px] text-[#C1762A] font-medium">
+                (Tuần này)
+              </span>
+            )}
+          </div>
+
+          <button
+            onClick={handleNextWeek}
+            disabled={isCurrentWeek}
+            aria-label="Tuần tiếp theo"
+            className={`p-1 rounded-lg transition-all ${
+              isCurrentWeek
+                ? "text-gray-300 cursor-not-allowed"
+                : "text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 cursor-pointer"
+            }`}
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* Biểu đồ thời gian học */}
       <section className="bg-white rounded-2xl border border-[#F1CCA6] p-6 shadow-sm">
         <h2 className="text-lg font-bold text-[#8C4905] mb-6 flex items-center gap-2">
           <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />

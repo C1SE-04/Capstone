@@ -4,8 +4,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from datetime import datetime, timezone
+from sqlalchemy import func, cast, Date
+from datetime import datetime, date, timezone
 from typing import Optional, List
 import models
 import schemas
@@ -177,13 +177,24 @@ def get_independence_history(
 @router.get("/independence/summary", response_model=schemas.IndependenceSummaryResponse)
 def get_independence_summary(
     student_id: Optional[str] = Query(None, description="ID học sinh"),
+    start_date: Optional[date] = Query(None, description="Ngày bắt đầu (YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="Ngày kết thúc (YYYY-MM-DD)"),
     current_user: dict = Depends(dependencies.get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Tổng hợp điểm tự lực trung bình và lịch sử phục vụ Dashboard Phụ huynh (Summary Cards & Line Chart).
+    Hỗ trợ lọc theo khoảng thời gian tuần (start_date, end_date).
     """
     target_id = student_id or current_user["id"]
+
+    query = db.query(models.IndependenceScore).filter(
+        models.IndependenceScore.student_id == target_id
+    )
+    if start_date:
+        query = query.filter(cast(models.IndependenceScore.created_at, Date) >= start_date)
+    if end_date:
+        query = query.filter(cast(models.IndependenceScore.created_at, Date) <= end_date)
 
     # 1. Tính điểm trung bình và tổng số bài hoàn thành
     stats_query = (
@@ -192,16 +203,20 @@ def get_independence_summary(
             func.avg(models.IndependenceScore.score).label("avg_score"),
         )
         .filter(models.IndependenceScore.student_id == target_id)
-        .one()
     )
+    if start_date:
+        stats_query = stats_query.filter(cast(models.IndependenceScore.created_at, Date) >= start_date)
+    if end_date:
+        stats_query = stats_query.filter(cast(models.IndependenceScore.created_at, Date) <= end_date)
 
-    total_completed = stats_query.total_completed or 0
-    avg_score = round(float(stats_query.avg_score), 1) if stats_query.avg_score is not None else 0.0
+    stats_row = stats_query.one()
+
+    total_completed = stats_row.total_completed or 0
+    avg_score = round(float(stats_row.avg_score), 1) if stats_row.avg_score is not None else 0.0
 
     # 2. Lấy bài gần nhất
     latest_record = (
-        db.query(models.IndependenceScore)
-        .filter(models.IndependenceScore.student_id == target_id)
+        query
         .order_by(models.IndependenceScore.created_at.desc())
         .first()
     )
@@ -219,12 +234,11 @@ def get_independence_summary(
     else:
         level = "Chưa có dữ liệu"
 
-    # 4. Lấy 30 bản ghi gần nhất cho Line Chart
+    # 4. Lấy danh sách bản ghi cho Line Chart (tối đa 100 bản ghi)
     history = (
-        db.query(models.IndependenceScore)
-        .filter(models.IndependenceScore.student_id == target_id)
-        .order_by(models.IndependenceScore.created_at.desc())
-        .limit(30)
+        query
+        .order_by(models.IndependenceScore.created_at.asc())
+        .limit(100)
         .all()
     )
 

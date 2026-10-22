@@ -869,16 +869,15 @@ def get_child_problems(
     # --- Áp dụng bộ lọc ---
     normalized_filter = (filter_type or "ALL").upper()
     if normalized_filter == "WITH_IMAGE":
-        has_image_subquery = (
+        has_image_query = (
             db.query(models.Message.session_id)
             .filter(
                 models.Message.attachment_url.isnot(None),
                 models.Message.attachment_url != "",
             )
             .distinct()
-            .subquery()
         )
-        base_query = base_query.filter(models.IndependenceScore.session_id.in_(has_image_subquery))
+        base_query = base_query.filter(models.IndependenceScore.session_id.in_(has_image_query))
     elif normalized_filter == "EXCELLENT":
         base_query = base_query.filter(models.IndependenceScore.score >= 80)
     elif normalized_filter == "NEEDS_SUPPORT":
@@ -968,6 +967,37 @@ def get_child_problems(
                 attachment_url = msg.attachment_url
                 break
 
+        # Nếu bài toán này không có ảnh riêng (ví dụ làm tiếp bài 2, 3 từ cùng 1 ảnh đề chụp trước đó):
+        # Ưu tiên lấy ảnh gần nhất gửi trước hoặc tại thời điểm hoàn thành bài toán trong cùng session
+        if not attachment_url:
+            prev_attachment = (
+                db.query(models.Message.attachment_url)
+                .filter(
+                    models.Message.session_id == session.id,
+                    models.Message.created_at <= end_time,
+                    models.Message.attachment_url.isnot(None),
+                    models.Message.attachment_url != "",
+                )
+                .order_by(models.Message.created_at.desc())
+                .first()
+            )
+            if prev_attachment and prev_attachment[0]:
+                attachment_url = prev_attachment[0]
+            else:
+                # Dự phòng: bất kỳ ảnh nào đã gửi trong session
+                any_attachment = (
+                    db.query(models.Message.attachment_url)
+                    .filter(
+                        models.Message.session_id == session.id,
+                        models.Message.attachment_url.isnot(None),
+                        models.Message.attachment_url != "",
+                    )
+                    .order_by(models.Message.created_at.asc())
+                    .first()
+                )
+                if any_attachment and any_attachment[0]:
+                    attachment_url = any_attachment[0]
+
         # Tóm tắt đoạn chat: lấy các tin nhắn USER của bài toán này
         user_messages = [m for m in valid_messages if m.sender_type == "USER"]
         summary_parts = [msg.content for msg in user_messages if msg.content]
@@ -984,6 +1014,24 @@ def get_child_problems(
             for m in valid_messages
         ]
 
+        # Nếu bài toán kế thừa attachment_url và trong valid_messages chưa có tin nhắn nào gắn ảnh,
+        # gán attachment_url cho tin nhắn USER đầu tiên để modal đối thoại hiển thị ảnh đề bài
+        if attachment_url and not any(m.attachment_url for m in valid_messages):
+            for dm in dialogue_messages:
+                if dm.sender_type == "USER":
+                    dm.attachment_url = attachment_url
+                    break
+        eval_text = score.evaluation
+        EVAL_MAP = {
+            "Tu lap xuat sac (it dung goi y)": "Tự lập xuất sắc (ít dùng gợi ý)",
+            "Tu lap tot (dung 1-2 goi y)": "Tự lập tốt (dùng 1-2 gợi ý)",
+            "Dang tien bo (can mot so goi y)": "Đang tiến bộ (cần một số gợi ý)",
+            "Can them ho tro su pham": "Cần thêm hỗ trợ sư phạm",
+            "Xuat sac": "Xuất sắc",
+        }
+        if eval_text in EVAL_MAP:
+            eval_text = EVAL_MAP[eval_text]
+
         items.append(
             schemas.ChildProblemItem(
                 id=score.id,
@@ -993,7 +1041,7 @@ def get_child_problems(
                 score=score.score,
                 hints_used=score.hints_used,
                 not_understood_count=score.not_understood_count,
-                evaluation=score.evaluation,
+                evaluation=eval_text,
                 attachment_url=attachment_url,
                 chat_summary=chat_summary,
                 dialogue_messages=dialogue_messages,

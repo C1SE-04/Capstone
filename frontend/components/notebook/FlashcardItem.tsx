@@ -55,7 +55,7 @@ export function FlashcardItem({
               <BookOpen size={15} />
             </span>
             <h3 className="font-bold text-sm text-[#8C4905] truncate">
-              {bookmark.session_title || "Bài toán Sổ tay"}
+              {bookmark.problem_snapshot || bookmark.session_title || "Bài toán Sổ tay"}
             </h3>
           </div>
 

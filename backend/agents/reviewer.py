@@ -125,6 +125,7 @@ class LocalReviewerAgent:
         student_question: str,
         expected_answer: str,
         scaffolding_response: str,
+        has_comprehension: bool = False,
     ) -> ReviewResult:
         
         clean_question = self._normalize_text(student_question)
@@ -164,12 +165,15 @@ class LocalReviewerAgent:
             }
 
         ends_with_question = self._response_ends_with_question(clean_response)
-        is_praise_correct = any(p in response_lower for p in ("chính xác", "hoàn toàn đúng", "đúng rồi", "xuất sắc", "tuyệt vời", "chuẩn rồi"))
+        is_praise_correct = any(p in response_lower for p in (
+            "chính xác", "hoàn toàn đúng", "đúng rồi", "xuất sắc", "tuyệt vời", 
+            "chuẩn rồi", "rất tốt", "rất giỏi", "khen ngợi", "chuẩn xác", "làm tốt lắm"
+        ))
         is_requesting_problem = any(p in response_lower for p in ("gửi đề", "gõ lại đề", "đọc lại đề", "nhập đề", "chưa thấy đề"))
 
         if not ends_with_question:
-            if is_praise_correct:
-                reasoning_logs.append("[PASS Lớp 1]: Phản hồi khen ngợi (miễn dấu '?').")
+            if is_praise_correct or has_comprehension:
+                reasoning_logs.append("[PASS Lớp 1]: Phản hồi khen ngợi / hoàn thành bài toán (miễn dấu '?').")
             elif is_requesting_problem:
                 reasoning_logs.append("[PASS Lớp 1]: Phản hồi xin đề bài (miễn dấu '?').")
             else:
@@ -185,7 +189,15 @@ class LocalReviewerAgent:
         # =====================================================================
         # LỚP 2: KIỂM TRA LỘ ĐÁP ÁN (Answer Leakage Check)
         # =====================================================================
-        student_has_answer = bool(expected_lower) and (expected_lower in question_lower)
+        has_number_in_question = bool(re.search(r"\d+", clean_question))
+        has_choice_in_question = bool(re.search(r"\b[a-dA-D]\b", clean_question))
+        student_answered = has_number_in_question or has_choice_in_question
+
+        student_has_answer = (
+            (bool(expected_lower) and (expected_lower in question_lower))
+            or (is_praise_correct and student_answered)
+            or has_comprehension
+        )
 
         if not student_has_answer:
             if expected_lower and len(expected_lower) >= 2 and (expected_lower in response_lower):
@@ -209,6 +221,8 @@ class LocalReviewerAgent:
             if latex_matches and not ends_with_question:
                 reasoning_logs.append(f"[FAIL Lớp 2]: LaTeX Leak {latex_matches[0]}.")
                 return {"is_approved": False, "reasoning": " -> ".join(reasoning_logs), "feedback": "Không viết đáp án số dạng LaTeX."}
+        else:
+            reasoning_logs.append("[PASS Lớp 2]: Học sinh đã trả lời hoặc bài toán đã hoàn thành, cho phép AI xác nhận/khen ngợi.")
 
         if self.SUBOPTIMAL_DENOMINATOR_PATTERN.search(clean_response):
             reasoning_logs.append("[FAIL Lớp 2]: Chấp nhận mẫu số 48 chưa tối ưu.")

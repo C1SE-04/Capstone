@@ -185,7 +185,21 @@ def generate_parent_learning_insights(
 
 
 def _fallback_insights(student_name: str, total_problems: int, score: float, reason: str = "") -> Dict[str, Any]:
-    """Hàm dự phòng (fallback) khi Gemini gặp sự cố mạng hoặc quota."""
+    """Hàm dự phòng (fallback) khi Gemini gặp sự cố mạng/quota hoặc học sinh chưa có bài giải nào."""
+    if total_problems == 0:
+        return {
+            "summary": f"Trong đợt học vừa qua, em {student_name} chưa tham gia giải bài toán nào cùng gia sư Socratic. Báo cáo nhận xét sư phạm chi tiết sẽ được tự động tổng hợp ngay khi con hoàn thành bài toán đầu tiên.",
+            "strengths": [],
+            "weak_points": [],
+            "recommendations": [
+                f"Phụ huynh hãy khuyến khích em {student_name} chụp ảnh bài toán trên lớp hoặc đặt câu hỏi để bắt đầu học cùng gia sư AI.",
+                "Động viên con trao đổi tự nhiên với gia sư Socratic để từng bước tháo gỡ khó khăn trong môn Toán."
+            ],
+            "mastery_assessment": "Chưa có dữ liệu",
+            "is_fallback": True,
+            "fallback_reason": reason or "Học sinh chưa có bài toán nào hoàn thành trong kỳ.",
+        }
+
     assessment = "Đang tiến bộ"
     if score >= 80:
         assessment = "Tự lập xuất sắc"

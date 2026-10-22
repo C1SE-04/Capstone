@@ -36,6 +36,14 @@ function getOnlineServerSnapshot() {
 
 export default function ChatPage() {
   const router = useRouter();
+  const { data: session } = useSession();
+
+  // Chặn tuyệt đối Quản trị viên (ADMIN) vào chat, đẩy thẳng về /admin
+  useEffect(() => {
+    if (session && (session.user as any)?.role === "ADMIN") {
+      router.replace("/admin");
+    }
+  }, [session, router]);
 
   // Khởi tạo state trống để đợi load từ DB
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -65,7 +73,6 @@ export default function ChatPage() {
   });
 
   // T7.18 (US 7.2): Quản lý huy hiệu & Modal chúc mừng (chỉ hiển thị 1 lần duy nhất)
-  const { data: session } = useSession();
   const userId = (session?.user as any)?.id || (session?.user as any)?.email || "student_guest";
   const [allBadges, setAllBadges] = useState<BadgeItem[]>(DEFAULT_BADGES);
   const [badgeQueue, setBadgeQueue] = useState<BadgeItem[]>([]);
@@ -182,6 +189,7 @@ export default function ChatPage() {
                     role: m.sender_type === "USER" ? "user" : "assistant",
                     content: m.content,
                     attachment_url: m.attachment_url || undefined,
+                    created_at: m.created_at,
                   }))
                   // Loc bo cac prompt ngam de khong bi lo khi reload trang
                   .filter((m: any) => !(
@@ -294,6 +302,8 @@ export default function ChatPage() {
     // Chỉ thêm message chúc mừng khi đang có cuộc trò chuyện
     if (!activeChatId) return;
 
+    let scoreCreatedAt: string | undefined = undefined;
+
     // Gửi request lên Backend (Task #160 - T6.4) để kích hoạt tính điểm và lưu vào DB
     try {
       const BACKEND_URL =
@@ -310,8 +320,9 @@ export default function ChatPage() {
 
       if (res.ok) {
         const resData = await res.json();
-        // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time (T6.5)
         if (resData.independence) {
+          scoreCreatedAt = resData.independence.created_at;
+          // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time (T6.5)
           window.dispatchEvent(
             new CustomEvent("INDEPENDENCE_SCORE_UPDATED", {
               detail: resData.independence,
@@ -360,6 +371,7 @@ export default function ChatPage() {
                   emotion: "correct",
                   isAnswerRevealed: false, // Không hiện lại nút Đã hiểu/Chưa hiểu
                   isCongrats: true, // Đánh dấu tin nhắn chúc mừng để hiển thị nút Lưu vào Sổ tay
+                  created_at: scoreCreatedAt || new Date().toISOString(),
                 },
               ],
             }

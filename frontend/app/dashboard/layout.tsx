@@ -28,8 +28,21 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  // [Task T6.12] Lắng nghe sự kiện đổi lớp từ các tab khác qua BroadcastChannel để đồng bộ session toàn Dashboard
+  // Chặn Quản trị viên (ADMIN) vào các trang Dashboard của người dùng thường
   useEffect(() => {
+    if (session && (session.user as any)?.role === "ADMIN") {
+      router.replace("/admin");
+    }
+  }, [session, router]);
+
+  const isChatRoute = pathname === "/dashboard/chat";
+  const isMonitorRoute = pathname.startsWith("/dashboard/monitor");
+  const isStudent = (session?.user as any)?.role === "STUDENT";
+
+  // [Task T6.12] Lắng nghe sự kiện đổi lớp từ các tab khác qua BroadcastChannel để đồng bộ session toàn Dashboard
+  // Chỉ áp dụng cho tài khoản Học sinh và ngoài màn hình Monitor
+  useEffect(() => {
+    if (isMonitorRoute || !isStudent) return;
     if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
 
     const channel = new BroadcastChannel("socratic_grade_sync");
@@ -42,10 +55,13 @@ export default function DashboardLayout({
     return () => {
       channel.close();
     };
-  }, [update]);
+  }, [update, isMonitorRoute, isStudent]);
 
   // Đồng bộ session & khối lớp khi focus lại tab (giúp tab ẩn danh tự cập nhật theo tab thường)
+  // Chỉ áp dụng cho tài khoản Học sinh và ngoài màn hình Monitor
   useEffect(() => {
+    if (isMonitorRoute || !isStudent) return;
+
     const handleFocus = async () => {
       try {
         await refreshSession(update);
@@ -66,10 +82,7 @@ export default function DashboardLayout({
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [update]);
-
-  const isChatRoute = pathname === "/dashboard/chat";
-  const isMonitorRoute = pathname.startsWith("/dashboard/monitor");
+  }, [update, isMonitorRoute, isStudent]);
 
   // Khi ở trang Chat hoặc Monitor, nhường layout cho trang con tự quản lý
   if (isChatRoute || isMonitorRoute) {
