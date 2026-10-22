@@ -15,7 +15,6 @@ import { useSession } from "next-auth/react";
 import { SummaryCards, SummaryMetrics } from "@/components/monitor/SummaryCards";
 import { AIInsightsCard } from "@/components/monitor/AIInsightsCard";
 import { TimeRangeFilter, TimeRange } from "@/components/monitor/TimeRangeFilter";
-import { ActivityHeatmap, HeatmapDay } from "@/components/monitor/ActivityHeatmap";
 import { IndependenceChart, IndependencePoint } from "@/components/monitor/IndependenceChart";
 import { ChildProblemHistory } from "@/components/monitor/ChildProblemHistory";
 import { UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
@@ -82,10 +81,6 @@ export default function MonitorPage() {
   // T7.8: State cho Summary Cards thật (thay mock)
   const [summaryData, setSummaryData] = useState<SummaryMetrics | null>(null);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
-
-  // T7.8: State cho Heatmap thật (thay generateMockHeatmapData)
-  const [heatmapData, setHeatmapData] = useState<HeatmapDay[]>([]);
-  const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
 
   // Tính toán thời gian của tuần đang chọn
   const { weekStart, weekEnd, isCurrentWeek } = useMemo(() => {
@@ -223,35 +218,6 @@ export default function MonitorPage() {
     }
   }, [selectedStudent, session?.access_token, timeRange]);
 
-  // T7.8: Fetch Heatmap thật từ /metrics/heatmap (cố định 24 tuần để hiển thị toàn cảnh)
-  const fetchHeatmap = useCallback(async () => {
-    if (!selectedStudent || !session?.access_token) return;
-    setIsLoadingHeatmap(true);
-    try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
-      const weeksParam = 24;
-      const res = await fetch(
-        `${backendUrl}/metrics/heatmap?student_id=${selectedStudent.student_id}&weeks=${weeksParam}`,
-        { headers: { Authorization: `Bearer ${session.access_token}` } }
-      );
-      if (!res.ok) throw new Error("Fetch heatmap failed");
-      const json = await res.json();
-      // json.data: [{date, minutes, intensity_level}] → lấy {date, minutes} cho HeatmapDay
-      const mapped: HeatmapDay[] = (json.data ?? []).map(
-        (item: { date: string; minutes: number }) => ({
-          date: item.date,
-          minutes: item.minutes,
-        })
-      );
-      setHeatmapData(mapped);
-    } catch (err) {
-      console.error("Lỗi fetch heatmap:", err);
-      setHeatmapData([]);
-    } finally {
-      setIsLoadingHeatmap(false);
-    }
-  }, [selectedStudent, session?.access_token]);
-
   // Trigger fetch cả 2 biểu đồ (Thời gian học & Điểm tự lực) khi đổi học sinh hoặc tuần
   useEffect(() => {
     fetchMetrics();
@@ -262,11 +228,6 @@ export default function MonitorPage() {
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
-
-  // Trigger fetch Heatmap khi đổi học sinh
-  useEffect(() => {
-    fetchHeatmap();
-  }, [fetchHeatmap]);
 
   // Tổng hợp số liệu
   const totalHours = (totalMinutes / 60).toFixed(1);
@@ -454,12 +415,6 @@ export default function MonitorPage() {
       <IndependenceChart
         data={independenceHistory}
         isLoading={isLoadingIndependence}
-      />
-
-      {/* T6.6 / T7.8: Biểu đồ nhiệt dùng dữ liệu thật từ /metrics/heatmap */}
-      <ActivityHeatmap
-        data={heatmapData}
-        isLoading={isLoadingHeatmap}
       />
 
       {/* T7.9: Sổ theo dõi bài tập của con (Child Problem & Session History) */}

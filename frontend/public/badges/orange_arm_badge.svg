@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <g>
+    <!-- Đuôi ruy băng -->
+    <path d="M 230 430 L 160 525 L 250 495 L 275 455 Z" fill="#B33614" />
+    <path d="M 160 525 L 250 495 L 230 430 Z" fill="#8C240B" />
+    <path d="M 570 430 L 640 525 L 550 495 L 525 455 Z" fill="#B33614" />
+    <path d="M 640 525 L 550 495 L 570 430 Z" fill="#8C240B" />
+
+    <!-- Vòng tròn huy hiệu nền cam -->
+    <circle cx="400" cy="275" r="205" fill="#E65100" />
+    <circle cx="400" cy="275" r="180" fill="#F57C00" stroke="#FFA726" stroke-width="15" />
+    <circle cx="400" cy="275" r="150" fill="#FF9800" />
+    <path d="M 400 125 A 150 150 0 0 1 400 425 Z" fill="#E65100" opacity="0.25" />
+
+    <!-- BIỂU TƯỢNG BẮP TAY CHỈNH CHU -->
+    <g transform="translate(400, 260) scale(1.15)">
+      <path d="M -75 25 C -75 -10 -40 -20 -15 -10 C 0 -45 50 -55 75 -25 C 85 0 75 35 45 45 C 10 55 -55 55 -75 25 Z" fill="#D84315" opacity="0.2" transform="translate(4, 5)" />
+      <path d="M -60 25 C -68 -5 -35 -15 -15 -10 C 0 -48 55 -50 72 -18 C 80 8 72 38 42 45 C 10 52 -45 48 -60 25 Z" fill="#FFE082" stroke="#FFB300" stroke-width="8" stroke-linejoin="round" />
+      <path d="M 12 -35 C 45 -40 65 -15 72 -18 C 80 8 72 38 42 45 C 25 48 5 45 -5 40 L 5 -5 Z" fill="#FFB300" opacity="0.35" />
+      <path d="M -60 25 L -35 -30 C -35 -48 -12 -55 -2 -42 L -12 -5 Z" fill="#FFE082" stroke="#FFB300" stroke-width="8" stroke-linejoin="round" />
+      <path d="M -36 -28 C -40 -45 -22 -58 -2 -46 C 8 -38 0 -22 -12 -22 Z" fill="#FFD54F" stroke="#FFB300" stroke-width="6" />
+      <path d="M -22 -38 C -14 -44 -4 -38 -6 -28 C -8 -22 -16 -22 -22 -28 Z" fill="#FFE082" stroke="#FFB300" stroke-width="4" />
+      <line x1="-28" y1="-48" x2="-26" y2="-40" stroke="#FFA000" stroke-width="4" stroke-linecap="round" />
+      <line x1="-20" y1="-50" x2="-18" y2="-42" stroke="#FFA000" stroke-width="4" stroke-linecap="round" />
+      <line x1="-12" y1="-46" x2="-10" y2="-38" stroke="#FFA000" stroke-width="4" stroke-linecap="round" />
+      <path d="M 8 -16 Q 28 -34 48 -14" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" fill="none" />
+      <path d="M -2 12 Q 18 8 38 18" stroke="#FFA000" stroke-width="5" stroke-linecap="round" fill="none" />
+      <line x1="56" y1="-32" x2="68" y2="-42" stroke="#FFF8E1" stroke-width="5" stroke-linecap="round" />
+      <line x1="72" y1="-18" x2="86" y2="-22" stroke="#FFF8E1" stroke-width="5" stroke-linecap="round" />
+      <line x1="48" y1="-48" x2="52" y2="-60" stroke="#FFF8E1" stroke-width="5" stroke-linecap="round" />
+    </g>
+
+    <!-- Dải ruy băng chính phía trước -->
+    <g id="ribbon-front">
+      <path d="M 190 405 Q 400 465 610 405 L 620 480 Q 400 540 180 480 Z" fill="#FF5722" />
+      <path d="M 190 405 Q 400 465 610 405 L 616 418 Q 400 477 186 418 Z" fill="#FF8A65" opacity="0.6" />
+      <path d="M 180 480 Q 400 540 620 480 L 617 468 Q 400 528 183 468 Z" fill="#D84315" opacity="0.5" />
+    </g>
+  </g>
+</svg>
