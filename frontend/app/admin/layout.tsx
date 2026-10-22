@@ -5,7 +5,6 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
-import { AlertTriangle } from "lucide-react";
 
 export default function AdminLayout({
   children,
@@ -31,24 +30,29 @@ export default function AdminLayout({
   const userRole = (session?.user as any)?.role;
   const isRealAdmin = userRole === "ADMIN";
 
-  // Màn hình Loading hoặc Chặn quyền truy cập nếu không phải ADMIN
+  // Màn hình Loading đồng bộ với Dashboard Phụ Huynh / Monitor
   if (status === "loading" || status === "unauthenticated" || !isRealAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#F7ECE1] select-none">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#C1762A] to-[#8C4905] text-white flex items-center justify-center font-extrabold text-2xl shadow-lg animate-bounce">
-          S
-        </div>
-        <div className="mt-4 text-base font-extrabold text-[#2A1C0E]">
-          SocraticKid Admin Portal
-        </div>
-        <div className="mt-1 text-xs font-semibold text-[#7E6B5A] flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-[#C1762A] animate-ping" />
-          {status === "loading"
-            ? "Đang xác thực quyền Quản trị viên..."
-            : !isRealAdmin && status === "authenticated"
-            ? "Bạn không có quyền truy cập. Đang chuyển hướng..."
-            : "Chuyển hướng đăng nhập..."}
-        </div>
+      <div className="flex h-[100dvh] items-center justify-center bg-[#F7ECE1]">
+        <svg
+          className="animate-spin h-10 w-10 text-[#C1762A]"
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8v8H4z"
+          />
+        </svg>
       </div>
     );
   }

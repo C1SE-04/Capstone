@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   X,
+  ShieldCheck,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -82,14 +83,8 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
 
-  const userName = session?.user?.name || "Nguyễn Văn Bảo";
-  const userEmail = session?.user?.email || "admin@socratickid.vn";
-  const userInitials = userName
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "AD";
+  const userName = session?.user?.name || "Quản Trị Viên";
+  const userEmail = session?.user?.email || "admin@socratickid.edu.vn";
 
   const isItemActive = (href: string) => {
     if (href === "/admin") {
@@ -99,25 +94,29 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
   };
 
   return (
-    <aside className="w-64 h-full bg-[#FFFDF9] border-r border-[#E8D5C4] flex flex-col justify-between select-none">
-      {/* ── Brand Header ── */}
+    <aside className="w-72 h-full bg-[#F1CCA6] border-r border-[#C1762A]/20 flex flex-col justify-between shrink-0 select-none">
+      {/* ── Brand Header (Đồng bộ chuẩn Parent Dashboard) ── */}
       <div>
-        <div className="h-16 px-5 border-b border-[#E8D5C4] flex items-center justify-between">
+        <div className="p-5 border-b border-[#C1762A]/20 flex items-center justify-between">
           <Link
             href="/admin"
             onClick={onCloseMobile}
-            className="flex items-center gap-3 group"
+            className="flex items-center gap-3 cursor-pointer group"
           >
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-gradient-to-br from-[#C1762A] to-[#8C4905] text-white flex items-center justify-center font-extrabold text-lg shadow-[0_3px_8px_rgba(193,118,42,0.25)] transition-transform group-hover:scale-105">
-              S
+            <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center hover:opacity-80 transition-opacity bg-[#F7ECE1] shadow-xs">
+              <img
+                src="/logo.png"
+                alt="SocraticKid Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
-              <div className="font-extrabold text-[#C1762A] text-base leading-tight tracking-tight">
+              <h2 className="text-[#8C4905] font-extrabold italic text-lg tracking-tight leading-none">
                 SocraticKid
-              </div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[#7E6B5A]">
+              </h2>
+              <p className="text-xs text-[#C1762A] font-bold mt-1 tracking-wide uppercase">
                 Cổng Quản Trị
-              </div>
+              </p>
             </div>
           </Link>
 
@@ -125,7 +124,7 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
           {onCloseMobile && (
             <button
               onClick={onCloseMobile}
-              className="lg:hidden p-1.5 rounded-lg text-[#7E6B5A] hover:bg-[#F7ECE1] hover:text-[#8C4905] transition-colors"
+              className="lg:hidden p-1.5 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] transition-colors"
               aria-label="Đóng thanh điều hướng"
             >
               <X className="w-5 h-5" />
@@ -134,10 +133,10 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
         </div>
 
         {/* ── Nav Items ── */}
-        <nav className="p-3 space-y-5">
+        <nav className="p-3 space-y-4">
           {NAV_GROUPS.map((group) => (
             <div key={group.groupTitle} className="space-y-1">
-              <div className="px-3 text-[11px] font-bold uppercase tracking-wider text-[#A18E7F]">
+              <div className="px-3 text-xs font-bold text-[#8C4905] uppercase tracking-wider">
                 {group.groupTitle}
               </div>
 
@@ -151,16 +150,16 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
                       key={item.href}
                       href={item.href}
                       onClick={onCloseMobile}
-                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 ${
+                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-bold transition-all duration-150 ${
                         active
-                          ? "bg-[#C1762A] text-white shadow-[0_3px_10px_rgba(193,118,42,0.3)]"
-                          : "text-[#4A3B2C] hover:bg-[#F7ECE1] hover:text-[#8C4905]"
+                          ? "bg-[#C1762A] text-white shadow-md transform hover:-translate-y-0.5"
+                          : "text-[#8C4905] hover:bg-[#F7ECE1]/70"
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Icon
-                          className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${
-                            active ? "text-white" : "text-[#7E6B5A]"
+                          className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                            active ? "text-white" : "text-[#8C4905]"
                           }`}
                         />
                         <span className="truncate">{item.name}</span>
@@ -170,7 +169,7 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
                       {item.badge && (
                         <div className="flex-shrink-0 ml-2">
                           {item.badge.variant === "danger" && (
-                            <span className="bg-[#D93829] text-white text-[11px] font-bold px-1.5 py-0.5 rounded-full">
+                            <span className="bg-[#D93829] text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-xs">
                               {item.badge.text}
                             </span>
                           )}
@@ -179,7 +178,7 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
                               className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
                                 active
                                   ? "bg-white/20 text-white"
-                                  : "bg-[#F1CCA6] text-[#8C4905]"
+                                  : "bg-[#F7ECE1] text-[#8C4905] border border-[#C1762A]/20"
                               }`}
                             >
                               {item.badge.text}
@@ -187,10 +186,10 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
                           )}
                           {item.badge.variant === "new" && (
                             <span
-                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
                                 active
-                                  ? "bg-white/25 text-white"
-                                  : "bg-[#EEF6FC] text-[#2B78C5] border border-[#BADEF7]"
+                                  ? "bg-white text-[#C1762A]"
+                                  : "bg-[#2A8C4A] text-white"
                               }`}
                             >
                               {item.badge.text}
@@ -207,28 +206,38 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
         </nav>
       </div>
 
-      {/* ── Footer: Admin Profile & Logout ── */}
-      <div className="p-3 border-t border-[#E8D5C4] bg-[#FFFDF9]">
-        <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-[#F7ECE1]/60 transition-colors">
-          <div className="w-9 h-9 rounded-full bg-[#F1CCA6] border-2 border-[#C1762A] flex items-center justify-center font-extrabold text-[#8C4905] text-xs flex-shrink-0 shadow-sm">
-            {userInitials}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-bold text-[#2A1C0E] truncate">
+      {/* ── Footer: Mini Profile & Đăng Xuất (Đồng bộ MonitorSidebar) ── */}
+      <div className="p-4 border-t border-[#C1762A]/20 flex items-center justify-between bg-[#F1CCA6]">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          {session?.user?.image ? (
+            <img
+              src={session.user.image}
+              alt="Avatar"
+              className="w-9 h-9 rounded-full border border-[#C1762A] shadow-xs"
+            />
+          ) : (
+            <div className="w-9 h-9 bg-[#C1762A] rounded-full flex items-center justify-center text-white font-bold text-sm shadow-xs">
+              {userName.charAt(0) || "A"}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-[#8C4905] truncate">
               {userName}
-            </div>
-            <div className="text-[10px] font-semibold text-[#C1762A] truncate">
-              Super Admin
-            </div>
+            </p>
+            <p className="text-xs text-[#C1762A] font-semibold flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3 text-[#C1762A]" />
+              Quản trị viên
+            </p>
           </div>
-          <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            title="Đăng xuất khỏi Cổng Quản Trị"
-            className="p-1.5 rounded-lg border border-[#E8D5C4] text-[#7E6B5A] hover:bg-[#FDF0ED] hover:text-[#D93829] hover:border-[#F5BCB4] transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
         </div>
+
+        <button
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="p-2 text-[#8C4905] hover:bg-[#F7AD62]/30 rounded-lg transition-colors cursor-pointer"
+          title="Đăng xuất khỏi hệ thống"
+        >
+          <LogOut size={18} />
+        </button>
       </div>
     </aside>
   );
