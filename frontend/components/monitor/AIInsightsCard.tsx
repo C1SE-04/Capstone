@@ -239,9 +239,6 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
               <h2 className="text-xl font-black text-[#8C4905] tracking-tight">
                 Nhận Xét Sư Phạm AI
               </h2>
-              <span className="text-[11px] font-bold uppercase tracking-wider bg-[#F7ECE1] text-[#8C4905] px-2 py-0.5 rounded-full border border-[#F1CCA6]">
-                Gemini Socratic
-              </span>
             </div>
             <div className="flex items-center gap-2 text-xs text-[#C1762A] font-medium mt-1">
               <Calendar size={13} className="text-[#C1762A]" />
@@ -337,9 +334,6 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
               </p>
             )}
           </div>
-          <div className="mt-4 pt-3 border-t border-emerald-200/60 text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5">
-            <span>Hãy khen ngợi để con duy trì sự hứng thú học tập.</span>
-          </div>
         </div>
 
         {/* 2. DẠNG BÀI CÒN LÚNG TÚNG */}
@@ -377,9 +371,6 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
               </p>
             )}
           </div>
-          <div className="mt-4 pt-3 border-t border-amber-200/60 text-[11px] text-amber-700 font-semibold flex items-center gap-1.5">
-            <span>Khó khăn là cơ hội để con rèn luyện tư duy độc lập.</span>
-          </div>
         </div>
 
         {/* 3. LỜI KHUYÊN SƯ PHẠM CHO CHA MẸ */}
@@ -416,9 +407,6 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
                 Khuyến khích con tiếp tục đặt câu hỏi khi gặp bài khó.
               </p>
             )}
-          </div>
-          <div className="mt-4 pt-3 border-t border-[#F1CCA6]/60 text-[11px] text-[#8C4905] font-semibold flex items-center gap-1.5">
-            <span>Phương pháp Socratic: Hỏi gợi mở, không làm thay.</span>
           </div>
         </div>
       </div>

@@ -7,7 +7,6 @@ import {
   ShieldAlert,
   Settings,
   ArrowRight,
-  Sparkles,
   BarChart3,
   TrendingUp,
   Cpu,
@@ -56,25 +55,6 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
-      {/* ── Welcome Banner ── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#C1762A] via-[#A85E1A] to-[#8C4905] p-6 md:p-8 text-white shadow-md">
-        <div className="relative z-10 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-xs text-white text-xs font-bold mb-3">
-            <Sparkles className="w-3.5 h-3.5" />
-            Cổng Quản Trị Hệ Sinh Thái SocraticKid
-          </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-            Chào mừng trở lại, Quản trị viên!
-          </h1>
-          <p className="mt-2 text-white/90 text-sm md:text-base leading-relaxed">
-            Hệ thống đang phục vụ ổn định cho học sinh và phụ huynh. Bạn có thể theo dõi nhanh các chỉ số hoạt động hoặc điều hướng tới các màn hình quản lý chi tiết bên dưới.
-          </p>
-        </div>
-
-        {/* Decorative elements */}
-        <div className="absolute right-0 bottom-0 translate-x-8 translate-y-8 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-      </div>
-
       {/* ── 4 KPI Stats Quick Overview (Preview cho T7.25) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-5 border border-[#E8D5C4] shadow-xs relative overflow-hidden">

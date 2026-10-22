@@ -85,6 +85,13 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
     null
   );
 
+  // Chuyển tab bộ lọc: reset trang về 1 để luôn hiển thị từ trang đầu của bộ lọc đó
+  const handleFilterChange = (newFilter: FilterType) => {
+    if (newFilter === filter) return;
+    setFilter(newFilter);
+    setCurrentPage(1);
+  };
+
   // Fetch dữ liệu thật từ API /parent/child-problems
   useEffect(() => {
     let isMounted = true;
@@ -97,7 +104,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
         const backendUrl =
           process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
         const res = await fetch(
-          `${backendUrl}/parent/child-problems?student_id=${studentId}&page=${currentPage}&page_size=${pageSize}`,
+          `${backendUrl}/parent/child-problems?student_id=${studentId}&page=${currentPage}&page_size=${pageSize}&filter_type=${filter}`,
           {
             headers: {
               Authorization: `Bearer ${session.access_token}`,
@@ -137,7 +144,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
     return () => {
       isMounted = false;
     };
-  }, [studentId, session, currentPage, pageSize, refreshKey]);
+  }, [studentId, session, currentPage, pageSize, filter, refreshKey]);
 
   // Phân loại badge tự lập
   const getIndependenceBadge = (score: number, evaluation?: string | null) => {
@@ -210,7 +217,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
             <BookOpen size={20} className="text-[#C1762A]" />
             Sổ Theo Dõi Bài Tập Của Con
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6]">
-              {totalProblems} bài đã giải
+              {filter === "ALL" ? `${totalProblems} bài đã giải` : `${totalProblems} bài phù hợp`}
             </span>
           </h2>
           <p className="text-xs text-[#C1762A] mt-1 ml-3.5">
@@ -222,7 +229,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
         {/* BỘ LỌC NHANH */}
         <div className="flex items-center gap-1.5 bg-[#FFFBF7] p-1 rounded-xl border border-[#F1CCA6] text-xs font-medium">
           <button
-            onClick={() => setFilter("ALL")}
+            onClick={() => handleFilterChange("ALL")}
             className={`px-3 py-1.5 rounded-lg transition-colors ${
               filter === "ALL"
                 ? "bg-[#C1762A] text-white font-bold shadow-xs"
@@ -232,7 +239,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
             Tất cả
           </button>
           <button
-            onClick={() => setFilter("WITH_IMAGE")}
+            onClick={() => handleFilterChange("WITH_IMAGE")}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors ${
               filter === "WITH_IMAGE"
                 ? "bg-[#C1762A] text-white font-bold shadow-xs"
@@ -242,7 +249,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
             <ImageIcon size={13} /> Có ảnh
           </button>
           <button
-            onClick={() => setFilter("EXCELLENT")}
+            onClick={() => handleFilterChange("EXCELLENT")}
             className={`px-3 py-1.5 rounded-lg transition-colors ${
               filter === "EXCELLENT"
                 ? "bg-[#C1762A] text-white font-bold shadow-xs"
@@ -252,7 +259,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
             Xuất sắc (≥80đ)
           </button>
           <button
-            onClick={() => setFilter("NEEDS_SUPPORT")}
+            onClick={() => handleFilterChange("NEEDS_SUPPORT")}
             className={`px-3 py-1.5 rounded-lg transition-colors ${
               filter === "NEEDS_SUPPORT"
                 ? "bg-[#C1762A] text-white font-bold shadow-xs"
@@ -406,34 +413,14 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                     </div>
 
                       {/* Card Footer: Các nút thao tác */}
-                    <div className="mt-4 pt-3 border-t border-[#F1CCA6]/50 flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-[11px] text-[#C1762A]/80 font-medium">
-                        Mã phiên: <span className="font-mono text-xs text-[#8C4905]">{item.session_id.slice(0, 8)}...</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {item.attachment_url && (
-                          <button
-                            onClick={() =>
-                              setActiveImage({
-                                url: item.attachment_url!,
-                                title: title,
-                              })
-                            }
-                            className="px-3 py-1.5 text-xs font-bold text-[#8C4905] bg-white border border-[#F1CCA6] rounded-xl hover:bg-[#F7ECE1] transition flex items-center gap-1.5"
-                          >
-                            <ZoomIn size={13} className="text-[#C1762A]" />
-                            Xem ảnh đề
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setActiveDialogue(item)}
-                          className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#C1762A] hover:bg-[#8C4905] rounded-xl transition shadow-xs flex items-center gap-1.5"
-                        >
-                          <Brain size={13} />
-                          Xem đối thoại tư duy
-                        </button>
-                      </div>
+                    <div className="mt-4 pt-3 border-t border-[#F1CCA6]/50 flex items-center justify-end">
+                      <button
+                        onClick={() => setActiveDialogue(item)}
+                        className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#C1762A] hover:bg-[#8C4905] rounded-xl transition shadow-xs flex items-center gap-1.5"
+                      >
+                        <Brain size={13} />
+                        Xem đối thoại tư duy
+                      </button>
                     </div>
                   </div>
                 </div>
