@@ -147,14 +147,36 @@ async function doRefresh(updateFn?: UpdateSessionFn): Promise<RefreshResult | nu
 }
 
 /**
- * Hàm fetch wrapper tự động bắt lỗi SESSION_STALE và refresh token.
+ * Hàm fetch wrapper tự động gắn Bearer token từ session hiện tại nếu thiếu,
+ * và tự động bắt lỗi SESSION_STALE để refresh token.
  */
 export async function authFetch(
   url: RequestInfo | URL,
   options: RequestInit = {}
 ): Promise<Response> {
+  const reqHeaders = new Headers(options.headers || {});
+
+  // Tự động đính kèm Authorization Bearer token nếu caller chưa truyền
+  if (!reqHeaders.has("Authorization")) {
+    try {
+      const nextAuth = await import("next-auth/react");
+      const currentSession = await nextAuth.getSession();
+      const token = (currentSession as { access_token?: string } | null)?.access_token;
+      if (token) {
+        reqHeaders.set("Authorization", `Bearer ${token}`);
+      }
+    } catch {
+      // Bỏ qua nếu môi trường không gọi được getSession
+    }
+  }
+
+  const initialOptions: RequestInit = {
+    ...options,
+    headers: reqHeaders,
+  };
+
   // Lần gọi đầu tiên
-  const response = await fetch(url, options);
+  const response = await fetch(url, initialOptions);
 
   // Chỉ can thiệp khi gặp 401
   if (response.status !== 401) {

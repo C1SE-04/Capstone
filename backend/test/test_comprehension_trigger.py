@@ -38,6 +38,35 @@ def test_router_strips_comprehension_tag_and_sets_meta():
         assert meta["has_comprehension"] is True
 
 
+def test_router_does_not_trigger_comprehension_when_response_ends_with_question():
+    """Kiểm tra router KHÔNG trigger comprehension khi câu trả lời của AI kết thúc bằng dấu '?' (vẫn đang hỏi học sinh)."""
+    mock_response = MagicMock()
+    # Dù có từ 'Rất chính xác' và từ 'kết quả' nhưng kết thúc bằng câu hỏi 'không?' -> không được trigger
+    mock_response.text = (
+        "Rất chính xác, khi Delta > 0 thì phương trình có 2 nghiệm phân biệt. "
+        "Thế còn trường hợp Delta = 0 và Delta < 0, phương trình sẽ có kết quả như thế nào, em có nhớ không?"
+    )
+
+    with patch("router.genai.GenerativeModel") as mock_model_cls, \
+         patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}):
+        mock_instance = MagicMock()
+        mock_instance.generate_content.return_value = mock_response
+        mock_model_cls.return_value = mock_instance
+
+        meta = {"has_comprehension": False}
+        stream_chunks = list(
+            agent_router(
+                target_agent="SCAFFOLDING_AGENT",
+                task_description="Hướng dẫn học sinh",
+                history_text="",
+                user_query="b^2 - 4ac",
+                meta=meta,
+            )
+        )
+
+        assert meta["has_comprehension"] is False
+
+
 def test_orchestrator_bridge_emits_ask_comprehension_when_gemini_detects():
     """Kiểm tra orchestrator_bridge phát event ask_comprehension khi Gemini phát hiện."""
     db_mock = MagicMock()
