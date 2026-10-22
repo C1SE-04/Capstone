@@ -16,15 +16,23 @@ export default function AdminLayout({
   const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Route Guard: chỉ redirect khi BIẾT CHẮC chưa đăng nhập (status xác định rõ)
+  // Route Guard: chỉ cho phép tài khoản có role ADMIN truy cập
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/");
+    } else if (status === "authenticated") {
+      const role = (session?.user as any)?.role;
+      if (role !== "ADMIN") {
+        router.replace(role === "MONITOR" ? "/dashboard/monitor" : "/dashboard/chat");
+      }
     }
-  }, [status, router]);
+  }, [status, session, router]);
 
-  // Màn hình Loading sang trọng chuẩn hệ màu SocraticKid
-  if (status === "loading" || status === "unauthenticated") {
+  const userRole = (session?.user as any)?.role;
+  const isRealAdmin = userRole === "ADMIN";
+
+  // Màn hình Loading hoặc Chặn quyền truy cập nếu không phải ADMIN
+  if (status === "loading" || status === "unauthenticated" || !isRealAdmin) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#F7ECE1] select-none">
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#C1762A] to-[#8C4905] text-white flex items-center justify-center font-extrabold text-2xl shadow-lg animate-bounce">
@@ -35,14 +43,15 @@ export default function AdminLayout({
         </div>
         <div className="mt-1 text-xs font-semibold text-[#7E6B5A] flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-[#C1762A] animate-ping" />
-          {status === "loading" ? "Đang xác thực quyền Quản trị viên..." : "Chuyển hướng đăng nhập..."}
+          {status === "loading"
+            ? "Đang xác thực quyền Quản trị viên..."
+            : !isRealAdmin && status === "authenticated"
+            ? "Bạn không có quyền truy cập. Đang chuyển hướng..."
+            : "Chuyển hướng đăng nhập..."}
         </div>
       </div>
     );
   }
-
-  const userRole = (session?.user as any)?.role || "STUDENT";
-  const isRealAdmin = userRole === "ADMIN";
 
   return (
     <div className="flex h-screen max-h-screen overflow-hidden bg-[#F7ECE1] text-[#2A1C0E]">
@@ -71,25 +80,6 @@ export default function AdminLayout({
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
         {/* Header trên cùng */}
         <AdminHeader onOpenMobileSidebar={() => setIsMobileOpen(true)} />
-
-        {/* Banner hỗ trợ kiểm thử Sprint 7 (nếu user test chưa có role ADMIN trên DB) */}
-        {!isRealAdmin && (
-          <div className="bg-[#FDF3E7] border-b border-[#F1CCA6] px-4 py-2 flex items-center justify-between text-xs text-[#8C4905]">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-[#C1762A] flex-shrink-0" />
-              <span>
-                <strong>Chế độ Xem Thử Nghiệm Sprint 7:</strong> Bạn đang truy cập với vai trò{" "}
-                <code className="bg-white/80 px-1.5 py-0.5 rounded text-[#C1762A] font-bold">
-                  {userRole}
-                </code>
-                . Toàn bộ các trang và nút bấm quản trị đã được mở khóa để kiểm thử.
-              </span>
-            </div>
-            <span className="hidden md:inline-block text-[11px] font-semibold text-[#A18E7F]">
-              Cổng Quản Trị SocraticKid
-            </span>
-          </div>
-        )}
 
         {/* Nội dung trang con cuộn độc lập */}
         <main className="flex-1 overflow-y-auto bg-[#F7ECE1] p-4 md:p-6 lg:p-8">

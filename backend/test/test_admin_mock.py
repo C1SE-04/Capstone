@@ -12,14 +12,40 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi.testclient import TestClient
 from main import app
 import schemas
+import auth
 
 client = TestClient(app)
+
+# Tạo JWT token hợp lệ cho ADMIN, STUDENT, MONITOR
+ADMIN_TOKEN = auth.create_access_token({"sub": "admin_test", "role": "ADMIN", "session_version": 1})
+STUDENT_TOKEN = auth.create_access_token({"sub": "student_test", "role": "STUDENT", "session_version": 1})
+MONITOR_TOKEN = auth.create_access_token({"sub": "monitor_test", "role": "MONITOR", "session_version": 1})
+
+ADMIN_HEADERS = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 
 
 class TestAdminMockRouter(unittest.TestCase):
 
+    def test_00_rbac_security_checks(self):
+        """Kiểm tra chỉ có role ADMIN mới được phép truy cập /admin/mock/..."""
+        # 1. Chưa đăng nhập -> 401 Unauthorized
+        res_no_auth = client.get("/admin/mock/overview")
+        self.assertEqual(res_no_auth.status_code, 401)
+
+        # 2. Học sinh (STUDENT) gọi API admin -> 403 Forbidden
+        res_student = client.get("/admin/mock/overview", headers={"Authorization": f"Bearer {STUDENT_TOKEN}"})
+        self.assertEqual(res_student.status_code, 403)
+        self.assertIn("Bạn không có quyền", res_student.json()["detail"])
+
+        # 3. Phụ huynh (MONITOR) gọi API admin -> 403 Forbidden
+        res_monitor = client.get("/admin/mock/overview", headers={"Authorization": f"Bearer {MONITOR_TOKEN}"})
+        self.assertEqual(res_monitor.status_code, 403)
+
+        # Thiết lập header ADMIN mặc định cho toàn bộ các test chức năng phía dưới
+        client.headers.update(ADMIN_HEADERS)
+
     def test_01_get_mock_overview_kpis(self):
-        """Kiểm tra endpoint /admin/mock/overview trả về 4 thẻ KPI chuẩn xác."""
+        """Kiểm tra endpoint /admin/mock/overview trả về 4 thẻ KPI chuẩn xác khi có quyền ADMIN."""
         res = client.get("/admin/mock/overview")
         self.assertEqual(res.status_code, 200)
         data = res.json()
