@@ -121,6 +121,12 @@ async def startup_event():
         print(f"⚠️  Redis không khả dụng: {e}. Rate-limit sẽ bỏ qua (fail-open).")
     # 2. Khởi động task dọn dẹp Guest session
     asyncio.create_task(schedule_guest_cleanup())
+    # 3. Đảm bảo tài khoản ADMIN duy nhất luôn sẵn sàng
+    try:
+        from scripts.init_admin import ensure_single_admin
+        ensure_single_admin()
+    except Exception as e:
+        print(f"⚠️ Không thể khởi tạo Admin: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():

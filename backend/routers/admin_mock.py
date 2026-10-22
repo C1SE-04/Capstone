@@ -12,11 +12,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 import schemas
+import dependencies
 
-router = APIRouter(prefix="/admin/mock", tags=["Admin Mock Portal"])
+# Chỉ cho phép tài khoản có role == "ADMIN" truy cập vào toàn bộ các endpoint /admin/mock/...
+router = APIRouter(
+    prefix="/admin/mock",
+    tags=["Admin Mock Portal"],
+    dependencies=[Depends(dependencies.require_role(["ADMIN"]))],
+)
 
 # ==============================================================================
 # IN-MEMORY MOCK STATE (Cho phép FE test click tương tác mượt mà trong phiên)

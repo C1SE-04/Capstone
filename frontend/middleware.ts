@@ -48,11 +48,23 @@ export async function middleware(request: NextRequest) {
       url.pathname = "/dashboard/chat"; // Bắn ngược về trang chat
       return NextResponse.redirect(url);
     }
+  // 5. Chặn tuyệt đối mọi Role khác ADMIN truy cập vào các trang /admin
+  if (path === "/admin" || path.startsWith("/admin/")) {
+    if (role !== "ADMIN") {
+      if (role === "STUDENT") {
+        url.pathname = "/dashboard/chat";
+      } else if (role === "MONITOR") {
+        url.pathname = "/dashboard/monitor";
+      } else {
+        url.pathname = "/";
+      }
+      return NextResponse.redirect(url);
+    }
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/chat/:path*"],
+  matcher: ["/dashboard/:path*", "/chat/:path*", "/admin", "/admin/:path*"],
 };
