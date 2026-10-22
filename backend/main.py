@@ -9,7 +9,8 @@ from database import engine
 import asyncio
 # Import các routers
 from routers import auth, users, chat, sessions
-from cleanup_guests import cleanup_old_guest_sessions
+from scripts.cleanup_guests import cleanup_old_guest_sessions
+
 from redis_client import get_redis, close_redis
 
 # Tự động tạo bảng 'users' trong database nếu chưa có
@@ -58,6 +59,9 @@ from routers import upload  # US 6.4 - Task #173: Cloudinary upload & ký chữ 
 app.include_router(upload.router)
 from routers import insights  # US 7.3 & 7.4: AI Insights background service + Badge system
 app.include_router(insights.router)
+from routers import bookmarks  # US 7.2 (Task T7.13): CRUD Sổ Tay Bài Toán
+app.include_router(bookmarks.router)
+
 
 
 @app.get("/")
