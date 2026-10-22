@@ -48,6 +48,8 @@ export async function middleware(request: NextRequest) {
       url.pathname = "/dashboard/chat"; // Bắn ngược về trang chat
       return NextResponse.redirect(url);
     }
+  }
+
   // 5. Chặn tuyệt đối mọi Role khác ADMIN truy cập vào các trang /admin
   if (path === "/admin" || path.startsWith("/admin/")) {
     if (role !== "ADMIN") {
