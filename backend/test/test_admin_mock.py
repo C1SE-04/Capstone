@@ -59,10 +59,10 @@ class TestAdminMockRouter(unittest.TestCase):
         self.assertEqual(data["version"], "v1.4.0")
 
         # Kiểm tra giá trị các KPI
-        self.assertEqual(data["total_users"]["value"], 12480)
+        self.assertEqual(data["total_users"]["value"], 48)
         self.assertEqual(data["total_users"]["growth_percent"], 14.2)
-        self.assertEqual(data["student_dau"]["value"], 3842)
-        self.assertEqual(data["ai_sessions"]["value"], 48920)
+        self.assertEqual(data["student_dau"]["value"], 18)
+        self.assertEqual(data["ai_sessions"]["value"], 46)
         self.assertEqual(data["ai_tokens"]["display_value"], "14.8M")
 
         # Validate qua Pydantic schema

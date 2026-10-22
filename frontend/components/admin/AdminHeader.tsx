@@ -36,11 +36,6 @@ export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
 
       {/* ── Bên phải: Công cụ quản trị, Tìm kiếm, Thông báo ── */}
       <div className="flex items-center gap-2 md:gap-3.5">
-        {/* System Status Pill */}
-        <div className="hidden xl:flex items-center gap-1.5 px-3 py-1 bg-[#EAF7EE] border border-[#B7E4C4] text-[#2A8C4A] rounded-full text-xs font-semibold select-none">
-          <span className="w-2 h-2 rounded-full bg-[#2A8C4A] animate-pulse" />
-          <span>AI Gateway: 99.8% Uptime</span>
-        </div>
 
         {/* Search Input */}
         <div className="relative hidden md:block">

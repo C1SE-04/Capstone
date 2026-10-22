@@ -321,29 +321,29 @@ MOCK_CONTENT_TOPICS = [
 def get_mock_admin_overview():
     """
     Trả về 4 thẻ KPI tổng quan của Cổng Quản Trị:
-    - Tổng người dùng (12,480, +14.2% so với tháng trước)
-    - Học sinh hoạt động trong ngày DAU (3,842, +8.6% hôm nay)
-    - Tổng phiên đối thoại AI (48,920, tỷ lệ tự hiểu 82.4%)
+    - Tổng người dùng (48, +14.2% so với tháng trước)
+    - Học sinh hoạt động trong ngày DAU (18, +8.6% hôm nay)
+    - Tổng phiên đối thoại AI (46, tỷ lệ tự hiểu 82.4%)
     - Token AI tiêu thụ (14.8M tokens, chi phí ước tính $18.42)
     """
     return schemas.AdminOverviewResponse(
         total_users=schemas.AdminKpiCard(
-            value=12480,
-            display_value="12,480",
+            value=48,
+            display_value="48",
             growth_percent=14.2,
             growth_period="so với tháng trước",
             subtext="+14.2% so với tháng trước",
         ),
         student_dau=schemas.AdminKpiCard(
-            value=3842,
-            display_value="3,842",
+            value=18,
+            display_value="18",
             growth_percent=8.6,
             growth_period="hôm nay",
             subtext="+8.6% hôm nay",
         ),
         ai_sessions=schemas.AdminKpiCard(
-            value=48920,
-            display_value="48,920",
+            value=46,
+            display_value="46",
             growth_percent=None,
             growth_period=None,
             subtext="Tỷ lệ tự hiểu: 82.4%",
