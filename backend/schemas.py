@@ -496,3 +496,222 @@ class FlashcardContent(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ==============================================================================
+# US 7.3 - Task T7.31: Schemas cho Admin Portal & Mock Router (/admin/mock)
+# ==============================================================================
+
+class AdminKpiCard(BaseModel):
+    value: float | int
+    display_value: str
+    growth_percent: Optional[float] = None
+    growth_period: Optional[str] = None
+    subtext: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AdminOverviewResponse(BaseModel):
+    total_users: AdminKpiCard
+    student_dau: AdminKpiCard
+    ai_sessions: AdminKpiCard
+    ai_tokens: AdminKpiCard
+    system_status: str = "OPERATIONAL"
+    version: str = "1.4.0"
+
+    class Config:
+        from_attributes = True
+
+
+class AdminDailyGrowthItem(BaseModel):
+    date: str
+    dau: int
+    mau: int
+    new_users: int
+
+    class Config:
+        from_attributes = True
+
+
+class AdminGrowthResponse(BaseModel):
+    period: str
+    data: list[AdminDailyGrowthItem]
+
+    class Config:
+        from_attributes = True
+
+
+class AdminDailyTokenItem(BaseModel):
+    date: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    sessions_count: int
+    cost_usd: float
+
+    class Config:
+        from_attributes = True
+
+
+class AdminTokenConsumptionResponse(BaseModel):
+    period: str
+    total_tokens: int
+    total_cost_usd: float
+    daily_data: list[AdminDailyTokenItem]
+
+    class Config:
+        from_attributes = True
+
+
+class AdminLinkedParentInfo(BaseModel):
+    id: str
+    email: EmailStr
+    name: str
+    phone: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AdminLinkedStudentInfo(BaseModel):
+    id: str
+    email: EmailStr
+    name: str
+    grade: Optional[int] = None
+    avg_independence_score: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AdminUserItem(BaseModel):
+    id: str
+    email: EmailStr
+    name: str
+    role: str  # STUDENT, MONITOR, ADMIN
+    grade: Optional[int] = None
+    status: str = "ACTIVE"  # ACTIVE, SUSPENDED
+    created_at: str
+    last_active_at: Optional[str] = None
+    total_sessions: int = 0
+    total_problems_solved: int = 0
+    avg_independence_score: Optional[int] = None  # Điểm tự lập trung bình (0-100)
+    streak_days: int = 0
+    linked_parent: Optional[AdminLinkedParentInfo] = None
+    linked_students: list[AdminLinkedStudentInfo] = []
+
+    class Config:
+        from_attributes = True
+
+
+class AdminUsersListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    items: list[AdminUserItem]
+
+    class Config:
+        from_attributes = True
+
+
+class AdminUserStatusUpdateRequest(BaseModel):
+    status: str  # ACTIVE hoặc SUSPENDED
+    reason: Optional[str] = None
+
+
+class AdminSafetyLogItem(BaseModel):
+    id: str
+    timestamp: str
+    student_id: str
+    student_email: str
+    student_grade: Optional[int] = None
+    message_snippet: str
+    violation_type: str  # TOXIC, JAILBREAK, OFF_TOPIC, SENSITIVE
+    severity: str        # LOW, MEDIUM, HIGH, CRITICAL
+    action_taken: str    # BLOCKED, WARNED, REDIRECTED
+    target_agent: str    # AGENT_TUTOR, AGENT_SAFETY, ORCHESTRATOR
+    flagged_reason: str
+
+    class Config:
+        from_attributes = True
+
+
+class AdminSafetyLogsResponse(BaseModel):
+    total: int
+    items: list[AdminSafetyLogItem]
+
+    class Config:
+        from_attributes = True
+
+
+class AdminDifficultTopicStat(BaseModel):
+    topic: str
+    grade: int
+    not_understood_count: int
+    average_hints: float
+
+    class Config:
+        from_attributes = True
+
+
+class AdminSafetyStatsResponse(BaseModel):
+    total_alerts: int
+    blocked_queries_count: int
+    jailbreak_attempts: int
+    toxic_language_count: int
+    comprehension_rate_percent: float
+    not_understood_rate_percent: float
+    common_difficult_topics: list[AdminDifficultTopicStat]
+
+    class Config:
+        from_attributes = True
+
+
+class AdminTopicItem(BaseModel):
+    id: str
+    grade: int
+    title: str
+    slug: str
+    description: str
+    problem_count: int
+    active_sessions_count: int
+    is_enabled: bool = True
+
+    class Config:
+        from_attributes = True
+
+
+class AdminTopicCreate(BaseModel):
+    grade: int
+    title: str
+    slug: Optional[str] = None
+    description: str
+    problem_count: Optional[int] = 0
+    is_enabled: bool = True
+
+
+class AdminTopicListResponse(BaseModel):
+    total: int
+    items: list[AdminTopicItem]
+
+    class Config:
+        from_attributes = True
+
+
+class AdminSystemSettings(BaseModel):
+    model_name: str = "gemini-1.5-flash"
+    backup_model: str = "gemini-1.5-pro"
+    temperature: float = 0.4
+    max_output_tokens: int = 1024
+    safety_threshold: str = "BLOCK_MEDIUM_AND_ABOVE"
+    rate_limit_per_minute: int = 30
+    enable_vision_support: bool = True
+    system_version: str = "v1.4.0"
+    last_updated_at: str
+    last_updated_by: str
+
+    class Config:
+        from_attributes = True

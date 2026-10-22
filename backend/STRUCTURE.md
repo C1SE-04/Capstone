@@ -19,6 +19,7 @@ backend/
 │
 ├── routers/                   # Các module API được chia theo tính năng
 │   ├── auth.py                # Đăng ký / Đăng nhập / Refresh token / Logout
+│   ├── admin_mock.py          # Mock RESTful APIs /admin/mock/... cho Admin Portal
 │   ├── bookmarks.py           # CRUD /bookmarks — Sổ Tay Bài Toán Yêu Thích
 │   ├── chat.py                # Chat với AI (stream SSE) + thống kê session
 │   ├── family.py              # Liên kết Phụ Huynh ↔ Học Sinh (pairing code)
@@ -46,6 +47,7 @@ backend/
 │   └── eval_orchestrator.py   # Đánh giá chất lượng routing của orchestrator
 │
 ├── test/                      # Test tự động (chạy để verify logic)
+│   ├── test_admin_mock.py           # Test API /admin/mock/... cho Admin Portal
 │   ├── test_bookmarks_crud.py       # Test CRUD /bookmarks
 │   ├── test_insights_badges.py      # Test AI Insights + Badge system
 │   ├── test_heatmap_summary_metrics.py  # Test /metrics/heatmap + /metrics/summary
