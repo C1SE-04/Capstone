@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { Star, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authFetch } from "@/lib/authFetch";
@@ -16,8 +17,11 @@ export function SaveBookmarkButton({
   className,
   onSaved,
 }: SaveBookmarkButtonProps) {
+  const { data: session } = useSession();
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  if (!sessionId) return null;
 
   const handleSave = async () => {
     if (!sessionId || status === "saving" || status === "saved") return;
@@ -29,10 +33,13 @@ export function SaveBookmarkButton({
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
+      const token = (session as { access_token?: string } | null)?.access_token;
+
       const res = await authFetch(`${BACKEND_URL}/bookmarks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           session_id: sessionId,
@@ -45,6 +52,9 @@ export function SaveBookmarkButton({
         if (onSaved && data.id) {
           onSaved(data.id);
         }
+      } else if (res.status === 401) {
+        setStatus("error");
+        setErrorMessage("Bạn chưa đăng nhập hoặc phiên học tập đã hết hạn. Vui lòng tải lại trang!");
       } else if (res.status === 404 || res.status === 405 || res.status === 501) {
         // Backend API T7.13 chưa được deploy/merge
         setStatus("error");
@@ -52,7 +62,11 @@ export function SaveBookmarkButton({
       } else {
         const errData = await res.json().catch(() => ({}));
         setStatus("error");
-        setErrorMessage(errData.detail || "Không thể lưu vào Sổ tay, vui lòng thử lại!");
+        const msg =
+          errData.detail === "Not authenticated"
+            ? "Bạn chưa đăng nhập hoặc phiên học tập đã hết hạn."
+            : errData.detail || "Không thể lưu vào Sổ tay, vui lòng thử lại!";
+        setErrorMessage(msg);
       }
     } catch {
       setStatus("error");
@@ -87,12 +101,12 @@ export function SaveBookmarkButton({
         ) : status === "saved" ? (
           <>
             <Check size={14} className="text-emerald-700 stroke-[2.5]" />
-            <span>Đã lưu vào Sổ tay ⭐</span>
+            <span>Đã lưu vào Sổ tay</span>
           </>
         ) : (
           <>
             <Star size={13} className="fill-amber-300 text-amber-100" />
-            <span>⭐ Lưu vào Sổ tay</span>
+            <span>Lưu vào Sổ tay</span>
           </>
         )}
       </button>

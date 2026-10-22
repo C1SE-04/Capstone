@@ -291,6 +291,7 @@ export default function ChatPage() {
                   content: randomMsg,
                   emotion: "correct",
                   isAnswerRevealed: false, // Không hiện lại nút Đã hiểu/Chưa hiểu
+                  isCongrats: true, // Đánh dấu tin nhắn chúc mừng để hiển thị nút Lưu vào Sổ tay
                 },
               ],
             }

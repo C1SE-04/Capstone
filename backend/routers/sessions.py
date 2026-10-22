@@ -56,6 +56,45 @@ def get_user_sessions(
     
     return sessions
 
+
+@router.get("/sessions/{session_id}", response_model=schemas.SessionResponse)
+def get_session_detail(
+    session_id: str,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Lấy chi tiết một phòng chat (Session) kèm danh sách tin nhắn.
+    Dùng cho tính năng Xem lại đoạn chat trong Sổ tay bài toán và Dashboard.
+    """
+    from sqlalchemy.orm import joinedload
+    session = db.query(models.Session).options(
+        joinedload(models.Session.messages)
+    ).filter(
+        models.Session.id == session_id
+    ).first()
+
+    if not session:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Không tìm thấy phòng chat.")
+
+    user_id = current_user["id"]
+    role = current_user.get("role")
+    if session.user_id != user_id:
+        if role in ("PARENT", "MONITOR"):
+            link = db.query(models.ParentStudentLink).filter(
+                models.ParentStudentLink.parent_id == user_id,
+                models.ParentStudentLink.student_id == session.user_id,
+            ).first()
+            if not link:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập phòng chat này.")
+        else:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập phòng chat này.")
+
+    return session
+
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_session(
     session_id: str,
