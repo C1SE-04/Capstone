@@ -257,13 +257,13 @@ class ProblemBookmark(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        # Mỗi học sinh chỉ lưu 1 lần / session (tránh trùng lặp)
-        Index("ix_bookmarks_student_session", "student_id", "session_id", unique=True),
+        # Index hỗ trợ tìm kiếm nhanh theo học sinh và session
+        Index("ix_bookmarks_student_session", "student_id", "session_id"),
         Index("ix_bookmarks_student_created", "student_id", "created_at"),
     )
 
     student = relationship("User", backref="bookmarks")
-    session = relationship("Session", backref="bookmark")
+    session = relationship("Session", backref="bookmarks")
 
 
 class ParentAiInsight(Base):

@@ -7,6 +7,7 @@ export interface Message {
   emotion?: "idle" | "thinking" | "suggesting" | "correct" | "incorrect" | string;
   isAnswerRevealed?: boolean;
   isCongrats?: boolean;
+  created_at?: string;
 }
 
 export interface Conversation {
