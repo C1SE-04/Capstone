@@ -50,16 +50,16 @@ export default function Breadcrumbs() {
         return (
           <div key={crumb.href + index} className="flex items-center gap-1.5">
             {index > 0 && (
-              <ChevronRight className="w-3.5 h-3.5 text-[#7E6B5A] flex-shrink-0" />
+              <ChevronRight className="w-3.5 h-3.5 text-[#C1762A]/60 shrink-0" />
             )}
             {isLast ? (
-              <span className="font-bold text-[#8C4905]">
+              <span className="font-extrabold text-[#8C4905]">
                 {crumb.label}
               </span>
             ) : (
               <Link
                 href={crumb.href}
-                className="font-medium text-[#7E6B5A] hover:text-[#C1762A] transition-colors"
+                className="font-semibold text-[#C1762A] hover:text-[#8C4905] transition-colors"
               >
                 {crumb.label}
               </Link>
