@@ -51,3 +51,54 @@ export interface AdminTopic {
     level3: string;
   };
 }
+
+export type ViolationType = "TOXIC" | "JAILBREAK" | "OFF_TOPIC" | "SENSITIVE";
+export type SeverityLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type ActionTaken = "BLOCKED" | "WARNED" | "REDIRECTED";
+export type TargetAgent = "AGENT_TUTOR" | "AGENT_SAFETY" | "ORCHESTRATOR";
+export type AuditLogStatus = "PENDING" | "RESOLVED" | "DISMISSED";
+
+export interface SafetyConversationContext {
+  problem_title?: string;
+  ai_prompt_before: string;
+  student_message: string;
+  guardrail_triggered_rule: string;
+  safety_response_sent: string;
+  session_id?: string;
+}
+
+export interface AdminSafetyLogItem {
+  id: string;
+  timestamp: string;
+  student_id: string;
+  student_name?: string;
+  student_email: string;
+  student_grade?: number | null;
+  message_snippet: string;
+  violation_type: ViolationType;
+  severity: SeverityLevel;
+  action_taken: ActionTaken;
+  target_agent: TargetAgent;
+  flagged_reason: string;
+  status?: AuditLogStatus;
+  conversation_context?: SafetyConversationContext;
+}
+
+export interface AdminDifficultTopicStat {
+  topic: string;
+  grade: number;
+  not_understood_count: number;
+  average_hints: number;
+  comprehension_rate?: number;
+  pedagogical_feedback?: string;
+}
+
+export interface AdminSafetyStatsResponse {
+  total_alerts: number;
+  blocked_queries_count: number;
+  jailbreak_attempts: number;
+  toxic_language_count: number;
+  comprehension_rate_percent: number;
+  not_understood_rate_percent: number;
+  common_difficult_topics: AdminDifficultTopicStat[];
+}
