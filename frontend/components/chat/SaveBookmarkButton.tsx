@@ -8,12 +8,14 @@ import { authFetch } from "@/lib/authFetch";
 
 interface SaveBookmarkButtonProps {
   sessionId?: string | null;
+  messageCreatedAt?: string | Date;
   className?: string;
   onSaved?: (bookmarkId: string) => void;
 }
 
 export function SaveBookmarkButton({
   sessionId,
+  messageCreatedAt,
   className,
   onSaved,
 }: SaveBookmarkButtonProps) {
@@ -33,7 +35,17 @@ export function SaveBookmarkButton({
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
-      const token = (session as { access_token?: string } | null)?.access_token;
+      let isoCreatedAt: string | undefined = undefined;
+      if (messageCreatedAt) {
+        try {
+          const d = new Date(messageCreatedAt);
+          if (!isNaN(d.getTime())) {
+            isoCreatedAt = d.toISOString();
+          }
+        } catch {
+          // ignore
+        }
+      }
 
       const res = await authFetch(`${BACKEND_URL}/bookmarks`, {
         method: "POST",
@@ -43,6 +55,7 @@ export function SaveBookmarkButton({
         },
         body: JSON.stringify({
           session_id: sessionId,
+          message_created_at: isoCreatedAt,
         }),
       });
 

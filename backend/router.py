@@ -228,19 +228,25 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
             # Nếu câu kết thúc bằng dấu '?', AI vẫn đang hỏi dở học sinh -> TUYỆT ĐỐI KHÔNG kích hoạt comprehension check!
             ends_with_question = cleaned_text.strip().rstrip("*_~` \t\r\n").endswith("?")
 
-            praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em")
+            praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em", "khen ngợi", "rất giỏi")
             is_praise = any(p in cleaned_text.lower() for p in praise_markers)
             conclusive_keywords = ("đáp án", "kết quả", "chọn đúng", "đáp án a", "đáp án b", "đáp án c", "đáp án d", "nghiệm của phương trình", "nghiệm là", "vô nghiệm")
             has_conclusive_markers = any(k in cleaned_text.lower() for k in conclusive_keywords)
 
             # Chỉ kích hoạt khi bài toán đã kết luận và KHÔNG kết thúc bằng câu hỏi gợi mở
+            attempt_has_comprehension = False
             if not ends_with_question:
                 if has_comp_tag or (is_praise and has_conclusive_markers):
-                    is_comprehension_detected = True
+                    attempt_has_comprehension = True
 
             # Chỉ kiểm duyệt gắt gao nếu đang đóng vai SCAFFOLDING_AGENT
             if target_agent == "SCAFFOLDING_AGENT":
-                review_result = reviewer.review(user_query, expected_answer, cleaned_text)
+                review_result = reviewer.review(
+                    user_query,
+                    expected_answer,
+                    cleaned_text,
+                    has_comprehension=has_comp_tag or attempt_has_comprehension,
+                )
                 if not review_result["is_approved"]:
                     current_attempt += 1
                     print(f"[Reviewer Agent 🛑] Từ chối (Lần {current_attempt}/{max_retries}): {review_result['feedback']}")
@@ -253,6 +259,7 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
             
             # Nếu pass qua được Reviewer hoặc không phải Scaffolding thì chốt đáp án
             final_text = cleaned_text
+            is_comprehension_detected = attempt_has_comprehension
             break
             
         except Exception as e:

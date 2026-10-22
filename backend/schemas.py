@@ -332,7 +332,8 @@ class ChildProblemsResponse(BaseModel):
 class BookmarkCreate(BaseModel):
     """Body gửi lên khi học sinh lưu bài toán vào Sổ Tay."""
     session_id: str
-    note: Optional[str] = None              # Ghi chú tuỳ ý của học sinh
+    message_created_at: Optional[datetime] = None  # Thời điểm bài toán cần lưu (từ tin nhắn chúc mừng)
+    note: Optional[str] = None                    # Ghi chú tuỳ ý của học sinh
 
 
 class BookmarkResponse(BaseModel):

@@ -191,7 +191,15 @@ export function ChatMessage({
             message.content.trim().toLowerCase().startsWith("xuất sắc!")
           ))
         ) && (
-          <SaveBookmarkButton sessionId={sessionId} />
+          <SaveBookmarkButton
+            sessionId={sessionId}
+            messageCreatedAt={
+              message.created_at ||
+              (typeof message.id === "string" && message.id.startsWith("congrats-")
+                ? new Date(Number(message.id.replace("congrats-", ""))).toISOString()
+                : undefined)
+            }
+          />
         )}
 
         {/* US4.1: Nut Da hieu / Chua hieu - chi hien duoi tin nhan cuoi cung cua AI */}
