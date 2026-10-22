@@ -27,7 +27,7 @@ export const DEFAULT_BADGES: BadgeItem[] = [
     subtitle: "Đạt 100 điểm tự lập",
     description: "Hoàn thành trọn vẹn bài toán với 100 điểm tự lực, không cần đến bất kỳ gợi ý nào!",
     iconUrl: "/badges/orange_star_badge.svg",
-    unlocked: true,
+    unlocked: false,
   },
   {
     id: "streak_3",
@@ -35,7 +35,7 @@ export const DEFAULT_BADGES: BadgeItem[] = [
     title: "Kiên Trì Bền Bỉ",
     subtitle: "Học 3 ngày liên tiếp",
     description: "Duy trì ngọn lửa học tập liên tục trong 3 ngày không gián đoạn!",
-    iconUrl: "/badges/orange_star_badge.svg",
+    iconUrl: "/badges/orange_arm_badge.svg",
     unlocked: false,
   },
   {
@@ -44,7 +44,7 @@ export const DEFAULT_BADGES: BadgeItem[] = [
     title: "Thám Tử Hình Ảnh",
     subtitle: "Giải bài toán bằng ảnh",
     description: "Tải lên và chinh phục thành công bài toán đầu tiên bằng ảnh chụp!",
-    iconUrl: "/badges/orange_star_badge.svg",
+    iconUrl: "/badges/orange_camera_badge.svg",
     unlocked: false,
   },
 ];
@@ -90,6 +90,8 @@ export function BadgeModal({
   useEffect(() => {
     if (activeBadge) {
       setActiveTab("unlock");
+    } else {
+      setActiveTab("collection");
     }
   }, [activeBadge]);
 

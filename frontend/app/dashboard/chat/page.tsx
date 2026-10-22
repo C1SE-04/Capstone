@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useState, useEffect, useMemo, useCallback, useSyncExternalStore } from "react";
+import { useSession } from "next-auth/react";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { ChatRightSidebar, ExerciseImage } from "@/components/chat/ChatRightSidebar";
@@ -8,7 +9,8 @@ import { ImageZoomModal } from "@/components/chat/ImageZoomModal";
 import { FileTooLargeToast } from "@/components/chat/FileTooLargeToast";
 // T7.18 (US 7.2): Streak Flame & Badge Modal
 import { StreakBadge } from "@/components/chat/StreakBadge";
-import { BadgeModal, BadgeItem } from "@/components/chat/BadgeModal";
+import { BadgeModal, BadgeItem, DEFAULT_BADGES } from "@/components/chat/BadgeModal";
+import { getMergedBadges, saveStoredBadge } from "@/lib/badgeStorage";
 import { Conversation, Message } from "@/types/chat";
 import { Menu, PanelRight } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -62,9 +64,67 @@ export default function ChatPage() {
     sizeMb: 0,
   });
 
-  // T7.18 (US 7.2): Trạng thái mở modal chúc mừng huy hiệu
+  // T7.18 (US 7.2): Quản lý huy hiệu & Modal chúc mừng (chỉ hiển thị 1 lần duy nhất)
+  const { data: session } = useSession();
+  const userId = (session?.user as any)?.id || (session?.user as any)?.email || "student_guest";
+  const [allBadges, setAllBadges] = useState<BadgeItem[]>(DEFAULT_BADGES);
+  const [badgeQueue, setBadgeQueue] = useState<BadgeItem[]>([]);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
   const [unlockedBadge, setUnlockedBadge] = useState<Partial<BadgeItem> | undefined>(undefined);
+
+  // Đồng bộ trạng thái huy hiệu từ LocalStorage theo User
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setAllBadges(getMergedBadges(userId));
+    }
+  }, [userId]);
+
+  // Hàm mở khóa huy hiệu: đảm bảo CHỈ HIỆN 1 LẦN DUY NHẤT
+  const triggerUnlockBadge = useCallback(
+    (badgeId: string) => {
+      // saveStoredBadge trả về true nếu là lần đầu tiên mở khóa
+      const isFirstTime = saveStoredBadge(badgeId, userId);
+      if (!isFirstTime) return;
+
+      // Cập nhật lại allBadges trong state
+      const updatedList = getMergedBadges(userId);
+      setAllBadges(updatedList);
+
+      const targetBadge =
+        updatedList.find((b) => b.id === badgeId) ||
+        DEFAULT_BADGES.find((b) => b.id === badgeId);
+
+      if (targetBadge) {
+        const itemToCelebrate: BadgeItem = {
+          ...targetBadge,
+          unlocked: true,
+          earnedAt: "Hôm nay",
+        };
+        setBadgeQueue((prev) => [...prev, itemToCelebrate]);
+      }
+    },
+    [userId]
+  );
+
+  // Xử lý hàng đợi hiển thị modal ăn mừng huy hiệu
+  useEffect(() => {
+    if (badgeQueue.length > 0 && !isBadgeModalOpen) {
+      const nextBadge = badgeQueue[0];
+      setUnlockedBadge(nextBadge);
+      setIsBadgeModalOpen(true);
+      setBadgeQueue((prev) => prev.slice(1));
+    }
+  }, [badgeQueue, isBadgeModalOpen]);
+
+  // Khi tải xong số ngày streak: nếu >= 3 ngày -> mở khóa "Kiên Trì Bền Bỉ" (streak_3)
+  const handleStreakLoaded = useCallback(
+    (streakCount: number) => {
+      if (streakCount >= 3) {
+        triggerUnlockBadge("streak_3");
+      }
+    },
+    [triggerUnlockBadge]
+  );
 
   const isOnline = useSyncExternalStore(
     subscribeOnline,
@@ -251,18 +311,19 @@ export default function ChatPage() {
             })
           );
 
-          // T7.18 (US 7.2): Nếu đạt 100 điểm tự lập -> Mở khóa huy hiệu "Tự lập nhí"
+          // T7.18 (US 7.2): Nếu đạt 100 điểm tự lập -> Mở khóa huy hiệu "Tự lập nhí" (hiện 1 lần duy nhất)
           if (resData.independence.score === 100 || notUnderstoodCount === 0) {
-            setUnlockedBadge({
-              id: "independence_100",
-              type: "independence_100",
-              title: "Tự Lập Nhí",
-              subtitle: "Đạt 100 điểm tự lập",
-              description: "Em đã hoàn thành xuất sắc bài toán với 100 điểm tự lực, không cần bất kỳ gợi ý nào!",
-              iconUrl: "/badges/orange_star_badge.svg",
-              unlocked: true,
-            });
-            setIsBadgeModalOpen(true);
+            triggerUnlockBadge("independence_100");
+          }
+
+          // T7.18 (US 7.2): Nếu bài toán có kèm ảnh bài tập -> Mở khóa huy hiệu "Thám Tử Hình Ảnh" (hiện 1 lần duy nhất)
+          const currentConv = conversations.find((c) => c.id === activeChatId);
+          const hasImageInSession = Boolean(
+            currentImages.length > 0 ||
+            currentConv?.messages.some((m) => Boolean(m.attachment_url))
+          );
+          if (hasImageInSession) {
+            triggerUnlockBadge("photo_solver");
           }
         }
       }
@@ -753,6 +814,8 @@ export default function ChatPage() {
     // US 6.4 (Task #173): Upload ảnh lên Cloudinary nếu người dùng có đính kèm file
     let uploadedAttachmentUrl: string | undefined = undefined;
     if (imageFile) {
+      // US 7.2: Học sinh tải ảnh bài toán lên để giải -> Kích hoạt huy hiệu "Thám Tử Hình Ảnh" (hiện 1 lần duy nhất)
+      triggerUnlockBadge("photo_solver");
       try {
         const BACKEND_URL =
           process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -902,6 +965,7 @@ export default function ChatPage() {
           <div className="flex items-center gap-2">
             {/* T7.18: Biểu tượng ngọn lửa hoạt hình Streak 🔥 */}
             <StreakBadge
+              onStreakLoaded={handleStreakLoaded}
               onClick={() => {
                 setUnlockedBadge(undefined); // Mở xem bộ sưu tập huy hiệu
                 setIsBadgeModalOpen(true);
@@ -987,6 +1051,7 @@ export default function ChatPage() {
         isOpen={isBadgeModalOpen}
         onClose={() => setIsBadgeModalOpen(false)}
         activeBadge={unlockedBadge}
+        allBadges={allBadges}
       />
     </div>
   );
