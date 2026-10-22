@@ -64,7 +64,8 @@ export default function MonitorLayout({
     }
   }, [session, status, router]);
 
-  if (status === "loading") {
+  // Chỉ hiển thị màn hình chờ khi lần đầu tải trang chưa có dữ liệu session
+  if (status === "loading" && !session) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-[#F7ECE1]">
         <svg

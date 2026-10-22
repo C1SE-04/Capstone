@@ -38,10 +38,10 @@ export async function refreshSession(
 
   if (!pendingRefresh) {
     lastRefreshTime = now;
-    pendingRefresh = doRefresh(updateFn).finally(() => {
+    pendingRefresh = doRefresh(updateFn, force).finally(() => {
       pendingRefresh = null;
     });
-  } else if (updateFn) {
+  } else if (updateFn && force) {
     pendingRefresh.then(async (res) => {
       if (res && res.grade !== undefined) {
         try {
@@ -58,7 +58,10 @@ export async function refreshSession(
   return pendingRefresh;
 }
 
-async function doRefresh(updateFn?: UpdateSessionFn): Promise<RefreshResult | null> {
+async function doRefresh(
+  updateFn?: UpdateSessionFn,
+  force = false
+): Promise<RefreshResult | null> {
   try {
     const nextAuth = await import("next-auth/react");
     const getSession = nextAuth.getSession;
@@ -71,6 +74,18 @@ async function doRefresh(updateFn?: UpdateSessionFn): Promise<RefreshResult | nu
     const currentAccessToken = (
       currentSession as { access_token?: string } | null
     )?.access_token;
+    const currentRole = (
+      currentSession as { user?: { role?: string } } | null
+    )?.user?.role;
+    const currentGrade = (
+      currentSession as { user?: { grade_level?: number } } | null
+    )?.user?.grade_level;
+
+    // Khi refresh on focus thông thường (không phải force do SESSION_STALE):
+    // MONITOR và ADMIN không cần làm mới session trên focus vì không đổi khối lớp
+    if (!force && currentRole && currentRole !== "STUDENT") {
+      return null;
+    }
 
     const BACKEND_URL =
       process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -90,8 +105,12 @@ async function doRefresh(updateFn?: UpdateSessionFn): Promise<RefreshResult | nu
         const newGrade = refreshData.grade;
 
         if (newAccessToken) {
-          // 3. Đồng bộ lại JWT session của NextAuth nếu có updateFn
-          if (typeof updateFn === "function") {
+          const gradeChanged =
+            newGrade !== undefined &&
+            (currentGrade === undefined || Number(newGrade) !== Number(currentGrade));
+
+          // 3. Chỉ đồng bộ lại JWT session của NextAuth nếu bị SESSION_STALE (force) hoặc khối lớp thực sự thay đổi
+          if (typeof updateFn === "function" && (force || gradeChanged)) {
             try {
               await updateFn({
                 access_token: newAccessToken,
@@ -103,11 +122,13 @@ async function doRefresh(updateFn?: UpdateSessionFn): Promise<RefreshResult | nu
             }
           }
 
-          console.info(
-            "[authFetch] Tự động refresh token thành công ✓ (Lớp mới:",
-            newGrade,
-            ")"
-          );
+          if (gradeChanged) {
+            console.info(
+              "[authFetch] Tự động cập nhật khối lớp mới thành công ✓ (Lớp mới:",
+              newGrade,
+              ")"
+            );
+          }
           return {
             token: newAccessToken,
             grade: newGrade !== undefined ? Number(newGrade) : undefined,
@@ -125,7 +146,11 @@ async function doRefresh(updateFn?: UpdateSessionFn): Promise<RefreshResult | nu
         if (userRes.ok) {
           const userData = await userRes.json();
           if (userData?.grade !== undefined) {
-            if (typeof updateFn === "function") {
+            const gradeChanged =
+              currentGrade === undefined ||
+              Number(userData.grade) !== Number(currentGrade);
+
+            if (typeof updateFn === "function" && (force || gradeChanged)) {
               await updateFn({ grade_level: Number(userData.grade) });
             }
             return {
@@ -203,7 +228,7 @@ export async function authFetch(
 
   // Singleton lock tránh refresh trùng lặp
   if (!pendingRefresh) {
-    pendingRefresh = doRefresh().finally(() => {
+    pendingRefresh = doRefresh(undefined, true).finally(() => {
       pendingRefresh = null;
     });
   }

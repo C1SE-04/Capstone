@@ -30,8 +30,8 @@ export default function AdminLayout({
   const userRole = (session?.user as any)?.role;
   const isRealAdmin = userRole === "ADMIN";
 
-  // Màn hình Loading đồng bộ với Dashboard Phụ Huynh / Monitor
-  if (status === "loading" || status === "unauthenticated" || !isRealAdmin) {
+  // Màn hình Loading hoặc Chặn quyền truy cập nếu không phải ADMIN
+  if ((status === "loading" && !session) || status === "unauthenticated" || !isRealAdmin) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-[#F7ECE1]">
         <svg
