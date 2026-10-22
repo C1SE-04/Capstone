@@ -27,9 +27,20 @@ import {
   ChevronRight,
   Image as ImageIcon,
   AlertCircle,
+  Bot,
+  User,
+  CheckCircle2,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
+
+// Schema tin nhắn đối thoại từng bước giữa Con và AI
+export interface ProblemDialogueMessage {
+  sender_type: "USER" | "AGENT_TUTOR" | string;
+  content: string;
+  attachment_url?: string | null;
+  created_at?: string | null;
+}
 
 // Schema tương thích hoàn toàn với backend ChildProblemItem
 export interface ChildProblemItem {
@@ -43,6 +54,7 @@ export interface ChildProblemItem {
   evaluation: string | null;
   attachment_url: string | null;
   chat_summary: string | null;
+  dialogue_messages?: ProblemDialogueMessage[];
 }
 
 interface ChildProblemsResponse {
@@ -85,6 +97,13 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
     null
   );
 
+  // Chuyển tab bộ lọc: reset trang về 1 để luôn hiển thị từ trang đầu của bộ lọc đó
+  const handleFilterChange = (newFilter: FilterType) => {
+    if (newFilter === filter) return;
+    setFilter(newFilter);
+    setCurrentPage(1);
+  };
+
   // Fetch dữ liệu thật từ API /parent/child-problems
   useEffect(() => {
     let isMounted = true;
@@ -97,7 +116,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
         const backendUrl =
           process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
         const res = await fetch(
-          `${backendUrl}/parent/child-problems?student_id=${studentId}&page=${currentPage}&page_size=${pageSize}`,
+          `${backendUrl}/parent/child-problems?student_id=${studentId}&page=${currentPage}&page_size=${pageSize}&filter_type=${filter}`,
           {
             headers: {
               Authorization: `Bearer ${session.access_token}`,
@@ -137,7 +156,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
     return () => {
       isMounted = false;
     };
-  }, [studentId, session, currentPage, pageSize, refreshKey]);
+  }, [studentId, session, currentPage, pageSize, filter, refreshKey]);
 
   // Phân loại badge tự lập
   const getIndependenceBadge = (score: number, evaluation?: string | null) => {
@@ -210,7 +229,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
             <BookOpen size={20} className="text-[#C1762A]" />
             Sổ Theo Dõi Bài Tập Của Con
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6]">
-              {totalProblems} bài đã giải
+              {filter === "ALL" ? `${totalProblems} bài đã giải` : `${totalProblems} bài phù hợp`}
             </span>
           </h2>
           <p className="text-xs text-[#C1762A] mt-1 ml-3.5">
@@ -222,7 +241,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
         {/* BỘ LỌC NHANH */}
         <div className="flex items-center gap-1.5 bg-[#FFFBF7] p-1 rounded-xl border border-[#F1CCA6] text-xs font-medium">
           <button
-            onClick={() => setFilter("ALL")}
+            onClick={() => handleFilterChange("ALL")}
             className={`px-3 py-1.5 rounded-lg transition-colors ${
               filter === "ALL"
                 ? "bg-[#C1762A] text-white font-bold shadow-xs"
@@ -232,7 +251,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
             Tất cả
           </button>
           <button
-            onClick={() => setFilter("WITH_IMAGE")}
+            onClick={() => handleFilterChange("WITH_IMAGE")}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors ${
               filter === "WITH_IMAGE"
                 ? "bg-[#C1762A] text-white font-bold shadow-xs"
@@ -242,7 +261,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
             <ImageIcon size={13} /> Có ảnh
           </button>
           <button
-            onClick={() => setFilter("EXCELLENT")}
+            onClick={() => handleFilterChange("EXCELLENT")}
             className={`px-3 py-1.5 rounded-lg transition-colors ${
               filter === "EXCELLENT"
                 ? "bg-[#C1762A] text-white font-bold shadow-xs"
@@ -252,7 +271,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
             Xuất sắc (≥80đ)
           </button>
           <button
-            onClick={() => setFilter("NEEDS_SUPPORT")}
+            onClick={() => handleFilterChange("NEEDS_SUPPORT")}
             className={`px-3 py-1.5 rounded-lg transition-colors ${
               filter === "NEEDS_SUPPORT"
                 ? "bg-[#C1762A] text-white font-bold shadow-xs"
@@ -406,34 +425,14 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                     </div>
 
                       {/* Card Footer: Các nút thao tác */}
-                    <div className="mt-4 pt-3 border-t border-[#F1CCA6]/50 flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-[11px] text-[#C1762A]/80 font-medium">
-                        Mã phiên: <span className="font-mono text-xs text-[#8C4905]">{item.session_id.slice(0, 8)}...</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {item.attachment_url && (
-                          <button
-                            onClick={() =>
-                              setActiveImage({
-                                url: item.attachment_url!,
-                                title: title,
-                              })
-                            }
-                            className="px-3 py-1.5 text-xs font-bold text-[#8C4905] bg-white border border-[#F1CCA6] rounded-xl hover:bg-[#F7ECE1] transition flex items-center gap-1.5"
-                          >
-                            <ZoomIn size={13} className="text-[#C1762A]" />
-                            Xem ảnh đề
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setActiveDialogue(item)}
-                          className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#C1762A] hover:bg-[#8C4905] rounded-xl transition shadow-xs flex items-center gap-1.5"
-                        >
-                          <Brain size={13} />
-                          Xem đối thoại tư duy
-                        </button>
-                      </div>
+                    <div className="mt-4 pt-3 border-t border-[#F1CCA6]/50 flex items-center justify-end">
+                      <button
+                        onClick={() => setActiveDialogue(item)}
+                        className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#C1762A] hover:bg-[#8C4905] rounded-xl transition shadow-xs flex items-center gap-1.5"
+                      >
+                        <Brain size={13} />
+                        Xem đối thoại tư duy
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -584,14 +583,133 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                 </div>
               </div>
 
-              {/* Luồng đối thoại tư duy */}
-              <div className="space-y-3 pt-2">
-                <p className="text-xs font-bold text-[#8C4905] uppercase tracking-wider flex items-center gap-1.5">
-                  <MessageSquare size={14} className="text-[#C1762A]" />
-                  Các bước phát biểu và tương tác của con:
-                </p>
+              {/* Luồng đối thoại tư duy từng bước */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-[#8C4905] uppercase tracking-wider flex items-center gap-1.5">
+                    <MessageSquare size={14} className="text-[#C1762A]" />
+                    Diễn biến giải bài & đối thoại giữa Con và Gia sư AI:
+                  </p>
+                  {activeDialogue.dialogue_messages && activeDialogue.dialogue_messages.length > 0 && (
+                    <span className="text-[11px] font-semibold text-[#C1762A] bg-[#F7ECE1] px-2 py-0.5 rounded-full border border-[#F1CCA6]">
+                      {activeDialogue.dialogue_messages.length} lượt đối thoại
+                    </span>
+                  )}
+                </div>
 
-                {activeDialogue.chat_summary ? (
+                {activeDialogue.dialogue_messages && activeDialogue.dialogue_messages.length > 0 ? (
+                  <div className="relative pl-6 space-y-4 before:absolute before:left-3 before:top-3 before:bottom-3 before:w-0.5 before:bg-gradient-to-b before:from-[#C1762A] before:via-[#F1CCA6] before:to-emerald-400">
+                    {activeDialogue.dialogue_messages.map((msg, index) => {
+                      const isUser = msg.sender_type === "USER";
+                      const isFirstUserMsg =
+                        isUser &&
+                        !activeDialogue.dialogue_messages!
+                          .slice(0, index)
+                          .some((m) => m.sender_type === "USER");
+
+                      return (
+                        <div key={index} className="relative group">
+                          {/* Điểm mốc trên timeline */}
+                          <div
+                            className={`absolute -left-[18px] top-3 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-xs border-2 border-white ${
+                              isUser ? "bg-[#C1762A]" : "bg-[#8C4905]"
+                            }`}
+                            title={`Bước ${index + 1}`}
+                          >
+                            {index + 1}
+                          </div>
+
+                          {/* Bong bóng tin nhắn */}
+                          <div
+                            className={`p-3.5 rounded-2xl border transition-all ${
+                              isUser
+                                ? "bg-[#FFFBF7] border-[#F1CCA6] shadow-2xs ml-1"
+                                : "bg-[#FAF8F5] border-[#E2D9CF] shadow-2xs ml-1"
+                            }`}
+                          >
+                            {/* Header tin nhắn */}
+                            <div className="flex items-center justify-between mb-1.5 gap-2">
+                              <span
+                                className={`text-[11px] font-bold flex items-center gap-1.5 ${
+                                  isUser ? "text-[#C1762A]" : "text-[#8C4905]"
+                                }`}
+                              >
+                                {isUser ? (
+                                  <>
+                                    <User size={13} />
+                                    {isFirstUserMsg
+                                      ? "Đề bài / Câu hỏi ban đầu của con:"
+                                      : "Con suy luận & trả lời:"}
+                                  </>
+                                ) : (
+                                  <>
+                                    <Bot size={13} />
+                                    Gia sư AI SocraticKid gợi mở:
+                                  </>
+                                )}
+                              </span>
+
+                              {msg.created_at && (
+                                <span className="text-[10px] text-gray-400">
+                                  {format(parseISO(msg.created_at), "HH:mm")}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Ảnh đính kèm (nếu là ảnh đề bài con gửi) */}
+                            {msg.attachment_url && (
+                              <div className="mb-2">
+                                <div
+                                  onClick={() =>
+                                    setActiveImage({
+                                      url: msg.attachment_url!,
+                                      title: activeDialogue.session_title || "Ảnh bài toán của con",
+                                    })
+                                  }
+                                  className="relative group/img inline-block rounded-xl overflow-hidden border-2 border-[#F1CCA6] cursor-pointer hover:border-[#C1762A] transition"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={msg.attachment_url}
+                                    alt="Đề bài của con"
+                                    className="max-h-36 max-w-xs object-cover rounded-lg group-hover/img:scale-105 transition-transform"
+                                    loading="lazy"
+                                  />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-bold gap-1">
+                                    <ZoomIn size={14} /> Phóng to đề bài
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Nội dung đối thoại */}
+                            <p
+                              className={`text-xs leading-relaxed whitespace-pre-line font-medium ${
+                                isUser ? "text-[#8C4905]" : "text-[#5A3818]"
+                              }`}
+                            >
+                              {msg.content}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Mốc hoàn thành bài */}
+                    <div className="relative pt-1">
+                      <div className="absolute -left-[18px] top-2 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs border-2 border-white">
+                        <CheckCircle2 size={14} />
+                      </div>
+                      <div className="ml-1 p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                        <span>🎉 Con đã hiểu bài & hoàn thành bài giải thành công!</span>
+                        <span className="ml-auto px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900 text-[10px] font-bold">
+                          {activeDialogue.score}/100 điểm tự lập
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : activeDialogue.chat_summary ? (
+                  /* Fallback dữ liệu cũ chưa có dialogue_messages */
                   activeDialogue.chat_summary.split(" | ").map((sentence, index) => (
                     <div
                       key={index}

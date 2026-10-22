@@ -148,7 +148,8 @@ Không được lặp lại bất kỳ nội dung nào vi phạm lý do từ ch�
     # Hướng dẫn đặc thù theo từng role
     role_specific_guide = {
         "KNOWLEDGE_TRACING": (
-            "• Đặt 1–2 câu hỏi ngắn để kiểm tra xem học sinh đã hiểu khái niệm nền tảng chưa.\n"
+            "• Đặt 1 câu hỏi ngắn để kiểm tra xem học sinh đã hiểu khái niệm nền tảng cần dùng cho bài toán cụ thể này chưa.\n"
+            "• Bám sát bài toán học sinh đang hỏi, không khảo sát lý thuyết toàn diện ngoài phạm vi bài toán.\n"
             "• Không hỏi quá nhiều thứ cùng lúc. Tập trung vào 1 khái niệm cốt lõi.\n"
             "• Câu hỏi phải dễ trả lời nếu hiểu, khó trả lời nếu chưa hiểu."
         ),
@@ -159,6 +160,8 @@ Không được lặp lại bất kỳ nội dung nào vi phạm lý do từ ch�
         ),
         "SCAFFOLDING": (
             "• Đặt câu hỏi gợi mở từng bước nhỏ, dẫn dắt học sinh tự suy nghĩ.\n"
+            "• Bám sát bài toán cụ thể đang giải, tuyệt đối không mở rộng khảo sát lý thuyết lan man không liên quan đến bài hiện tại.\n"
+            "• Nếu học sinh nói không có máy tính hoặc tính nhẩm khó, hướng dẫn học sinh lập phép tính đơn giản từ các hệ số của bài để tính nhẩm.\n"
             "• Chỉ hỏi 1 câu hỏi tại một thời điểm, không hỏi nhiều câu cùng lúc.\n"
             "• Nếu học sinh bí hoàn toàn, thu hẹp câu hỏi xuống mức đơn giản hơn.\n"
         ),

@@ -178,9 +178,28 @@ export function ChatMessage({
           )}
         </div>
 
-        {/* T7.17: Nút ⭐ "Lưu vào Sổ tay" xuất hiện ngay dưới bong bóng chúc mừng khi học sinh đã hiểu */}
-        {!isUser && message.emotion === "correct" && (
-          <SaveBookmarkButton sessionId={sessionId} />
+        {/* T7.17: Nút ⭐ "Lưu vào Sổ tay" CHỈ xuất hiện DUY NHẤT dưới bong bóng chúc mừng (Giỏi lắm, Tuyệt vời, Xuất sắc) khi học sinh đã bấm "Đã hiểu" */}
+        {!isUser && (
+          Boolean(message.isCongrats) ||
+          (typeof message.id === "string" && message.id.startsWith("congrats-")) ||
+          (typeof message.content === "string" && (
+            message.content.trim().toLowerCase().startsWith("**giỏi lắm!**") ||
+            message.content.trim().toLowerCase().startsWith("**tuyệt vời!**") ||
+            message.content.trim().toLowerCase().startsWith("**xuất sắc!**") ||
+            message.content.trim().toLowerCase().startsWith("giỏi lắm!") ||
+            message.content.trim().toLowerCase().startsWith("tuyệt vời!") ||
+            message.content.trim().toLowerCase().startsWith("xuất sắc!")
+          ))
+        ) && (
+          <SaveBookmarkButton
+            sessionId={sessionId}
+            messageCreatedAt={
+              message.created_at ||
+              (typeof message.id === "string" && message.id.startsWith("congrats-")
+                ? new Date(Number(message.id.replace("congrats-", ""))).toISOString()
+                : undefined)
+            }
+          />
         )}
 
         {/* US4.1: Nut Da hieu / Chua hieu - chi hien duoi tin nhan cuoi cung cua AI */}

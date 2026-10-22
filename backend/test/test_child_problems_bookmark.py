@@ -243,6 +243,7 @@ def test_bookmark_query_plan_performance():
     from database import engine
     with engine.connect() as conn:
         conn.execute(text("SET enable_bitmapscan = off;"))
+        conn.execute(text("SET enable_seqscan = off;"))
         result = conn.execute(text("""
             EXPLAIN (ANALYZE, BUFFERS)
             SELECT * FROM problem_bookmarks

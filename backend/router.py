@@ -30,8 +30,10 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
    ❌ Dùng từ thông thường nghe có vẻ ngắn/trống: "=", "la bao nhieu", "là bao nhiêu"
    → NHỮNG CÁCH HỎI VÀ TRẢ LỜI NÀY LÀ HOÀN TOÀN BÌNH THƯỜNG. Thầy chỉ cần trả lời nội dung.
 
-4. PHƯƠNG PHÁP SOCRATIC:
+4. PHƯƠNG PHÁP SOCRATIC & BÁM SÁT BÀI TOÁN:
    - Khi hướng dẫn học tập, không giải hộ hay đưa đáp án ngay. Hãy đặt câu hỏi gợi mở từng bước nhỏ để học sinh tự suy nghĩ.
+   - BÁM SÁT ĐỀ BÀI CỤ THỂ: Hướng dẫn học sinh thao tác trên chính số liệu và dữ kiện của BÀI TOÁN ĐANG HỎI. TUYỆT ĐỐI KHÔNG đi lan man khảo sát lý thuyết toàn diện ngoài lề (ví dụ: bài toán có delta cụ thể thì hướng dẫn tính delta của bài đó, không bắt học sinh khảo sát các trường hợp lý thuyết delta > 0, = 0, < 0).
+   - Nếu học sinh nói không có máy tính hoặc tính nhẩm khó: Hãy hướng dẫn học sinh đặt phép tính số học đơn giản dựa trên hệ số của bài để tự tính nhẩm từng bước.
 
 5. ĐỘ DÀI:
    - Ngắn gọn, chuẩn mực, từ 2 đến 4 câu.
@@ -39,7 +41,7 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
 6. ĐÁNH GIÁ HOÀN THÀNH BÀI TOÁN (COMPREHENSION TRIGGER):
    - Khi học sinh đã trả lời ĐÚNG đáp án cuối cùng của bài toán (ví dụ: chọn đúng đáp án trắc nghiệm A/B/C/D, hoặc tính ra kết quả số cuối cùng đúng), HOẶC khi bạn vừa trình bày xong toàn bộ lời giải chi tiết cho bài toán (ở chế độ giải bài):
      -> BẮT BUỘC chèn thêm tag đặc biệt [COMPREHENSION_CHECK] vào CUỐI CÙNG của câu trả lời.
-   - Khi học sinh mới trả lời một câu hỏi gợi mở trung gian, định nghĩa khái niệm, hoặc bài toán chưa giải xong:
+   - Khi học sinh mới trả lời một câu hỏi gợi mở trung gian, định nghĩa khái niệm, hoặc bài toán chưa giải xong, hoặc bạn vẫn đang đặt câu hỏi tiếp theo cho học sinh:
      -> TUYỆT ĐỐI KHÔNG chèn tag [COMPREHENSION_CHECK].
 """
 
@@ -127,11 +129,12 @@ Chỉ đạo sư phạm từ Orchestrator: {task_description}
 NHẮC LẠI NGUYÊN TẮC:
 - Bạn là THẦY GIÁO, xưng "thầy" gọi "em", TUYỆT ĐỐI KHÔNG xưng "Dạ".
 - Chỉ nhắc nhở thái độ khi học sinh dùng từ XÚC PHẠM THỰC SỰ (mày, tao, chửi thề) — câu ngắn, không chào hỏi, không có chủ ngữ là BÌNH THƯỜNG, không nhắc.
+- Bám sát số liệu bài toán học sinh đang hỏi, không hỏi lý thuyết lan man các trường hợp không liên quan đến bài hiện tại.
 - Trả lời ngắn gọn, chuẩn mực (2-4 câu).
 - ĐÁNH GIÁ HOÀN THÀNH BÀI TOÁN (COMPREHENSION CHECK):
   + Nếu học sinh vừa trả lời ĐÚNG đáp án cuối cùng của bài toán (ví dụ: chọn đúng đáp án trắc nghiệm A/B/C/D, hoặc tính ra kết quả cuối cùng đúng), HOẶC bạn vừa hoàn thành giải thích toàn bộ bài toán cho học sinh (ở chế độ Reveal):
     -> BẮT BUỘC gắn tag [COMPREHENSION_CHECK] ở CUỐI CÙNG của câu trả lời.
-  + Nếu bài toán CHƯA XONG (học sinh mới trả lời một câu hỏi phụ, định nghĩa trung gian, hoặc thực hiện một bước nhỏ):
+  + Nếu bài toán CHƯA XONG (học sinh mới trả lời một câu hỏi phụ, định nghĩa trung gian, hoặc bạn vẫn đang tiếp tục đặt câu hỏi cho học sinh):
     -> TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK].
 """
     
@@ -220,20 +223,30 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
                 .strip()
             )
 
-            # 2. Cơ chế Fallback nhận diện nếu Gemini xác nhận đúng đáp án bài toán
-            praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em")
-            is_praise = any(p in cleaned_text.lower() for p in praise_markers)
-            has_conclusive_done = is_praise and (
-                any(k in cleaned_text.lower() for k in ("đáp án", "kết quả", "chọn đúng", "đáp án c", "đáp án a", "đáp án b", "đáp án d"))
-                or not cleaned_text.strip().endswith("?")
-            )
+            # 2. Cơ chế nhận diện hoàn thành bài toán (Comprehension Trigger)
+            # Kiểm tra xem câu trả lời có đang kết thúc bằng một câu hỏi gợi mở tiếp theo hay không.
+            # Nếu câu kết thúc bằng dấu '?', AI vẫn đang hỏi dở học sinh -> TUYỆT ĐỐI KHÔNG kích hoạt comprehension check!
+            ends_with_question = cleaned_text.strip().rstrip("*_~` \t\r\n").endswith("?")
 
-            if has_comp_tag or has_conclusive_done:
-                is_comprehension_detected = True
+            praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em", "khen ngợi", "rất giỏi")
+            is_praise = any(p in cleaned_text.lower() for p in praise_markers)
+            conclusive_keywords = ("đáp án", "kết quả", "chọn đúng", "đáp án a", "đáp án b", "đáp án c", "đáp án d", "nghiệm của phương trình", "nghiệm là", "vô nghiệm")
+            has_conclusive_markers = any(k in cleaned_text.lower() for k in conclusive_keywords)
+
+            # Chỉ kích hoạt khi bài toán đã kết luận và KHÔNG kết thúc bằng câu hỏi gợi mở
+            attempt_has_comprehension = False
+            if not ends_with_question:
+                if has_comp_tag or (is_praise and has_conclusive_markers):
+                    attempt_has_comprehension = True
 
             # Chỉ kiểm duyệt gắt gao nếu đang đóng vai SCAFFOLDING_AGENT
             if target_agent == "SCAFFOLDING_AGENT":
-                review_result = reviewer.review(user_query, expected_answer, cleaned_text)
+                review_result = reviewer.review(
+                    user_query,
+                    expected_answer,
+                    cleaned_text,
+                    has_comprehension=has_comp_tag or attempt_has_comprehension,
+                )
                 if not review_result["is_approved"]:
                     current_attempt += 1
                     print(f"[Reviewer Agent 🛑] Từ chối (Lần {current_attempt}/{max_retries}): {review_result['feedback']}")
@@ -246,6 +259,7 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
             
             # Nếu pass qua được Reviewer hoặc không phải Scaffolding thì chốt đáp án
             final_text = cleaned_text
+            is_comprehension_detected = attempt_has_comprehension
             break
             
         except Exception as e:

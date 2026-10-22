@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { X, Sparkles, MessageSquare, Loader2 } from "lucide-react";
 import { Message } from "@/types/chat";
+import { BookmarkDialogueMessage } from "@/types/bookmark";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { authFetch } from "@/lib/authFetch";
 
@@ -22,6 +23,7 @@ interface BookmarkChatDrawerProps {
   problemTitle?: string | null;
   independenceScore?: number | null;
   createdAt?: string | null;
+  dialogueMessages?: BookmarkDialogueMessage[];
 }
 
 function subscribe() {
@@ -35,6 +37,7 @@ export function BookmarkChatDrawer({
   problemTitle,
   independenceScore,
   createdAt,
+  dialogueMessages,
 }: BookmarkChatDrawerProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -50,10 +53,29 @@ export function BookmarkChatDrawer({
   useEffect(() => {
     let ignore = false;
 
-    if (!isOpen || !sessionId) {
+    if (!isOpen) {
       return;
     }
 
+    // 1. Ưu tiên số 1: Hiển thị ngay chuỗi đối thoại chuẩn của riêng bài toán này
+    if (dialogueMessages && dialogueMessages.length > 0) {
+      const formatted: Message[] = dialogueMessages.map((m, idx) => ({
+        id: `bm-dialogue-${idx}`,
+        role: m.sender_type === "USER" ? ("user" as const) : ("assistant" as const),
+        content: m.content || "",
+        attachment_url: m.attachment_url || undefined,
+      }));
+      setMessages(formatted);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    if (!sessionId) {
+      return;
+    }
+
+    // 2. Fallback: Nếu bài cũ chưa có dialogueMessages thì fetch từ session
     const loadMessages = async () => {
       setIsLoading(true);
       setError(null);
@@ -153,6 +175,11 @@ export function BookmarkChatDrawer({
                 {independenceScore !== undefined && independenceScore !== null && (
                   <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                     {independenceScore}đ tự lập
+                  </span>
+                )}
+                {dialogueMessages && dialogueMessages.length > 0 && (
+                  <span className="font-semibold text-[#8C4905] bg-[#F7ECE1] px-1.5 py-0.2 rounded border border-[#F1CCA6]">
+                    {dialogueMessages.length} lượt trao đổi
                   </span>
                 )}
                 {createdAt && (

@@ -124,6 +124,7 @@ export default function ChatPage() {
                     role: m.sender_type === "USER" ? "user" : "assistant",
                     content: m.content,
                     attachment_url: m.attachment_url || undefined,
+                    created_at: m.created_at,
                   }))
                   // Loc bo cac prompt ngam de khong bi lo khi reload trang
                   .filter((m: any) => !(
@@ -236,6 +237,8 @@ export default function ChatPage() {
     // Chỉ thêm message chúc mừng khi đang có cuộc trò chuyện
     if (!activeChatId) return;
 
+    let scoreCreatedAt: string | undefined = undefined;
+
     // Gửi request lên Backend (Task #160 - T6.4) để kích hoạt tính điểm và lưu vào DB
     try {
       const BACKEND_URL =
@@ -252,8 +255,9 @@ export default function ChatPage() {
 
       if (res.ok) {
         const resData = await res.json();
-        // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time (T6.5)
         if (resData.independence) {
+          scoreCreatedAt = resData.independence.created_at;
+          // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time (T6.5)
           window.dispatchEvent(
             new CustomEvent("INDEPENDENCE_SCORE_UPDATED", {
               detail: resData.independence,
@@ -300,6 +304,8 @@ export default function ChatPage() {
                   content: randomMsg,
                   emotion: "correct",
                   isAnswerRevealed: false, // Không hiện lại nút Đã hiểu/Chưa hiểu
+                  isCongrats: true, // Đánh dấu tin nhắn chúc mừng để hiển thị nút Lưu vào Sổ tay
+                  created_at: scoreCreatedAt || new Date().toISOString(),
                 },
               ],
             }

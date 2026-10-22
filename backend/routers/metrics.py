@@ -835,6 +835,7 @@ def get_child_problems(
     student_id: str = Query(..., description="ID của học sinh cần xem"),
     page: int = Query(default=1, ge=1, description="Trang hiện tại (bắt đầu từ 1)"),
     page_size: int = Query(default=10, ge=1, le=50, description="Số bài mỗi trang"),
+    filter_type: Optional[str] = Query(default="ALL", description="Bộ lọc: ALL, WITH_IMAGE, EXCELLENT, NEEDS_SUPPORT"),
     current_user: dict = Depends(dependencies.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -845,6 +846,7 @@ def get_child_problems(
     - Thời điểm hoàn thành, điểm tự lực, số gợi ý đã dùng, đánh giá mức độ
     - Ảnh đề bài từ Cloudinary (nếu học sinh upload ảnh trong session đó)
     - Tóm tắt đoạn chat: 3 tin nhắn USER đầu tiên của session
+    - Hỗ trợ filter_type: ALL, WITH_IMAGE, EXCELLENT, NEEDS_SUPPORT
     """
     if current_user.get("role") != "MONITOR":
         raise HTTPException(status_code=403, detail="Chỉ phụ huynh mới có thể xem dữ liệu này.")
@@ -857,50 +859,130 @@ def get_child_problems(
     if not link:
         raise HTTPException(status_code=403, detail="Bạn không có quyền xem dữ liệu của học sinh này.")
 
-    # --- Đếm tổng số bài đã hoàn thành ---
-    total = (
-        db.query(func.count(models.IndependenceScore.id))
+    # --- Query cơ bản ---
+    base_query = (
+        db.query(models.IndependenceScore, models.Session)
+        .join(models.Session, models.IndependenceScore.session_id == models.Session.id)
         .filter(models.IndependenceScore.student_id == student_id)
-        .scalar()
-    ) or 0
+    )
+
+    # --- Áp dụng bộ lọc ---
+    normalized_filter = (filter_type or "ALL").upper()
+    if normalized_filter == "WITH_IMAGE":
+        has_image_subquery = (
+            db.query(models.Message.session_id)
+            .filter(
+                models.Message.attachment_url.isnot(None),
+                models.Message.attachment_url != "",
+            )
+            .distinct()
+            .subquery()
+        )
+        base_query = base_query.filter(models.IndependenceScore.session_id.in_(has_image_subquery))
+    elif normalized_filter == "EXCELLENT":
+        base_query = base_query.filter(models.IndependenceScore.score >= 80)
+    elif normalized_filter == "NEEDS_SUPPORT":
+        base_query = base_query.filter(models.IndependenceScore.score < 65)
+
+    # --- Đếm tổng số bài đã hoàn thành phù hợp bộ lọc ---
+    total = base_query.count()
 
     # --- Lấy danh sách bài theo trang, sắp xếp mới nhất lên đầu ---
     offset = (page - 1) * page_size
     score_rows = (
-        db.query(models.IndependenceScore, models.Session)
-        .join(models.Session, models.IndependenceScore.session_id == models.Session.id)
-        .filter(models.IndependenceScore.student_id == student_id)
+        base_query
         .order_by(models.IndependenceScore.created_at.desc())
         .offset(offset)
         .limit(page_size)
         .all()
     )
 
+    HIDDEN_PROMPTS = (
+        "Hoc sinh chua hieu cach giai thich tren. Hay giai thich lai theo cach khac, don gian va de hieu hon.",
+        "Hoc sinh van chua hieu sau nhieu lan giai thich. Hay dua ra dap an chinh xac va giai thich tung buoc that ro rang.",
+    )
+
     items: list[schemas.ChildProblemItem] = []
 
     for score, session in score_rows:
-        # --- Lấy tất cả tin nhắn USER trong session (tối đa 5 để tìm ảnh + tóm tắt) ---
-        user_messages = (
-            db.query(models.Message)
-            .filter(
-                models.Message.session_id == session.id,
-                models.Message.sender_type == "USER",
-            )
-            .order_by(models.Message.created_at.asc())
-            .limit(5)
+        # 1. Xác định ranh giới bài toán trong session:
+        # Tìm tất cả điểm số trong cùng session theo thứ tự thời gian tăng dần
+        all_session_scores = (
+            db.query(models.IndependenceScore)
+            .filter(models.IndependenceScore.session_id == session.id)
+            .order_by(models.IndependenceScore.created_at.asc(), models.IndependenceScore.id.asc())
             .all()
         )
 
-        # Ảnh đề bài: ưu tiên tin nhắn USER có attachment_url đầu tiên
+        # Tìm vị trí của score hiện tại trong session
+        prev_time = None
+        for i, s in enumerate(all_session_scores):
+            if s.id == score.id:
+                if i > 0:
+                    prev_time = all_session_scores[i - 1].created_at
+                break
+
+        # Điểm kết thúc: thời điểm bấm Đã hiểu (+ 5 giây phòng sai số thời gian lưu)
+        end_time = score.created_at + timedelta(seconds=5)
+
+        # Lấy các tin nhắn thuộc phạm vi bài toán này
+        msg_query = (
+            db.query(models.Message)
+            .filter(
+                models.Message.session_id == session.id,
+                models.Message.created_at <= end_time,
+            )
+        )
+        if prev_time:
+            msg_query = msg_query.filter(models.Message.created_at > prev_time)
+
+        raw_messages = msg_query.order_by(models.Message.created_at.asc()).all()
+
+        # Fallback nếu msg_query trống (ví dụ do lệch timezone/lịch sử cũ)
+        if not raw_messages:
+            raw_messages = (
+                db.query(models.Message)
+                .filter(models.Message.session_id == session.id)
+                .order_by(models.Message.created_at.asc())
+                .all()
+            )
+
+        # Lọc tin nhắn hợp lệ (bỏ tin hệ thống ẩn và tin rác)
+        valid_messages: list[models.Message] = []
+        for m in raw_messages:
+            if m.sender_type not in ("USER", "AGENT_TUTOR"):
+                continue
+            if not m.content:
+                continue
+            content_str = m.content.strip()
+            if any(hp in content_str for hp in HIDDEN_PROMPTS):
+                continue
+            if content_str.startswith("[") and content_str.endswith("]") and "Chua hieu" in content_str:
+                continue
+            valid_messages.append(m)
+
+        # Ảnh đề bài: ưu tiên tin nhắn USER đầu tiên có attachment_url trong bài này
         attachment_url: Optional[str] = None
-        for msg in user_messages:
-            if msg.attachment_url:
+        for msg in valid_messages:
+            if msg.sender_type == "USER" and msg.attachment_url:
                 attachment_url = msg.attachment_url
                 break
 
-        # Tóm tắt đoạn chat: ghép nội dung 3 tin nhắn USER đầu tiên
-        summary_parts = [msg.content for msg in user_messages[:3] if msg.content]
-        chat_summary: Optional[str] = " | ".join(summary_parts) if summary_parts else None
+        # Tóm tắt đoạn chat: lấy các tin nhắn USER của bài toán này
+        user_messages = [m for m in valid_messages if m.sender_type == "USER"]
+        summary_parts = [msg.content for msg in user_messages if msg.content]
+        chat_summary: Optional[str] = " | ".join(summary_parts[:5]) if summary_parts else None
+
+        # Danh sách đầy đủ các bước đối thoại giữa con và hệ thống
+        dialogue_messages = [
+            schemas.ProblemDialogueMessage(
+                sender_type=m.sender_type,
+                content=m.content,
+                attachment_url=m.attachment_url,
+                created_at=m.created_at,
+            )
+            for m in valid_messages
+        ]
 
         eval_text = score.evaluation
         EVAL_MAP = {
@@ -925,6 +1007,7 @@ def get_child_problems(
                 evaluation=eval_text,
                 attachment_url=attachment_url,
                 chat_summary=chat_summary,
+                dialogue_messages=dialogue_messages,
             )
         )
 

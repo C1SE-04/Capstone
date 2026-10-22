@@ -1,3 +1,10 @@
+export interface BookmarkDialogueMessage {
+  sender_type: "USER" | "AGENT_TUTOR" | string;
+  content: string;
+  attachment_url?: string | null;
+  created_at?: string | null;
+}
+
 export interface BookmarkItem {
   id: string;
   student_id: string;
@@ -9,6 +16,7 @@ export interface BookmarkItem {
   independence_score?: number | null;
   note?: string | null;
   created_at: string;
+  dialogue_messages?: BookmarkDialogueMessage[];
 }
 
 export interface BookmarkCreatePayload {

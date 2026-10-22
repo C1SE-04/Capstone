@@ -250,9 +250,6 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
               <h2 className="text-xl font-black text-[#8C4905] tracking-tight">
                 Nhận Xét Sư Phạm AI
               </h2>
-              <span className="text-[11px] font-bold uppercase tracking-wider bg-[#F7ECE1] text-[#8C4905] px-2 py-0.5 rounded-full border border-[#F1CCA6]">
-                Gemini Socratic
-              </span>
             </div>
             <div className="flex items-center gap-2 text-xs text-[#C1762A] font-medium mt-1">
               <Calendar size={13} className="text-[#C1762A]" />
