@@ -20,10 +20,10 @@ export default function AdminPage() {
   const quickCards = [
     {
       title: "Quản Lý Người Dùng",
-      description: "Xem danh sách 12,480 tài khoản học sinh, phụ huynh, liên kết gia đình và kiểm soát trạng thái khóa/mở.",
+      description: "Xem danh sách 48 tài khoản học sinh, phụ huynh, liên kết gia đình và kiểm soát trạng thái khóa/mở.",
       icon: Users,
       href: "/admin/users",
-      stats: "12,480 Users",
+      stats: "48 Users",
       color: "#C1762A",
       bgLight: "#F7ECE1",
     },
@@ -98,9 +98,9 @@ export default function AdminPage() {
               Tổng người dùng
             </p>
             <p className="text-2xl font-black text-[#8C4905] leading-none">
-              12,480
+              48
             </p>
-            <p className="text-xs text-[#C1762A]/70 mt-1.5 font-medium">9,240 Học sinh • 3,240 Phụ huynh</p>
+            <p className="text-xs text-[#C1762A]/70 mt-1.5 font-medium">36 Học sinh • 12 Phụ huynh</p>
           </div>
         </div>
 
@@ -121,12 +121,12 @@ export default function AdminPage() {
             </p>
             <div className="flex items-baseline gap-1.5">
               <span className="text-3xl font-black text-[#8C4905] leading-none">
-                3,842
+                18
               </span>
               <span className="text-xs font-bold text-[#2A8C4A]">+8.6% hôm nay</span>
             </div>
             <p className="text-xs text-[#8C4905]/80 font-medium mt-1.5">
-              MAU: 10,120 học sinh gắn kết
+              MAU: 32 học sinh gắn kết
             </p>
           </div>
         </div>
@@ -146,7 +146,7 @@ export default function AdminPage() {
               Phiên Đối Thoại AI
             </p>
             <p className="text-2xl font-black text-[#8C4905] leading-none">
-              48,920
+              46
             </p>
             <p className="text-xs text-[#C1762A]/70 mt-1.5 font-medium">Trung bình 18.5 phút / bài toán</p>
           </div>
