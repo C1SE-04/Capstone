@@ -61,6 +61,9 @@ from routers import insights  # US 7.3 & 7.4: AI Insights background service + B
 app.include_router(insights.router)
 from routers import bookmarks  # US 7.2 (Task T7.13): CRUD Sổ Tay Bài Toán
 app.include_router(bookmarks.router)
+from routers import admin_mock  # US 7.3 (Task T7.31): Mock Data Router cho Admin Portal
+app.include_router(admin_mock.router)
+
 
 
 
