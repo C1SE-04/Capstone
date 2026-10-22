@@ -4,6 +4,10 @@ from fastapi.testclient import TestClient
 from jose import jwt
 from datetime import datetime, timedelta, timezone
 
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Import middleware và các cấu hình JWT từ hệ thống
 from middleware import JWTMiddleware, SECRET_KEY, ALGORITHM
 
