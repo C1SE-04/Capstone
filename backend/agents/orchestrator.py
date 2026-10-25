@@ -13,6 +13,18 @@ class RoutingResult(TypedDict):
     selected_agent: str      # "SCAFFOLDING" | "MISCONCEPTION" | "KNOWLEDGE_TRACING" | "SAFETY"
     task_description: str    # Chỉ đạo cụ thể cho agent tiếp theo (< 3 câu)
     routing_scratchpad: str  # Ghi chú suy luận nội bộ
+    emotion_flag: str
+
+def _detect_uncovered_claim(message: str) -> bool:
+    """Trả về True nếu học sinh biện hộ rằng chưa học/chưa được dạy chủ đề nào đó."""
+    # Công thức: (Từ phủ định) + (từ đệm tùy chọn) + (học/dạy/thấy/gặp/nghe)
+    pattern = r"(chưa|chx|không|ko|k|hk)\s+(được\s+|đc\s+|dc\s+|từng\s+|bao giờ\s+|bao h\s+|cs\s+|có\s+)?(hc|học|dạy|nghe|biết tới|bt tới|bt|biết)|(lần đầu|mới|ms).{0,10}(gặp|thấy|nghe)|(chưa|chx)\s+quen"
+    # Cộng thêm các cụm từ viết tắt quá dị của Gen Z mà Regex khó gom nhóm
+    gen_z_slang = ("e ch hc", "chưa hỉu", "chx hỉu")
+    msg_lower = message.lower()
+    if re.search(pattern, msg_lower) or any(s in msg_lower for s in gen_z_slang):
+        return True
+    return False
 
 def _build_task_description(
     agent: str,
@@ -63,13 +75,21 @@ def _build_task_description(
                 "2. TUYỆT ĐỐI KHÔNG xưng 'Dạ', luôn xưng 'thầy' gọi 'em'. "
                 "3. Ân cần hỏi học sinh hôm nay cần thầy hướng dẫn bài toán nào."
             )
-
         # 3. Off-topic (ngoài lề)
         return (
             f"Học sinh đang giao tiếp ngoài bài học: '{message[:60]}'. "
             "Bạn là THẦY GIÁO (xưng thầy, gọi em, tuyệt đối không xưng 'Dạ'). "
             "Hãy từ chối chuyện ngoài lề một cách nhã nhặn, giữ phong thái người thầy mẫu mực và hướng dẫn học sinh tập trung vào bài học."
         )
+
+    if _detect_uncovered_claim(message):
+        return (
+            f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
+            "BẮT BUỘC kiểm tra kỹ chủ đề toán này CÓ nằm trong danh sách THÔNG TIN LỚP HỌC SINH không, và chọn đúng 1 trong 2 kịch bản:\n"
+            "KỊCH BẢN A (CÓ trong danh sách) – Học sinh đang nói dối hoặc quên. TUYỆT ĐỐI KHÔNG xin lỗi. Nhẹ nhàng nhắc: 'Theo chương trình, đây là kiến thức cơ bản em đã học. Thầy tin em có thể nhớ lại...' rồi tiếp tục hướng dẫn.\n"
+            "KỊCH BẢN B (KHÔNG có trong danh sách) – Đây là kiến thức vượt cấp (VD: phương trình với HS tiểu học). BẮT BUỘC an ủi: 'Vì em đang học lớp [X] nên chưa quen với kiến thức lớp cao hơn này là bình thường...' rồi giải thích đơn giản hóa theo cấp học của em."
+        )
+    
     if agent == "KNOWLEDGE_TRACING":
         topic = message.replace("là gì", "").replace("thầy ơi", "").replace("vậy thầy", "").strip()
         return (
@@ -122,7 +142,7 @@ class OrchestratorAgent:
         "con cặc", "cục cặc", "cái cặc", "đầu cặc", "cái quần què", "quần què","phò", "điếm", "cave", "đĩ điếm", "gái điếm", "con đĩ",
         "nứng", "nứng lồn", "nứng sảng", "chịch", "xoạc", "bú cu", "bú lồn", "liếm lồn","súc vật", "súc sinh", "óc chó", "óc lợn", "ngu học", 
         "ngu như bò", "ngu lồn", "khốn nạn", "khốn kiếp", "chó má",  "đĩ chó", "đĩ ngựa", "đĩ thoã",
-        "ê", "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này"
+        "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này"
     )
 
     # ── Danh sách tiếng hú hét, gọi cộc lốc, vô nghĩa, quấy rối ─────────
@@ -193,7 +213,8 @@ class OrchestratorAgent:
         "hàng trăm", "nhóm hạng tử", "tách hạng tử", "khử mẫu", "đưa vào", 
         "đưa ra", "góc ngoài", "tam giác vuông", "tam giác tù", "tam giác nhọn", 
         "hoành độ", "tung độ", "trục tọa độ", "mặt phẳng tọa độ", "gốc tọa độ", 
-        "hệ số góc", "cắt nhau", "trùng nhau", "khoảng cách", "số chính phương", "vế trái", "vế phải"
+        "hệ số góc", "cắt nhau", "trùng nhau", "khoảng cách", "số chính phương", "vế trái", "vế phải",
+        "dạ", "vâng", "dạ có", "dạ không", "vâng ạ", "dạ hiểu", "dạ vâng", "dạ đúng"
     )
 
     # ── Tín hiệu ngoài lề (luôn là SAFETY, dù dài bao nhiêu từ) ─────────────
@@ -239,6 +260,8 @@ class OrchestratorAgent:
         "giúp em", "cứu em", "giúp mình", "giúp e", "cứu e", "bước tiếp theo làm gì", "tiếp theo làm gì",
         "help em", "help mình", "help thầy","gợi ý đi", "cho em gợi ý", "gợi ý nhỏ", "hint đi",
         "bước tiếp làm gì", "tiếp theo lm gì", "làm gì tiếp","lm gì tiếp", "tiếp theo là gì", "next step",
+        "cho em ví dụ", "ví dụ đi", "ví dụ thế nào", "ví dụ cụ thể", "cho 1 vd đi", "1 vd đi", "cho vd đi", "vd đi",
+        "ví dụ", "vi du", "vd", "vdu", "dí dụ", "di du", "vidu", "mẫu", "bài mẫu", "làm mẫu", "giải mẫu",
         "không hiểu đề", "ko hiểu đề", "k hiểu đề", "chưa làm được", "chưa lm được",
         "bắt đầu từ đâu", "bắt đầu ntn", "bắt đầu từ đâu thầy","em làm vậy đúng k", "em làm vậy đúng ko", "em làm đúng chưa",
         "thầy xem giúp em", "thầy check giúp", "check hộ em", "em làm đến đây rồi", "em mới làm đến đây",
@@ -268,7 +291,6 @@ class OrchestratorAgent:
         "quên mất cách", "quên cách", "không nhớ công thức", "ko nhớ công thức",
         "giải thích lại", "giải thích cho em", "giải thích đi",
         "chưa hiểu khái niệm", "không hiểu khái niệm", "ko hiểu khái niệm",
-        "cho em ví dụ", "ví dụ đi", "ví dụ thế nào", "ví dụ cụ thể",
         "tại sao phải", "tại sao lại", "vì sao phải", "vì sao lại",
         "khác nhau thế nào", "khác nhau ntn", "phân biệt", "so sánh",
         "dùng để làm gì", "có tác dụng gì", "để làm gì", "dùng khi nào",
@@ -484,6 +506,16 @@ class OrchestratorAgent:
 
         return None
 
+    # ── Tín hiệu tích cực / kết thúc hiểu bài — không báo WRONG dù agent cũ là MISCONCEPTION ──
+    POSITIVE_CLOSE_SIGNALS: tuple = (
+        "ok em hiểu", "em hiểu rồi", "hiểu rồi thầy", "hiểu rồi ạ", "em hiểu ạ",
+        "cảm ơn thầy", "cảm ơn", "cám ơn thầy", "cám ơn", "thank thầy", "thanks thầy",
+        "dạ em hiểu", "dạ hiểu", "dạ em biết rồi", "biết rồi thầy",
+        "ok thầy", "oke thầy", "được rồi thầy", "rõ rồi thầy",
+        "em làm được rồi", "làm được rồi", "giải được rồi",
+        "dạ vâng", "vâng ạ", "dạ", "vâng",
+    )
+
     def _state_machine_route(
         self,
         text_clean: str,
@@ -501,15 +533,27 @@ class OrchestratorAgent:
                 selected_agent="SCAFFOLDING",
                 task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
                 routing_scratchpad=f"[Trụ3 - StateMachine]: Bài toán đang mở → SCAFFOLDING.",
+                emotion_flag="GUIDING",
             )
 
         # 3.2 Kế thừa agent cuối từ lịch sử hội thoại
         last_agent = self._last_agent_from_history(history_text)
         if last_agent and last_agent in ("MISCONCEPTION", "KNOWLEDGE_TRACING"):
+            # FIX #1: Nếu tin nhắn hiện tại là lời cảm ơn / đã hiểu rồi
+            # thì KHÔNG báo WRONG dù agent cũ là MISCONCEPTION
+            is_positive_close = any(s in text_clean for s in self.POSITIVE_CLOSE_SIGNALS)
+            if last_agent == "MISCONCEPTION" and is_positive_close:
+                return RoutingResult(
+                    selected_agent="SCAFFOLDING",
+                    task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                    routing_scratchpad=f"[Trụ3 - StateMachine]: Học sinh đã hiểu sau MISCONCEPTION → SCAFFOLDING khen.",
+                    emotion_flag="CORRECT",  # Cú vui vẻ vỗ tay vì học sinh hiểu bài rồi
+                )
             return RoutingResult(
                 selected_agent=last_agent,
                 task_description=_build_task_description(last_agent, original_message, problem_context),
                 routing_scratchpad=f"[Trụ3 - StateMachine]: Tiếp tục ngữ cảnh '{last_agent}' từ lịch sử.",
+                emotion_flag="WRONG" if last_agent == "MISCONCEPTION" else "GUIDING",
             )
 
         # 3.3 Mặc định an toàn
@@ -517,6 +561,7 @@ class OrchestratorAgent:
             selected_agent="SCAFFOLDING",
             task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
             routing_scratchpad=f"[Trụ3 - StateMachine]: Mặc định SCAFFOLDING.",
+            emotion_flag="GUIDING",
         )
 
     def _structural_route(
@@ -536,6 +581,7 @@ class OrchestratorAgent:
                 selected_agent="SAFETY",
                 task_description=_build_task_description("SAFETY", original_message, safety_subtype="DISRESPECT"),
                 routing_scratchpad="[Trụ1] Profanity / Disrespect detected.",
+                emotion_flag="WARNING",
             )
 
         # 1.1b Shouting / Gibberish / Hú hét cộc lốc
@@ -548,6 +594,7 @@ class OrchestratorAgent:
                 selected_agent="SAFETY",
                 task_description=_build_task_description("SAFETY", original_message, safety_subtype="SHOUTING"),
                 routing_scratchpad=f"[Trụ1] Shouting / improper exclamation detected: '{text_clean[:40]}'",
+                emotion_flag="WARNING",
             )
 
         # 1.2 Off-topic tuyệt đối
@@ -556,6 +603,7 @@ class OrchestratorAgent:
                 selected_agent="SAFETY",
                 task_description=_build_task_description("SAFETY", original_message),
                 routing_scratchpad=f"[Trụ1] Off-topic signal: '{text_clean[:40]}'",
+                emotion_flag="WARNING",
             )
 
         # 1.3 Câu chào hỏi (không kèm nội dung bài học)
@@ -568,14 +616,27 @@ class OrchestratorAgent:
                 selected_agent="SAFETY",
                 task_description=_build_task_description("SAFETY", original_message),
                 routing_scratchpad=f"[Trụ1] Greeting pattern: '{text_clean[:40]}'",
+                emotion_flag="GUIDING",
             )
-
+        # 1.3b Học sinh tuyên bố chưa học — KHÔNG route KNOWLEDGE_TRACING, route SCAFFOLDING để xử lý context
+        if _detect_uncovered_claim(text_clean):
+            return RoutingResult(
+                selected_agent="SCAFFOLDING",
+                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                routing_scratchpad=f"[Trụ1] Uncovered claim detected: '{text_clean[:40]}'",
+                emotion_flag="GUIDING",
+            )
         # 1.4 Câu hỏi lý thuyết "X là gì?" / "thế nào là X"
         if self._theory_re.search(text_clean) or any(s in text_clean for s in self.THEORY_SIGNALS):
             return RoutingResult(
                 selected_agent="KNOWLEDGE_TRACING",
                 task_description=_build_task_description("KNOWLEDGE_TRACING", original_message, problem_context),
                 routing_scratchpad=f"[Trụ1] Theory question pattern: '{text_clean[:40]}'",
+                emotion_flag=OrchestratorAgent._determine_emotion_flag(
+                    "KNOWLEDGE_TRACING",
+                    f"[Trụ1] Theory question pattern: '{text_clean[:40]}'",
+                    original_message,
+                ),
             )
 
         # 1.5 Tín hiệu lỗi sai rõ ràng
@@ -584,6 +645,7 @@ class OrchestratorAgent:
                 selected_agent="MISCONCEPTION",
                 task_description=_build_task_description("MISCONCEPTION", original_message, problem_context),
                 routing_scratchpad=f"[Trụ1] Explicit misconception signal: '{text_clean[:40]}'",
+                emotion_flag="WRONG",
             )
 
         # 1.6 Tín hiệu cầu cứu / cần gợi ý
@@ -592,6 +654,7 @@ class OrchestratorAgent:
                 selected_agent="SCAFFOLDING",
                 task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
                 routing_scratchpad=f"[Trụ1] Help signal: '{text_clean[:40]}'",
+                emotion_flag="GUIDING",
             )
 
         # 1.7 So khớp Toán học với correctSolution
@@ -604,6 +667,20 @@ class OrchestratorAgent:
         if correct_solution:
             correct_frac, correct_raw = self._extract_fraction(str(correct_solution))
             if correct_frac is not None:
+                # FIX #2: Nếu câu học sinh chứa từ phủ định / không hiểu
+                # thì KHÔNG so khớp toán học — tránh trích số từ "bài 3", "câu 2" nhầm thành đáp án
+                _negation_signals = (
+                    "không hiểu", "ko hiểu", "k hiểu", "chưa hiểu",
+                    "không biết", "ko biết", "k biết",
+                    "sai rồi", "em sai", "mình sai",
+                    "không làm được", "ko làm được",
+                    "chưa làm", "chưa ra", "không ra",
+                    "bài này", "câu này", "đề này",
+                )
+                _has_negation = any(s in text_clean for s in _negation_signals)
+                if _has_negation:
+                    return None  # Bỏ qua so khớp toán học, xuống Trụ 2
+
                 _has_operator = bool(re.search(r"[\+\-\*\/\^\(\)x]", original_message, re.IGNORECASE))
                 if _has_operator:
                     student_frac = self._eval_math_expr(original_message)
@@ -621,6 +698,7 @@ class OrchestratorAgent:
                                 "SCAFFOLDING", original_message, problem_context
                             ) + f" (Học sinh tính đúng: {student_raw} ✓)",
                             routing_scratchpad=f"[Trụ1] Math match CORRECT: {student_raw} == {correct_raw}",
+                            emotion_flag="CORRECT",
                         )
                     else:
                         return RoutingResult(
@@ -630,6 +708,7 @@ class OrchestratorAgent:
                                 student_ans=student_raw, expected_ans=correct_raw,
                             ),
                             routing_scratchpad=f"[Trụ1] Math mismatch: {student_raw} != {correct_raw}",
+                            emotion_flag="WRONG",
                         )
 
         return None  # Không khớp → chuyển Trụ cột 2
@@ -656,10 +735,16 @@ class OrchestratorAgent:
                 selected_agent=predicted,
                 task_description=task,
                 routing_scratchpad=f"[Trụ2 - ML Semantic Router]: {predicted} ({max_prob:.1%})",
+                emotion_flag=OrchestratorAgent._determine_emotion_flag(
+                    predicted,
+                    f"[Trụ2 - ML Semantic Router]: {predicted} ({max_prob:.1%})",
+                    text,
+                ),
             )
         except Exception as e:
             print(f"[ML-Router] Lỗi: {e}")
             return None
+    
     async def route(
         self,
         latest_message: str,
@@ -681,11 +766,21 @@ class OrchestratorAgent:
         )
         if is_empty_history:
             student_val, _ = self._extract_fraction(text_clean)
-            if student_val is None:
+            has_math_expr = bool(self._math_expr_re.search(text_clean))
+            # Nếu không có phân số VÀ không có biểu thức toán học → SCAFFOLDING ngay
+            # Nếu CÓ biểu thức toán (kể cả "3/43 + 32/2 = mấy") → cũng SCAFFOLDING,
+            # tránh ML nhầm "mấy" (bao nhiêu) thành "mày" (bất lịch sự).
+            if student_val is None or has_math_expr:
+                emotion_new = OrchestratorAgent._determine_emotion_flag(
+                    "SCAFFOLDING",
+                    "[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
+                    latest_message,
+                )
                 return RoutingResult(
                     selected_agent="SCAFFOLDING",
                     task_description=_build_task_description("SCAFFOLDING", latest_message, problem_context),
-                    routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng).",
+                    routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
+                    emotion_flag=emotion_new,
                 )
 
         # Trụ cột 2
@@ -695,7 +790,50 @@ class OrchestratorAgent:
 
         # Trụ cột 3
         return self._state_machine_route(text_clean, history_text, problem_context, latest_message)
+    
+    @staticmethod
+    def _determine_emotion_flag(
+        agent: str,
+        routing_scratchpad: str,
+        original_message: str,
+    ) -> str:
+        """
+        Xác định cờ cảm xúc dựa trên kết quả phân luồng.
+        Mapping:
+          SAFETY                                  → "WARNING"
+          Bất kỳ agent + keyword hiểu sai rõ ràng → "WRONG"
+          MISCONCEPTION (math mismatch)           → "WRONG"
+          SCAFFOLDING (math CORRECT)              → "CORRECT"
+          KNOWLEDGE_TRACING                       → "GUIDING"
+          SCAFFOLDING (mặc định)                  → "GUIDING"
+        """
+        # ── Kiểm tra keyword hiểu sai — áp dụng cho MỌI agent ──────────────
+        # Nếu học sinh tự thú nhận hiểu sai, dù ML Router chọn agent nào
+        # (SCAFFOLDING, MISCONCEPTION, ...) cũng đều báo WRONG cho cú lắc đầu
+        _explicit_wrong_keywords = (
+            "tưởng", "nhầm", "lộn", "sai r", "sai rồi", "ngộ nhận",
+            "hiểu sai", "tính sai", "học sai", "nghĩ sai",
+            "quên đổi dấu", "quên ngoặc", "không đổi chiều",
+            "âm nhân âm ra âm", "âm bình phương ra âm",
+            "tử cộng tử mẫu cộng mẫu", "nhân chéo nhầm",
+        )
+        msg_lower = original_message.lower()
+        if (
+            "Math mismatch" in routing_scratchpad
+            or "math mismatch" in routing_scratchpad
+            or any(kw in msg_lower for kw in _explicit_wrong_keywords)
+        ):
+            return "WRONG"
+        # ────────────────────────────────────────────────────────────────────
 
+        if agent == "SAFETY":
+            return "WARNING"
+        if agent == "SCAFFOLDING" and (
+            "Math match CORRECT" in routing_scratchpad
+            or "Học sinh tính đúng" in routing_scratchpad
+        ):
+            return "CORRECT"
+        return "GUIDING"
     def route_sync(
         self,
         latest_message: str,
@@ -715,11 +853,18 @@ class OrchestratorAgent:
         )
         if is_empty_history:
             student_val, _ = self._extract_fraction(text_clean)
-            if student_val is None:
+            has_math_expr = bool(self._math_expr_re.search(text_clean))
+            if student_val is None or has_math_expr:
+                emotion_new = OrchestratorAgent._determine_emotion_flag(
+                    "SCAFFOLDING",
+                    "[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
+                    latest_message,
+                )
                 return RoutingResult(
                     selected_agent="SCAFFOLDING",
                     task_description=_build_task_description("SCAFFOLDING", latest_message, problem_context),
-                    routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng).",
+                    routing_scratchpad="[Trụ1] Phiên học mới (lịch sử rỗng, có biểu thức toán học).",
+                    emotion_flag=emotion_new,
                 )
 
         result = self._ml_route(text_clean, problem_context)

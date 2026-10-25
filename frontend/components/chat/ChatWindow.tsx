@@ -5,14 +5,37 @@ import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Message } from "@/types/chat";
 import { Sparkles, ArrowDown, WifiOff, RefreshCw } from "lucide-react";
+import { AssistantOwl, OwlEmotion } from "./AssistantOwl";
+// T6.15 – US 6.3: Hook phát hiện học sinh không tương tác 10 phút
+import { useIdleTimer } from "@/hooks/useIdleTimer";
+// T6.16 – US 6.3: Modal thông báo "Bạn vẫn đang học chứ?"
+import { IdleModal } from "./IdleModal";
 
 interface ChatWindowProps {
   messages: Message[];
   isTyping: boolean;
   isOnline?: boolean;
-  onSendMessage: (content: string) => void;
+  /**
+   * Callback chính khi học sinh gửi tin nhắn.
+   * @param content       - Nội dung text
+   * @param isExplanation - True khi gọi từ nút "Chưa hiểu" (UnderstandingButtons)
+   * @param image         - [T6.20] File ảnh đính kèm (từ ChatInput)
+   */
+  onSendMessage: (content: string, isExplanation?: boolean, image?: File) => void;
   onRetryMessage?: (messageId: string, content: string) => void;
   onReconnect?: () => void;
+  /** US4.1: Callbacks cho nut Da hieu / Chua hieu */
+  onUnderstood?: () => void;
+  onNotUnderstood?: () => void;
+  /** US4.1: So lan nhan Chua hieu (quan ly o ChatPage de tranh bi reset khi remount) */
+  notUnderstoodCount?: number;
+  /**
+   * Key tăng mỗi khi người dùng chọn một cuộc hội thoại cũ từ Sidebar.
+   * Khi key thay đổi, ChatWindow sẽ scroll ngay xuống tin nhắn mới nhất.
+   */
+  selectedChatKey?: number;
+  /** T6.16: Session ID của cuộc hội thoại để gửi kèm restart timestamp */
+  sessionId?: string;
 }
 
 export function ChatWindow({
@@ -22,23 +45,133 @@ export function ChatWindow({
   onSendMessage,
   onRetryMessage,
   onReconnect,
+  onUnderstood,
+  onNotUnderstood,
+  notUnderstoodCount = 0,
+  selectedChatKey = 0,
+  sessionId,
 }: ChatWindowProps) {
   // Container cuộn của danh sách tin nhắn
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   // Ref dùng để xác định vị trí phần tử cuối cùng trong danh sách tin nhắn (phục vụ auto-scroll)
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
+  // T6.16 – US 6.3: Trạng thái hiển thị modal nhắc nhở khi học sinh idle
+  const [isIdleModalOpen, setIsIdleModalOpen] = useState(false);
+  // Trạng thái khi học sinh bấm "Không học" -> ngừng đếm giờ học & không hiện thông báo idle nữa
+  const [isStudyPaused, setIsStudyPaused] = useState(false);
+
+  // T6.15 – US 6.3: Idle Timer 10 phút
+  const { reset: resetIdleTimer } = useIdleTimer({
+    timeout: 10 * 60 * 1000, // 10 phút theo đặc tả US 6.3
+    onIdle: () => {
+      if (!isStudyPaused) {
+        setIsIdleModalOpen(true);
+      }
+    },
+    enabled: !isStudyPaused,
+  });
+
+  /**
+   * T6.16 – Khi học sinh bấm "Đang học" trong modal:
+   * 1. Reset timer về 0 để tiếp tục đếm 10 phút mới.
+   * 2. Đóng modal.
+   */
+  const handleContinueLearning = useCallback(() => {
+    setIsStudyPaused(false);
+    resetIdleTimer();
+    setIsIdleModalOpen(false);
+  }, [resetIdleTimer]);
+
+  /**
+   * Khi học sinh bấm "Không học" trong modal:
+   * 1. Ngừng tính thời gian học (không gọi restart).
+   * 2. Đặt isStudyPaused = true để không hiện lại thông báo idle nữa.
+   * 3. Đóng modal.
+   */
+  const handleStopLearning = useCallback(() => {
+    setIsStudyPaused(true);
+    setIsIdleModalOpen(false);
+  }, []);
+
+  /**
+   * T6.15/T6.20 – Wrapper tổng hợp của onSendMessage:
+   * - Reset idle timer và đóng modal mỗi khi học sinh gửi tin nhắn.
+   * - Truyền image (từ ChatInput) và isExplanation (từ UnderstandingButtons) lên ChatPage.
+   */
+  const handleSendMessage = useCallback(
+    (content: string, isExplanationOrImage?: boolean | File, image?: File) => {
+      setIsIdleModalOpen(false);
+
+      // Nếu trước đó học sinh bấm "Không học" nhưng nay gửi bài mới -> tiếp tục tính giờ học
+      if (isStudyPaused) {
+        setIsStudyPaused(false);
+        // Gửi timestamp restart lên BE để ghi nhận khoảng thời gian học mới
+        const now = Date.now();
+        fetch("/api/metrics/restart", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            timestamp: Math.floor(now / 1000),
+            timestamp_ms: now,
+            restart_time: new Date(now).toISOString(),
+            session_id: sessionId || null,
+          }),
+        }).catch((err) => {
+          console.warn("[ChatWindow] Lỗi gửi restart timestamp khi gửi bài mới:", err);
+        });
+      }
+
+      resetIdleTimer();
+      // Phân biệt 2 luồng gọi:
+      // 1. Từ ChatInput: handleSendMessage(text, imageFile)
+      // 2. Từ UnderstandingButtons: handleSendMessage(text, true)
+      if (typeof isExplanationOrImage === "boolean") {
+        onSendMessage(content, isExplanationOrImage, image);
+      } else {
+        // isExplanationOrImage là File hoặc undefined → luồng ChatInput
+        onSendMessage(content, false, isExplanationOrImage);
+      }
+    },
+    [isStudyPaused, sessionId, resetIdleTimer, onSendMessage],
+  );
+
+  // Xác định trạng thái cảm xúc của cú
+  let currentEmotion: OwlEmotion = "idle";
+  if (isTyping) {
+    currentEmotion = "thinking";
+  } else {
+    const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
+    if (lastAssistantMsg && lastAssistantMsg.emotion) {
+      currentEmotion = lastAssistantMsg.emotion as OwlEmotion;
+    }
+  }
+
   // Trạng thái hiển thị nút cuộn xuống dưới
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   // Cờ báo có tin nhắn mới khi người dùng đang cuộn lên xem lịch sử
   const [hasNewMessage, setHasNewMessage] = useState(false);
+  // Cờ điều khiển auto-scroll thông minh
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
   // Lưu số lượng tin nhắn trước đó để phát hiện tin nhắn mới
   const prevMessagesCountRef = useRef(messages.length);
 
-  // Hàm tự động cuộn xuống dưới cùng của danh sách với hiệu ứng mượt
+  // Hàm tự động cuộn xuống dưới cùng của danh sách
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    endOfMessagesRef.current?.scrollIntoView({ behavior });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior,
+      });
+    } else {
+      endOfMessagesRef.current?.scrollIntoView({ behavior });
+    }
+    // Khi đã gọi hàm cuộn xuống đáy -> chủ động ẩn nút và tắt cờ báo
+    setShowScrollBottom(false);
     setHasNewMessage(false);
+    setIsAutoScrollEnabled(true);
   }, []);
 
   // Xử lý sự kiện scroll để phát hiện vị trí người dùng
@@ -50,35 +183,53 @@ export function ChatWindow({
     const scrollBottomOffset =
       container.scrollHeight - container.scrollTop - container.clientHeight;
 
-    // Nếu cách đáy hơn 120px thì coi như người dùng đang cuộn lên để đọc
-    const isScrolledUp = scrollBottomOffset > 120;
+    // Ngưỡng phát hiện cuộn lên: chỉ khi người dùng cuộn lên cách đáy > 100px mới hiện nút
+    const isScrolledUp = scrollBottomOffset > 100;
     setShowScrollBottom(isScrolledUp);
+    setIsAutoScrollEnabled(!isScrolledUp);
 
-    // Khi người dùng đã cuộn lại gần đáy thì tự động xóa huy hiệu tin nhắn mới
+    // Khi người dùng đã cuộn lại gần đáy (cách đáy <= 100px) thì tự động ẩn nút và xóa huy hiệu tin nhắn mới
     if (!isScrolledUp) {
       setHasNewMessage(false);
+      setShowScrollBottom(false);
     }
   };
+
+  // Khi người dùng chọn một cuộc hội thoại cũ từ Sidebar (selectedChatKey thay đổi),
+  // scroll ngay xuống dưới cùng bằng "instant" (không animation) để thấy tin nhắn mới nhất
+  useEffect(() => {
+    if (selectedChatKey === 0) return; // Bỏ qua lần mount đầu tiên
+    setIsAutoScrollEnabled(true);
+    // Dùng setTimeout nhỏ để đảm bảo DOM đã render xong danh sách tin nhắn
+    const timer = setTimeout(() => {
+      scrollToBottom("instant");
+    }, 50);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChatKey]);
 
   // Lắng nghe thay đổi messages hoặc isTyping để kích hoạt auto-scroll thông minh
   useEffect(() => {
     const isNewMessageAdded = messages.length > prevMessagesCountRef.current;
     prevMessagesCountRef.current = messages.length;
 
-    const container = scrollContainerRef.current;
-    const isNearBottom =
-      container
-        ? container.scrollHeight - container.scrollTop - container.clientHeight <= 150
-        : true;
+    const lastMsg = messages[messages.length - 1];
+    const isUserJustSent = isNewMessageAdded && lastMsg?.role === "user";
 
-    // Nếu người dùng đang ở gần đáy hoặc vừa bắt đầu gõ -> tự động cuộn xuống
-    if (isNearBottom) {
+    if (isUserJustSent) {
+      // 1. Học sinh vừa gửi tin nhắn mới -> Luôn bật auto-scroll và cuộn ngay xuống đáy
+      setIsAutoScrollEnabled(true);
+      setShowScrollBottom(false);
+      setHasNewMessage(false);
       scrollToBottom("smooth");
+    } else if (isAutoScrollEnabled) {
+      // 2. AI đang stream từng từ -> Cuộn trực tiếp (auto) để bám đáy 100%, không bị hủy animation giữa chừng
+      scrollToBottom(isTyping ? "auto" : "smooth");
     } else if (isNewMessageAdded) {
-      // Nếu người dùng đang đọc ở trên -> không cưỡng bức cuộn, mà hiện thông báo tin nhắn mới
+      // 3. Người dùng đang chủ động cuộn lên xem lịch sử -> hiện huy hiệu có tin nhắn mới
       setHasNewMessage(true);
     }
-  }, [messages, isTyping, scrollToBottom]);
+  }, [messages, isTyping, isAutoScrollEnabled, scrollToBottom]);
 
   return (
     // Container chính: lấp đầy khu vực main content
@@ -108,7 +259,7 @@ export function ChatWindow({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth relative"
+        className="flex-1 overflow-y-auto p-4 md:p-6 relative"
       >
         <div className="max-w-4xl mx-auto flex flex-col min-h-full">
           {/* Hiển thị màn hình khởi tạo khi chưa có tin nhắn (New Chat) */}
@@ -126,26 +277,32 @@ export function ChatWindow({
             </div>
           ) : (
             /* Render danh sách tin nhắn */
-            <div className="flex flex-col justify-end flex-1">
-              {messages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  message={msg}
-                  onRetry={onRetryMessage}
-                />
-              ))}
+            <div className="flex flex-col justify-start flex-1 pt-2">
+              {messages.map((msg, index) => {
+                // US4.1: Chi truyen callbacks cho tin nhan AI cuoi cung (khong tinh khi AI dang typing)
+                // - Chi hien khi AI dua ra dap an (msg.isAnswerRevealed = true)
+                const isLastAssistantMsg =
+                  !isTyping &&
+                  msg.role === "assistant" &&
+                  index === messages.length - 1 &&
+                  msg.isAnswerRevealed === true;
 
-              {/* Hiệu ứng bong bóng 3 dấu chấm (Typing indicator) */}
-              {isTyping && (
-                <div className="flex justify-start mb-6 w-full animate-in fade-in duration-300">
-                  <div className="bg-white border border-[#F1CCA6] px-5 py-5 rounded-2xl rounded-tl-sm flex items-center gap-1.5 shadow-sm h-[52px]">
-                    <span className="text-xs text-[#8C4905] mr-1 font-medium">SocraticKid đang nghĩ</span>
-                    <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                    <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                    <div className="w-2 h-2 bg-[#C1762A] rounded-full animate-bounce"></div>
-                  </div>
-                </div>
-              )}
+                return (
+                  <ChatMessage
+                    key={msg.id}
+                    message={msg}
+                    sessionId={sessionId}
+                    onRetry={onRetryMessage}
+                    {...(isLastAssistantMsg && {
+                      onUnderstood,
+                      onNotUnderstood,
+                      onSendExplanation: (text: string) => handleSendMessage(text, true),
+                      isAiLoading: isTyping,
+                      notUnderstoodCount,
+                    })}
+                  />
+                );
+              })}
 
               {/* Thẻ div rỗng nằm ở cuối để làm mốc cho hàm cuộn (scrollIntoView) */}
               <div ref={endOfMessagesRef} className="h-4" />
@@ -175,11 +332,25 @@ export function ChatWindow({
         </div>
       )}
 
-      {/* Vùng nhập liệu (Input Area) ở dưới cùng */}
-      <ChatInput
-        onSendMessage={onSendMessage}
-        isLoading={isTyping}
-        isOffline={!isOnline}
+      {/* Footer Strip: cú + ô nhập liệu nằm cùng 1 hàng, cú không bao giờ đè tin nhắn */}
+      <div className="flex flex-row items-end">
+        <AssistantOwl emotion={currentEmotion} />
+        <div className="flex-1 min-w-0">
+          {/* [T6.20/T6.21] ChatInput: nhận text + ảnh đính kèm từ người dùng */}
+          <ChatInput
+            onSendMessage={(message, image) => handleSendMessage(message, image)}
+            isLoading={isTyping}
+            isOffline={!isOnline}
+          />
+        </div>
+      </div>
+
+      {/* T6.16 – US 6.3: Modal thông báo "Bạn vẫn đang học chứ? 🦉" */}
+      <IdleModal
+        isOpen={isIdleModalOpen}
+        onContinue={handleContinueLearning}
+        onStopLearning={handleStopLearning}
+        sessionId={sessionId}
       />
     </div>
   );

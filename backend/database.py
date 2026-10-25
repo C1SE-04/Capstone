@@ -9,8 +9,20 @@ load_dotenv()
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://neondb_owner:npg_LgvPyk9znt8p@ep-withered-forest-b37ql1e0-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require")
 
-# PostgreSQL không cần connect_args={"check_same_thread": False} như SQLite
-engine = create_engine(DATABASE_URL)
+# SQLAlchemy 2.x mặc định dùng psycopg3 khi URL là "postgresql://".
+# Ép sang psycopg2 để tương thích với psycopg2-binary trong requirements.txt.
+if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+# Thêm timeout để tránh treo vô thời hạn trên Render/Cloud khi DB cold start
+engine = create_engine(
+    DATABASE_URL,
+    pool_timeout=10,        # Tối đa 10s chờ lấy connection từ pool
+    pool_pre_ping=True,     # Kiểm tra connection còn sống trước khi dùng
+    connect_args={
+        "connect_timeout": 10,  # Timeout kết nối TCP: 10 giây
+    },
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

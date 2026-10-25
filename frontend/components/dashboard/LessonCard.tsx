@@ -34,7 +34,7 @@ export function LessonCard({ id, title, description, thumbnail, progress, onClic
   return (
     <div 
       onClick={handleClick}
-      className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-[1.02] cursor-pointer flex flex-col h-full border border-[#F1CCA6]/50 group"
+      className="bg-white rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-[box-shadow,border-color] duration-200 cursor-pointer flex flex-col h-full border border-[#F1CCA6]/70 hover:border-[#C1762A] group"
     >
       {/* Thumbnail Area */}
       <div className="relative w-full h-48 overflow-hidden bg-[#D9D9D9]">
@@ -42,6 +42,7 @@ export function LessonCard({ id, title, description, thumbnail, progress, onClic
           src={thumbnail} 
           alt={title}
           fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           className="object-cover transition-transform duration-500 group-hover:scale-110"
         />
         {progress === 100 && (
@@ -56,7 +57,7 @@ export function LessonCard({ id, title, description, thumbnail, progress, onClic
         <h3 className="text-xl font-bold text-[#8C4905] mb-2 line-clamp-1 group-hover:text-[#CB6600] transition-colors">
           {title}
         </h3>
-        <p className="text-[#000000]/70 text-sm mb-5 flex-1 line-clamp-2 leading-relaxed">
+        <p className="text-stone-600 text-sm mb-5 flex-1 line-clamp-2 leading-relaxed">
           {description}
         </p>
 

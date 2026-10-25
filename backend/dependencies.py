@@ -16,9 +16,17 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
         user_id: str = payload.get("sub")
         role: str = payload.get("role")
+        grade_level = payload.get("grade_level")  # Đọc grade_level từ JWT (đã đổi key từ auth router)
+        session_version = payload.get("session_version")  # US 6.2: đọc session_version từ JWT
         if user_id is None or role is None:
             raise credentials_exception
-        return {"id": user_id, "role": role}
+        return {
+            "id": user_id,
+            "role": role,
+            "grade_level": grade_level,
+            "session_version": session_version,
+        }
+
     except JWTError:
         raise credentials_exception
 

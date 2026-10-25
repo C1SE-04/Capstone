@@ -2,7 +2,12 @@ export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  attachment_url?: string;
   status?: "sending" | "sent" | "error";
+  emotion?: "idle" | "thinking" | "suggesting" | "correct" | "incorrect" | string;
+  isAnswerRevealed?: boolean;
+  isCongrats?: boolean;
+  created_at?: string;
 }
 
 export interface Conversation {

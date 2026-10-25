@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
@@ -8,12 +8,24 @@ export default function Home() {
   const { data: session } = useSession();
   const router = useRouter();
   const [showAuthForm, setShowAuthForm] = useState(false);
+
+  // Nếu người dùng có role ADMIN, tự động chuyển hướng thẳng vào dashboard admin
+  useEffect(() => {
+    if (session) {
+      const role = (session.user as any)?.role;
+      if (role === "ADMIN") {
+        router.replace("/admin");
+      }
+    }
+  }, [session, router]);
   return (
     <div className="min-h-screen bg-[#F7ECE1] font-sans flex flex-col">
       {/* Navigation Bar / Header */}
       <header className="w-full py-4 px-8 flex justify-between items-center relative z-10">
         {/* Logo Placeholder */}
-        <div className="w-12 h-12 bg-[#D9D9D9] rounded-lg"></div>
+        <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1]">
+          <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
+        </div>
 
         {/* Navigation Links */}
         <nav className="hidden md:flex absolute left-1/2 -translate-x-1/2 gap-12 text-[#C1762A] font-bold text-lg">
@@ -42,11 +54,15 @@ export default function Home() {
               <span className="text-[#C1762A] font-medium hidden sm:inline-block">
                 Xin chào, {session.user?.name}
               </span>
-              <img
-                src={session.user?.image || ""}
-                alt="Avatar"
-                className="w-10 h-10 rounded-full border-2 border-[#C1762A]"
-              />
+              {session.user?.image ? (
+                <img
+                  src={session.user.image}
+                  alt="Avatar"
+                  className="w-10 h-10 rounded-full border-2 border-[#C1762A]"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full border-2 border-[#C1762A] bg-[#D9D9D9]" />
+              )}
               <button
                 onClick={() => signOut()}
                 className="bg-[#C1762A] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#8C4905] transition-colors text-sm cursor-pointer"
@@ -72,16 +88,35 @@ export default function Home() {
           </p>
         </div>
         <button 
-          onClick={() => session ? router.push("/dashboard") : router.push("/try")}
-          className="bg-[#F1CCA6] text-[#8C4905] font-bold text-lg py-3 px-10 rounded-xl hover:bg-[#F7AD62] hover:text-white transition-all shadow-md transform hover:scale-105 cursor-pointer">
-          Dùng thử
+          onClick={() => {
+            if (session) {
+              const role = (session.user as any)?.role;
+              if (role === "ADMIN") {
+                router.push("/admin");
+              } else if (role === "MONITOR") {
+                router.push("/dashboard/monitor");
+              } else {
+                router.push("/dashboard/chat");
+              }
+            } else {
+              router.push("/try");
+            }
+          }}
+          className="bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold text-lg py-3.5 px-10 rounded-xl hover:brightness-105 active:scale-95 transition-all shadow-md cursor-pointer">
+          {session 
+            ? ((session.user as any)?.role === "ADMIN" 
+                ? "Vào Dashboard Quản Trị" 
+                : (session.user as any)?.role === "MONITOR" 
+                  ? "Vào Dashboard" 
+                  : "Vô khung chat") 
+            : "Dùng thử ngay"}
         </button>
       </main>
 
       {/* Features Section */}
       <section id="features" className="w-full pb-20">
         <div className="bg-[#C1762A] w-full py-4 mb-16 shadow-inner">
-          <h2 className="text-center text-2xl md:text-3xl font-black italic text-[#000000]">
+          <h2 className="text-center text-2xl md:text-3xl font-black italic text-white tracking-wide">
             Các Tính Năng Nổi Bật
           </h2>
         </div>
@@ -89,26 +124,26 @@ export default function Home() {
         {/* Features Grid */}
         <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Card 1 */}
-          <div className="bg-[#F1CCA6] p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col text-center items-center">
+          <div className="bg-white/80 backdrop-blur-xs p-8 rounded-2xl border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all flex flex-col text-center items-center">
             <img src="/star.svg" alt="Star Icon" className="w-12 h-12 mb-4" />
-            <h3 className="text-xl font-bold text-[#8C4905] mb-4">Học Hiểu Sâu - Nhớ Lâu Dài</h3>
-            <p className="text-[#C1762A] font-medium leading-relaxed">
+            <h3 className="text-xl font-bold text-[#8C4905] mb-3">Học Hiểu Sâu - Nhớ Lâu Dài</h3>
+            <p className="text-[#6B3704] text-sm md:text-[15px] font-normal leading-relaxed">
               AI được huấn luyện đặc biệt để đóng vai trò người dẫn dắt. Thay vì cung cấp ngay đáp án, SocraticKid sẽ đặt các câu hỏi gợi ý, chia nhỏ bài toán phức tạp giúp các em tự suy luận và tìm ra cách giải.
             </p>
           </div>
           {/* Card 2 */}
-          <div className="bg-[#F1CCA6] p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col text-center items-center">
+          <div className="bg-white/80 backdrop-blur-xs p-8 rounded-2xl border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all flex flex-col text-center items-center">
             <img src="/shield.svg" alt="Shield Icon" className="w-12 h-12 mb-4" />
-            <h3 className="text-xl font-bold text-[#8C4905] mb-4">An Toàn & Chuẩn Xác Tuyệt Đối</h3>
-            <p className="text-[#C1762A] font-medium leading-relaxed">
+            <h3 className="text-xl font-bold text-[#8C4905] mb-3">An Toàn & Chuẩn Xác Tuyệt Đối</h3>
+            <p className="text-[#6B3704] text-sm md:text-[15px] font-normal leading-relaxed">
               Mọi câu trả lời của AI đều được đi qua một hệ thống &ldquo;Giám thị&rdquo; (Reviewer Agent) nhằm đảm bảo nội dung phù hợp với học sinh, loại bỏ các từ ngữ độc hại và kiểm tra độ chính xác trước khi hiển thị.
             </p>
           </div>
           {/* Card 3 */}
-          <div className="bg-[#F1CCA6] p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col text-center items-center">
+          <div className="bg-white/80 backdrop-blur-xs p-8 rounded-2xl border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all flex flex-col text-center items-center">
             <img src="/target.svg" alt="Target Icon" className="w-12 h-12 mb-4" />
-            <h3 className="text-xl font-bold text-[#8C4905] mb-4">Tối Ưu Cho Học Sinh Lớp 4 – 9</h3>
-            <p className="text-[#C1762A] font-medium leading-relaxed">
+            <h3 className="text-xl font-bold text-[#8C4905] mb-3">Tối Ưu Cho Học Sinh Lớp 4 – 9</h3>
+            <p className="text-[#6B3704] text-sm md:text-[15px] font-normal leading-relaxed">
               Hệ thống được thiết kế riêng biệt để tương thích với tư duy, ngôn ngữ và chương trình sách giáo khoa của học sinh Việt Nam, giúp các em ôn tập và làm bài tập bám sát kiến thức trên lớp.
             </p>
           </div>
@@ -120,7 +155,9 @@ export default function Home() {
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Cột 1: Thương hiệu & Thông điệp */}
           <div className="flex flex-col gap-4">
-            <div className="w-12 h-12 bg-[#D9D9D9] rounded-lg"></div> {/* Logo Placeholder */}
+            <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1]">
+              <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
+            </div>
             <p className="font-medium text-sm md:text-base">
               &ldquo;Hệ thống AI Gia sư Socratic – Đồng hành cùng học sinh Việt Nam.&rdquo;
             </p>

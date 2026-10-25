@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "name": "SocraticKid Independence Rubric",
+  "description": "Barem nội bộ đánh giá điểm tự lực của học sinh theo phương pháp Socratic",
+  "scoring_rules": {
+    "base_score": 100,
+    "hint_penalty": 5,
+    "struggle_penalty": 10,
+    "time_penalties": [
+      {
+        "threshold_seconds": 1800,
+        "penalty": 10,
+        "description": "Ngâm bài trên 30 phút"
+      },
+      {
+        "threshold_seconds": 900,
+        "penalty": 5,
+        "description": "Ngâm bài từ 15 đến 30 phút"
+      }
+    ],
+    "floor_score": 10,
+    "ceiling_score": 100
+  },
+  "mastery_levels": [
+    {
+      "min_score": 80,
+      "max_score": 100,
+      "key": "EXCELLENT",
+      "label": "Tự lập xuất sắc (ít dùng gợi ý)"
+    },
+    {
+      "min_score": 60,
+      "max_score": 79,
+      "key": "GOOD",
+      "label": "Tự lập tốt (dùng 1-2 gợi ý)"
+    },
+    {
+      "min_score": 40,
+      "max_score": 59,
+      "key": "DEVELOPING",
+      "label": "Đang tiến bộ (cần một số gợi ý)"
+    },
+    {
+      "min_score": 0,
+      "max_score": 39,
+      "key": "NEEDS_SUPPORT",
+      "label": "Cần thêm hỗ trợ sư phạm"
+    }
+  ],
+  "quick_answer_threshold_seconds": 15
+}

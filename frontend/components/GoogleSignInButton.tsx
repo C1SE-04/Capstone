@@ -9,9 +9,9 @@ export default function GoogleSignInButton() {
     return (
       <button
         disabled
-        className="flex h-12 w-full max-w-sm items-center justify-center gap-3 rounded-full bg-white px-5 text-sm font-medium text-black shadow-sm ring-1 ring-inset ring-gray-200 transition-all sm:w-auto"
+        className="flex h-12 w-full max-w-sm items-center justify-center gap-3 rounded-full bg-white px-5 text-sm font-medium text-stone-800 shadow-sm ring-1 ring-inset ring-stone-200 transition-all sm:w-auto"
       >
-        <div className="h-5 w-5 animate-pulse rounded-full bg-gray-200" />
+        <div className="h-5 w-5 animate-pulse rounded-full bg-stone-200" />
         Đang tải...
       </button>
     );
@@ -19,7 +19,7 @@ export default function GoogleSignInButton() {
 
   if (session) {
     return (
-      <div className="flex h-12 items-center justify-center gap-3 rounded-full bg-white px-5 text-sm font-medium text-black shadow-sm ring-1 ring-inset ring-gray-200 transition-all dark:bg-zinc-900 dark:text-white dark:ring-zinc-800">
+      <div className="flex h-12 items-center justify-center gap-3 rounded-full bg-white px-5 text-sm font-medium text-stone-800 shadow-sm ring-1 ring-inset ring-stone-200 transition-all dark:bg-stone-900 dark:text-stone-100 dark:ring-stone-800">
         <img
           src={session.user?.image || "/globe.svg"}
           alt="Avatar"

@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LogOut, Settings, X, Plus, Trash2 } from "lucide-react";
+import { LogOut, Settings, Settings2, X, Plus, Trash2, BookMarked } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Conversation } from "@/types/chat";
+// T6.5 – US 6.1: Thanh tiến trình Mastery tự lực
+import { MasteryProgressBar } from "./MasteryProgressBar";
 
 interface ChatSidebarProps {
   className?: string;
@@ -42,18 +44,19 @@ export function ChatSidebar({
 
   return (
     <>
-      {/* Mobile overlay */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
+      {/* Mobile overlay có transition mờ dần tự nhiên */}
+      <div
+        className={cn(
+          "fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          isMobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setIsMobileOpen(false)}
+      />
 
-      {/* Sidebar container */}
+      {/* Sidebar container trượt mượt mà */}
       <aside
         className={cn(
-          "fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#F1CCA6] flex flex-col h-full transform transition-transform duration-300 ease-in-out border-r border-[#C1762A]/20 flex-shrink-0",
+          "fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#F1CCA6] flex flex-col h-full transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-[#C1762A]/20 flex-shrink-0",
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           className
         )}
@@ -69,7 +72,7 @@ export function ChatSidebar({
         <div className="p-4 flex flex-col gap-4">
           <div
             className="flex items-center gap-3 mb-2 cursor-pointer"
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.push("/")}
           >
             <div className="w-10 h-10 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold text-sm shadow-inner">
               SK
@@ -81,11 +84,23 @@ export function ChatSidebar({
 
           <button
             onClick={onNewChat}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-white text-[#8C4905] rounded-2xl font-bold shadow-sm hover:shadow transition-all border border-[#F1CCA6]"
+            className="w-full flex items-center justify-center gap-2 py-3 bg-white text-[#8C4905] rounded-2xl font-bold shadow-sm hover:shadow transition-all border border-[#F1CCA6] cursor-pointer"
           >
             <Plus size={18} />
-            new chat
+            New chat
           </button>
+
+          <button
+            onClick={() => router.push("/dashboard/notebook")}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#F7ECE1]/90 hover:bg-[#F7ECE1] text-[#8C4905] rounded-2xl font-bold text-xs shadow-xs transition-all border border-[#F1CCA6] cursor-pointer"
+            title="Xem Sổ tay bài toán yêu thích"
+          >
+            <BookMarked size={15} className="text-[#C1762A]" />
+            Sổ tay bài học
+          </button>
+
+          {/* T6.5 – US 6.1: Thanh tiến trình Mastery tự lực */}
+          <MasteryProgressBar className="mt-0.5" />
         </div>
 
         {/* Chat History List */}
@@ -129,7 +144,14 @@ export function ChatSidebar({
 
         {/* Settings Dropdown (Floating) */}
         {showSettings && (
-          <div className="absolute bottom-20 left-4 right-4 bg-white rounded-xl shadow-lg border border-[#F1CCA6] p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+          <div className="absolute bottom-20 left-4 right-4 bg-white rounded-xl shadow-lg border border-[#F1CCA6] p-2 z-50 animate-in fade-in zoom-in-95 duration-200 flex flex-col gap-1">
+            <button
+              onClick={() => router.push("/dashboard/settings")}
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#8C4905] hover:bg-[#F7ECE1] rounded-lg transition-colors font-medium"
+            >
+              <Settings2 size={16} />
+              Cài đặt
+            </button>
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#8C4905] hover:bg-[#F7ECE1] rounded-lg transition-colors font-medium"

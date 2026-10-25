@@ -10,14 +10,20 @@ router = APIRouter(tags=["Auth"])
 
 @router.post("/register/student", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
-    existing_user = db.query(models.User).filter(models.User.email == user_data.email).first()
+    normalized_email = user_data.email.lower()
+    existing_user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email đã được sử dụng")
 
+    # Validate grade bắt buộc và hợp lệ cho STUDENT
+    if user_data.grade is None or user_data.grade not in range(4, 10):
+        raise HTTPException(status_code=422, detail="Lớp học phải là số từ 4 đến 9")
+
     new_user = models.User(
-        email=user_data.email,
+        email=normalized_email,
         hashed_password=auth.hash_password(user_data.password),
-        role="STUDENT"
+        role="STUDENT",
+        grade=user_data.grade
     )
     db.add(new_user)
     db.commit()
@@ -26,12 +32,13 @@ def register(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
 
 @router.post("/register/monitor", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register_monitor(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
-    existing_user = db.query(models.User).filter(models.User.email == user_data.email).first()
+    normalized_email = user_data.email.lower()
+    existing_user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email đã được sử dụng")
 
     new_user = models.User(
-        email=user_data.email,
+        email=normalized_email,
         hashed_password=auth.hash_password(user_data.password),
         role="MONITOR"
     )
@@ -40,11 +47,15 @@ def register_monitor(user_data: schemas.AuthInput, db: Session = Depends(get_db)
     db.refresh(new_user)
     return new_user
 
+from sqlalchemy import func
+
 @router.post("/login", response_model=schemas.TokenResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # Chuẩn hóa email về chữ thường trước khi tra cứu DB — cho phép đăng nhập với mọi kiểu viết hoa
+    normalized_username = form_data.username.lower()
     user = (
         db.query(models.User).filter(
-            models.User.email == form_data.username
+            func.lower(models.User.email) == normalized_username
         ).first()
     )
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
@@ -66,14 +77,24 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     db.add(refresh_token_db)
     db.commit()
     
+    user_version = getattr(user, "session_version", 1) or 1
     access_token = auth.create_access_token(
-        data={"sub": str(user.id), "email": user.email, "role": user.role}
+        data={
+            "sub": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "grade_level": user.grade,
+            "session_version": user_version,
+        }
     )
     return {
         "access_token": access_token,
         "refresh_token": raw_refresh_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "grade": user.grade,  # Task #132: trả về FE để hiển thị và lưu local
+        "session_version": user_version,  # US 6.2: phiên bản session của user
     }
+
 
 @router.post("/refresh", response_model=schemas.TokenResponse)
 def refresh_access_token(
@@ -136,11 +157,14 @@ def refresh_access_token(
     db.add(new_refresh_token_db)
 
     # Tạo access token mới
+    user_version = getattr(user, "session_version", 1) or 1
     new_access_token = auth.create_access_token(
         data={
             "sub": str(user.id),
             "email": user.email,
-            "role": user.role
+            "role": user.role,
+            "grade_level": user.grade,  # Task #132: cấp lại grade khi refresh token
+            "session_version": user_version,  # US 6.2: cấp lại session_version mới nhất từ DB
         }
     )
 
@@ -149,5 +173,8 @@ def refresh_access_token(
     return {
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "grade": user.grade,  # Task #132: trả về grade mới nhất
+        "session_version": user_version,  # US 6.2: trả về session_version mới nhất
     }
+

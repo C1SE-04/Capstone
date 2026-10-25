@@ -28,12 +28,12 @@ export const authOptions: NextAuthOptions = {
 
         try {
           // Gọi sang API của Backend (FastAPI) để xác thực
-          const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+          const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
           const res = await fetch(`${backendUrl}/login`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
-              username: credentials.email,
+              username: credentials.email.toLowerCase(),
               password: credentials.password,
             }),
           });
@@ -44,7 +44,7 @@ export const authOptions: NextAuthOptions = {
 
           // Decode JWT payload (Access Token) từ Backend trả về để lấy thông tin user (ID, Email, Role)
           const payload = JSON.parse(
-            Buffer.from(data.access_token.split(".")[1], "base64").toString()
+            Buffer.from(data.access_token.split(".")[1], "base64").toString(),
           );
 
           // Trả về object user để NextAuth lưu vào phiên đăng nhập (Session)
@@ -53,7 +53,9 @@ export const authOptions: NextAuthOptions = {
             email: payload.email,
             name: payload.email.split("@")[0], // Dùng phần trước @ làm display name
             role: payload.role,
+            grade_level: payload.grade_level,
             access_token: data.access_token,
+            refresh_token: data.refresh_token, // US 6.2 (T6.13): lưu refresh_token của Backend
           };
         } catch {
           return null;
@@ -61,18 +63,32 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 30 * 60 },
   pages: {
     signIn: "/",
   },
   // Các callback xử lý khi tạo Token và Session
   callbacks: {
     // Gọi khi tạo hoặc cập nhật JWT token
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
+      // Lần đăng nhập đầu tiên: map thông tin từ authorize()
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.grade_level = user.grade_level;
         token.access_token = user.access_token;
+        token.refresh_token = user.refresh_token; // US 6.2 (T6.13): lưu refresh_token
+      }
+      // Khi client gọi update({ grade_level: X }): cập nhật token ngay trong phiên hiện tại
+      if (trigger === "update" && session?.grade_level !== undefined) {
+        token.grade_level = session.grade_level;
+      }
+      // US 6.2 (T6.13): Khi authFetch gọi update({ access_token, refresh_token }) sau khi refresh thành công
+      if (trigger === "update" && session?.access_token) {
+        token.access_token = session.access_token;
+      }
+      if (trigger === "update" && session?.refresh_token) {
+        token.refresh_token = session.refresh_token;
       }
       return token;
     },
@@ -81,7 +97,12 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string | undefined;
+        session.user.grade_level = token.grade_level as
+          | string
+          | number
+          | undefined;
         session.access_token = token.access_token as string | undefined;
+        session.refresh_token = token.refresh_token as string | undefined; // US 6.2 (T6.13): expose refresh_token cho authFetch
       }
       return session;
     },

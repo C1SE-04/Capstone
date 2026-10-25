@@ -8,10 +8,11 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { History, Settings, LogOut, X } from "lucide-react";
+import { History, Settings, Settings2, LogOut, X, UserPlus, LayoutDashboard, BookMarked } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import LinkStudentModal from "@/components/LinkStudentModal";
 
 interface SidebarProps {
   className?: string;
@@ -24,25 +25,53 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
   const router = useRouter();
   const { data: session } = useSession();
   const [showSettings, setShowSettings] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkedStudents, setLinkedStudents] = useState<string[]>([]);
+
+  const isMonitor = (session?.user as any)?.role === "MONITOR";
+
+  // Redirect MONITOR về dashboard riêng của họ
+  useEffect(() => {
+    if (isMonitor && !pathname.startsWith("/dashboard/monitor")) {
+      router.replace("/dashboard/monitor");
+    }
+  }, [isMonitor, pathname, router]);
+
+  const handleLinkSuccess = (studentName: string) => {
+    setLinkedStudents((prev) => [...prev, studentName]);
+  };
 
   const navLinks = [
-    { name: "Lịch sử", href: "/dashboard/history", icon: History },
+    ...(isMonitor
+      ? [{ name: "Bảng phụ huynh", href: "/dashboard/monitor", icon: LayoutDashboard }]
+      : []),
+    ...(!isMonitor
+      ? [
+          { name: "Sổ tay", href: "/dashboard/notebook", icon: BookMarked },
+          ...(!pathname.startsWith("/dashboard/settings") && !pathname.startsWith("/dashboard/notebook")
+            ? [{ name: "Lịch sử", href: "/dashboard/history", icon: History }]
+            : []),
+        ]
+      : []),
+    { name: "Cài đặt", href: "/dashboard/settings", icon: Settings2 },
   ];
+
 
   return (
     <>
       {/* Mobile overlay */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
+      <div
+        className={cn(
+          "fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300",
+          isMobileOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setIsMobileOpen(false)}
+      />
 
       {/* Sidebar container */}
       <aside
         className={cn(
-          "fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#F1CCA6] flex flex-col h-full transform transition-transform duration-300 ease-in-out border-r border-[#C1762A]/20",
+          "fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#F1CCA6] flex flex-col h-full transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-[#C1762A]/20",
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           className
         )}
@@ -57,10 +86,10 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
         {/* Logo Area — clicking navigates to Dashboard */}
         <div className="p-6 pt-8 md:pt-6 flex flex-col items-center border-b border-[#C1762A]/20">
           <div
-            className="w-16 h-16 bg-[#D9D9D9] rounded-2xl flex items-center justify-center text-[#8C4905] font-bold text-xl shadow-inner cursor-pointer hover:bg-[#F7AD62]/40 transition-colors"
+            className="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity bg-[#F7ECE1]"
             onClick={() => router.push("/dashboard")}
           >
-            SK
+            <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
           </div>
           <h2 className="mt-4 text-[#8C4905] font-extrabold italic text-2xl tracking-tight">
             SocraticKid
@@ -92,7 +121,33 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
               </button>
             );
           })}
+          {/* Nút Thêm học sinh — chỉ hiển thị cho Phụ huynh */}
+          {isMonitor && (
+            <button
+              id="add-student-btn"
+              onClick={() => {
+                setShowLinkModal(true);
+                setIsMobileOpen(false);
+              }}
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 font-semibold group text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#CB6600]"
+            >
+              <UserPlus size={20} className="text-[#C1762A] group-hover:text-[#CB6600] transition-colors" />
+              <span className="flex-1 text-left">Thêm học sinh</span>
+              {linkedStudents.length > 0 && (
+                <span className="bg-[#C1762A] text-white text-xs font-black rounded-full w-5 h-5 flex items-center justify-center">
+                  {linkedStudents.length}
+                </span>
+              )}
+            </button>
+          )}
         </nav>
+
+        {/* LinkStudentModal */}
+        <LinkStudentModal
+          isOpen={showLinkModal}
+          onClose={() => setShowLinkModal(false)}
+          onSuccess={handleLinkSuccess}
+        />
 
         {/* Settings Dropdown */}
         {showSettings && (

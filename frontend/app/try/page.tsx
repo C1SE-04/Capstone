@@ -2,13 +2,24 @@
  * File: app/try/page.tsx
  * Mô tả: Trang "Dùng thử" - Chat demo dành cho khách chưa đăng nhập.
  * Không yêu cầu xác thực. Không lưu lịch sử.
+ * Sprint 4 - US 4.3:
+ *   - Task 89:  Tạo Guest ID lưu vào localStorage, kẹp X-Guest-ID vào mỗi API call.
+ *   - Task 113: Hiển thị bảng thông báo hết lượt dùng thử (TrialExpiredModal).
+ *   - Task 113: Nút "Đăng nhập" mở AuthForm modal giống trang chủ.
  */
 "use client";
 
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User } from "lucide-react";
+import Lottie from "lottie-react";
 import { useRouter } from "next/navigation";
-
+import AuthForm from "@/components/AuthForm";
+import { getOrCreateGuestId, getGuestHeaders } from "@/lib/guestId";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 const SUGGESTIONS = [
   "Phân số là gì?",
@@ -28,38 +39,238 @@ function createMessageId(prefix: string = "msg") {
   return `${prefix}-${Date.now()}-${idCounter}`;
 }
 
+/* ──────────────────────────────────────────────
+   Modal: Thông báo hết lượt dùng thử (US 4.3)
+────────────────────────────────────────────── */
+function TrialExpiredModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => void }) {
+  const [owlData, setOwlData] = useState<object | null>(null);
+
+  useEffect(() => {
+    fetch("/lottie/owl_idle.json")
+      .then((r) => r.json())
+      .then(setOwlData)
+      .catch(() => {});
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{
+        backgroundColor: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(4px)",
+        animation: "trialFadeIn 0.2s ease both",
+      }}
+    >
+      <style>{`
+        @keyframes trialFadeIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes trialSlideUp {
+          from { opacity: 0; transform: translateY(24px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .trial-card { animation: trialSlideUp 0.3s ease both; }
+      `}</style>
+
+      {/* Card */}
+      <div
+        className="trial-card relative bg-[#F7ECE1] rounded-3xl shadow-2xl overflow-hidden max-w-sm w-full border border-[#C1762A]/20"
+      >
+        {/* Top decorative strip */}
+        <div
+          style={{
+            height: "4px",
+            background: "linear-gradient(90deg, #C1762A, #F7AD62, #C1762A)",
+          }}
+        />
+
+        {/* Close button */}
+        <button
+          id="trial-expired-close-btn"
+          onClick={onClose}
+          className="absolute top-3 right-3 p-1.5 rounded-full text-[#8C4905]/60 hover:text-[#8C4905] hover:bg-[#F1CCA6] transition-all cursor-pointer"
+          aria-label="Đóng thông báo"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <div className="px-8 py-8 flex flex-col items-center text-center gap-5">
+          {/* Owl — hiển thị tĩnh frame đầu của Lottie */}
+          <div
+            className="w-24 h-24 rounded-full bg-[#F1CCA6] flex items-center justify-center shadow-inner overflow-hidden"
+            aria-hidden="true"
+          >
+            {owlData ? (
+              <Lottie
+                animationData={owlData}
+                loop={false}
+                autoplay={false}
+                initialSegment={[0, 1]}
+                style={{ width: "80px", height: "80px" }}
+              />
+            ) : (
+              <span style={{ fontSize: "2.2rem" }}>🦉</span>
+            )}
+          </div>
+
+          {/* Heading */}
+          <div>
+            <h2 className="text-2xl font-extrabold text-[#8C4905] italic tracking-tight mb-2">
+              Hết lượt hôm nay rồi!
+            </h2>
+            <p className="text-sm text-[#C1762A] font-medium leading-relaxed max-w-xs">
+              Bạn đã dùng hết{" "}
+              <strong className="text-[#8C4905]">10 câu hỏi</strong> dùng thử
+              hôm nay. Quay lại sau{" "}
+              <strong className="text-[#8C4905]">24 tiếng</strong> để được cấp
+              thêm lượt mới — hoặc{" "}
+              <span className="text-[#8C4905] font-bold">đăng nhập</span> để
+              học tẹt ga không giới hạn!
+            </p>
+          </div>
+
+
+
+          {/* CTA */}
+          <div className="w-full flex flex-col gap-3 pt-1">
+            <button
+              id="trial-expired-login-btn"
+              onClick={onLogin}
+              className="w-full bg-[#C1762A] text-white font-bold py-3 rounded-xl
+                         hover:bg-[#8C4905] transition-all shadow-md
+                         flex items-center justify-center gap-2 cursor-pointer"
+              style={{ transform: "scale(1)" }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.transform = "scale(1.02)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.transform = "scale(1)")
+              }
+            >
+              {/* Arrow icon */}
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 8l4 4m0 0l-4 4m4-4H3"
+                />
+              </svg>
+              Đăng nhập
+            </button>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────
+   Main Page
+────────────────────────────────────────────── */
 export default function TryPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       role: "assistant",
       content:
-        "Xin chào! Mình là **SocraticKid** 🦉\n\nBạn có thể hỏi mình bất cứ điều gì về Toán học. Mình sẽ **không cho đáp án luôn** — mình sẽ đặt câu hỏi dẫn dắt để bạn tự khám phá ra nhé! 💪\n\n*Đây là chế độ dùng thử — lịch sử sẽ không được lưu lại.*",
+        "Xin chào! Mình là **SocraticKid** 🦉\n\nBạn có thể hỏi mình bất cứ điều gì về Toán học. Mình sẽ **không cho đáp án luôn** — mình sẽ đặt câu hỏi dẫn dắt để bạn tự khám phá ra nhé! \n\n*Đây là chế độ dùng thử — lịch sử sẽ không được lưu lại.*",
     },
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+
+  // Modal states (Task 113)
+  const [showTrialExpired, setShowTrialExpired] = useState(false);
+  const [showAuthForm, setShowAuthForm] = useState(false);
+
+  // US 4.3: Quản lý giới hạn 10 câu hỏi dùng thử & chống spam
+  const [trialCount, setTrialCount] = useState(0);
+  const [isTrialExpired, setIsTrialExpired] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const [sessionId, setSessionId] = useState("");
 
+  // Task 89 - US 4.3: Lấy hoặc tạo Guest ID từ localStorage
+  // và kiểm tra số câu đã dùng (persistent trong 24h)
   useEffect(() => {
-    let sid = sessionStorage.getItem("guest_session_id");
-    if (!sid) {
-      sid = "guest-" + crypto.randomUUID();
-      sessionStorage.setItem("guest_session_id", sid);
+    const guestId = getOrCreateGuestId();
+    if (guestId) setSessionId(guestId);
+
+    if (typeof window !== "undefined") {
+      const storedCount = parseInt(
+        localStorage.getItem("sk_trial_count") || "0",
+        10
+      );
+      const resetAt = parseInt(
+        localStorage.getItem("sk_trial_reset_at") || "0",
+        10
+      );
+      const now = Date.now();
+
+      if (resetAt && now > resetAt) {
+        localStorage.removeItem("sk_trial_count");
+        localStorage.removeItem("sk_trial_reset_at");
+        setTrialCount(0);
+        setIsTrialExpired(false);
+      } else {
+        setTrialCount(storedCount);
+        if (storedCount >= 10) {
+          setIsTrialExpired(true);
+          setShowTrialExpired(true);
+        }
+      }
     }
-    setSessionId(sid);
   }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
+  /** Mở AuthForm modal — dùng chung cho header và TrialExpiredModal */
+  const handleOpenAuth = () => {
+    setShowTrialExpired(false);
+    setShowAuthForm(true);
+  };
+
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isTyping) return;
+
+    // Chặn gửi nếu đã hết lượt dùng thử (10 câu)
+    if (isTrialExpired || trialCount >= 10) {
+      setIsTrialExpired(true);
+      setShowTrialExpired(true);
+      return;
+    }
+
+    const currentCount = trialCount + 1;
+    setTrialCount(currentCount);
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sk_trial_count", currentCount.toString());
+      if (!localStorage.getItem("sk_trial_reset_at")) {
+        localStorage.setItem(
+          "sk_trial_reset_at",
+          (Date.now() + 24 * 60 * 60 * 1000).toString()
+        );
+      }
+    }
+
+    if (currentCount >= 10) {
+      setIsTrialExpired(true);
+    }
 
     const userMsg: Message = {
       id: createMessageId("user"),
@@ -77,15 +288,30 @@ export default function TryPage() {
 
     const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
     try {
+      // Task 89: Kẹp X-Guest-ID vào header để backend nhận diện và đếm số câu
       const response = await fetch(`${BACKEND_URL}/chat/orchestrator`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getGuestHeaders(), // { "X-Guest-ID": "<uuid từ localStorage>" }
+        },
         body: JSON.stringify({
           session_id: sessionId,
           prompt: trimmed,
           problem_context: null, // Chế độ dùng thử: không có bài toán cụ thể
         }),
       });
+
+      // ── Hết lượt dùng thử → hiện bảng thông báo (US 4.3 - AC1, AC2, AC3) ──
+      if (response.status === 429) {
+        setMessages((prev) => prev.filter((m) => m.id !== botId));
+        setIsTrialExpired(true);
+        setShowTrialExpired(true);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("sk_trial_count", "10");
+        }
+        return;
+      }
 
       if (!response.body) throw new Error("Không có phản hồi từ server");
 
@@ -129,11 +355,16 @@ export default function TryPage() {
       );
     } finally {
       setIsTyping(false);
-      inputRef.current?.focus();
+      if (currentCount >= 10) {
+        setShowTrialExpired(true);
+      } else {
+        inputRef.current?.focus();
+      }
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isTrialExpired) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage(inputValue);
@@ -142,26 +373,33 @@ export default function TryPage() {
 
   return (
     <div className="min-h-screen bg-[#F7ECE1] font-sans flex flex-col">
-      {/* Header */}
+      {/* ── Header ── */}
       <header className="w-full px-6 py-4 flex items-center justify-between border-b border-[#C1762A]/10 bg-[#F7ECE1]/80 backdrop-blur-sm sticky top-0 z-10">
+        {/* Logo */}
         <div
           className="w-10 h-10 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold text-sm cursor-pointer hover:bg-[#F1CCA6] transition-colors shadow-inner"
           onClick={() => router.push("/")}
         >
           SK
         </div>
+
+        {/* Status label */}
         <span className="text-xs text-[#8C4905]/60 font-medium">
           Chế độ dùng thử · Không lưu lịch sử
         </span>
+
+        {/* Nút Đăng nhập — bấm mở AuthForm modal (Task 113) */}
         <button
-          onClick={() => router.push("/")}
-          className="text-sm font-semibold text-[#C1762A] hover:text-[#8C4905] transition-colors"
+          id="try-page-login-btn"
+          onClick={handleOpenAuth}
+          className="text-sm font-semibold text-[#C1762A] hover:text-[#8C4905] transition-colors cursor-pointer
+                     bg-[#F1CCA6]/60 hover:bg-[#F1CCA6] px-4 py-1.5 rounded-lg border border-[#C1762A]/20"
         >
           Đăng nhập →
         </button>
       </header>
 
-      {/* Chat area */}
+      {/* ── Chat area ── */}
       <div className="flex-1 overflow-y-auto px-4 py-6 max-w-2xl w-full mx-auto flex flex-col gap-4">
         {messages.map((msg) => (
           <div
@@ -179,13 +417,33 @@ export default function TryPage() {
 
             {/* Bubble */}
             <div
-              className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-sm ${
+              className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
                 msg.role === "user"
-                  ? "bg-[#C1762A] text-white rounded-tr-sm"
+                  ? "bg-[#C1762A] text-white rounded-tr-sm whitespace-pre-wrap"
                   : "bg-white text-[#1a1a1a] rounded-tl-sm border border-[#C1762A]/10"
               } ${msg.content === "" ? "animate-pulse bg-gray-100 text-gray-400 italic" : ""}`}
             >
-              {msg.content === "" ? "Đang soạn..." : msg.content}
+              {msg.content === "" ? (
+                "Đang soạn..."
+              ) : msg.role === "user" ? (
+                msg.content
+              ) : (
+                <div className="markdown-prose prose-sm max-w-none
+                  prose-p:leading-relaxed prose-p:mb-2
+                  prose-pre:bg-gray-100 prose-pre:p-3 prose-pre:rounded-lg
+                  prose-code:text-[#CB6600] prose-code:bg-[#F1CCA6]/40 prose-code:px-1 prose-code:rounded
+                  prose-ul:list-disc prose-ul:ml-4 prose-ul:mb-2
+                  prose-ol:list-decimal prose-ol:ml-4 prose-ol:mb-2
+                  prose-strong:text-[#8C4905]"
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkMath, remarkGfm]}
+                    rehypePlugins={[rehypeKatex]}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -208,14 +466,15 @@ export default function TryPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggestions (chỉ hiện khi mới vào) */}
-      {messages.length <= 1 && (
+      {/* Suggestions (chỉ hiện khi mới vào và chưa hết lượt) */}
+      {messages.length <= 1 && !isTrialExpired && (
         <div className="flex flex-wrap justify-center gap-2 px-4 pb-2 max-w-2xl mx-auto w-full">
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
               onClick={() => sendMessage(s)}
-              className="px-4 py-2 bg-[#F1CCA6] text-[#8C4905] rounded-full text-xs font-semibold hover:bg-[#F7AD62] hover:text-white transition-all"
+              disabled={isTrialExpired}
+              className="px-4 py-2 bg-[#F1CCA6] text-[#8C4905] rounded-full text-xs font-semibold hover:bg-[#F7AD62] hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {s}
             </button>
@@ -223,25 +482,69 @@ export default function TryPage() {
         </div>
       )}
 
-      {/* Input bar */}
+      {/* ── Input bar ── */}
       <div className="w-full max-w-2xl mx-auto px-4 pb-6 pt-2">
-        <div className="flex items-center bg-white border border-[#C1762A]/20 rounded-full px-5 py-3 shadow-sm focus-within:border-[#C1762A] focus-within:shadow-md transition-all gap-3">
+        {/* Banner cảnh báo hết hạn dùng thử */}
+        {isTrialExpired && (
+          <div className="mb-3 px-4 py-2.5 bg-amber-50 border border-[#F1CCA6] rounded-2xl flex items-center justify-between text-xs text-[#8C4905] animate-in fade-in shadow-sm">
+            <span>
+              Bạn đã sử dụng hết <strong>10/10 lượt dùng thử</strong> hôm nay.
+            </span>
+            <button
+              onClick={handleOpenAuth}
+              className="font-bold text-[#C1762A] hover:text-[#8C4905] hover:underline cursor-pointer"
+            >
+              Đăng nhập để tiếp tục →
+            </button>
+          </div>
+        )}
+
+        <div
+          onClick={() => {
+            if (isTrialExpired) {
+              setShowTrialExpired(true);
+            }
+          }}
+          className={`flex items-center bg-white border rounded-full px-5 py-3 shadow-sm transition-all gap-3 ${
+            isTrialExpired
+              ? "bg-gray-100/90 border-gray-300 opacity-70 cursor-not-allowed"
+              : "border-[#C1762A]/20 focus-within:border-[#C1762A] focus-within:shadow-md"
+          }`}
+        >
           <input
             ref={inputRef}
+            id="try-page-input"
             type="text"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => {
+              if (!isTrialExpired) setInputValue(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
-            placeholder="Hỏi SocraticKid bất cứ điều gì..."
-            className="flex-1 bg-transparent text-[#000000] placeholder:text-[#8C4905]/40 outline-none font-medium text-sm"
-            disabled={isTyping}
+            placeholder={
+              isTrialExpired
+                ? "Đã hết 10 lượt dùng thử — Vui lòng đăng nhập để tiếp tục"
+                : `Hỏi SocraticKid bất cứ điều gì... (${trialCount}/10 lượt)`
+            }
+            className={`flex-1 bg-transparent text-stone-900 placeholder:text-[#8C4905]/40 outline-none font-medium text-sm ${
+              isTrialExpired ? "cursor-not-allowed select-none" : ""
+            }`}
+            disabled={isTyping || isTrialExpired}
+            readOnly={isTrialExpired}
           />
           <button
-            onClick={() => sendMessage(inputValue)}
-            disabled={!inputValue.trim() || isTyping}
+            onClick={() => {
+              if (isTrialExpired) {
+                setShowTrialExpired(true);
+              } else {
+                sendMessage(inputValue);
+              }
+            }}
+            disabled={(!inputValue.trim() && !isTrialExpired) || isTyping}
             className={`p-2 rounded-full transition-all ${
-              inputValue.trim() && !isTyping
-                ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105"
+              isTrialExpired
+                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                : inputValue.trim() && !isTyping
+                ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 cursor-pointer"
                 : "text-[#C1762A]/30 cursor-not-allowed"
             }`}
           >
@@ -249,6 +552,17 @@ export default function TryPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Modal: Hết lượt dùng thử (US 4.3 - Task 113) ── */}
+      {showTrialExpired && (
+        <TrialExpiredModal
+          onLogin={handleOpenAuth}
+          onClose={() => setShowTrialExpired(false)}
+        />
+      )}
+
+      {/* ── Modal: AuthForm giống trang chủ (Task 113) ── */}
+      {showAuthForm && <AuthForm onClose={() => setShowAuthForm(false)} />}
     </div>
   );
 }

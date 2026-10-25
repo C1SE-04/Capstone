@@ -1,0 +1,408 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { authFetch, refreshSession } from "@/lib/authFetch";
+
+const GRADES = [4, 5, 6, 7, 8, 9];
+
+// [Task T6.12] Kênh và sự kiện BroadcastChannel để đồng bộ khối lớp đa tab
+export const GRADE_SYNC_CHANNEL = "socratic_grade_sync";
+export const GRADE_UPDATED_EVENT = "GRADE_UPDATED";
+
+export default function SettingsPage() {
+  const { data: session, update } = useSession();
+
+  // Lấy lớp hiện tại từ session — parse sang number vì NextAuth có thể trả về string
+  const rawGrade = session?.user?.grade_level ?? null;
+  const currentGrade: number | null = rawGrade !== null ? Number(rawGrade) : null;
+
+  const [selectedGrade, setSelectedGrade] = useState<number | null>(currentGrade);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingGrade, setPendingGrade] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Tự động đồng bộ selectedGrade khi currentGrade trong session thay đổi
+  useEffect(() => {
+    if (currentGrade !== null) {
+      setSelectedGrade(currentGrade);
+    }
+  }, [currentGrade]);
+
+  // Đồng bộ session & khối lớp khi người dùng focus lại tab (xử lý giữa tab thường và tab ẩn danh)
+  useEffect(() => {
+    const handleFocus = async () => {
+      try {
+        const res = await refreshSession(update);
+        if (res?.grade !== undefined) {
+          setSelectedGrade(Number(res.grade));
+        }
+      } catch (err) {
+        console.warn("Lỗi đồng bộ session on focus:", err);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleFocus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [update]);
+
+  // [Task T6.12] Lắng nghe sự kiện đổi lớp từ các tab khác qua BroadcastChannel
+  useEffect(() => {
+    if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
+
+    const channel = new BroadcastChannel(GRADE_SYNC_CHANNEL);
+    channel.onmessage = (event) => {
+      if (event.data?.type === GRADE_UPDATED_EVENT && event.data.grade) {
+        const newGrade = Number(event.data.grade);
+        setSelectedGrade(newGrade);
+        // Đồng bộ lại session NextAuth của tab hiện tại
+        update({ grade_level: newGrade });
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
+  }, [update]);
+  
+  // Pairing Code states
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [maxSeconds, setMaxSeconds] = useState<number>(900); // Mặc định 15 phút
+
+  // Lấy mã liên kết hiện tại nếu có (khi F5 reload trang)
+  useEffect(() => {
+    if (session?.access_token) {
+      fetchActivePairingCode();
+    }
+  }, [session?.access_token]);
+
+  const fetchActivePairingCode = async () => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/family/pairing-code`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const code: string = data.pairing_code;
+        const ttl: number = data.expires_in;
+        startCountdown(code, ttl);
+      }
+    } catch (error) {
+      console.error("No active pairing code found.", error);
+    }
+  };
+
+  const startCountdown = (code: string, ttl: number) => {
+    setPairingCode(code);
+    setMaxSeconds(900); // Code mới luôn tối đa 15 phút
+    const expiry = new Date(Date.now() + ttl * 1000);
+    
+    // Clear interval cũ nếu có
+    if ((window as any).pairingCodeInterval) {
+      clearInterval((window as any).pairingCodeInterval);
+    }
+
+    const tick = setInterval(() => {
+      const secs = Math.round((expiry.getTime() - Date.now()) / 1000);
+      if (secs <= 0) {
+        clearInterval(tick);
+        setPairingCode(null);
+        setSecondsLeft(null);
+      } else {
+        setSecondsLeft(secs);
+      }
+    }, 1000);
+
+    (window as any).pairingCodeInterval = tick;
+  };
+
+  const handleGradeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newGrade = Number(e.target.value);
+    if (newGrade === currentGrade) return;
+    setPendingGrade(newGrade);
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirm = async () => {
+    if (!pendingGrade) return;
+    setIsLoading(true);
+    setErrorMsg("");
+
+    try {
+      // Gọi API thật lên Backend để lưu lớp học mới vào NeonDB (dùng authFetch để tự xử lý SESSION_STALE)
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await authFetch(`${backendUrl}/users/me/grade`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ grade: pendingGrade }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Không thể cập nhật lớp học");
+      }
+
+      // Sau khi DB cập nhật thành công, đồng bộ lại session NextAuth ở tab hiện tại
+      await update({ grade_level: pendingGrade });
+
+      // [Task T6.12] Phát sự kiện Broadcast sang các tab cùng browser để trigger update()
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        const channel = new BroadcastChannel(GRADE_SYNC_CHANNEL);
+        channel.postMessage({
+          type: GRADE_UPDATED_EVENT,
+          grade: pendingGrade,
+        });
+        channel.close();
+      }
+      
+      // Cập nhật UI
+      setSelectedGrade(pendingGrade);
+      setSuccessMsg(` Đã đổi sang Lớp ${pendingGrade} thành công!`);
+      setTimeout(() => setSuccessMsg(""), 3000);
+      
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Đã xảy ra lỗi hệ thống");
+      setSelectedGrade(currentGrade);
+    } finally {
+      setIsLoading(false);
+      setShowConfirmDialog(false);
+      setPendingGrade(null);
+    }
+  };
+
+  const handleCancel = () => {
+    setSelectedGrade(currentGrade);
+    setPendingGrade(null);
+    setShowConfirmDialog(false);
+  };
+
+  const generatePairingCode = async () => {
+    setIsGeneratingCode(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/family/pairing-code`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Không thể tạo mã");
+      }
+
+      const data = await res.json();
+      const code: string = data.pairing_code;
+      const ttl: number = data.expires_in || 900;
+      
+      startCountdown(code, ttl);
+
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsGeneratingCode(false);
+    }
+  };
+
+
+  const handleCopyCode = async () => {
+    if (!pairingCode) return;
+    await navigator.clipboard.writeText(pairingCode);
+    setCopyFeedback(true);
+    setTimeout(() => setCopyFeedback(false), 2000);
+  };
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto animate-in fade-in duration-500 pb-10">
+      <h1 className="text-3xl font-extrabold text-[#8C4905] mb-8 tracking-tight">
+        Cài đặt cá nhân
+      </h1>
+
+      {/* Thông tin tài khoản */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#F1CCA6] p-6 mb-6">
+        <h2 className="text-lg font-bold text-[#8C4905] mb-4 flex items-center gap-2">
+          <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />
+          Thông tin tài khoản
+        </h2>
+        <div className="space-y-3 text-sm text-[#8C4905]">
+          <div className="flex justify-between items-center py-2 border-b border-[#F1CCA6]">
+            <span className="font-medium text-[#C1762A]">Email</span>
+            <span className="font-bold">{session?.user?.email || "—"}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b border-[#F1CCA6]">
+            <span className="font-medium text-[#C1762A]">Vai trò</span>
+            <span className="font-bold uppercase">{session?.user?.role || "—"}</span>
+          </div>
+          <div className="flex justify-between items-center py-2">
+            <span className="font-medium text-[#C1762A]">Lớp hiện tại</span>
+            <span className="font-bold text-[#8C4905]">
+              {currentGrade ? `Lớp ${currentGrade}` : "Chưa cập nhật (đợi Session T5.7)"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Đổi lớp học */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#F1CCA6] p-6">
+        <h2 className="text-lg font-bold text-[#8C4905] mb-1 flex items-center gap-2">
+          <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />
+          Đổi lớp học 
+        </h2>
+        <p className="text-sm text-[#C1762A] mb-4 leading-relaxed">
+          Socratic AI sẽ tự động điều chỉnh độ khó, xưng hô và kiến thức theo đúng trình độ lớp mới ngay sau khi bạn lưu.
+        </p>
+
+        <label className="block text-sm font-bold text-[#8C4905] mb-2">
+          Chọn khối lớp
+        </label>
+        <select
+          value={selectedGrade ?? ""}
+          onChange={handleGradeChange}
+          disabled={isLoading}
+          className="w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 border border-transparent focus:outline-none focus:ring-2 focus:ring-[#F7AD62] cursor-pointer disabled:opacity-60 transition-shadow"
+        >
+          <option value="" disabled>-- Chọn khối lớp --</option>
+          {GRADES.map((g) => (
+            <option key={g} value={g}>Lớp {g}</option>
+          ))}
+        </select>
+
+        {successMsg && (
+          <p className="mt-3 text-sm font-bold text-green-600 animate-in slide-in-from-top-1">{successMsg}</p>
+        )}
+        {errorMsg && (
+          <p className="mt-3 text-sm font-bold text-[#CB6600] animate-in slide-in-from-top-1">{errorMsg}</p>
+        )}
+      </div>
+
+      {/* Liên kết với Phụ huynh */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#F1CCA6] p-6 mt-6 mb-6">
+        <h2 className="text-lg font-bold text-[#8C4905] mb-1 flex items-center gap-2">
+          <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />
+          Liên kết với Phụ huynh
+        </h2>
+        <p className="text-sm text-[#C1762A] mb-4 leading-relaxed">
+          Tạo mã liên kết để bố mẹ có thể xem tiến độ học tập của bạn trên bảng điều khiển phụ huynh.
+        </p>
+
+        {pairingCode ? (
+          <div className="bg-[#F7ECE1] p-4 rounded-xl border border-[#F1CCA6] space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-[#8C4905] font-bold uppercase tracking-wider mb-1">Mã của bạn</p>
+                <p className="text-3xl font-black text-[#C1762A] tracking-[0.2em]">{pairingCode}</p>
+              </div>
+              <button
+                onClick={handleCopyCode}
+                className="px-4 py-2 bg-white text-[#8C4905] font-bold rounded-lg border border-[#F1CCA6] hover:bg-gray-50 transition-all shadow-sm cursor-pointer flex items-center gap-1.5 min-w-[80px] justify-center"
+              >
+                {copyFeedback ? (
+                  <span className="text-green-600 animate-in fade-in duration-200">✓ Đã copy</span>
+                ) : (
+                  "Copy"
+                )}
+              </button>
+            </div>
+            {/* Countdown */}
+            {secondsLeft !== null && (
+              <div className="flex items-center gap-2 pt-1">
+                <div className="h-1.5 flex-1 bg-[#F1CCA6] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#C1762A] rounded-full transition-all duration-1000"
+                    style={{ width: `${(secondsLeft / maxSeconds) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-[#C1762A] tabular-nums">
+                  {formatCountdown(secondsLeft)}
+                </span>
+              </div>
+            )}
+            <p className="text-xs text-[#8C4905]/60">
+              Mã có hiệu lực trong 15 phút. Vui lòng cung cấp mã này cho phụ huynh để liên kết tài khoản.
+            </p>
+          </div>
+        ) : (
+          <button
+            id="get-pairing-code-btn"
+            onClick={generatePairingCode}
+            disabled={isGeneratingCode}
+            className="w-full py-3 rounded-xl bg-[#C1762A] text-white font-bold hover:bg-[#8C4905] shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 cursor-pointer flex items-center justify-center gap-2"
+          >
+            {isGeneratingCode ? (
+              <>
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                Đang tạo mã...
+              </>
+            ) : "Lấy mã liên kết"}
+          </button>
+        )}
+      </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm animate-in zoom-in-95 duration-200 border border-[#F1CCA6]">
+            <h3 className="text-xl font-bold text-[#8C4905] mb-3">Xác nhận đổi lớp</h3>
+            <p className="text-[#C1762A] mb-8 leading-relaxed">
+              Bạn đang chuyển sang <span className="font-black text-[#8C4905]">Lớp {pendingGrade}</span>. Hành trình học tập và tư duy của AI sẽ được đồng bộ hoá ngay lập tức.
+            </p>
+            <div className="flex gap-4">
+              <button
+                onClick={handleCancel}
+                disabled={isLoading}
+                className="flex-1 py-2.5 rounded-xl border-2 border-[#F1CCA6] text-[#8C4905] font-bold hover:bg-[#F7ECE1] transition-colors disabled:opacity-60 cursor-pointer"
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={isLoading}
+                className="flex-1 py-2.5 rounded-xl bg-[#C1762A] text-white font-bold hover:bg-[#8C4905] shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                ) : "Xác nhận"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

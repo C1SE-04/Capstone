@@ -18,7 +18,7 @@ export default function DashboardPage() {
       {/* Header Section */}
       <div className="mb-8">
         <h1 className="text-3xl md:text-4xl font-extrabold text-[#8C4905] mb-2 tracking-tight">
-          Chào mừng trở lại, {session?.user?.name || "bạn"}! 👋
+          Chào mừng trở lại, {session?.user?.name || "bạn"}!
         </h1>
         <p className="text-[#C1762A] text-lg font-medium">
           Tiếp tục hành trình học tập của bạn hôm nay.

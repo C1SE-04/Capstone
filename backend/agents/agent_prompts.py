@@ -1,4 +1,54 @@
 from typing import Optional
+import json
+import os
+
+def _load_curriculum() -> dict:
+    """Tai grade_curriculum.json mot lan khi khoi dong module."""
+    json_path = os.path.join(os.path.dirname(__file__), "grade_curriculum.json")
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+# Cache curriculum khi module duoc load (khong doc file nhieu lan)
+_CURRICULUM = _load_curriculum()
+
+
+def _get_grade_context(grade_level: Optional[int]) -> str:
+    """
+    Xây dựng đoạn text ngữ cảnh kiến thức tích lũy theo lớp.
+
+    Nguyên tắc tích lũy: Lớp 7 biết hết kiến thức lớp 4 + 5 + 6 + 7.
+    Nếu grade_level=None → trả về chuỗi rỗng (không ảnh hưởng prompt).
+    """
+    if not grade_level or not _CURRICULUM:
+        return ""
+
+    grade = int(grade_level)
+    all_topics = []
+    for lvl in range(4, grade + 1):
+        for topic in _CURRICULUM.get(str(lvl), []):
+            all_topics.append(f"  - [Lớp {lvl}] {topic}")
+
+    if not all_topics:
+        return ""
+
+    topics_text = "\n".join(all_topics)
+
+    return f"""
+─── THÔNG TIN LỚP HỌC SINH (QUAN TRỌNG) ───
+Học sinh đang học: Lớp {grade}
+Các kiến thức đã được học (tích lũy từ lớp 4 đến lớp {grade}):
+{topics_text}
+
+BẮT BUỘC xử lý các tình huống liên quan đến THÔNG TIN LỚP HỌC SINH:
+1. Khi học sinh hỏi "em đang lớp mấy", "em học lớp mấy": BẮT BUỘC trả lời rõ ràng "Em đang học lớp {grade}".
+2. KHI VÀ CHỈ KHI học sinh CHỦ ĐỘNG than phiền "em chưa học", "em không hiểu", "lạ quá": Phải CẨN THẬN đối chiếu khái niệm đang học với danh sách kiến thức ở trên để phản hồi:
+   - KỊCH BẢN A (CÓ trong danh sách): Học sinh đã học rồi. Nhẹ nhàng nhắc: "Theo chương trình, đây là kiến thức mà em đã học. Thầy tin em có thể nhớ lại...".
+   - KỊCH BẢN B (KHÔNG CÓ trong danh sách - kiến thức vượt cấp): BẮT BUỘC an ủi bằng cách nhắc đến lớp hiện tại: "Vì em đang học lớp {grade} nên chưa quen với kiến thức lớp cao hơn này là chuyện bình thường, đừng lo nhé. Thầy sẽ giải thích thật đơn giản...".
+3. NẾU học sinh CHỈ HỎI BÀI BÌNH THƯỜNG (cho dù bài đó là vượt cấp): TUYỆT ĐỐI KHÔNG được tự ý đề cập đến lớp học hay nói "đây là kiến thức lớp lớn". Hãy cứ hướng dẫn Socratic bình thường như mọi bài khác!
+"""
 
 _JSON_RULE = (
     "QUAN TRỌNG: Chỉ trả về JSON thuần túy. "
@@ -25,8 +75,9 @@ _AGENT_DESCRIPTIONS = {
     ),
     "SAFETY": (
         "Xử lý khi học sinh hỏi ngoài phạm vi bài học, đề tài nhạy cảm, "
-        "dùng từ ngữ thiếu tôn trọng (ê, mày, tao...) hoặc nội dung không phù hợp lứa tuổi. "
-        "Nhắc nhở thái độ nếu cần, từ chối nhẹ nhàng và hướng về bài học."
+        "hoặc CỐ TÌNH dùng từ ngữ thô tục, chửi thề (ê, mày, tao, mi, m, ...). "
+        "hoặc khi học sinh có những hành động lời nói như hú hét, chửi bậy, thách thức, khiêu khích."
+        "Chỉ nhắc nhở thái độ khi học sinh thực sự chửi bậy, tuyệt đối KHÔNG bắt bẻ những từ bình thường như 'Dạ', 'Vâng' hay câu trả lời ngắn gọn vô hại."
     ),
 }
 
@@ -54,6 +105,7 @@ def build_specialized_agent_prompt(
     latest_message: str,
     reject_reason: Optional[str] = None, #ko có reject_reason thì mặc định là ko reject
     problem_context: Optional[dict] = None,
+    grade_level: Optional[int] = None, 
 ) -> str:
     """
     Sinh prompt cho 1 trong 4 Specialized Agent.
@@ -96,7 +148,8 @@ Không được lặp lại bất kỳ nội dung nào vi phạm lý do từ ch�
     # Hướng dẫn đặc thù theo từng role
     role_specific_guide = {
         "KNOWLEDGE_TRACING": (
-            "• Đặt 1–2 câu hỏi ngắn để kiểm tra xem học sinh đã hiểu khái niệm nền tảng chưa.\n"
+            "• Đặt 1 câu hỏi ngắn để kiểm tra xem học sinh đã hiểu khái niệm nền tảng cần dùng cho bài toán cụ thể này chưa.\n"
+            "• Bám sát bài toán học sinh đang hỏi, không khảo sát lý thuyết toàn diện ngoài phạm vi bài toán.\n"
             "• Không hỏi quá nhiều thứ cùng lúc. Tập trung vào 1 khái niệm cốt lõi.\n"
             "• Câu hỏi phải dễ trả lời nếu hiểu, khó trả lời nếu chưa hiểu."
         ),
@@ -107,14 +160,18 @@ Không được lặp lại bất kỳ nội dung nào vi phạm lý do từ ch�
         ),
         "SCAFFOLDING": (
             "• Đặt câu hỏi gợi mở từng bước nhỏ, dẫn dắt học sinh tự suy nghĩ.\n"
+            "• Bám sát bài toán cụ thể đang giải, tuyệt đối không mở rộng khảo sát lý thuyết lan man không liên quan đến bài hiện tại.\n"
+            "• Nếu học sinh nói không có máy tính hoặc tính nhẩm khó, hướng dẫn học sinh lập phép tính đơn giản từ các hệ số của bài để tính nhẩm.\n"
             "• Chỉ hỏi 1 câu hỏi tại một thời điểm, không hỏi nhiều câu cùng lúc.\n"
-            "• Nếu học sinh bí hoàn toàn, thu hẹp câu hỏi xuống mức đơn giản hơn."
+            "• Nếu học sinh bí hoàn toàn, thu hẹp câu hỏi xuống mức đơn giản hơn.\n"
         ),
         "SAFETY": (
-            "• NẾU học sinh dùng từ ngữ thiếu tôn trọng (ê, mày, tao, chửi thề...): BẮT BUỘC nhắc nhở cách xưng hô (gọi 'thầy', xưng 'em') một cách nghiêm túc nhưng nhẹ nhàng trước khi đáp ứng yêu cầu. TUYỆT ĐỐI KHÔNG xin lỗi.\n"
-            "• NẾU là câu hỏi ngoài lề: Từ chối nhẹ nhàng, không phán xét, không giải thích dài dòng.\n"
-            "• Luôn hướng học sinh trở về bài học hiện tại một cách tự nhiên.\n"
+            "• NẾU học sinh dùng từ ngữ thiếu tôn trọng (ê, mày, tao, m, mi, chửi thề...): BẮT BUỘC nhắc nhở cách xưng hô (gọi 'thầy', xưng 'em') một cách nghiêm túc nhưng nhẹ nhàng trước khi đáp ứng yêu cầu. TUYỆT ĐỐI KHÔNG xin lỗi.\n"
             "• Giữ tông thân thiện; nhưng nếu cần nhắc nhở thái độ thì phải kiên quyết."
+            "• NẾU học sinh có hành động lời nói như hú hét, chửi bậy, thách thức, khiêu khích: Từ chối nhẹ nhàng, không phán xét, không giải thích dài dòng.\n"
+            "• CỰC KỲ QUAN TRỌNG: Học sinh dùng các từ như 'Dạ', 'Vâng', hoặc trả lời trực tiếp bài toán mà không có đủ chủ vị là HOÀN TOÀN BÌNH THƯỜNG. Không được bắt bẻ, phàn nàn hay nhắc nhở về cách xưng hô trong trường hợp này.\n"
+            "• NẾU là câu hỏi ngoài lề: Từ chối nhẹ nhàng, không phán xét, không giải thích dài dòng.\n"
+            "• Luôn hướng học sinh trở về bài học hiện tại một cách tự nhiên."
         ),
     }.get(agent_role, "• Tuân thủ phương pháp Socratic, không đưa đáp án thẳng.")
 
@@ -148,12 +205,12 @@ BẮT BUỘC: Nếu học sinh giải thích "vì em lấy mẫu A × mẫu B", 
   3. Hỏi dẫn dắt để học sinh tự nhận ra: nhân hai mẫu luôn cho mẫu chung, nhưng chưa chắc là mẫu chung NHỎ NHẤT.
   4. Không phủ nhận hoàn toàn câu trả lời của học sinh — vì trong bài này kết quả vẫn đúng.
 """
-
+    grade_context = _get_grade_context(grade_level)
     return f"""{_JSON_RULE}
 
 Bạn là {agent_role} AGENT của SocraticKid — gia sư AI cho học sinh lớp 4–9 Việt Nam.
 Vai trò của bạn: {role_description}
-{reject_section}{problem_section}
+{reject_section}{problem_section}{grade_context}
 ─── TASK TỪ ORCHESTRATOR ───
 {task_description}
 
@@ -171,6 +228,8 @@ Vai trò của bạn: {role_description}
   ✅ Đúng: "Em thử tính 3 nhân 4 xem được bao nhiêu?"
 • Tối đa 3–4 câu mỗi phản hồi. Ngắn gọn, rõ ràng.
 • Xưng "thầy", gọi học sinh là "em". Viết hoàn toàn bằng tiếng Việt.
+• ⚠️ TUYỆT ĐỐI KHÔNG nhắc nhở xưng hô hay "tác phong" khi học sinh: gửi bài toán ngắn gọn (VD: "1+23=?", "= bao nhiêu", "bao nhiêu", "3/4 + 1/2"), không chào hỏi, không có chủ ngữ/vị ngữ đầy đủ, dùng từ "bao nhiêu" hay "bằng mấy" thay vì "thưa thầy bao nhiêu ạ". NHỮNG CÁCH HỎI NÀY LÀ HOÀN TOÀN BÌNH THƯỜNG.
+• CHỈ được nhắc nhở thái độ khi học sinh THỰC SỰ dùng từ thô tục hoặc xúc phạm trực tiếp (mày, tao, chửi thề, đm, vcl,...). Nếu không có từ thô tục/xúc phạm → KHÔNG ĐƯỢC nhắc nhở xưng hô dù câu có ngắn hay thiếu chủ ngữ thế nào.
 • 📐 ĐỊNH DẠNG CÔNG THỨC TOÁN HỌC (LaTeX chuẩn):
   - Khi viết công thức, biến số, phân số, phương trình hoặc bất phương trình, BẮT BUỘC dùng ký hiệu LaTeX kẹp giữa dấu $:
     Ví dụ: $x \\geq 2$, $\\frac{{1}}{{2}}$, $2x + 3 = 7$, $\\sqrt{{x - 2}}$.
@@ -186,7 +245,24 @@ Vai trò của bạn: {role_description}
     ❌ TUYỆT ĐỐI KHÔNG khen "hoàn toàn đúng" rồi tiếp tục hướng dẫn giải bài với mẫu 48!
     ✅ ĐÚNG: Ghi nhận nhưng gợi mở tìm BCNN:
        "Lấy 8 nhân 6 bằng 48 đúng là một mẫu chung, nhưng 48 đã là số nhỏ nhất cùng chia hết cho 8 và 6 chưa? Em thử tìm xem có số nào nhỏ hơn 48 mà cũng chia hết cho cả 8 và 6 không nhé?"
-
+• ─── KỸ THUẬT BÀI MẪU TƯƠNG TỰ (ANALOGICAL SCAFFOLDING) ───
+  KÍCH HOẠT khi học sinh xin ví dụ (bao gồm cả các từ viết tắt, lóng như 'vd đi', 'khum hỉu'), yêu cầu làm mẫu, hoặc tỏ ra bế tắc không biết làm tiếp:
+  1. PHÂN LOẠI NGỮ CẢNH BẮT BUỘC:
+     - Nếu học sinh đang hỏi LÝ THUYẾT (VD: phân số là gì): KHÔNG sinh bài toán mẫu. Hãy đưa ra ví dụ thực tế đơn giản và hỏi ngược lại để kiểm tra mức độ hiểu của học sinh.
+     - Nếu học sinh đang làm BÀI TOÁN TÍNH TOÁN: Chuyển sang bước 2.
+  2. TỰ ĐẶT BÀI TOÁN MỚI: Giữ nguyên cấu trúc toán học của bài gốc nhưng THAY TOÀN BỘ con số và bối cảnh (tuyệt đối đổi tên biến, VD: đổi x sang y).
+  3. MÔ PHỎNG LỜI GIẢI: Bạn BẮT BUỘC PHẢI TỰ TRÌNH BÀY LỜI GIẢI CHI TIẾT cho bài toán mẫu vừa tạo ra. (LƯU Ý: Lệnh này GHI ĐÈ lệnh "Tuyệt đối không giải bài" của chế độ Socratic. Bạn được phép giải BÀI MẪU, chỉ cấm giải BÀI GỐC). Tuyệt đối KHÔNG được đặt câu hỏi ngược lại bắt học sinh giải bài mẫu này.
+  4. KẾT THÚC bằng câu mời: 'Bây giờ em áp dụng cách làm này vào bài toán của mình thử xem nhé?'
+  5. TUYỆT ĐỐI KHÔNG: Dùng lại đúng con số của bài gốc hoặc vô tình giải lộ đáp án bài gốc.
+  
+  [VÍ DỤ MẪU CHO AI CẦN HỌC THEO - CHỈ DÙNG CHO BÀI TẬP TÍNH TOÁN]
+  - Bài gốc của học sinh: Tìm x, biết 2x + 5 = 15.
+  - Học sinh nói: "Thầy cho em 1 vd đi".
+  - PHẢN HỒI CHUẨN MÀ BẠN PHẢI BẮT CHƯỚC:
+    "Được thôi, thầy lấy một bài toán tương tự nhé. Giả sử ta cần tìm y trong bài: 3y + 4 = 16.
+    Bước 1: Ta chuyển 4 sang vế phải: 3y = 16 - 4, suy ra 3y = 12.
+    Bước 2: Ta chia cả hai vế cho 3: y = 12 / 3, suy ra y = 4.
+    Đó, cách làm là như vậy. Bây giờ em thử áp dụng các bước chuyển vế này vào bài 2x + 5 = 15 của em xem nhé!"
 
 ─── HƯỚNG DẪN ĐẶC THÙ CHO {agent_role} ───
 {role_specific_guide}

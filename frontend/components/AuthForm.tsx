@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 interface AuthFormProps {
@@ -15,6 +15,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<'student' | 'monitor' | null>(null);
+  const [grade, setGrade] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -24,6 +25,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     password?: string;
     confirmPassword?: string;
     role?: string;
+    grade?: string;
     form?: string;
   }>({});
 
@@ -33,19 +35,21 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     setEmail("");
     setPassword("");
     setConfirmPassword("");
+    setGrade(null);
   };
 
   const validateForm = () => {
     let hasError = false;
     const newErrors: typeof errors = {};
 
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
       newErrors.email = "Email/SDT không được bỏ trống";
       hasError = true;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.includes("@")) {
+    } else if (!trimmedEmail.includes("@")) {
       newErrors.email = "Vui lòng nhập đúng định dạng email";
       hasError = true;
-    } else if (!email.includes("@")) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(trimmedEmail)) {
       newErrors.email = "Vui lòng nhập đúng định dạng email";
       hasError = true;
     }
@@ -62,6 +66,11 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
     if (!isLoginMode && !role) {
       newErrors.role = "Vui lòng chọn vai trò";
+      hasError = true;
+    }
+
+    if (!isLoginMode && role === 'student' && !grade) {
+      newErrors.grade = "Vui lòng chọn lớp học";
       hasError = true;
     }
 
@@ -97,18 +106,29 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
         setToastMessage("Đăng nhập thành công!");
         setShowSuccessToast(true);
-        setTimeout(() => {
+        setTimeout(async () => {
           if (onClose) onClose();
-          router.push("/dashboard");
+          
+          // Lấy session mới nhất để kiểm tra role
+          const currentSession = await getSession();
+          const userRole = (currentSession?.user as any)?.role;
+          
+          if (userRole === "ADMIN") {
+            router.push("/admin");
+          } else if (userRole === "MONITOR") {
+            router.push("/dashboard/monitor");
+          } else {
+            router.push("/dashboard/chat");
+          }
         }, 1500);
       } else {
-        // Tích hợp API Đăng ký
+        // Tích hợp API Đăng ký — gửi email lowercase về DB
         const endpoint = role === 'student' ? '/register/student' : '/register/monitor';
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
         const response = await fetch(`${backendUrl}${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({ email: email.toLowerCase(), password, grade })
         });
 
         if (!response.ok) {
@@ -122,6 +142,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         setPassword("");
         setConfirmPassword("");
         setRole(null);
+        setGrade(null);
         setToastMessage("Đăng ký thành công! Vui lòng đăng nhập.");
         setShowSuccessToast(true);
         setTimeout(() => setShowSuccessToast(false), 3000);
@@ -137,13 +158,13 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       {/* Success Toast */}
       {showSuccessToast && (
-        <div className="fixed top-4 right-4 z-[60] bg-white border-l-4 border-green-500 shadow-lg rounded-lg px-6 py-4 animate-fade-in-down flex items-center gap-3">
-          <div className="bg-green-100 rounded-full p-1">
-            <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="fixed top-4 right-4 z-[60] bg-white border border-emerald-200/80 shadow-lg rounded-xl px-5 py-3.5 animate-fade-in-down flex items-center gap-3">
+          <div className="bg-emerald-50 rounded-full p-1 text-emerald-600">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-gray-800 font-medium">{toastMessage}</p>
+          <p className="text-stone-800 text-sm font-medium">{toastMessage}</p>
         </div>
       )}
 
@@ -179,10 +200,10 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           <div>
             <label className="block text-[#8C4905] text-sm font-bold mb-1">Email/SDT</label>
             <input
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
                 }`}
               disabled={isLoading}
             />
@@ -198,7 +219,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.password ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.password ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
                 }`}
               disabled={isLoading}
             />
@@ -215,7 +236,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-[#000000] focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
                   }`}
                 disabled={isLoading}
               />
@@ -241,7 +262,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               </button>
               <button
                 type="button"
-                onClick={() => setRole('monitor')}
+                onClick={() => { setRole('monitor'); setGrade(null); }}
                 className={`flex-1 py-2 rounded-xl font-bold transition-all cursor-pointer ${role === 'monitor'
                     ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
                     : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
@@ -250,6 +271,33 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               >
                 Người giám sát
               </button>
+            </div>
+          )}
+
+          {/* Grade Dropdown — chỉ hiện khi chọn Học sinh */}
+          {!isLoginMode && role === 'student' && (
+            <div className="pt-1">
+              <label className="block text-[#8C4905] text-sm font-bold mb-1">
+                Lớp học <span className="text-[#CB6600]">*</span>
+              </label>
+              <select
+                value={grade ?? ""}
+                onChange={(e) => setGrade(e.target.value ? Number(e.target.value) : null)}
+                disabled={isLoading}
+                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 cursor-pointer ${
+                  errors.grade
+                    ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]'
+                    : 'focus:ring-[#F7AD62] border-transparent'
+                }`}
+              >
+                <option value="" disabled>-- Chọn lớp --</option>
+                {[4, 5, 6, 7, 8, 9].map((g) => (
+                  <option key={g} value={g}>Lớp {g}</option>
+                ))}
+              </select>
+              {errors.grade && (
+                <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.grade}</p>
+              )}
             </div>
           )}
           {errors.role && !isLoginMode && (
@@ -283,7 +331,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full mt-4 bg-[#000000] text-[#F7ECE1] font-bold py-3 rounded-xl hover:bg-gray-800 transition-colors flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-md cursor-pointer"
+            className="w-full mt-4 bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold py-3.5 rounded-xl hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-md cursor-pointer"
           >
             {isLoading ? (
               <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -296,7 +344,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
         {/* Social Login & Toggle Mode */}
         {isLoginMode && (
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center hidden">
             <div className="flex justify-center mb-4">
               <button
                 type="button"
