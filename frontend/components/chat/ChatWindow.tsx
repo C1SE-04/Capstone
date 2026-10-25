@@ -264,11 +264,11 @@ export function ChatWindow({
         <div className="max-w-4xl mx-auto flex flex-col min-h-full">
           {/* Hiển thị màn hình khởi tạo khi chưa có tin nhắn (New Chat) */}
           {messages.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 py-16 text-center animate-in fade-in duration-300">
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 py-12 sm:py-16 px-4 text-center animate-in fade-in duration-300">
               <div className="w-16 h-16 bg-[#F1CCA6] rounded-2xl flex items-center justify-center text-[#8C4905] shadow-inner">
                 <Sparkles size={32} />
               </div>
-              <h2 className="text-2xl font-bold text-[#8C4905]">
+              <h2 className="text-xl sm:text-2xl font-bold text-[#8C4905]">
                 Bắt đầu phiên học mới với SocraticKid
               </h2>
               <p className="text-[#C1762A] max-w-md text-sm leading-relaxed">

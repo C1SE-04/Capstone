@@ -929,23 +929,17 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[100dvh] w-screen bg-[#F7ECE1] overflow-hidden font-sans">
-      {/* Sidebar bên trái với transition trượt thu gọn / mở rộng mượt mà */}
-      <div
-        className={cn(
-          "h-full overflow-hidden transition-[width,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          isSidebarCollapsed ? "w-0 opacity-0 pointer-events-none" : "w-64 opacity-100"
-        )}
-      >
-        <ChatSidebar
-          isMobileOpen={isMobileOpen}
-          setIsMobileOpen={setIsMobileOpen}
-          conversations={conversations}
-          activeChatId={activeChatId}
-          onSelectChat={handleSelectChat}
-          onNewChat={handleNewChat}
-          onDeleteChat={handleDeleteChat}
-        />
-      </div>
+      {/* Sidebar bên trái */}
+      <ChatSidebar
+        isMobileOpen={isMobileOpen}
+        setIsMobileOpen={setIsMobileOpen}
+        isCollapsed={isSidebarCollapsed}
+        conversations={conversations}
+        activeChatId={activeChatId}
+        onSelectChat={handleSelectChat}
+        onNewChat={handleNewChat}
+        onDeleteChat={handleDeleteChat}
+      />
 
       {/* Khu vực nội dung Chat bên phải */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">

@@ -13,6 +13,7 @@ interface ChatSidebarProps {
   className?: string;
   isMobileOpen: boolean;
   setIsMobileOpen: (open: boolean) => void;
+  isCollapsed?: boolean;
   conversations: Conversation[];
   activeChatId: string | null;
   onSelectChat: (id: string) => void;
@@ -24,6 +25,7 @@ export function ChatSidebar({
   className,
   isMobileOpen,
   setIsMobileOpen,
+  isCollapsed = false,
   conversations,
   activeChatId,
   onSelectChat,
@@ -56,11 +58,17 @@ export function ChatSidebar({
       {/* Sidebar container trượt mượt mà */}
       <aside
         className={cn(
-          "fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#F1CCA6] flex flex-col h-full transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-[#C1762A]/20 flex-shrink-0",
+          "fixed md:static inset-y-0 left-0 z-50 bg-[#F1CCA6] flex flex-col h-full flex-shrink-0 border-r border-[#C1762A]/20",
+          "transition-[width,transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          "w-64",
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          isCollapsed
+            ? "md:w-0 md:opacity-0 md:pointer-events-none md:border-r-0 md:overflow-hidden"
+            : "md:w-64 md:opacity-100",
           className
         )}
       >
+        <div className="relative w-64 min-w-[16rem] flex flex-col h-full">
         {/* Mobile close button */}
         <div className="md:hidden flex justify-end p-4 pb-0">
           <button onClick={() => setIsMobileOpen(false)} className="text-[#8C4905]">
@@ -186,6 +194,7 @@ export function ChatSidebar({
           >
             <Settings size={20} />
           </button>
+        </div>
         </div>
       </aside>
     </>
