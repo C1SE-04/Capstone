@@ -594,6 +594,29 @@ class FlashcardContent(BaseModel):
         from_attributes = True
 
 
+# =========================================================================
+# --- US 8.1: Problem Deduplication & Classification Schemas (Task T8.1) ---
+# =========================================================================
+
+class ProblemClassificationResult(BaseModel):
+    """
+    Kết quả phân loại bài tập từ Gemini AI.
+    Phục vụ đánh giá năng lực thực chất (Deduplication) và nhận diện bài hỏi lại nhiều lần.
+    """
+    category: str                        # "NEW_TOPIC" | "ISOMORPHIC_PRACTICE" | "EXACT_DUPLICATE"
+    confidence_score: float = 1.0        # Độ tin cậy của phân loại (0.0 đến 1.0)
+    reasoning: str                       # Phân tích lý do sư phạm / giải thích kết quả
+    matched_problem: Optional[str] = None # Đề bài lịch sử có độ tương đồng/trùng khớp nhất (nếu có)
+    is_repeated_query: bool = False      # Học sinh có hỏi lại bài này/dạng này nhiều lần không
+    repeat_count: int = 1                # Số lần xuất hiện của bài này hoặc dạng bài này
+    gentle_reminder: Optional[str] = None # Lời nhắc nhở nhẹ nhàng nếu là EXACT_DUPLICATE hoặc hỏi lại nhiều lần
+    pedagogical_recommendation: str      # Khuyến nghị sư phạm cho hệ thống đánh giá
+    is_fallback: bool = False            # Đánh dấu nếu kết quả trả về từ Heuristic Fallback
+
+    class Config:
+        from_attributes = True
+
+
 # ==============================================================================
 # US 7.3 - Task T7.31: Schemas cho Admin Portal & Mock Router (/admin/mock)
 # ==============================================================================
