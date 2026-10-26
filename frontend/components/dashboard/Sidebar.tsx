@@ -8,7 +8,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { History, Settings, Settings2, LogOut, X, UserPlus, LayoutDashboard, BookMarked } from "lucide-react";
+import { History, Settings, Settings2, LogOut, X, UserPlus, LayoutDashboard, BookMarked, Trophy } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -48,7 +48,8 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
     ...(!isMonitor
       ? [
           { name: "Sổ tay", href: "/dashboard/notebook", icon: BookMarked },
-          ...(!pathname.startsWith("/dashboard/settings") && !pathname.startsWith("/dashboard/notebook")
+          { name: "Bảng xếp hạng", href: "/dashboard/leaderboard", icon: Trophy },
+          ...(!pathname.startsWith("/dashboard/settings") && !pathname.startsWith("/dashboard/notebook") && !pathname.startsWith("/dashboard/leaderboard")
             ? [{ name: "Lịch sử", href: "/dashboard/history", icon: History }]
             : []),
         ]
