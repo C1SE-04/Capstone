@@ -266,6 +266,35 @@ class SummaryCardsResponse(BaseModel):
     avgMinutesPerDay: int
 
 
+# --- US 8.2: Streak Leaderboard Schemas ---
+
+class StreakLeaderboardItem(BaseModel):
+    """Thông tin một học sinh trên Bảng Xếp Hạng Chuỗi Ngày Học."""
+    rank: int
+    student_id: str
+    display_name: str
+    avatar: Optional[str] = None
+    grade: Optional[int] = None
+    streak_days: int
+    max_streak: Optional[int] = None
+    is_current_user: bool = False
+
+    class Config:
+        from_attributes = True
+
+
+class StreakLeaderboardResponse(BaseModel):
+    """Phản hồi API GET /metrics/streak-leaderboard."""
+    scope: str  # "ALL" hoặc "GRADE_{grade}"
+    grade: Optional[int] = None
+    total_participants: int
+    leaderboard: list[StreakLeaderboardItem] = []
+    current_user_entry: Optional[StreakLeaderboardItem] = None
+
+    class Config:
+        from_attributes = True
+
+
 class CloudinaryUploadResponse(BaseModel):
     """Response trả về sau khi upload ảnh lên Cloudinary thành công."""
     success: bool
@@ -327,13 +356,22 @@ class ChildProblemsResponse(BaseModel):
     items: list[ChildProblemItem] = []
 
 
-# --- US 7.2: Bookmark / Notebook Schema (Task T7.7) ---
+# --- US 7.2 & US 8.2: Bookmark / Notebook & Playlist Schemas ---
 
 class BookmarkCreate(BaseModel):
     """Body gửi lên khi học sinh lưu bài toán vào Sổ Tay."""
     session_id: str
     message_created_at: Optional[datetime] = None  # Thời điểm bài toán cần lưu (từ tin nhắn chúc mừng)
     note: Optional[str] = None                    # Ghi chú tuỳ ý của học sinh
+    title: Optional[str] = None                   # US 8.2: Tên bài toán do học sinh tự đặt hoặc AI gợi ý
+    playlist_ids: Optional[list[str]] = None      # US 8.2: Danh sách playlist muốn lưu bài vào
+
+
+class BookmarkUpdate(BaseModel):
+    """Body cập nhật tiêu đề, ghi chú hoặc danh sách playlist của bookmark (US 8.2)."""
+    title: Optional[str] = None
+    note: Optional[str] = None
+    playlist_ids: Optional[list[str]] = None
 
 
 class BookmarkResponse(BaseModel):
@@ -346,12 +384,56 @@ class BookmarkResponse(BaseModel):
     attachment_url: Optional[str] = None    # Ảnh đề bài Cloudinary
     chat_summary: Optional[str] = None      # Tóm tắt đoạn chat khi lưu
     independence_score: Optional[int] = None
+    title: Optional[str] = None             # US 8.2: Tên bài toán do học sinh đặt hoặc AI gợi ý
     note: Optional[str] = None
+    playlist_ids: list[str] = []            # US 8.2: Các playlist bài này đang thuộc về
     created_at: datetime
     dialogue_messages: list[ProblemDialogueMessage] = []
 
     class Config:
         from_attributes = True
+
+
+class PlaylistCreate(BaseModel):
+    """Body tạo mới Bookmark Playlist (YouTube-style) - US 8.2."""
+    name: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+    initial_bookmark_id: Optional[str] = None  # Tự động add bài toán này vào playlist sau khi tạo
+
+
+class PlaylistUpdate(BaseModel):
+    """Body cập nhật thông tin Bookmark Playlist - US 8.2."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+
+
+class PlaylistResponse(BaseModel):
+    """Thông tin trả về của một Playlist - US 8.2."""
+    id: str
+    student_id: str
+    name: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+    is_default: bool = False
+    item_count: int = 0
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PlaylistItemAdd(BaseModel):
+    """Body thêm bài toán vào Playlist - US 8.2."""
+    bookmark_id: str
+
+
+class PlaylistDetailResponse(PlaylistResponse):
+    """Chi tiết Playlist kèm danh sách các bài toán - US 8.2."""
+    items: list[BookmarkResponse] = []
+
 
 
 # ========================================================
