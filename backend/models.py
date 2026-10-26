@@ -252,6 +252,8 @@ class ProblemBookmark(Base):
     chat_summary = Column(String, nullable=True)
     # Điểm tự lực (Independence Score) tại thời điểm lưu
     independence_score = Column(Integer, nullable=True)
+    # Tên bài toán do học sinh tự đặt hoặc AI gợi ý (US 8.2)
+    title = Column(String, nullable=True)
     # Ghi chú tuỳ ý của học sinh
     note = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -264,6 +266,76 @@ class ProblemBookmark(Base):
 
     student = relationship("User", backref="bookmarks")
     session = relationship("Session", backref="bookmarks")
+
+
+class BookmarkPlaylist(Base):
+    """
+    US 8.2: Danh sách phát / Thư mục Sổ Tay (Bookmark Playlist) phong cách YouTube.
+    Học sinh có thể tạo nhiều playlist (Yêu thích, Ôn thi HK1, ...) để gom nhóm bài toán.
+    """
+    __tablename__ = "bookmark_playlists"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    student_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    color = Column(String, nullable=True)        # Mã màu HEX phân loại (VD: #F59E0B)
+    is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_bookmark_playlists_student_created", "student_id", "created_at"),
+        Index("ix_bookmark_playlists_student_name", "student_id", "name"),
+    )
+
+    student = relationship("User", backref="bookmark_playlists")
+    items = relationship(
+        "BookmarkPlaylistItem",
+        back_populates="playlist",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="BookmarkPlaylistItem.added_at.desc()",
+    )
+
+
+class BookmarkPlaylistItem(Base):
+    """
+    US 8.2: Bảng liên kết N-N giữa BookmarkPlaylist và ProblemBookmark.
+    Một bài toán có thể thuộc nhiều playlist (checkbox YouTube-style).
+    """
+    __tablename__ = "bookmark_playlist_items"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    playlist_id = Column(
+        String,
+        ForeignKey("bookmark_playlists.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    bookmark_id = Column(
+        String,
+        ForeignKey("problem_bookmarks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position = Column(Integer, default=0, nullable=False)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_playlist_items_unique", "playlist_id", "bookmark_id", unique=True),
+        Index("ix_playlist_items_playlist", "playlist_id", "added_at"),
+        Index("ix_playlist_items_bookmark", "bookmark_id"),
+    )
+
+    playlist = relationship("BookmarkPlaylist", back_populates="items")
+    bookmark = relationship("ProblemBookmark", backref="playlist_items")
+
 
 
 class ParentAiInsight(Base):

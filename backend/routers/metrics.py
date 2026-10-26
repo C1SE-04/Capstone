@@ -475,6 +475,15 @@ def calculate_student_streak(student_id: str, db: Session) -> tuple[int, int]:
         if row.d:
             all_dates.add(row.d)
 
+    return _compute_streak_from_dates(all_dates)
+
+
+def _compute_streak_from_dates(all_dates: set[date]) -> tuple[int, int]:
+    """
+    Tính (current_streak, max_streak) từ tập hợp các ngày có hoạt động học tập.
+    - current_streak: Tính từ hôm nay hoặc hôm qua lùi về trước.
+    - max_streak: Chuỗi ngày học liên tục dài nhất trong toàn bộ lịch sử.
+    """
     if not all_dates:
         return 0, 0
 
@@ -482,10 +491,6 @@ def calculate_student_streak(student_id: str, db: Session) -> tuple[int, int]:
     today = date.today()
     yesterday = today - timedelta(days=1)
 
-    # 4. Tính current_streak:
-    # Nếu ngày học gần nhất là hôm nay: đếm từ hôm nay lùi về trước.
-    # Nếu ngày học gần nhất là hôm qua: đếm từ hôm qua lùi về trước (vì ngày hôm nay vẫn đang diễn ra).
-    # Nếu ngày gần nhất < hôm qua: streak đã đứt (current_streak = 0).
     current_streak = 0
     if sorted_dates[0] == today:
         current_streak = 1
@@ -508,7 +513,6 @@ def calculate_student_streak(student_id: str, db: Session) -> tuple[int, int]:
     else:
         current_streak = 0
 
-    # 5. Tính max_streak (chuỗi ngày liên tiếp kỷ lục trong toàn bộ lịch sử)
     asc_dates = sorted(all_dates)
     max_streak = 1
     running = 1
@@ -521,6 +525,148 @@ def calculate_student_streak(student_id: str, db: Session) -> tuple[int, int]:
             running = 1
 
     return current_streak, max(max_streak, current_streak)
+
+
+# ==============================================================================
+# US 8.2: BẢNG XẾP HẠNG CHUỖI NGÀY HỌC (STREAK LEADERBOARD)
+# ==============================================================================
+
+@router.get("/metrics/streak-leaderboard", response_model=schemas.StreakLeaderboardResponse)
+def get_streak_leaderboard(
+    grade: Optional[int] = Query(None, ge=4, le=9, description="Lọc theo khối lớp (Lớp 4 - 9). Bỏ trống để xem Toàn Server"),
+    limit: int = Query(20, ge=1, le=100, description="Số lượng học sinh trong top (mặc định 20, tối đa 100)"),
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Bảng xếp hạng chuỗi ngày học liên tục (Streak Leaderboard) - US 8.2.
+    - Hỗ trợ lọc theo Khối lớp (Lớp 4 - 9) hoặc xem Toàn Server.
+    - Bảo vệ riêng tư: Chỉ hiện Tên hiển thị (display_name), Avatar, Khối lớp, Số ngày Streak và Rank.
+    - Xác định vị trí xếp hạng của học sinh đang đăng nhập (current_user_entry).
+    - Tối ưu hóa truy vấn dạng batch (tránh N+1 queries).
+    - Sắp xếp: Số ngày streak hiện tại giảm dần, kỷ lục streak giảm dần.
+    """
+    query = db.query(models.User).filter(models.User.role == "STUDENT")
+    if grade is not None:
+        query = query.filter(models.User.grade == grade)
+
+    students = query.all()
+    if not students:
+        return schemas.StreakLeaderboardResponse(
+            scope=f"GRADE_{grade}" if grade is not None else "ALL",
+            grade=grade,
+            total_participants=0,
+            leaderboard=[],
+            current_user_entry=None,
+        )
+
+    student_ids = [s.id for s in students]
+    student_map = {s.id: s for s in students}
+
+    # Batch query tất cả ngày học của danh sách học sinh (3 queries duy nhất)
+    user_dates: dict[str, set[date]] = {sid: set() for sid in student_ids}
+
+    # 1. Từ intervals
+    for r in (
+        db.query(
+            models.SessionActiveInterval.user_id,
+            cast(models.SessionActiveInterval.start_time, Date).label("d")
+        )
+        .filter(models.SessionActiveInterval.user_id.in_(student_ids))
+        .distinct()
+        .all()
+    ):
+        if r.user_id and r.d:
+            user_dates[r.user_id].add(r.d)
+
+    # 2. Từ independence_scores
+    for r in (
+        db.query(
+            models.IndependenceScore.student_id,
+            cast(models.IndependenceScore.created_at, Date).label("d")
+        )
+        .filter(models.IndependenceScore.student_id.in_(student_ids))
+        .distinct()
+        .all()
+    ):
+        if r.student_id and r.d:
+            user_dates[r.student_id].add(r.d)
+
+    # 3. Từ sessions
+    for r in (
+        db.query(
+            models.Session.user_id,
+            cast(models.Session.created_at, Date).label("d")
+        )
+        .filter(models.Session.user_id.in_(student_ids))
+        .distinct()
+        .all()
+    ):
+        if r.user_id and r.d:
+            user_dates[r.user_id].add(r.d)
+
+    # Tính streak cho từng học sinh
+    ranked_list = []
+    current_uid = current_user.get("id")
+
+    for sid in student_ids:
+        cur_streak, m_streak = _compute_streak_from_dates(user_dates[sid])
+        s_obj = student_map[sid]
+
+        # Tên hiển thị bảo vệ riêng tư: lấy phần trước @ của email (VD: hoangnam hoặc student1)
+        email_prefix = s_obj.email.split("@")[0] if s_obj.email else "Học sinh"
+        avatar_url = f"https://api.dicebear.com/7.x/bottts/svg?seed={sid}"
+
+        ranked_list.append({
+            "student_id": sid,
+            "display_name": email_prefix,
+            "avatar": avatar_url,
+            "grade": s_obj.grade,
+            "streak_days": cur_streak,
+            "max_streak": m_streak,
+            "created_at": s_obj.created_at,
+        })
+
+    # Sắp xếp: streak_days giảm dần, max_streak giảm dần, created_at tăng dần
+    ranked_list.sort(
+        key=lambda x: (
+            -x["streak_days"],
+            -x["max_streak"],
+            x["created_at"] or datetime.min,
+        )
+    )
+
+    total_participants = len(ranked_list)
+    leaderboard_items: list[schemas.StreakLeaderboardItem] = []
+    current_user_entry: Optional[schemas.StreakLeaderboardItem] = None
+
+    for idx, item in enumerate(ranked_list, start=1):
+        is_cur = (item["student_id"] == current_uid)
+        entry = schemas.StreakLeaderboardItem(
+            rank=idx,
+            student_id=item["student_id"],
+            display_name=item["display_name"],
+            avatar=item["avatar"],
+            grade=item["grade"],
+            streak_days=item["streak_days"],
+            max_streak=item["max_streak"],
+            is_current_user=is_cur,
+        )
+        if is_cur:
+            current_user_entry = entry
+        if len(leaderboard_items) < limit:
+            leaderboard_items.append(entry)
+
+    scope_name = f"GRADE_{grade}" if grade is not None else "ALL"
+
+    return schemas.StreakLeaderboardResponse(
+        scope=scope_name,
+        grade=grade,
+        total_participants=total_participants,
+        leaderboard=leaderboard_items,
+        current_user_entry=current_user_entry,
+    )
+
 
 
 @router.get("/metrics/heatmap", response_model=schemas.ActivityHeatmapResponse)
