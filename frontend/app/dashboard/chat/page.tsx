@@ -361,20 +361,20 @@ export default function ChatPage() {
       prev.map((c) =>
         c.id === activeChatId
           ? {
-              ...c,
-              messages: [
-                ...c.messages,
-                {
-                  id: congratsId,
-                  role: "assistant" as const,
-                  content: randomMsg,
-                  emotion: "correct",
-                  isAnswerRevealed: false, // Không hiện lại nút Đã hiểu/Chưa hiểu
-                  isCongrats: true, // Đánh dấu tin nhắn chúc mừng để hiển thị nút Lưu vào Sổ tay
-                  created_at: scoreCreatedAt || new Date().toISOString(),
-                },
-              ],
-            }
+            ...c,
+            messages: [
+              ...c.messages,
+              {
+                id: congratsId,
+                role: "assistant" as const,
+                content: randomMsg,
+                emotion: "correct",
+                isAnswerRevealed: false, // Không hiện lại nút Đã hiểu/Chưa hiểu
+                isCongrats: true, // Đánh dấu tin nhắn chúc mừng để hiển thị nút Lưu vào Sổ tay
+                created_at: scoreCreatedAt || new Date().toISOString(),
+              },
+            ],
+          }
           : c
       )
     );
@@ -459,18 +459,18 @@ export default function ChatPage() {
                     prev.map((c) =>
                       c.id === conversationId
                         ? {
-                            ...c,
-                            messages: c.messages.map((m) =>
-                              m.id === botMessageId
-                                ? {
-                                    ...m,
-                                    content: aiText,
-                                    emotion: lastEmotion,
-                                    isAnswerRevealed: isAnswerRevealedFlag,
-                                  }
-                                : m,
-                            ),
-                          }
+                          ...c,
+                          messages: c.messages.map((m) =>
+                            m.id === botMessageId
+                              ? {
+                                ...m,
+                                content: aiText,
+                                emotion: lastEmotion,
+                                isAnswerRevealed: isAnswerRevealedFlag,
+                              }
+                              : m,
+                          ),
+                        }
                         : c,
                     ),
                   );
@@ -555,11 +555,11 @@ export default function ChatPage() {
         prev.map((c) =>
           c.id === targetConversationId
             ? {
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === userMessageId ? { ...m, status: "error" } : m,
-                ),
-              }
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === userMessageId ? { ...m, status: "error" } : m,
+              ),
+            }
             : c,
         ),
       );
@@ -574,11 +574,11 @@ export default function ChatPage() {
         prev.map((c) =>
           c.id === targetConversationId
             ? {
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === userMessageId ? { ...m, status: "sent" } : m,
-                ),
-              }
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === userMessageId ? { ...m, status: "sent" } : m,
+              ),
+            }
             : c,
         ),
       );
@@ -677,18 +677,18 @@ export default function ChatPage() {
                     prev.map((c) =>
                       c.id === targetConversationId
                         ? {
-                            ...c,
-                            messages: c.messages.map((m) =>
-                              m.id === botMessageId
-                                ? {
-                                    ...m,
-                                    content: aiText,
-                                    emotion: lastEmotion,
-                                    isAnswerRevealed: isAnswerRevealedFlag,
-                                  }
-                                : m,
-                            ),
-                          }
+                          ...c,
+                          messages: c.messages.map((m) =>
+                            m.id === botMessageId
+                              ? {
+                                ...m,
+                                content: aiText,
+                                emotion: lastEmotion,
+                                isAnswerRevealed: isAnswerRevealedFlag,
+                              }
+                              : m,
+                          ),
+                        }
                         : c,
                     ),
                   );
@@ -865,13 +865,13 @@ export default function ChatPage() {
               prev.map((c) =>
                 c.id === targetId
                   ? {
-                      ...c,
-                      messages: c.messages.map((m) =>
-                        m.id === messageId
-                          ? { ...m, attachment_url: uploadedAttachmentUrl }
-                          : m,
-                      ),
-                    }
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === messageId
+                        ? { ...m, attachment_url: uploadedAttachmentUrl }
+                        : m,
+                    ),
+                  }
                   : c,
               ),
             );
@@ -904,11 +904,11 @@ export default function ChatPage() {
       prev.map((c) =>
         c.id === activeChatId
           ? {
-              ...c,
-              messages: c.messages.map((m) =>
-                m.id === messageId ? { ...m, status: "sending" } : m,
-              ),
-            }
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === messageId ? { ...m, status: "sending" } : m,
+            ),
+          }
           : c,
       ),
     );

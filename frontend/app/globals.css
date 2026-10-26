@@ -109,3 +109,76 @@ input:disabled,
 .cursor-not-allowed {
   cursor: not-allowed !important;
 }
+
+/* Animation Ngọn lửa Streak 7 mốc tiến hóa (Task T8.9) */
+
+/* Mốc 3 ngày — Đốm lửa nhỏ rung nhẹ, sống động nhưng khiêm tốn */
+@keyframes flame-flicker {
+  0% { transform: scale(1) rotate(0deg) translateY(0); }
+  20% { transform: scale(1.06) rotate(-1.5deg) translateY(-0.5px); }
+  40% { transform: scale(0.97) rotate(1deg) translateY(0.3px); }
+  60% { transform: scale(1.04) rotate(-0.5deg) translateY(-0.3px); }
+  80% { transform: scale(0.98) rotate(1.2deg) translateY(0.2px); }
+  100% { transform: scale(1) rotate(0deg) translateY(0); }
+}
+
+/* Mốc 10 ngày — Bập bùng mạnh hơn, nhấp nhổm nhanh */
+@keyframes flame-bob {
+  0% { transform: scale(1) translateY(0) rotate(0deg); }
+  15% { transform: scale(1.12) translateY(-1px) rotate(-2deg); }
+  30% { transform: scale(0.95) translateY(0.5px) rotate(1.5deg); }
+  50% { transform: scale(1.1) translateY(-0.8px) rotate(-1deg); }
+  70% { transform: scale(0.97) translateY(0.3px) rotate(1deg); }
+  85% { transform: scale(1.06) translateY(-0.5px) rotate(-0.5deg); }
+  100% { transform: scale(1) translateY(0) rotate(0deg); }
+}
+
+/* Mốc 30/60 ngày — Hào quang nhịp thở sáng dần rồi tắt nhẹ */
+@keyframes flame-glow-pulse {
+  0% { transform: scale(1); opacity: 0.88; filter: brightness(1); }
+  50% { transform: scale(1.1); opacity: 1; filter: brightness(1.15); }
+  100% { transform: scale(1); opacity: 0.88; filter: brightness(1); }
+}
+
+/* Mốc 100/200 ngày — Lấp lánh sao sáng, xoay nhẹ + phóng to */
+@keyframes star-twinkle {
+  0% { transform: scale(1) rotate(0deg); opacity: 0.85; filter: brightness(1); }
+  30% { transform: scale(1.15) rotate(4deg); opacity: 1; filter: brightness(1.2); }
+  60% { transform: scale(0.95) rotate(-2deg); opacity: 0.9; filter: brightness(1.05); }
+  100% { transform: scale(1) rotate(0deg); opacity: 0.85; filter: brightness(1); }
+}
+
+/* Mốc 365 ngày — Phượng hoàng vỗ cánh bốc lên */
+@keyframes phoenix-flutter {
+  0% { transform: translateY(0) scale(1) rotate(0deg); }
+  20% { transform: translateY(-1.5px) scale(1.12) rotate(-2deg); }
+  40% { transform: translateY(0.5px) scale(0.96) rotate(1.5deg); }
+  60% { transform: translateY(-1px) scale(1.08) rotate(-1deg); }
+  80% { transform: translateY(0.3px) scale(0.98) rotate(0.5deg); }
+  100% { transform: translateY(0) scale(1) rotate(0deg); }
+}
+
+.animate-flame-flicker {
+  animation: flame-flicker 2s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.animate-flame-bob {
+  animation: flame-bob 1.1s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.animate-flame-pulse {
+  animation: flame-glow-pulse 2.4s ease-in-out infinite;
+  transform-origin: center center;
+}
+
+.animate-star-twinkle {
+  animation: star-twinkle 1.8s ease-in-out infinite;
+  transform-origin: center center;
+}
+
+.animate-phoenix {
+  animation: phoenix-flutter 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: bottom center;
+}
