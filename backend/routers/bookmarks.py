@@ -10,17 +10,18 @@
 
 import uuid
 import collections
+import models
+import schemas
+import dependencies
 from typing import Optional
 from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
+from agents.problem_title_generator import generate_friendly_problem_title
 
-import models
-import schemas
-import dependencies
+
 from database import get_db
 
 router = APIRouter(prefix="/bookmarks", tags=["Bookmarks"])
@@ -321,6 +322,28 @@ def _to_bookmark_response(
 # ==============================================================================
 # POST /bookmarks — Tạo bookmark mới
 # ==============================================================================
+@router.post("/suggest-title", response_model=schemas.ProblemTitleResult)
+def suggest_problem_title(
+    body: schemas.ProblemTitleGenerateRequest,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    US 8.1 - Task T8.3:
+    Gọi Prompt Gemini sinh tên bài toán mặc định (friendly_parent_title) chuẩn sư phạm:
+    [Lớp X] [Chủ đề] – [Tên dạng toán]
+    Dùng làm placeholder gợi ý khi học sinh bấm 'Lưu vào Sổ tay'.
+    """
+    problem_text = body.problem_text.strip() if body.problem_text else ""
+    grade_val = body.grade or current_user.get("grade") or 5
+
+    # Nếu truyền session_id mà chưa có problem_text, tự động trích xuất từ session
+    if not problem_text and body.session_id:
+        from deduplication import extract_session_problem_text
+        problem_text = extract_session_problem_text(db, body.session_id)
+
+    result = generate_friendly_problem_title(problem_text=problem_text, grade=grade_val)
+    return result
 
 @router.post("", response_model=schemas.BookmarkResponse, status_code=201)
 def create_bookmark(
@@ -356,6 +379,15 @@ def create_bookmark(
     score_val = snapshot["independence_score"]
 
     title_val = body.title.strip() if body.title and body.title.strip() else None
+
+    # US 8.1 (Task T8.3): Nếu học sinh để trống tiêu đề khi lưu, tự động dùng tên AI chuẩn sư phạm
+    if not title_val:
+        student_grade = current_user.get("grade") or 5
+        auto_title_obj = generate_friendly_problem_title(
+            problem_text=p_snap or session.title or "Bài toán",
+            grade=student_grade
+        )
+        title_val = auto_title_obj.friendly_parent_title
 
     # Kiểm tra xem bài toán này đã được lưu trong session chưa (so khớp đề bài / ảnh)
     existing_bookmarks = (

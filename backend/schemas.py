@@ -616,7 +616,33 @@ class ProblemClassificationResult(BaseModel):
     class Config:
         from_attributes = True
 
+# =========================================================================
+# --- US 8.1: Problem Friendly Title Generator Schemas (Task T8.3) ---
+# =========================================================================
 
+class ProblemTitleGenerateRequest(BaseModel):
+    """Body gửi lên yêu cầu AI gợi ý tên bài toán."""
+    problem_text: str                           # Nội dung đề bài toán (hoặc câu hỏi toán học)
+    grade: Optional[int] = None                 # Khối lớp của học sinh (4 - 9), nếu không có AI tự suy luận
+    session_id: Optional[str] = None            # ID phiên học (tùy chọn)
+
+
+class ProblemTitleResult(BaseModel):
+    """
+    Kết quả sinh tên bài toán mặc định (friendly_parent_title) chuẩn sư phạm (Task T8.3).
+    Dùng làm placeholder gợi ý khi học sinh bấm 'Lưu vào Sổ tay' và hiển thị cho phụ huynh.
+    Định dạng chuẩn: [Lớp X] [Chủ đề] – [Tên dạng toán]
+    """
+    friendly_parent_title: str                  # Tiêu đề chuẩn sư phạm, VD: "[Lớp 5] Phân số – Tìm phân số của một số"
+    grade: int                                  # Khối lớp xác định (4 - 9)
+    topic: str                                  # Tên chủ đề lớn (VD: "Phân số", "Hình học", "Chuyển động đều")
+    subtopic_type: str                          # Tên dạng toán chi tiết (VD: "Tìm phân số của một số")
+    short_summary: Optional[str] = None         # Tóm tắt siêu ngắn gọn đề bài (< 15 từ)
+    is_fallback: bool = False                   # True nếu trả về từ cơ chế Rule-based khi Gemini mất kết nối
+
+    class Config:
+        from_attributes = True
+        
 # ==============================================================================
 # US 7.3 - Task T7.31: Schemas cho Admin Portal & Mock Router (/admin/mock)
 # ==============================================================================
@@ -888,4 +914,4 @@ class CurriculumTopicListResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
+
