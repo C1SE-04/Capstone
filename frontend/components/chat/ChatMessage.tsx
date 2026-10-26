@@ -8,7 +8,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm"; // Hỗ trợ cú pháp GitHub Flavored Markdown (như table, strikethrough)
 import remarkMath from "remark-math"; // Hỗ trợ cú pháp toán học (dấu $ hoặc $$)
@@ -19,6 +18,7 @@ import { Message } from "@/types/chat";
 import { UnderstandingButtons } from "./UnderstandingButtons";
 import { ImageZoomModal } from "./ImageZoomModal";
 import { SaveBookmarkButton } from "./SaveBookmarkButton";
+import { preprocessLaTeX } from "@/lib/latex";
 
 export type MessageProps = Message;
 
@@ -54,11 +54,6 @@ export function ChatMessage({
 
   // State quản lý xem ảnh phóng to ở giữa màn hình
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   // Lắng nghe phím Escape và khóa cuộn trang khi đang mở ảnh
   useEffect(() => {
@@ -81,11 +76,11 @@ export function ChatMessage({
   return (
     // Wrap chính: flex để đẩy bong bóng sang phải (user) hoặc trái (assistant) với hiệu ứng pop-in mượt mà
     <div className={cn("flex w-full mb-5 animate-message-pop", isUser ? "justify-end" : "justify-start")}>
-      <div className={cn("flex flex-col max-w-[85%] md:max-w-[75%]", isUser ? "items-end" : "items-start")}>
+      <div className={cn("flex flex-col min-w-0 max-w-[85%] md:max-w-[75%]", isUser ? "items-end" : "items-start")}>
         {/* Bong bóng chat */}
         <div
           className={cn(
-            "px-5 py-4 rounded-2xl shadow-sm text-[15px] leading-relaxed transition-all",
+            "px-5 py-4 rounded-2xl shadow-sm text-[15px] leading-relaxed transition-all min-w-0 max-w-full overflow-hidden break-words",
             isUser
               ? isError
                 ? "bg-red-50 text-red-900 border border-red-300 rounded-tr-sm"
@@ -155,7 +150,7 @@ export function ChatMessage({
           ) : (
             // Tin nhắn của assistant: Cần render thành Markdown và Toán học.
             // Sử dụng các class `prose-*` của Tailwind (hoặc tùy chỉnh thủ công) để định dạng các thẻ HTML (h1, p, pre, code, table) bên trong Markdown.
-            <div className="markdown-prose prose-sm max-w-none text-stone-900 
+            <div className="markdown-prose prose-sm max-w-none text-stone-900 min-w-0 break-words overflow-hidden
               prose-p:leading-relaxed prose-p:mb-3 
               prose-pre:bg-[#D9D9D9]/30 prose-pre:text-[#8C4905] prose-pre:p-3 prose-pre:rounded-lg
               prose-code:text-[#CB6600] prose-code:bg-[#F1CCA6]/40 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
@@ -167,12 +162,12 @@ export function ChatMessage({
               prose-a:text-[#C1762A] hover:prose-a:text-[#8C4905] prose-a:underline
               prose-strong:text-[#8C4905]"
             >
-              {/* Component ReactMarkdown thực hiện chức năng phân tích cú pháp chuỗi thành HTML */}
+              {/* Component ReactMarkdown thực hiện chức năng phân tích cú pháp chuỗi thành HTML (đã qua preprocessor KaTeX chuẩn hóa) */}
               <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm]}
                 rehypePlugins={[rehypeKatex]}
               >
-                {message.content}
+                {preprocessLaTeX(message.content)}
               </ReactMarkdown>
             </div>
           )}
