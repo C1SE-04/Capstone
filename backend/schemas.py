@@ -833,4 +833,59 @@ class AdminSystemSettings(BaseModel):
     last_updated_by: str
 
     class Config:
-        from_attributes = True
+        from_attributes = True
+
+
+# ========================================================
+# --- US 8.4: Curriculum Topics Schemas (Task T8.23) ---
+# ========================================================
+
+class CurriculumTopicBase(BaseModel):
+    grade: int
+    book_series: str = "Kết nối tri thức"
+    semester: Optional[int] = None
+    chapter_name: str
+    topic_name: str
+    order_index: int = 0
+    school_year: Optional[str] = None
+    is_active: bool = True
+    source_url: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CurriculumTopicCreate(CurriculumTopicBase):
+    pass
+
+
+class CurriculumTopicUpdate(BaseModel):
+    book_series: Optional[str] = None
+    semester: Optional[int] = None
+    chapter_name: Optional[str] = None
+    topic_name: Optional[str] = None
+    order_index: Optional[int] = None
+    school_year: Optional[str] = None
+    is_active: Optional[bool] = None
+    source_url: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CurriculumTopicToggle(BaseModel):
+    is_active: bool
+
+
+class CurriculumTopicResponse(CurriculumTopicBase):
+    id: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CurriculumTopicListResponse(BaseModel):
+    total: int
+    items: list[CurriculumTopicResponse] = []
+
+    class Config:
+        from_attributes = True
+
