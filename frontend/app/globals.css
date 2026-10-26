@@ -109,3 +109,56 @@ input:disabled,
 .cursor-not-allowed {
   cursor: not-allowed !important;
 }
+
+/* ==========================================================================
+   T8.5 - US 8.1: Tối ưu hiển thị KaTeX & Responsive chống tràn viền mobile
+   ========================================================================== */
+.markdown-prose {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Đảm bảo công thức toán khối (Display Math) tự động cuộn ngang mượt mà trên mobile (375px) */
+.markdown-prose .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  padding: 0.5rem 0.25rem;
+  margin: 0.75rem 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(193, 118, 42, 0.3) transparent;
+}
+
+/* Tùy chỉnh thanh cuộn mảnh thanh lịch cùng tông màu cam của SocraticKid */
+.markdown-prose .katex-display::-webkit-scrollbar {
+  height: 4px;
+}
+
+.markdown-prose .katex-display::-webkit-scrollbar-thumb {
+  background-color: rgba(193, 118, 42, 0.3);
+  border-radius: 9999px;
+}
+
+.markdown-prose .katex-display::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(140, 73, 5, 0.6);
+}
+
+.markdown-prose .katex-display::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Đảm bảo công thức toán nội dòng (Inline Math) không làm xô lệch dòng văn bản */
+.markdown-prose .katex {
+  max-width: 100%;
+  line-height: normal;
+  white-space: normal;
+}
+
+.markdown-prose .katex-html {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
