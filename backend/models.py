@@ -207,11 +207,22 @@ class IndependenceScore(Base):
     hints_used = Column(Integer, default=0, nullable=False)
     not_understood_count = Column(Integer, default=0, nullable=False)
     evaluation = Column(String, nullable=True)
+    # Nội dung đề bài toán trích xuất từ phiên học
+    problem_text = Column(String, nullable=True)
+    # Mã băm SHA-256 của đề bài đã chuẩn hóa (dùng cho Fast-path deduplication)
+    problem_hash = Column(String(64), nullable=True, index=True)
+    # Phân loại: NEW_TOPIC | ISOMORPHIC_PRACTICE | EXACT_DUPLICATE
+    category = Column(String, default="NEW_TOPIC", nullable=True)
+    # Cờ đánh dấu bài trùng lặp (nếu True: chặn không cộng dồn vào total_completed)
+    is_duplicate = Column(Boolean, default=False, nullable=False)
+    # Lời nhắc nhở nhẹ nhàng nếu là bài trùng lặp EXACT_DUPLICATE
+    gentle_reminder = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_independence_student_created", "student_id", "created_at"),
         Index("ix_independence_session_created", "session_id", "created_at"),
+        Index("ix_independence_student_hash", "student_id", "problem_hash"),
     )
 
     session = relationship("Session", back_populates="independence_records")
