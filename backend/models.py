@@ -431,4 +431,43 @@ class StudentBadge(Base):
         Index("ix_student_badges_unique", "student_id", "badge_key", unique=True),
         Index("ix_student_badges_student", "student_id", "unlocked_at"),
     )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 8.4: Chương Trình Học Linh Động (Curriculum Topics)
+# ────────────────────────────────────────────────────────────────────────────
+
+class CurriculumTopic(Base):
+    """
+    US 8.4 - Task T8.23:
+    Bảng lưu danh mục chuyên đề & bài học chuẩn SGK (môn Toán lớp 4 - 9).
+    - Hỗ trợ crawler VietJack tự động bóc tách và upsert vào DB.
+    - Hỗ trợ Admin Portal (admin/content) xem danh mục, lọc theo lớp, toggle Bật/Tắt (is_active).
+    - Hỗ trợ AI Engine (agent_prompts.py) tải động chương trình học theo khối lớp.
+    """
+    __tablename__ = "curriculum_topics"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    grade = Column(Integer, nullable=False, index=True)                          # Khối lớp (4 - 9)
+    book_series = Column(String, nullable=False, default="Kết nối tri thức")     # Bộ SGK: "Kết nối tri thức", "Cánh diều", "Chân trời sáng tạo"
+    semester = Column(Integer, nullable=True)                                    # Học kỳ (1 hoặc 2)
+    chapter_name = Column(String, nullable=False)                                # Tên Chủ đề / Chương lớn (VD: "Chương 1: Phân số")
+    topic_name = Column(String, nullable=False)                                  # Tên bài học / chuyên đề (VD: "Bài 1: Khái niệm phân số")
+    order_index = Column(Integer, default=0, nullable=False)                     # Thứ tự bài học trong chương/học kỳ
+    school_year = Column(String, nullable=True)                                  # Niên khóa (VD: "2024-2025")
+    is_active = Column(Boolean, default=True, nullable=False)                    # Trạng thái Bật/Tắt giảm tải của Admin
+    source_url = Column(String, nullable=True)                                   # URL nguồn VietJack cào dữ liệu
+    description = Column(String, nullable=True)                                  # Mô tả tóm tắt nội dung bài học
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        # Composite Unique Index chống trùng lặp khi crawler chạy đồng bộ nhiều lần
+        Index("ix_curriculum_unique_topic", "grade", "book_series", "chapter_name", "topic_name", unique=True),
+        # Index tối ưu cho AI prompt query chuyên đề đang bật theo khối lớp
+        Index("ix_curriculum_grade_active", "grade", "is_active"),
+        # Index tối ưu hiển thị danh mục theo chương và thứ tự bài học
+        Index("ix_curriculum_grade_chapter_order", "grade", "chapter_name", "order_index"),
+    )
+
 
