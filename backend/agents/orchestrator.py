@@ -399,7 +399,16 @@ class OrchestratorAgent:
 
     def __init__(self, model_name: Optional[str] = None, **kwargs: Any) -> None:
         self.model_name = model_name
-
+        self._minimal_arithmetic_re = re.compile(
+            r"^(?:thầy ơi\s+|thầy\s+|thưa thầy\s+|bạn ơi\s+|tính\s+|em muốn tính\s+|cho em hỏi\s+|giúp em\s+|phép tính\s+|phép tính này\s+)?"
+            r"(\d+(?:\.\d+)?)\s*"
+            r"([:\/÷\*x×\+\-]|chia cho|chia|nhân với|nhân|cộng với|cộng|trừ đi|trừ)\s*"
+            r"(\d+(?:\.\d+)?)"
+            r"(?:\s*(?:=|bằng|\?|là|ra)?\s*(?:\?|mấy|bao nhiêu|la bao nhieu|bao nhiu|j|gì)?)?"
+            r"\s*(?:ạ|nhé|nha|hả|ha|à|nhỉ|ơi)?"
+            r"\s*[\?!\.]*$",
+            re.IGNORECASE | re.UNICODE,
+        )
         # Pre-compile regex từ cấm
         escaped = [re.escape(w) for w in self.PROFANITY_LIST]
         self._profanity_re = re.compile(
@@ -515,6 +524,142 @@ class OrchestratorAgent:
         "em làm được rồi", "làm được rồi", "giải được rồi",
         "dạ vâng", "vâng ạ", "dạ", "vâng",
     )
+
+    @staticmethod
+    def _parse_minimal_operator(raw_op: str) -> Tuple[str, str]:
+        """
+        Chuẩn hóa toán tử biểu thức tối giản thành mã phép tính (DIV, MUL, ADD, SUB) và ký hiệu toán học chuẩn.
+        """
+        raw = raw_op.strip().lower()
+        if raw in (":", "/", "÷", "chia cho", "chia"):
+            return "DIV", ":"
+        if raw in ("*", "x", "×", "nhân với", "nhân"):
+            return "MUL", "×"
+        if raw in ("+", "cộng với", "cộng"):
+            return "ADD", "+"
+        if raw in ("-", "trừ đi", "trừ"):
+            return "SUB", "-"
+        return "UNKNOWN", raw
+
+    def _detect_minimal_arithmetic_expr(
+        self,
+        text_clean: str,
+        original_message: str,
+    ) -> Optional[RoutingResult]:
+        """
+        Trụ cột 1 — Nhận diện biểu thức toán học tối giản (Task T8.16 - US 8.2).
+        Ví dụ: "4/2", "10:2", "3*5", "12+8", "10:2 = ?", "thầy ơi 4/2 bằng mấy ạ".
+        Điều phối trực tiếp sang SCAFFOLDING với chỉ đạo Socratic sư phạm (chia kẹo / đồ vật).
+        """
+        m = self._minimal_arithmetic_re.match(text_clean)
+        if not m:
+            return None
+
+        a_str, raw_op, b_str = m.group(1), m.group(2), m.group(3)
+        op_type, std_op = self._parse_minimal_operator(raw_op)
+        if op_type == "UNKNOWN":
+            return None
+
+        # Tránh nhận diện nhầm các ngày lễ phổ biến của học sinh Việt Nam khi dùng ký tự / hoặc :
+        if raw_op in ("/", ":") and "." not in a_str and "." not in b_str:
+            a_int, b_int = int(a_str), int(b_str)
+            special_dates = {
+                (20, 11), (2, 9), (30, 4), (1, 5), (1, 6),
+                (8, 3), (20, 10), (22, 12),
+                (19, 5),   # Ngày sinh Bác Hồ
+                (26, 3),   # Ngày thành lập Đoàn TNCS
+                (10, 3),   # Giỗ Tổ Hùng Vương
+                (27, 7),   # Ngày Thương binh Liệt sĩ
+                (3, 2),    # Ngày thành lập Đảng
+            }
+            math_intent_signals = ("=", "tính", "bằng", "mấy", "bao nhiêu", "chia")
+            if (a_int, b_int) in special_dates and not any(sig in text_clean for sig in math_intent_signals):
+                return None  # Coi là ngày tháng, để các phễu khác xử lý
+
+        # Chuyển đổi giá trị số
+        try:
+            val_a = float(a_str) if "." in a_str else int(a_str)
+            val_b = float(b_str) if "." in b_str else int(b_str)
+        except Exception:
+            return None
+
+        # Ngoại lệ chia cho 0: Tuyệt đối không gợi mở "chia kẹo cho 0 bạn" (vô lý toán học & sư phạm)
+        if op_type == "DIV" and val_b == 0:
+            return None  # Để phễu khác / LLM giải thích bản chất phép chia cho 0 không xác định
+
+        # Tính toán giá trị tham chiếu nội bộ (dùng để nhắc AI không được vô tình nói ra đáp án)
+        ref_val = ""
+        try:
+            if op_type == "DIV":
+                res = val_a / val_b
+                ref_val = f"{int(res)}" if res.is_integer() else f"{res:.2f}"
+            elif op_type == "MUL":
+                res = val_a * val_b
+                ref_val = f"{int(res)}" if res.is_integer() else f"{res:.2f}"
+            elif op_type == "ADD":
+                res = val_a + val_b
+                ref_val = f"{int(res)}" if res.is_integer() else f"{res:.2f}"
+            elif op_type == "SUB":
+                res = val_a - val_b
+                ref_val = f"{int(res)}" if res.is_integer() else f"{res:.2f}"
+        except Exception:
+            ref_val = ""
+
+        # Xây dựng chỉ đạo sư phạm Socratic đặc thù (chuẩn AC 8.2.7)
+        display_expr = f"{a_str} {std_op} {b_str}"
+        if op_type == "DIV":
+            task_desc = (
+                f"Học sinh vừa gửi phép tính chia tối giản: '{display_expr}'. "
+                "Bạn là THẦY GIÁO, điều phối Socratic trực tiếp: "
+                f"TUYỆT ĐỐI KHÔNG giải bài, TUYỆT ĐỐI KHÔNG nói ra kết quả{' là ' + ref_val if ref_val else ''}. "
+                f"BẮT BUỘC gợi mở tư duy cho học sinh bằng hình tượng thực tế gần gũi dạng CHIA KẸO / QUẢ TÁO: "
+                f"Đặt câu hỏi gợi mở trực quan (ví dụ: 'Giả sử em có {a_str} cái kẹo và muốn chia đều cho {b_str} bạn, "
+                f"vậy mỗi bạn sẽ nhận được mấy cái kẹo nhỉ?'). "
+                "Chỉ đặt DUY NHẤT 1 câu hỏi gợi mở ngắn gọn (1-2 câu), ấm áp, khích lệ học sinh tự suy nghĩ."
+            )
+        elif op_type == "MUL":
+            task_desc = (
+                f"Học sinh vừa gửi phép tính nhân tối giản: '{display_expr}'. "
+                "Bạn là THẦY GIÁO, điều phối Socratic trực tiếp: "
+                f"TUYỆT ĐỐI KHÔNG giải bài, TUYỆT ĐỐI KHÔNG nói ra kết quả{' là ' + ref_val if ref_val else ''}. "
+                f"BẮT BUỘC gợi mở tư duy cho học sinh bằng hình tượng GOM NHÓM ĐỒ VẬT hoặc PHÉP CỘNG LẶP: "
+                f"Đặt câu hỏi gợi mở (ví dụ: 'Giả sử em có {b_str} túi kẹo, mỗi túi có {a_str} viên, "
+                f"hoặc số {a_str} được lấy {b_str} lần, em thử tính xem có tất cả bao nhiêu viên kẹo nhé?'). "
+                "Chỉ đặt DUY NHẤT 1 câu hỏi gợi mở ngắn gọn (1-2 câu)."
+            )
+        elif op_type == "ADD":
+            task_desc = (
+                f"Học sinh vừa gửi phép tính cộng tối giản: '{display_expr}'. "
+                "Bạn là THẦY GIÁO, điều phối Socratic trực tiếp: "
+                f"TUYỆT ĐỐI KHÔNG giải bài, TUYỆT ĐỐI KHÔNG nói ra kết quả. "
+                f"Gợi mở trực quan thêm vào đồ vật (ví dụ: 'Em đang có {a_str} món đồ, có thêm {b_str} món nữa, "
+                f"tất cả là bao nhiêu nhỉ?'). Chỉ đặt DUY NHẤT 1 câu hỏi ngắn gọn (1-2 câu)."
+            )
+        else:  # SUB
+            if val_a >= val_b:
+                analogy_desc = (
+                    f"Gợi mở trực quan bớt đi đồ vật (ví dụ: 'Em có {a_str} cái kẹo, bớt đi {b_str} cái, "
+                    f"vậy em còn lại mấy cái kẹo nhỉ?')."
+                )
+            else:
+                analogy_desc = (
+                    f"Gợi mở so sánh trực quan giữa số bị trừ {a_str} và số trừ {b_str} "
+                    f"(ví dụ: 'Em thử quan sát xem số {a_str} có đủ để bớt đi {b_str} cái kẹo không nhỉ, "
+                    f"hay ta cần hình dung bước lùi trên tia số?')."
+                )
+            task_desc = (
+                f"Học sinh vừa gửi phép tính trừ tối giản: '{display_expr}'. "
+                "Bạn là THẦY GIÁO, điều phối Socratic trực tiếp: "
+                f"TUYỆT ĐỐI KHÔNG giải bài, TUYỆT ĐỐI KHÔNG nói ra kết quả{' là ' + ref_val if ref_val else ''}. "
+                f"{analogy_desc} Chỉ đặt DUY NHẤT 1 câu hỏi ngắn gọn (1-2 câu)."
+            )
+
+        return RoutingResult(
+            selected_agent="SCAFFOLDING",
+            task_description=task_desc,
+            routing_scratchpad=f"[Trụ1] Minimal math expression detected: '{text_clean}' ({op_type}) -> Direct Socratic dispatch",
+            emotion_flag="GUIDING",
+        )
 
     def _state_machine_route(
         self,
@@ -656,6 +801,14 @@ class OrchestratorAgent:
                 routing_scratchpad=f"[Trụ1] Help signal: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )
+
+        # =========================================================================
+        # 1.6b Biểu thức toán học tối giản (Task T8.16 - US 8.2)
+        # Nhận diện: 4/2, 10:2, 3*5, 12+8... điều phối thẳng SCAFFOLDING (Socratic)
+        # =========================================================================
+        minimal_math = self._detect_minimal_arithmetic_expr(text_clean, original_message)
+        if minimal_math is not None:
+            return minimal_math
 
         # 1.7 So khớp Toán học với correctSolution
         correct_solution = None
