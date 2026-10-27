@@ -217,6 +217,10 @@ class IndependenceScore(Base):
     is_duplicate = Column(Boolean, default=False, nullable=False)
     # Lời nhắc nhở nhẹ nhàng nếu là bài trùng lặp EXACT_DUPLICATE
     gentle_reminder = Column(String, nullable=True)
+    # Tên bài toán do học sinh tự đặt khi lưu Sổ tay (US 8.1 - T8.4)
+    custom_title = Column(String, nullable=True)
+    # Tên bài toán chuẩn sư phạm do AI sinh ra ([Lớp X] [Chủ đề] – [Dạng toán])
+    friendly_parent_title = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

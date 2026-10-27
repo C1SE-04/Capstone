@@ -1047,6 +1047,9 @@ def get_child_problems(
         "Hoc sinh van chua hieu sau nhieu lan giai thich. Hay dua ra dap an chinh xac va giai thich tung buoc that ro rang.",
     )
 
+    student_user = db.query(models.User).filter(models.User.id == student_id).first()
+    student_grade = (student_user.grade if student_user and student_user.grade else 5)
+
     items: list[schemas.ChildProblemItem] = []
 
     for score, session in score_rows:
@@ -1178,11 +1181,74 @@ def get_child_problems(
         if eval_text in EVAL_MAP:
             eval_text = EVAL_MAP[eval_text]
 
+        # ── US 8.1 (Task T8.4): Xác định tên bài toán hiển thị cho Phụ Huynh ──
+        # Quy tắc:
+        # 1. Nếu bài đó học sinh CÓ lưu vào sổ tay & tự gõ tên riêng (custom_title):
+        #    -> Hiển thị đúng tên con tự đặt (để tôn trọng cảm xúc và cách tư duy của con)
+        # 2. Nếu bài đó học sinh KHÔNG bấm lưu vào sổ tay (hoặc có lưu nhưng để trống tên):
+        #    -> Tự động dùng tên chuẩn sư phạm do AI sinh ra (friendly_parent_title)
+        resolved_custom_title: Optional[str] = None
+        if score.custom_title and score.custom_title.strip():
+            resolved_custom_title = score.custom_title.strip()
+        else:
+            # Tra cứu từ bảng problem_bookmarks xem học sinh có bookmark bài này và đặt tên riêng không
+            matching_bms = (
+                db.query(models.ProblemBookmark)
+                .filter(
+                    models.ProblemBookmark.student_id == student_id,
+                    models.ProblemBookmark.session_id == session.id,
+                )
+                .all()
+            )
+            for bm in matching_bms:
+                if bm.title and bm.title.strip():
+                    bm_title = bm.title.strip()
+                    # Phân biệt tên do con tự đặt vs tên mẫu sư phạm mặc định
+                    # Tên AI chuẩn sư phạm luôn có dạng: [Lớp X] ... – ...
+                    is_ai_pattern = bm_title.startswith("[Lớp ") and " – " in bm_title
+                    if not is_ai_pattern:
+                        resolved_custom_title = bm_title
+                        break
+
+        # Tên chuẩn sư phạm (friendly_parent_title) do AI sinh ra
+        resolved_friendly_title: str = ""
+        if score.friendly_parent_title and score.friendly_parent_title.strip():
+            resolved_friendly_title = score.friendly_parent_title.strip()
+        else:
+            from agents.problem_title_generator import generate_friendly_problem_title
+            prob_text = (
+                score.problem_text
+                or (summary_parts[0] if summary_parts else None)
+                or session.title
+                or "Bài toán"
+            )
+            try:
+                auto_title_obj = generate_friendly_problem_title(
+                    problem_text=prob_text,
+                    grade=student_grade
+                )
+                resolved_friendly_title = auto_title_obj.friendly_parent_title
+            except Exception:
+                resolved_friendly_title = f"[Lớp {student_grade}] Bài toán – Luyện tập chung"
+
+            # Cache lại vào database để các lần gọi sau không cần sinh lại
+            score.friendly_parent_title = resolved_friendly_title
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+
+        # Tiêu đề bài toán hiển thị: Ưu tiên tên con tự đặt, fallback về tên AI chuẩn sư phạm
+        display_title = resolved_custom_title if resolved_custom_title else resolved_friendly_title
+
         items.append(
             schemas.ChildProblemItem(
                 id=score.id,
                 session_id=session.id,
-                session_title=session.title,
+                session_title=display_title,
+                problem_title=display_title,
+                custom_title=resolved_custom_title,
+                friendly_parent_title=resolved_friendly_title,
                 completed_at=score.created_at,
                 score=score.score,
                 hints_used=score.hints_used,

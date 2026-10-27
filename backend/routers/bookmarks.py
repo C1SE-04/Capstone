@@ -484,6 +484,28 @@ def create_bookmark(
             )
         db.commit()
 
+    # US 8.1 (T8.4): Đồng bộ custom_title vào bảng independence_scores nếu học sinh tự đặt tên
+    if body.title and body.title.strip():
+        custom_name = body.title.strip()
+        score_q = (
+            db.query(models.IndependenceScore)
+            .filter(
+                models.IndependenceScore.student_id == student_id,
+                models.IndependenceScore.session_id == body.session_id,
+            )
+        )
+        if body.message_created_at:
+            matched_score = (
+                score_q.filter(models.IndependenceScore.created_at >= body.message_created_at - timedelta(seconds=10))
+                .order_by(models.IndependenceScore.created_at.asc())
+                .first()
+            )
+        else:
+            matched_score = score_q.order_by(models.IndependenceScore.created_at.desc()).first()
+        if matched_score:
+            matched_score.custom_title = custom_name
+            db.commit()
+
     return _to_bookmark_response(bookmark, db, session_title=session.title)
 
 
@@ -1075,7 +1097,20 @@ def update_bookmark(
         raise HTTPException(status_code=403, detail="Bạn không có quyền chỉnh sửa bookmark này.")
 
     if body.title is not None:
-        bm.title = body.title.strip() if body.title.strip() else None
+        clean_title = body.title.strip() if body.title.strip() else None
+        bm.title = clean_title
+        # US 8.1 - T8.4: Đồng bộ custom_title vào bảng independence_scores
+        score_rec = (
+            db.query(models.IndependenceScore)
+            .filter(
+                models.IndependenceScore.student_id == bm.student_id,
+                models.IndependenceScore.session_id == bm.session_id,
+            )
+            .order_by(models.IndependenceScore.created_at.desc())
+            .first()
+        )
+        if score_rec:
+            score_rec.custom_title = clean_title
 
     if body.note is not None:
         bm.note = body.note
