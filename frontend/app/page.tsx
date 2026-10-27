@@ -9,9 +9,13 @@ export default function Home() {
   const router = useRouter();
   const [showAuthForm, setShowAuthForm] = useState(false);
 
-  // Nếu người dùng có role ADMIN, tự động chuyển hướng thẳng vào dashboard admin
+  // Nếu là user mới (chưa onboarding) hoặc là ADMIN, tự động chuyển hướng
   useEffect(() => {
     if (session) {
+      if (session.is_new_user || (session.user as any)?.is_new_user) {
+        router.replace("/onboarding");
+        return;
+      }
       const role = (session.user as any)?.role;
       if (role === "ADMIN") {
         router.replace("/admin");
@@ -90,6 +94,10 @@ export default function Home() {
         <button 
           onClick={() => {
             if (session) {
+              if (session.is_new_user || (session.user as any)?.is_new_user) {
+                router.push("/onboarding");
+                return;
+              }
               const role = (session.user as any)?.role;
               if (role === "ADMIN") {
                 router.push("/admin");
@@ -104,11 +112,13 @@ export default function Home() {
           }}
           className="bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold text-lg py-3.5 px-10 rounded-xl hover:brightness-105 active:scale-95 transition-all shadow-md cursor-pointer">
           {session 
-            ? ((session.user as any)?.role === "ADMIN" 
-                ? "Vào Dashboard Quản Trị" 
-                : (session.user as any)?.role === "MONITOR" 
-                  ? "Vào Dashboard" 
-                  : "Vô khung chat") 
+            ? (session.is_new_user || (session.user as any)?.is_new_user
+                ? "Hoàn tất thiết lập ngay"
+                : (session.user as any)?.role === "ADMIN" 
+                  ? "Vào Dashboard Quản Trị" 
+                  : (session.user as any)?.role === "MONITOR" 
+                    ? "Vào Dashboard" 
+                    : "Vô khung chat") 
             : "Dùng thử ngay"}
         </button>
       </main>
