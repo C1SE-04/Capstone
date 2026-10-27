@@ -9,6 +9,7 @@ import { ImageZoomModal } from "@/components/chat/ImageZoomModal";
 import { FileTooLargeToast } from "@/components/chat/FileTooLargeToast";
 // T7.18 (US 7.2): Streak Flame & Badge Modal
 import { StreakBadge } from "@/components/chat/StreakBadge";
+import { SaveBookmarkButton } from "@/components/chat/SaveBookmarkButton";
 import { BadgeModal, BadgeItem, DEFAULT_BADGES } from "@/components/chat/BadgeModal";
 import { getMergedBadges, saveStoredBadge, resetStoredBadge } from "@/lib/badgeStorage";
 import { Conversation, Message } from "@/types/chat";
@@ -972,8 +973,14 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Khu vực Streak ngọn lửa & Nút bật/tắt thanh ảnh bài tập bên phải */}
+          {/* Khu vực Lưu vào Sổ tay, Streak ngọn lửa & Nút bật/tắt thanh ảnh bài tập bên phải */}
           <div className="flex items-center gap-2">
+            {/* T8.12: Nút Lưu vào Sổ tay dạng Playlist (YouTube-style) */}
+            <SaveBookmarkButton
+              sessionId={activeChatId || conversations[0]?.id}
+              className="mt-0"
+            />
+
             {/* T7.18: Biểu tượng ngọn lửa hoạt hình Streak 🔥 */}
             <StreakBadge
               onStreakLoaded={handleStreakLoaded}
