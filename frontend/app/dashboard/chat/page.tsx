@@ -130,14 +130,19 @@ export default function ChatPage() {
     }
   }, [badgeQueue, isBadgeModalOpen]);
 
-  // Khi tải xong số ngày streak: nếu >= 3 ngày -> mở khóa "Kiên Trì Bền Bỉ" (streak_3)
+  // Khi tải xong số ngày streak: kiểm tra theo kỷ lục cao nhất (nếu >= 3 ngày -> mở khóa, nếu < 3 ngày -> khóa lại)
   const handleStreakLoaded = useCallback(
-    (streakCount: number) => {
-      if (streakCount >= 3) {
+    (streakCount: number, maxStreakCount?: number) => {
+      const highestStreak = maxStreakCount !== undefined ? Math.max(streakCount, maxStreakCount) : streakCount;
+      if (highestStreak >= 3) {
         triggerUnlockBadge("streak_3");
+      } else {
+        // Tự động thu hồi/khóa lại nếu trước đó bị mở do test thử số ngày
+        resetStoredBadge("streak_3", userId);
+        setAllBadges(getMergedBadges(userId));
       }
     },
-    [triggerUnlockBadge]
+    [triggerUnlockBadge, userId]
   );
 
   const isOnline = useSyncExternalStore(
@@ -991,7 +996,7 @@ export default function ChatPage() {
                   ? "bg-[#C1762A] text-white border-[#C1762A] shadow-sm"
                   : "bg-white text-[#8C4905] border-[#F1CCA6] hover:bg-[#F1CCA6]/40"
               )}
-              title="Đóng / mở thanh ảnh bài tập bên phải (giống Zalo)"
+              title="Đóng / mở thanh ảnh bài tập bên phải"
             >
               <PanelRight size={17} />
               <span className="hidden sm:inline">Ảnh bài tập</span>
