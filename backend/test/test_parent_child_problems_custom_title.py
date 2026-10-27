@@ -30,7 +30,11 @@ current_mock_user: dict = {"id": TEST_PARENT_ID, "role": "MONITOR"}
 def mock_user():
     return current_mock_user
 
-app.dependency_overrides[dependencies.get_current_user] = mock_user
+@pytest.fixture(autouse=True)
+def override_user():
+    app.dependency_overrides[dependencies.get_current_user] = mock_user
+    yield
+    app.dependency_overrides.pop(dependencies.get_current_user, None)
 
 def cleanup_db(db):
     db.rollback()
