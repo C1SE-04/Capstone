@@ -56,10 +56,13 @@ def save_independence_score(
     custom_not_understood: Optional[int] = None,
     custom_evaluation: Optional[str] = None,
     problem_text_input: Optional[str] = None,
+    custom_title: Optional[str] = None,
+    friendly_parent_title: Optional[str] = None,
 ) -> models.IndependenceScore:
     """
-    Kích hoạt tính điểm và lưu bản ghi Independence vào DB (Task #159, #160 & US 8.1 - T8.2).
+    Kích hoạt tính điểm và lưu bản ghi Independence vào DB (Task #159, #160 & US 8.1 - T8.2, T8.4).
     Tích hợp kiểm tra Deduplication: tính problem_hash, gọi Prompt phân loại và chặn cộng dồn bài lặp.
+    Tự động sinh và lưu friendly_parent_title và custom_title (nếu có).
     """
     # 1. Tìm session và user
     session_obj = db.query(models.Session).filter(models.Session.id == session_id).first()
@@ -109,6 +112,21 @@ def save_independence_score(
 
     is_duplicate_flag = (dedup_result.category == "EXACT_DUPLICATE")
 
+    # ── 4.5. US 8.1 (T8.3 & T8.4): SINH TÊN CHUẨN SƯ PHẠM (friendly_parent_title) ─────
+    resolved_friendly_title = friendly_parent_title
+    if not resolved_friendly_title:
+        try:
+            student_user = db.query(models.User).filter(models.User.id == resolved_student_id).first()
+            student_grade = student_user.grade if (student_user and student_user.grade) else 5
+            from agents.problem_title_generator import generate_friendly_problem_title
+            title_obj = generate_friendly_problem_title(
+                problem_text=resolved_problem_text or (session_obj.title if session_obj else "Bài toán"),
+                grade=student_grade
+            )
+            resolved_friendly_title = title_obj.friendly_parent_title
+        except Exception:
+            resolved_friendly_title = None
+
     # ── 5. Lưu bản ghi vào bảng independence_scores ───────────────────────
     record = models.IndependenceScore(
         session_id=session_id,
@@ -122,6 +140,8 @@ def save_independence_score(
         category=dedup_result.category,
         is_duplicate=is_duplicate_flag,
         gentle_reminder=dedup_result.gentle_reminder,
+        custom_title=custom_title,
+        friendly_parent_title=resolved_friendly_title,
     )
     db.add(record)
 
@@ -142,7 +162,7 @@ def record_independence_score(
     db: Session = Depends(get_db),
 ):
     """
-    Task #159: Tiếp nhận điểm số Independence từ AI hoặc Client và lưu vào DB.
+    Task #159 & US 8.1 - T8.4: Tiếp nhận điểm số Independence từ AI hoặc Client và lưu vào DB.
     """
     student_id = body.student_id or (current_user["id"] if current_user else None)
 
@@ -154,6 +174,8 @@ def record_independence_score(
         custom_hints=body.hints_used,
         custom_not_understood=body.not_understood_count,
         custom_evaluation=body.evaluation,
+        custom_title=body.custom_title,
+        friendly_parent_title=body.friendly_parent_title,
     )
 
     return {
@@ -167,6 +189,8 @@ def record_independence_score(
             "hints_used": record.hints_used,
             "not_understood_count": record.not_understood_count,
             "evaluation": record.evaluation,
+            "custom_title": record.custom_title,
+            "friendly_parent_title": record.friendly_parent_title,
             "created_at": record.created_at.isoformat() if record.created_at else None,
         },
     }

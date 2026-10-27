@@ -144,6 +144,8 @@ class IndependenceRecordCreate(BaseModel):
     hints_used: Optional[int] = None
     not_understood_count: Optional[int] = None
     evaluation: Optional[str] = None
+    custom_title: Optional[str] = None
+    friendly_parent_title: Optional[str] = None
 
 
 class IndependenceRecordResponse(BaseModel):
@@ -154,6 +156,8 @@ class IndependenceRecordResponse(BaseModel):
     hints_used: int
     not_understood_count: int
     evaluation: Optional[str] = None
+    custom_title: Optional[str] = None
+    friendly_parent_title: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -333,7 +337,10 @@ class ChildProblemItem(BaseModel):
     """Thông tin 1 bài toán con đã giải, trả về cho Dashboard Phụ Huynh."""
     id: Optional[str] = None                 # ID bản ghi IndependenceScore (duy nhất)
     session_id: str                          # ID session chứa bài toán
-    session_title: Optional[str] = None      # Tiêu đề phòng chat (nếu có)
+    session_title: Optional[str] = None      # Tiêu đề phòng chat / tiêu đề hiển thị (US 8.1: ưu tiên custom_title, fallback friendly_parent_title)
+    problem_title: Optional[str] = None      # Tên bài toán hiển thị cho phụ huynh
+    custom_title: Optional[str] = None       # Tên bài toán do học sinh tự đặt khi lưu Sổ tay (nếu có)
+    friendly_parent_title: Optional[str] = None # Tên chuẩn sư phạm do AI sinh ra
     completed_at: datetime                   # Thời điểm hoàn thành (timestamp IndependenceScore)
     score: int                               # Điểm tự lực (0–100)
     hints_used: int                          # Số gợi ý đã dùng
