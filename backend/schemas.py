@@ -266,6 +266,35 @@ class SummaryCardsResponse(BaseModel):
     avgMinutesPerDay: int
 
 
+# --- US 8.2: Streak Leaderboard Schemas ---
+
+class StreakLeaderboardItem(BaseModel):
+    """Thông tin một học sinh trên Bảng Xếp Hạng Chuỗi Ngày Học."""
+    rank: int
+    student_id: str
+    display_name: str
+    avatar: Optional[str] = None
+    grade: Optional[int] = None
+    streak_days: int
+    max_streak: Optional[int] = None
+    is_current_user: bool = False
+
+    class Config:
+        from_attributes = True
+
+
+class StreakLeaderboardResponse(BaseModel):
+    """Phản hồi API GET /metrics/streak-leaderboard."""
+    scope: str  # "ALL" hoặc "GRADE_{grade}"
+    grade: Optional[int] = None
+    total_participants: int
+    leaderboard: list[StreakLeaderboardItem] = []
+    current_user_entry: Optional[StreakLeaderboardItem] = None
+
+    class Config:
+        from_attributes = True
+
+
 class CloudinaryUploadResponse(BaseModel):
     """Response trả về sau khi upload ảnh lên Cloudinary thành công."""
     success: bool
@@ -327,13 +356,22 @@ class ChildProblemsResponse(BaseModel):
     items: list[ChildProblemItem] = []
 
 
-# --- US 7.2: Bookmark / Notebook Schema (Task T7.7) ---
+# --- US 7.2 & US 8.2: Bookmark / Notebook & Playlist Schemas ---
 
 class BookmarkCreate(BaseModel):
     """Body gửi lên khi học sinh lưu bài toán vào Sổ Tay."""
     session_id: str
     message_created_at: Optional[datetime] = None  # Thời điểm bài toán cần lưu (từ tin nhắn chúc mừng)
     note: Optional[str] = None                    # Ghi chú tuỳ ý của học sinh
+    title: Optional[str] = None                   # US 8.2: Tên bài toán do học sinh tự đặt hoặc AI gợi ý
+    playlist_ids: Optional[list[str]] = None      # US 8.2: Danh sách playlist muốn lưu bài vào
+
+
+class BookmarkUpdate(BaseModel):
+    """Body cập nhật tiêu đề, ghi chú hoặc danh sách playlist của bookmark (US 8.2)."""
+    title: Optional[str] = None
+    note: Optional[str] = None
+    playlist_ids: Optional[list[str]] = None
 
 
 class BookmarkResponse(BaseModel):
@@ -346,12 +384,56 @@ class BookmarkResponse(BaseModel):
     attachment_url: Optional[str] = None    # Ảnh đề bài Cloudinary
     chat_summary: Optional[str] = None      # Tóm tắt đoạn chat khi lưu
     independence_score: Optional[int] = None
+    title: Optional[str] = None             # US 8.2: Tên bài toán do học sinh đặt hoặc AI gợi ý
     note: Optional[str] = None
+    playlist_ids: list[str] = []            # US 8.2: Các playlist bài này đang thuộc về
     created_at: datetime
     dialogue_messages: list[ProblemDialogueMessage] = []
 
     class Config:
         from_attributes = True
+
+
+class PlaylistCreate(BaseModel):
+    """Body tạo mới Bookmark Playlist (YouTube-style) - US 8.2."""
+    name: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+    initial_bookmark_id: Optional[str] = None  # Tự động add bài toán này vào playlist sau khi tạo
+
+
+class PlaylistUpdate(BaseModel):
+    """Body cập nhật thông tin Bookmark Playlist - US 8.2."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+
+
+class PlaylistResponse(BaseModel):
+    """Thông tin trả về của một Playlist - US 8.2."""
+    id: str
+    student_id: str
+    name: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+    is_default: bool = False
+    item_count: int = 0
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PlaylistItemAdd(BaseModel):
+    """Body thêm bài toán vào Playlist - US 8.2."""
+    bookmark_id: str
+
+
+class PlaylistDetailResponse(PlaylistResponse):
+    """Chi tiết Playlist kèm danh sách các bài toán - US 8.2."""
+    items: list[BookmarkResponse] = []
+
 
 
 # ========================================================
@@ -512,6 +594,55 @@ class FlashcardContent(BaseModel):
         from_attributes = True
 
 
+# =========================================================================
+# --- US 8.1: Problem Deduplication & Classification Schemas (Task T8.1) ---
+# =========================================================================
+
+class ProblemClassificationResult(BaseModel):
+    """
+    Kết quả phân loại bài tập từ Gemini AI.
+    Phục vụ đánh giá năng lực thực chất (Deduplication) và nhận diện bài hỏi lại nhiều lần.
+    """
+    category: str                        # "NEW_TOPIC" | "ISOMORPHIC_PRACTICE" | "EXACT_DUPLICATE"
+    confidence_score: float = 1.0        # Độ tin cậy của phân loại (0.0 đến 1.0)
+    reasoning: str                       # Phân tích lý do sư phạm / giải thích kết quả
+    matched_problem: Optional[str] = None # Đề bài lịch sử có độ tương đồng/trùng khớp nhất (nếu có)
+    is_repeated_query: bool = False      # Học sinh có hỏi lại bài này/dạng này nhiều lần không
+    repeat_count: int = 1                # Số lần xuất hiện của bài này hoặc dạng bài này
+    gentle_reminder: Optional[str] = None # Lời nhắc nhở nhẹ nhàng nếu là EXACT_DUPLICATE hoặc hỏi lại nhiều lần
+    pedagogical_recommendation: str      # Khuyến nghị sư phạm cho hệ thống đánh giá
+    is_fallback: bool = False            # Đánh dấu nếu kết quả trả về từ Heuristic Fallback
+
+    class Config:
+        from_attributes = True
+
+# =========================================================================
+# --- US 8.1: Problem Friendly Title Generator Schemas (Task T8.3) ---
+# =========================================================================
+
+class ProblemTitleGenerateRequest(BaseModel):
+    """Body gửi lên yêu cầu AI gợi ý tên bài toán."""
+    problem_text: str                           # Nội dung đề bài toán (hoặc câu hỏi toán học)
+    grade: Optional[int] = None                 # Khối lớp của học sinh (4 - 9), nếu không có AI tự suy luận
+    session_id: Optional[str] = None            # ID phiên học (tùy chọn)
+
+
+class ProblemTitleResult(BaseModel):
+    """
+    Kết quả sinh tên bài toán mặc định (friendly_parent_title) chuẩn sư phạm (Task T8.3).
+    Dùng làm placeholder gợi ý khi học sinh bấm 'Lưu vào Sổ tay' và hiển thị cho phụ huynh.
+    Định dạng chuẩn: [Lớp X] [Chủ đề] – [Tên dạng toán]
+    """
+    friendly_parent_title: str                  # Tiêu đề chuẩn sư phạm, VD: "[Lớp 5] Phân số – Tìm phân số của một số"
+    grade: int                                  # Khối lớp xác định (4 - 9)
+    topic: str                                  # Tên chủ đề lớn (VD: "Phân số", "Hình học", "Chuyển động đều")
+    subtopic_type: str                          # Tên dạng toán chi tiết (VD: "Tìm phân số của một số")
+    short_summary: Optional[str] = None         # Tóm tắt siêu ngắn gọn đề bài (< 15 từ)
+    is_fallback: bool = False                   # True nếu trả về từ cơ chế Rule-based khi Gemini mất kết nối
+
+    class Config:
+        from_attributes = True
+        
 # ==============================================================================
 # US 7.3 - Task T7.31: Schemas cho Admin Portal & Mock Router (/admin/mock)
 # ==============================================================================
@@ -728,4 +859,59 @@ class AdminSystemSettings(BaseModel):
     last_updated_by: str
 
     class Config:
-        from_attributes = True
+        from_attributes = True
+
+
+# ========================================================
+# --- US 8.4: Curriculum Topics Schemas (Task T8.23) ---
+# ========================================================
+
+class CurriculumTopicBase(BaseModel):
+    grade: int
+    book_series: str = "Kết nối tri thức"
+    semester: Optional[int] = None
+    chapter_name: str
+    topic_name: str
+    order_index: int = 0
+    school_year: Optional[str] = None
+    is_active: bool = True
+    source_url: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CurriculumTopicCreate(CurriculumTopicBase):
+    pass
+
+
+class CurriculumTopicUpdate(BaseModel):
+    book_series: Optional[str] = None
+    semester: Optional[int] = None
+    chapter_name: Optional[str] = None
+    topic_name: Optional[str] = None
+    order_index: Optional[int] = None
+    school_year: Optional[str] = None
+    is_active: Optional[bool] = None
+    source_url: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CurriculumTopicToggle(BaseModel):
+    is_active: bool
+
+
+class CurriculumTopicResponse(CurriculumTopicBase):
+    id: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CurriculumTopicListResponse(BaseModel):
+    total: int
+    items: list[CurriculumTopicResponse] = []
+
+    class Config:
+        from_attributes = True
+

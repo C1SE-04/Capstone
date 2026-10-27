@@ -33,6 +33,11 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { preprocessLaTeX } from "@/lib/latex";
 
 // Schema tin nhắn đối thoại từng bước giữa Con và AI
 export interface ProblemDialogueMessage {
@@ -671,14 +676,21 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                               </div>
                             )}
 
-                            {/* Nội dung đối thoại */}
-                            <p
-                              className={`text-xs leading-relaxed whitespace-pre-line font-medium ${
-                                isUser ? "text-[#8C4905]" : "text-[#5A3818]"
-                              }`}
-                            >
-                              {msg.content}
-                            </p>
+                            {/* Nội dung đối thoại (Hỗ trợ render KaTeX & Markdown chuẩn cho AI) */}
+                            {isUser ? (
+                              <p className="text-xs leading-relaxed whitespace-pre-line font-medium text-[#8C4905]">
+                                {msg.content}
+                              </p>
+                            ) : (
+                              <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#5A3818] min-w-0 break-words overflow-hidden">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkMath, remarkGfm]}
+                                  rehypePlugins={[rehypeKatex]}
+                                >
+                                  {preprocessLaTeX(msg.content)}
+                                </ReactMarkdown>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );

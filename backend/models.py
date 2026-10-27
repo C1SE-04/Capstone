@@ -207,11 +207,22 @@ class IndependenceScore(Base):
     hints_used = Column(Integer, default=0, nullable=False)
     not_understood_count = Column(Integer, default=0, nullable=False)
     evaluation = Column(String, nullable=True)
+    # Nội dung đề bài toán trích xuất từ phiên học
+    problem_text = Column(String, nullable=True)
+    # Mã băm SHA-256 của đề bài đã chuẩn hóa (dùng cho Fast-path deduplication)
+    problem_hash = Column(String(64), nullable=True, index=True)
+    # Phân loại: NEW_TOPIC | ISOMORPHIC_PRACTICE | EXACT_DUPLICATE
+    category = Column(String, default="NEW_TOPIC", nullable=True)
+    # Cờ đánh dấu bài trùng lặp (nếu True: chặn không cộng dồn vào total_completed)
+    is_duplicate = Column(Boolean, default=False, nullable=False)
+    # Lời nhắc nhở nhẹ nhàng nếu là bài trùng lặp EXACT_DUPLICATE
+    gentle_reminder = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_independence_student_created", "student_id", "created_at"),
         Index("ix_independence_session_created", "session_id", "created_at"),
+        Index("ix_independence_student_hash", "student_id", "problem_hash"),
     )
 
     session = relationship("Session", back_populates="independence_records")
@@ -252,6 +263,8 @@ class ProblemBookmark(Base):
     chat_summary = Column(String, nullable=True)
     # Điểm tự lực (Independence Score) tại thời điểm lưu
     independence_score = Column(Integer, nullable=True)
+    # Tên bài toán do học sinh tự đặt hoặc AI gợi ý (US 8.2)
+    title = Column(String, nullable=True)
     # Ghi chú tuỳ ý của học sinh
     note = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -264,6 +277,76 @@ class ProblemBookmark(Base):
 
     student = relationship("User", backref="bookmarks")
     session = relationship("Session", backref="bookmarks")
+
+
+class BookmarkPlaylist(Base):
+    """
+    US 8.2: Danh sách phát / Thư mục Sổ Tay (Bookmark Playlist) phong cách YouTube.
+    Học sinh có thể tạo nhiều playlist (Yêu thích, Ôn thi HK1, ...) để gom nhóm bài toán.
+    """
+    __tablename__ = "bookmark_playlists"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    student_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    color = Column(String, nullable=True)        # Mã màu HEX phân loại (VD: #F59E0B)
+    is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_bookmark_playlists_student_created", "student_id", "created_at"),
+        Index("ix_bookmark_playlists_student_name", "student_id", "name"),
+    )
+
+    student = relationship("User", backref="bookmark_playlists")
+    items = relationship(
+        "BookmarkPlaylistItem",
+        back_populates="playlist",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="BookmarkPlaylistItem.added_at.desc()",
+    )
+
+
+class BookmarkPlaylistItem(Base):
+    """
+    US 8.2: Bảng liên kết N-N giữa BookmarkPlaylist và ProblemBookmark.
+    Một bài toán có thể thuộc nhiều playlist (checkbox YouTube-style).
+    """
+    __tablename__ = "bookmark_playlist_items"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    playlist_id = Column(
+        String,
+        ForeignKey("bookmark_playlists.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    bookmark_id = Column(
+        String,
+        ForeignKey("problem_bookmarks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position = Column(Integer, default=0, nullable=False)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_playlist_items_unique", "playlist_id", "bookmark_id", unique=True),
+        Index("ix_playlist_items_playlist", "playlist_id", "added_at"),
+        Index("ix_playlist_items_bookmark", "bookmark_id"),
+    )
+
+    playlist = relationship("BookmarkPlaylist", back_populates="items")
+    bookmark = relationship("ProblemBookmark", backref="playlist_items")
+
 
 
 class ParentAiInsight(Base):
@@ -359,4 +442,43 @@ class StudentBadge(Base):
         Index("ix_student_badges_unique", "student_id", "badge_key", unique=True),
         Index("ix_student_badges_student", "student_id", "unlocked_at"),
     )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 8.4: Chương Trình Học Linh Động (Curriculum Topics)
+# ────────────────────────────────────────────────────────────────────────────
+
+class CurriculumTopic(Base):
+    """
+    US 8.4 - Task T8.23:
+    Bảng lưu danh mục chuyên đề & bài học chuẩn SGK (môn Toán lớp 4 - 9).
+    - Hỗ trợ crawler VietJack tự động bóc tách và upsert vào DB.
+    - Hỗ trợ Admin Portal (admin/content) xem danh mục, lọc theo lớp, toggle Bật/Tắt (is_active).
+    - Hỗ trợ AI Engine (agent_prompts.py) tải động chương trình học theo khối lớp.
+    """
+    __tablename__ = "curriculum_topics"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    grade = Column(Integer, nullable=False, index=True)                          # Khối lớp (4 - 9)
+    book_series = Column(String, nullable=False, default="Kết nối tri thức")     # Bộ SGK: "Kết nối tri thức", "Cánh diều", "Chân trời sáng tạo"
+    semester = Column(Integer, nullable=True)                                    # Học kỳ (1 hoặc 2)
+    chapter_name = Column(String, nullable=False)                                # Tên Chủ đề / Chương lớn (VD: "Chương 1: Phân số")
+    topic_name = Column(String, nullable=False)                                  # Tên bài học / chuyên đề (VD: "Bài 1: Khái niệm phân số")
+    order_index = Column(Integer, default=0, nullable=False)                     # Thứ tự bài học trong chương/học kỳ
+    school_year = Column(String, nullable=True)                                  # Niên khóa (VD: "2024-2025")
+    is_active = Column(Boolean, default=True, nullable=False)                    # Trạng thái Bật/Tắt giảm tải của Admin
+    source_url = Column(String, nullable=True)                                   # URL nguồn VietJack cào dữ liệu
+    description = Column(String, nullable=True)                                  # Mô tả tóm tắt nội dung bài học
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        # Composite Unique Index chống trùng lặp khi crawler chạy đồng bộ nhiều lần
+        Index("ix_curriculum_unique_topic", "grade", "book_series", "chapter_name", "topic_name", unique=True),
+        # Index tối ưu cho AI prompt query chuyên đề đang bật theo khối lớp
+        Index("ix_curriculum_grade_active", "grade", "is_active"),
+        # Index tối ưu hiển thị danh mục theo chương và thứ tự bài học
+        Index("ix_curriculum_grade_chapter_order", "grade", "chapter_name", "order_index"),
+    )
+
 

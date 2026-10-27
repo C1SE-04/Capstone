@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   Users,
@@ -25,6 +26,7 @@ import {
   GraduationCap,
   Eye,
   Check,
+  FileText,
 } from "lucide-react";
 import { AdminUser, UserRole, UserStatus } from "@/types/admin";
 
@@ -202,6 +204,7 @@ const INITIAL_USERS: AdminUser[] = [
 ];
 
 export default function AdminUsersPage() {
+  const router = useRouter();
   const { data: session } = useSession();
 
   // State danh sách users
@@ -331,6 +334,12 @@ export default function AdminUsersPage() {
     setSelectedUserIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
+  };
+
+  // Điều hướng xem log chi tiết của tài khoản (Task T8.28 / US 8.5 - Hỗ trợ CSKH)
+  const handleViewUserLogs = (user: AdminUser) => {
+    // Điều hướng sang trang Giám sát Safety / Audit Log kèm query search email để lọc ngay log của user đó
+    router.push(`/admin/safety?search=${encodeURIComponent(user.email)}`);
   };
 
   // Khóa / Mở khóa tài khoản
@@ -514,7 +523,7 @@ export default function AdminUsersPage() {
               </span>
             </div>
             <p className="text-sm text-[#C1762A] mt-1 font-medium">
-              Danh sách Học sinh, Phụ huynh, kiểm tra liên kết tài khoản và điều hành trạng thái khóa/mở
+              Danh sách tài khoản định danh Học sinh & Phụ huynh, theo dõi trạng thái hoạt động và tra cứu log chăm sóc khách hàng
             </p>
           </div>
         </div>
@@ -538,12 +547,12 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* ── 2. Quick Stat Chips (Đồng bộ SummaryCards) ── */}
+      {/* ── 2. Quick Stat Chips (Đồng bộ SummaryCards - Định danh tài khoản) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm hover:shadow-md transition-all duration-200">
-          <div className="text-xs font-bold uppercase tracking-wider text-[#C1762A]">Tổng Users</div>
+          <div className="text-xs font-bold uppercase tracking-wider text-[#C1762A]">Tổng Tài Khoản</div>
           <div className="text-2xl font-black text-[#8C4905] mt-1.5">{stats.total}</div>
-          <div className="text-xs text-[#C1762A]/70 mt-1">Học sinh & Phụ huynh</div>
+          <div className="text-xs text-[#C1762A]/70 mt-1">Định danh hệ thống</div>
         </div>
         <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm hover:shadow-md transition-all duration-200">
           <div className="text-xs font-bold uppercase tracking-wider text-[#C1762A]">Học Sinh</div>
@@ -894,6 +903,15 @@ export default function AdminUsersPage() {
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            onClick={() => handleViewUserLogs(user)}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#EBF4FC] hover:bg-[#D5E9FA] text-[#2B78C5] border border-[#BADEF7] flex items-center gap-1 transition-colors shadow-2xs"
+                            title={`Xem nhật ký log hoạt động của ${user.name}`}
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Xem Log</span>
+                          </button>
+
+                          <button
                             onClick={() => setDetailUser(user)}
                             className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#F7ECE1] hover:bg-[#F1CCA6] text-[#8C4905] transition-colors"
                             title="Xem chi tiết hồ sơ"
@@ -1146,7 +1164,19 @@ export default function AdminUsersPage() {
                 Đóng
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <button
+                  onClick={() => {
+                    handleViewUserLogs(detailUser);
+                    setDetailUser(null);
+                  }}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#EBF4FC] text-[#2B78C5] border border-[#BADEF7] hover:bg-[#D5E9FA] flex items-center gap-1.5 transition-colors shadow-2xs"
+                  title={`Tra cứu nhật ký log và phiên chat của ${detailUser.name}`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Xem Log Tài Khoản</span>
+                </button>
+
                 <button
                   onClick={() => showToast(`Đã gửi báo cáo học tập của ${detailUser.name} tới phụ huynh!`)}
                   className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#FDF6EE] text-[#C1762A] border border-[#F1CCA6] hover:bg-[#FBECE0] transition-colors"

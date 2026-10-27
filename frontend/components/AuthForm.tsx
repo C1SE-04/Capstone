@@ -342,21 +342,27 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           </button>
         </form>
 
-        {/* Social Login & Toggle Mode */}
-        {isLoginMode && (
-          <div className="mt-6 text-center hidden">
-            <div className="flex justify-center mb-4">
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={() => signIn("google")}
-                className="w-12 h-12 bg-[#F7ECE1] rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-md disabled:opacity-70 disabled:cursor-not-allowed p-2 cursor-pointer"
-              >
-                <img src="/google-logo.svg" alt="Google Login" className="w-full h-full object-contain" />
-              </button>
-            </div>
+        {/* Social Login (Google OAuth US 8.3) */}
+        <div className="relative my-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-[#8C4905]/20" />
           </div>
-        )}
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-[#F1CCA6] px-3 font-bold text-[#8C4905]">
+              Hoặc tiếp tục với
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={() => signIn("google")}
+          className="w-full flex items-center justify-center gap-3 py-3 bg-white text-[#8C4905] rounded-xl font-bold text-sm shadow-xs hover:shadow transition-all border border-[#F1CCA6] cursor-pointer hover:bg-[#F7ECE1]/60 disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          <img src="/google-logo.svg" alt="Google Login" className="w-5 h-5 object-contain" />
+          <span>Đăng nhập bằng Google</span>
+        </button>
 
         <div className="mt-4 text-center">
           <p className="text-xs font-bold text-[#8C4905]">

@@ -1,7 +1,3 @@
-# Task #159 & #160 (US 6.1): Đo lường Điểm Tự Lực (Independence Score)
-# - #159: Code API api/independence tiếp nhận điểm từ AI và lưu vào DB
-# - #160: Sửa luồng bấm "Đã hiểu" trong API /chat: kích hoạt tính điểm và lưu kết quả
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date
@@ -11,6 +7,11 @@ import models
 import schemas
 import dependencies
 from database import get_db
+from deduplication import (
+    compute_problem_hash,
+    extract_session_problem_text,
+    check_problem_deduplication
+)
 
 router = APIRouter(tags=["Independence"])
 
@@ -54,10 +55,11 @@ def save_independence_score(
     custom_hints: Optional[int] = None,
     custom_not_understood: Optional[int] = None,
     custom_evaluation: Optional[str] = None,
+    problem_text_input: Optional[str] = None,
 ) -> models.IndependenceScore:
     """
-    Kích hoạt tính điểm và lưu bản ghi Independence vào DB (Task #159 & #160).
-    Sau khi lưu điểm thành công, reset hint_count và consecutive_wrong_count để sẵn sàng cho bài toán mới.
+    Kích hoạt tính điểm và lưu bản ghi Independence vào DB (Task #159, #160 & US 8.1 - T8.2).
+    Tích hợp kiểm tra Deduplication: tính problem_hash, gọi Prompt phân loại và chặn cộng dồn bài lặp.
     """
     # 1. Tìm session và user
     session_obj = db.query(models.Session).filter(models.Session.id == session_id).first()
@@ -94,7 +96,20 @@ def save_independence_score(
         score = calc_result["score"]
         evaluation = custom_evaluation or calc_result["level"]
 
-    # 4. Lưu bản ghi vào bảng independence_scores
+    # ── 4. US 8.1 (T8.2): KIỂM TRA DEDUPLICATION VÀ BĂM HASH ĐỀ BÀI ─────
+    resolved_problem_text = problem_text_input or extract_session_problem_text(db, session_id)
+    problem_hash = compute_problem_hash(resolved_problem_text)
+
+    # Gọi kiểm tra phân loại bài tập (Fast-path SHA-256 + Gemini fallback)
+    dedup_result = check_problem_deduplication(
+        db=db,
+        student_id=resolved_student_id,
+        current_problem=resolved_problem_text
+    )
+
+    is_duplicate_flag = (dedup_result.category == "EXACT_DUPLICATE")
+
+    # ── 5. Lưu bản ghi vào bảng independence_scores ───────────────────────
     record = models.IndependenceScore(
         session_id=session_id,
         student_id=resolved_student_id,
@@ -102,10 +117,15 @@ def save_independence_score(
         hints_used=hints_used,
         not_understood_count=not_understood,
         evaluation=evaluation,
+        problem_text=resolved_problem_text,
+        problem_hash=problem_hash,
+        category=dedup_result.category,
+        is_duplicate=is_duplicate_flag,
+        gentle_reminder=dedup_result.gentle_reminder,
     )
     db.add(record)
 
-    # 5. Reset bộ đếm gợi ý của bài toán hiện tại trong session_stats
+    # 6. Reset bộ đếm gợi ý của bài toán hiện tại trong session_stats
     if stats:
         stats.consecutive_wrong_count = 0
         stats.hint_count = 0
@@ -188,21 +208,26 @@ def get_independence_summary(
     """
     target_id = student_id or current_user["id"]
 
+    # Lọc bỏ bài trùng lặp khi lấy danh sách biểu đồ lịch sử
     query = db.query(models.IndependenceScore).filter(
-        models.IndependenceScore.student_id == target_id
+        models.IndependenceScore.student_id == target_id,
+        models.IndependenceScore.is_duplicate == False  # US 8.1: Không hiển thị bài lặp trùng
     )
     if start_date:
         query = query.filter(cast(models.IndependenceScore.created_at, Date) >= start_date)
     if end_date:
         query = query.filter(cast(models.IndependenceScore.created_at, Date) <= end_date)
 
-    # 1. Tính điểm trung bình và tổng số bài hoàn thành
+    # 1. Tính điểm trung bình và tổng số bài hoàn thành thực chất (CHẶN BÀI LẶP)
     stats_query = (
         db.query(
             func.count(models.IndependenceScore.id).label("total_completed"),
             func.avg(models.IndependenceScore.score).label("avg_score"),
         )
-        .filter(models.IndependenceScore.student_id == target_id)
+        .filter(
+            models.IndependenceScore.student_id == target_id,
+            models.IndependenceScore.is_duplicate == False  # US 8.1: AC 8.1.1 KHÔNG CỘNG DỒN BÀI LẶP
+        )
     )
     if start_date:
         stats_query = stats_query.filter(cast(models.IndependenceScore.created_at, Date) >= start_date)

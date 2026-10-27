@@ -20,6 +20,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+import { preprocessLaTeX } from "@/lib/latex";
 
 const SUGGESTIONS = [
   "Phân số là gì?",
@@ -428,7 +429,7 @@ export default function TryPage() {
               ) : msg.role === "user" ? (
                 msg.content
               ) : (
-                <div className="markdown-prose prose-sm max-w-none
+                <div className="markdown-prose prose-sm max-w-none min-w-0 break-words overflow-hidden
                   prose-p:leading-relaxed prose-p:mb-2
                   prose-pre:bg-gray-100 prose-pre:p-3 prose-pre:rounded-lg
                   prose-code:text-[#CB6600] prose-code:bg-[#F1CCA6]/40 prose-code:px-1 prose-code:rounded
@@ -440,7 +441,7 @@ export default function TryPage() {
                     remarkPlugins={[remarkMath, remarkGfm]}
                     rehypePlugins={[rehypeKatex]}
                   >
-                    {msg.content}
+                    {preprocessLaTeX(msg.content)}
                   </ReactMarkdown>
                 </div>
               )}

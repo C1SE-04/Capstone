@@ -126,8 +126,9 @@ def submit_comprehension_feedback(
         db.add(stats)
         
     independence_data = None
+    deduplication_data = None
     if req.understood:
-        # Task #160 (US 6.1): Kích hoạt tính điểm tự lực và lưu kết quả vào DB
+        # Task #160 & US 8.1 (T8.2): Tính điểm tự lực, kiểm tra hash đề bài & chặn cộng dồn bài lặp
         from routers.independence import save_independence_score
         record = save_independence_score(db=db, session_id=req.session_id)
         independence_data = {
@@ -137,6 +138,11 @@ def submit_comprehension_feedback(
             "not_understood_count": record.not_understood_count,
             "evaluation": record.evaluation,
             "created_at": record.created_at.isoformat() if record.created_at else None,
+        }
+        deduplication_data = {
+            "category": record.category,
+            "is_duplicate": record.is_duplicate,
+            "gentle_reminder": record.gentle_reminder
         }
         stats.consecutive_wrong_count = 0
         stats.hint_count = 0
@@ -150,6 +156,7 @@ def submit_comprehension_feedback(
         "status": "success",
         "message": "Feedback recorded",
         "independence": independence_data,
+        "deduplication": deduplication_data,
         "stats": {
             "consecutive_wrong_count": stats.consecutive_wrong_count,
             "hint_count": stats.hint_count,

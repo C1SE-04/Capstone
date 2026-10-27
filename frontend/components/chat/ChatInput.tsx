@@ -274,7 +274,7 @@ export function ChatInput({
   // ── Render ──
 
   return (
-    <div className="p-4 bg-transparent mt-auto relative z-10 w-full">
+    <div className="p-2 sm:p-4 bg-transparent mt-auto relative z-10 w-full">
       {/* ── [T6.20/AC5] Cảnh báo lỗi tải ảnh (>5MB hoặc định dạng không hợp lệ) ── */}
       {errorMessage && (
         <div className="mb-2 ml-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">

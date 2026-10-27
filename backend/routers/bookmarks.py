@@ -9,16 +9,19 @@
 #   DELETE /bookmarks/{bookmark_id}    — Xóa bookmark
 
 import uuid
-from typing import Optional
-from datetime import datetime, timedelta, timezone
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
-
+import collections
 import models
 import schemas
 import dependencies
+from typing import Optional
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
+from agents.problem_title_generator import generate_friendly_problem_title
+
+
 from database import get_db
 
 router = APIRouter(prefix="/bookmarks", tags=["Bookmarks"])
@@ -276,9 +279,71 @@ def _build_bookmark_snapshot(
     }
 
 
+def _to_bookmark_response(
+    bm: models.ProblemBookmark,
+    db: Session,
+    session_title: Optional[str] = None,
+    playlist_ids: Optional[list[str]] = None,
+) -> schemas.BookmarkResponse:
+    """Helper chuyển đổi ProblemBookmark model sang BookmarkResponse thống nhất."""
+    if playlist_ids is None:
+        playlist_ids = [
+            row[0]
+            for row in db.query(models.BookmarkPlaylistItem.playlist_id)
+            .filter(models.BookmarkPlaylistItem.bookmark_id == bm.id)
+            .all()
+        ]
+
+    dialogue_messages = _extract_bookmark_dialogue(
+        bm.session_id,
+        db,
+        bookmark_created_at=bm.created_at,
+        problem_snapshot=bm.problem_snapshot,
+        attachment_url=bm.attachment_url,
+    )
+
+    return schemas.BookmarkResponse(
+        id=bm.id,
+        student_id=bm.student_id,
+        session_id=bm.session_id,
+        session_title=session_title,
+        problem_snapshot=bm.problem_snapshot,
+        attachment_url=bm.attachment_url,
+        chat_summary=bm.chat_summary,
+        independence_score=bm.independence_score,
+        title=bm.title,
+        note=bm.note,
+        playlist_ids=playlist_ids,
+        created_at=bm.created_at,
+        dialogue_messages=dialogue_messages,
+    )
+
+
 # ==============================================================================
 # POST /bookmarks — Tạo bookmark mới
 # ==============================================================================
+@router.post("/suggest-title", response_model=schemas.ProblemTitleResult)
+def suggest_problem_title(
+    body: schemas.ProblemTitleGenerateRequest,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    US 8.1 - Task T8.3:
+    Gọi Prompt Gemini sinh tên bài toán mặc định (friendly_parent_title) chuẩn sư phạm:
+    [Lớp X] [Chủ đề] – [Tên dạng toán]
+    Dùng làm placeholder gợi ý khi học sinh bấm 'Lưu vào Sổ tay'.
+    """
+    problem_text = body.problem_text.strip() if body.problem_text else ""
+    grade_val = body.grade or current_user.get("grade") or 5
+
+    # Nếu truyền session_id mà chưa có problem_text, tự động trích xuất từ session
+    if not problem_text and body.session_id:
+        from deduplication import extract_session_problem_text
+        problem_text = extract_session_problem_text(db, body.session_id)
+
+    result = generate_friendly_problem_title(problem_text=problem_text, grade=grade_val)
+    return result
 
 @router.post("", response_model=schemas.BookmarkResponse, status_code=201)
 def create_bookmark(
@@ -287,11 +352,13 @@ def create_bookmark(
     db: Session = Depends(get_db),
 ):
     """
-    Học sinh lưu một bài toán từ session vào Sổ Tay.
-    - Hỗ trợ lưu nhiều bài toán độc lập trong cùng 1 session (chia ranh giới theo IndependenceScore như bên phụ huynh).
-    - Tự động lấy snapshot đề bài (tin nhắn USER đầu) và ảnh Cloudinary của bài toán đó.
+    Học sinh lưu một bài toán từ session vào Sổ Tay (US 7.2 & US 8.2).
+    - Hỗ trợ lưu nhiều bài toán độc lập trong cùng 1 session.
+    - Hỗ trợ tiêu đề bài toán (title) do học sinh tự đặt hoặc AI gợi ý.
+    - Hỗ trợ lưu ngay vào các danh sách phát (playlist_ids).
+    - Tự động lấy snapshot đề bài và ảnh Cloudinary của bài toán đó.
     - Tự động điền điểm tự lực từ bài toán tương ứng.
-    - Idempotent: Nếu đã lưu bài toán này rồi, trả về bookmark đã có thay vì báo lỗi.
+    - Idempotent: Nếu đã lưu bài toán này rồi, cập nhật title/playlists và trả về.
     """
     if current_user.get("role") not in ("STUDENT", "MONITOR"):
         raise HTTPException(status_code=403, detail="Chỉ học sinh mới có thể lưu vào Sổ Tay.")
@@ -310,6 +377,17 @@ def create_bookmark(
     p_snap = snapshot["problem_snapshot"]
     att_url = snapshot["attachment_url"]
     score_val = snapshot["independence_score"]
+
+    title_val = body.title.strip() if body.title and body.title.strip() else None
+
+    # US 8.1 (Task T8.3): Nếu học sinh để trống tiêu đề khi lưu, tự động dùng tên AI chuẩn sư phạm
+    if not title_val:
+        student_grade = current_user.get("grade") or 5
+        auto_title_obj = generate_friendly_problem_title(
+            problem_text=p_snap or session.title or "Bài toán",
+            grade=student_grade
+        )
+        title_val = auto_title_obj.friendly_parent_title
 
     # Kiểm tra xem bài toán này đã được lưu trong session chưa (so khớp đề bài / ảnh)
     existing_bookmarks = (
@@ -330,27 +408,41 @@ def create_bookmark(
             break
 
     if existing:
-        # Trả về bookmark đã có (idempotent, không lỗi)
-        dialogue_messages = _extract_bookmark_dialogue(
-            existing.session_id,
-            db,
-            bookmark_created_at=existing.created_at,
-            problem_snapshot=existing.problem_snapshot,
-            attachment_url=existing.attachment_url,
-        )
-        return schemas.BookmarkResponse(
-            id=existing.id,
-            student_id=existing.student_id,
-            session_id=existing.session_id,
-            session_title=session.title,
-            problem_snapshot=existing.problem_snapshot,
-            attachment_url=existing.attachment_url,
-            chat_summary=existing.chat_summary,
-            independence_score=existing.independence_score,
-            note=existing.note,
-            created_at=existing.created_at,
-            dialogue_messages=dialogue_messages,
-        )
+        # Nếu đã có bài, cập nhật title/note nếu có truyền mới
+        if title_val and not existing.title:
+            existing.title = title_val
+        if body.note and not existing.note:
+            existing.note = body.note
+
+        # Thêm bài vào các playlist mới được chọn (nếu có)
+        if body.playlist_ids:
+            valid_pls = (
+                db.query(models.BookmarkPlaylist.id)
+                .filter(
+                    models.BookmarkPlaylist.id.in_(body.playlist_ids),
+                    models.BookmarkPlaylist.student_id == student_id,
+                )
+                .all()
+            )
+            valid_pids = {r[0] for r in valid_pls}
+            curr_pids = {
+                r[0]
+                for r in db.query(models.BookmarkPlaylistItem.playlist_id)
+                .filter(models.BookmarkPlaylistItem.bookmark_id == existing.id)
+                .all()
+            }
+            for pid in valid_pids - curr_pids:
+                db.add(
+                    models.BookmarkPlaylistItem(
+                        id=uuid.uuid4().hex,
+                        playlist_id=pid,
+                        bookmark_id=existing.id,
+                    )
+                )
+
+        db.commit()
+        db.refresh(existing)
+        return _to_bookmark_response(existing, db, session_title=session.title)
 
     bookmark = models.ProblemBookmark(
         id=uuid.uuid4().hex,
@@ -360,6 +452,7 @@ def create_bookmark(
         attachment_url=att_url,
         chat_summary=snapshot["chat_summary"],
         independence_score=score_val,
+        title=title_val,
         note=body.note,
     )
     db.add(bookmark)
@@ -370,49 +463,53 @@ def create_bookmark(
         db.rollback()
         raise HTTPException(status_code=409, detail="Bài toán này đã có trong Sổ Tay của bạn.")
 
-    dialogue_messages = _extract_bookmark_dialogue(
-        bookmark.session_id,
-        db,
-        bookmark_created_at=bookmark.created_at,
-        problem_snapshot=bookmark.problem_snapshot,
-        attachment_url=bookmark.attachment_url,
-    )
-    return schemas.BookmarkResponse(
-        id=bookmark.id,
-        student_id=bookmark.student_id,
-        session_id=bookmark.session_id,
-        session_title=session.title,
-        problem_snapshot=bookmark.problem_snapshot,
-        attachment_url=bookmark.attachment_url,
-        chat_summary=bookmark.chat_summary,
-        independence_score=bookmark.independence_score,
-        note=bookmark.note,
-        created_at=bookmark.created_at,
-        dialogue_messages=dialogue_messages,
-    )
+    # Thêm vào các danh sách phát nếu có
+    if body.playlist_ids:
+        valid_pls = (
+            db.query(models.BookmarkPlaylist.id)
+            .filter(
+                models.BookmarkPlaylist.id.in_(body.playlist_ids),
+                models.BookmarkPlaylist.student_id == student_id,
+            )
+            .all()
+        )
+        for row in valid_pls:
+            pid = row[0]
+            db.add(
+                models.BookmarkPlaylistItem(
+                    id=uuid.uuid4().hex,
+                    playlist_id=pid,
+                    bookmark_id=bookmark.id,
+                )
+            )
+        db.commit()
+
+    return _to_bookmark_response(bookmark, db, session_title=session.title)
 
 
 # ==============================================================================
-# GET /bookmarks — Danh sách bookmark (hỗ trợ lọc)
+# GET /bookmarks — Danh sách bookmark (hỗ trợ lọc + playlist)
 # ==============================================================================
 
 @router.get("", response_model=list[schemas.BookmarkResponse])
 def list_bookmarks(
-    search: Optional[str] = Query(None, description="Tìm kiếm theo từ khóa trong snapshot / chat_summary"),
+    playlist_id: Optional[str] = Query(None, description="Lọc theo Playlist ID"),
+    search: Optional[str] = Query(None, description="Tìm kiếm theo từ khóa trong tiêu đề / snapshot / chat_summary / note"),
     score_filter: Optional[str] = Query(
         "all",
         description="Lọc theo điểm: 'all' | 'perfect' (>= 80) | 'passed' (>= 60)",
     ),
     has_attachment: Optional[bool] = Query(None, description="Chỉ lấy bookmark có ảnh đề bài"),
     page: int = Query(1, ge=1, description="Trang hiện tại"),
-    page_size: int = Query(20, ge=1, le=100, description="Số bookmark mỗi trang"),
+    page_size: int = Query(20, ge=1, le=100, description="Số bookmark mỗi trang (mặc định 20, Sổ tay có thể dùng 10)"),
     current_user: dict = Depends(dependencies.get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Học sinh xem danh sách Sổ Tay của mình.
+    Học sinh xem danh sách Sổ Tay của mình (US 7.2 & US 8.2).
     Hỗ trợ:
-    - Tìm kiếm full-text trong problem_snapshot và chat_summary
+    - Lọc theo Playlist ID (dành cho Sidebar danh sách Sổ tay phong cách YouTube)
+    - Tìm kiếm full-text trong title, problem_snapshot, chat_summary, note
     - Lọc theo mức điểm tự lực (all / perfect / passed)
     - Lọc chỉ hiện bookmark có ảnh đề bài
     - Phân trang
@@ -430,11 +527,29 @@ def list_bookmarks(
         .filter(models.ProblemBookmark.student_id == student_id)
     )
 
+    # Lọc theo Playlist ID nếu có
+    if playlist_id:
+        pl = (
+            db.query(models.BookmarkPlaylist)
+            .filter(
+                models.BookmarkPlaylist.id == playlist_id,
+                models.BookmarkPlaylist.student_id == student_id,
+            )
+            .first()
+        )
+        if not pl:
+            raise HTTPException(status_code=404, detail="Danh sách phát không tồn tại.")
+        query = query.join(
+            models.BookmarkPlaylistItem,
+            models.BookmarkPlaylistItem.bookmark_id == models.ProblemBookmark.id,
+        ).filter(models.BookmarkPlaylistItem.playlist_id == playlist_id)
+
     # Lọc tìm kiếm từ khóa
     if search_str and search_str.strip():
         keyword = f"%{search_str.strip()}%"
         query = query.filter(
-            (models.ProblemBookmark.problem_snapshot.ilike(keyword))
+            (models.ProblemBookmark.title.ilike(keyword))
+            | (models.ProblemBookmark.problem_snapshot.ilike(keyword))
             | (models.ProblemBookmark.chat_summary.ilike(keyword))
             | (models.ProblemBookmark.note.ilike(keyword))
         )
@@ -464,32 +579,447 @@ def list_bookmarks(
         s.id: s for s in db.query(models.Session).filter(models.Session.id.in_(session_ids)).all()
     }
 
+    # Batch query danh sách playlist_ids của tất cả bookmarks để tránh N+1
+    bm_ids = [b.id for b in bookmarks]
+    bm_to_playlists = collections.defaultdict(list)
+    if bm_ids:
+        pl_items = (
+            db.query(
+                models.BookmarkPlaylistItem.bookmark_id,
+                models.BookmarkPlaylistItem.playlist_id,
+            )
+            .filter(models.BookmarkPlaylistItem.bookmark_id.in_(bm_ids))
+            .all()
+        )
+        for b_id, p_id in pl_items:
+            bm_to_playlists[b_id].append(p_id)
+
     result = []
     for bm in bookmarks:
-        session = sessions.get(bm.session_id)
-        dialogue_messages = _extract_bookmark_dialogue(
-            bm.session_id,
-            db,
-            bookmark_created_at=bm.created_at,
-            problem_snapshot=bm.problem_snapshot,
-            attachment_url=bm.attachment_url,
-        )
+        sess = sessions.get(bm.session_id)
         result.append(
-            schemas.BookmarkResponse(
-                id=bm.id,
-                student_id=bm.student_id,
-                session_id=bm.session_id,
-                session_title=session.title if session else None,
-                problem_snapshot=bm.problem_snapshot,
-                attachment_url=bm.attachment_url,
-                chat_summary=bm.chat_summary,
-                independence_score=bm.independence_score,
-                note=bm.note,
-                created_at=bm.created_at,
-                dialogue_messages=dialogue_messages,
+            _to_bookmark_response(
+                bm,
+                db,
+                session_title=sess.title if sess else None,
+                playlist_ids=bm_to_playlists.get(bm.id, []),
             )
         )
     return result
+
+
+# ==============================================================================
+# PLAYLISTS API — Danh sách phát Sổ Tay YouTube-Style (US 8.2)
+# ==============================================================================
+
+def _ensure_default_playlist(student_id: str, db: Session) -> models.BookmarkPlaylist:
+    """Tự động tạo playlist mặc định '⭐ Yêu thích' nếu học sinh chưa có playlist nào."""
+    default_pl = (
+        db.query(models.BookmarkPlaylist)
+        .filter(
+            models.BookmarkPlaylist.student_id == student_id,
+            models.BookmarkPlaylist.is_default == True,
+        )
+        .first()
+    )
+    if not default_pl:
+        default_pl = models.BookmarkPlaylist(
+            id=uuid.uuid4().hex,
+            student_id=student_id,
+            name="⭐ Yêu thích",
+            description="Danh sách các bài toán yêu thích",
+            color="#F59E0B",
+            is_default=True,
+        )
+        db.add(default_pl)
+        db.commit()
+        db.refresh(default_pl)
+    return default_pl
+
+
+@router.get("/playlists", response_model=list[schemas.PlaylistResponse])
+def list_playlists(
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Lấy danh sách các Playlist của học sinh kèm số lượng bài toán (item_count).
+    Tự động khởi tạo playlist mặc định '⭐ Yêu thích' nếu học sinh chưa có playlist nào.
+    """
+    if current_user.get("role") not in ("STUDENT", "MONITOR"):
+        raise HTTPException(status_code=403, detail="Chỉ học sinh mới có thể quản lý Sổ Tay.")
+
+    student_id = current_user["id"]
+    _ensure_default_playlist(student_id, db)
+
+    playlists = (
+        db.query(models.BookmarkPlaylist)
+        .filter(models.BookmarkPlaylist.student_id == student_id)
+        .order_by(models.BookmarkPlaylist.is_default.desc(), models.BookmarkPlaylist.created_at.asc())
+        .all()
+    )
+
+    pl_ids = [p.id for p in playlists]
+    counts_query = (
+        db.query(
+            models.BookmarkPlaylistItem.playlist_id,
+            func.count(models.BookmarkPlaylistItem.id).label("cnt"),
+        )
+        .filter(models.BookmarkPlaylistItem.playlist_id.in_(pl_ids))
+        .group_by(models.BookmarkPlaylistItem.playlist_id)
+        .all()
+    )
+    counts = {row[0]: row[1] for row in counts_query}
+
+    result = []
+    for pl in playlists:
+        result.append(
+            schemas.PlaylistResponse(
+                id=pl.id,
+                student_id=pl.student_id,
+                name=pl.name,
+                description=pl.description,
+                color=pl.color,
+                is_default=pl.is_default,
+                item_count=counts.get(pl.id, 0),
+                created_at=pl.created_at,
+                updated_at=pl.updated_at,
+            )
+        )
+    return result
+
+
+@router.post("/playlists", response_model=schemas.PlaylistResponse, status_code=201)
+def create_playlist(
+    body: schemas.PlaylistCreate,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Tạo mới một Playlist (YouTube-style) cho học sinh.
+    - Hỗ trợ 'initial_bookmark_id': Tự động lưu ngay bài toán vào danh sách phát sau khi tạo.
+    """
+    if current_user.get("role") not in ("STUDENT", "MONITOR"):
+        raise HTTPException(status_code=403, detail="Chỉ học sinh mới có thể tạo danh sách phát.")
+
+    student_id = current_user["id"]
+    name_clean = body.name.strip()
+    if not name_clean:
+        raise HTTPException(status_code=400, detail="Tên danh sách phát không được để trống.")
+
+    # Kiểm tra trùng tên playlist của học sinh
+    existing = (
+        db.query(models.BookmarkPlaylist)
+        .filter(
+            models.BookmarkPlaylist.student_id == student_id,
+            func.lower(models.BookmarkPlaylist.name) == name_clean.lower(),
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Bạn đã có danh sách bài toán tên '{name_clean}'.")
+
+    # Kiểm tra initial_bookmark_id nếu có
+    if body.initial_bookmark_id:
+        bm = (
+            db.query(models.ProblemBookmark)
+            .filter(
+                models.ProblemBookmark.id == body.initial_bookmark_id,
+                models.ProblemBookmark.student_id == student_id,
+            )
+            .first()
+        )
+        if not bm:
+            raise HTTPException(status_code=404, detail="Bài toán cần thêm không tồn tại hoặc không thuộc về bạn.")
+
+    playlist = models.BookmarkPlaylist(
+        id=uuid.uuid4().hex,
+        student_id=student_id,
+        name=name_clean,
+        description=body.description,
+        color=body.color or "#F59E0B",
+        is_default=False,
+    )
+    db.add(playlist)
+    db.flush()
+
+    item_count = 0
+    if body.initial_bookmark_id:
+        item = models.BookmarkPlaylistItem(
+            id=uuid.uuid4().hex,
+            playlist_id=playlist.id,
+            bookmark_id=body.initial_bookmark_id,
+            position=0,
+        )
+        db.add(item)
+        item_count = 1
+
+    db.commit()
+    db.refresh(playlist)
+
+    return schemas.PlaylistResponse(
+        id=playlist.id,
+        student_id=playlist.student_id,
+        name=playlist.name,
+        description=playlist.description,
+        color=playlist.color,
+        is_default=playlist.is_default,
+        item_count=item_count,
+        created_at=playlist.created_at,
+        updated_at=playlist.updated_at,
+    )
+
+
+@router.get("/playlists/{playlist_id}", response_model=schemas.PlaylistDetailResponse)
+def get_playlist_detail(
+    playlist_id: str,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lấy chi tiết một Playlist kèm danh sách các bài toán bên trong."""
+    student_id = current_user["id"]
+    pl = (
+        db.query(models.BookmarkPlaylist)
+        .filter(
+            models.BookmarkPlaylist.id == playlist_id,
+            models.BookmarkPlaylist.student_id == student_id,
+        )
+        .first()
+    )
+    if not pl:
+        raise HTTPException(status_code=404, detail="Danh sách phát không tồn tại.")
+
+    items_query = (
+        db.query(models.ProblemBookmark)
+        .join(models.BookmarkPlaylistItem, models.BookmarkPlaylistItem.bookmark_id == models.ProblemBookmark.id)
+        .filter(models.BookmarkPlaylistItem.playlist_id == playlist_id)
+        .order_by(models.BookmarkPlaylistItem.added_at.desc())
+        .all()
+    )
+
+    session_ids = [b.session_id for b in items_query]
+    sessions = {
+        s.id: s for s in db.query(models.Session).filter(models.Session.id.in_(session_ids)).all()
+    }
+
+    bm_ids = [b.id for b in items_query]
+    bm_to_playlists = collections.defaultdict(list)
+    if bm_ids:
+        pl_items = (
+            db.query(
+                models.BookmarkPlaylistItem.bookmark_id,
+                models.BookmarkPlaylistItem.playlist_id,
+            )
+            .filter(models.BookmarkPlaylistItem.bookmark_id.in_(bm_ids))
+            .all()
+        )
+        for b_id, p_id in pl_items:
+            bm_to_playlists[b_id].append(p_id)
+
+    bookmark_responses = []
+    for bm in items_query:
+        sess = sessions.get(bm.session_id)
+        bookmark_responses.append(
+            _to_bookmark_response(
+                bm,
+                db,
+                session_title=sess.title if sess else None,
+                playlist_ids=bm_to_playlists.get(bm.id, []),
+            )
+        )
+
+    return schemas.PlaylistDetailResponse(
+        id=pl.id,
+        student_id=pl.student_id,
+        name=pl.name,
+        description=pl.description,
+        color=pl.color,
+        is_default=pl.is_default,
+        item_count=len(bookmark_responses),
+        created_at=pl.created_at,
+        updated_at=pl.updated_at,
+        items=bookmark_responses,
+    )
+
+
+@router.patch("/playlists/{playlist_id}", response_model=schemas.PlaylistResponse)
+def update_playlist(
+    playlist_id: str,
+    body: schemas.PlaylistUpdate,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cập nhật tên, mô tả hoặc màu của Playlist."""
+    student_id = current_user["id"]
+    pl = (
+        db.query(models.BookmarkPlaylist)
+        .filter(
+            models.BookmarkPlaylist.id == playlist_id,
+            models.BookmarkPlaylist.student_id == student_id,
+        )
+        .first()
+    )
+    if not pl:
+        raise HTTPException(status_code=404, detail="Danh sách phát không tồn tại.")
+
+    if body.name is not None:
+        name_clean = body.name.strip()
+        if not name_clean:
+            raise HTTPException(status_code=400, detail="Tên danh sách phát không được để trống.")
+        duplicate = (
+            db.query(models.BookmarkPlaylist)
+            .filter(
+                models.BookmarkPlaylist.student_id == student_id,
+                models.BookmarkPlaylist.id != playlist_id,
+                func.lower(models.BookmarkPlaylist.name) == name_clean.lower(),
+            )
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(status_code=409, detail=f"Bạn đã có danh sách bài toán tên '{name_clean}'.")
+        pl.name = name_clean
+
+    if body.description is not None:
+        pl.description = body.description
+
+    if body.color is not None:
+        pl.color = body.color
+
+    db.commit()
+    db.refresh(pl)
+
+    cnt = (
+        db.query(func.count(models.BookmarkPlaylistItem.id))
+        .filter(models.BookmarkPlaylistItem.playlist_id == playlist_id)
+        .scalar()
+    ) or 0
+
+    return schemas.PlaylistResponse(
+        id=pl.id,
+        student_id=pl.student_id,
+        name=pl.name,
+        description=pl.description,
+        color=pl.color,
+        is_default=pl.is_default,
+        item_count=cnt,
+        created_at=pl.created_at,
+        updated_at=pl.updated_at,
+    )
+
+
+@router.delete("/playlists/{playlist_id}", status_code=204)
+def delete_playlist(
+    playlist_id: str,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Xóa một Playlist.
+    Chỉ xóa danh sách phát và các liên kết; các bài toán gốc trong Sổ Tay vẫn được bảo toàn.
+    """
+    student_id = current_user["id"]
+    pl = (
+        db.query(models.BookmarkPlaylist)
+        .filter(
+            models.BookmarkPlaylist.id == playlist_id,
+            models.BookmarkPlaylist.student_id == student_id,
+        )
+        .first()
+    )
+    if not pl:
+        raise HTTPException(status_code=404, detail="Danh sách phát không tồn tại.")
+
+    db.delete(pl)
+    db.commit()
+
+
+@router.post("/playlists/{playlist_id}/items", status_code=201)
+def add_item_to_playlist(
+    playlist_id: str,
+    body: schemas.PlaylistItemAdd,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Thêm một bài toán vào Playlist (YouTube-style checkbox)."""
+    student_id = current_user["id"]
+    pl = (
+        db.query(models.BookmarkPlaylist)
+        .filter(
+            models.BookmarkPlaylist.id == playlist_id,
+            models.BookmarkPlaylist.student_id == student_id,
+        )
+        .first()
+    )
+    if not pl:
+        raise HTTPException(status_code=404, detail="Danh sách phát không tồn tại.")
+
+    bm = (
+        db.query(models.ProblemBookmark)
+        .filter(
+            models.ProblemBookmark.id == body.bookmark_id,
+            models.ProblemBookmark.student_id == student_id,
+        )
+        .first()
+    )
+    if not bm:
+        raise HTTPException(status_code=404, detail="Bài toán không tồn tại hoặc không thuộc về bạn.")
+
+    existing_item = (
+        db.query(models.BookmarkPlaylistItem)
+        .filter(
+            models.BookmarkPlaylistItem.playlist_id == playlist_id,
+            models.BookmarkPlaylistItem.bookmark_id == body.bookmark_id,
+        )
+        .first()
+    )
+    if not existing_item:
+        item = models.BookmarkPlaylistItem(
+            id=uuid.uuid4().hex,
+            playlist_id=playlist_id,
+            bookmark_id=body.bookmark_id,
+            position=0,
+        )
+        db.add(item)
+        db.commit()
+
+    return {
+        "message": "Đã thêm bài toán vào danh sách phát.",
+        "playlist_id": playlist_id,
+        "bookmark_id": body.bookmark_id,
+    }
+
+
+@router.delete("/playlists/{playlist_id}/items/{bookmark_id}", status_code=204)
+def remove_item_from_playlist(
+    playlist_id: str,
+    bookmark_id: str,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Xóa một bài toán khỏi Playlist."""
+    student_id = current_user["id"]
+    pl = (
+        db.query(models.BookmarkPlaylist)
+        .filter(
+            models.BookmarkPlaylist.id == playlist_id,
+            models.BookmarkPlaylist.student_id == student_id,
+        )
+        .first()
+    )
+    if not pl:
+        raise HTTPException(status_code=404, detail="Danh sách phát không tồn tại.")
+
+    item = (
+        db.query(models.BookmarkPlaylistItem)
+        .filter(
+            models.BookmarkPlaylistItem.playlist_id == playlist_id,
+            models.BookmarkPlaylistItem.bookmark_id == bookmark_id,
+        )
+        .first()
+    )
+    if item:
+        db.delete(item)
+        db.commit()
 
 
 # ==============================================================================
@@ -512,52 +1042,30 @@ def get_bookmark(
         raise HTTPException(status_code=403, detail="Bạn không có quyền xem bookmark này.")
 
     session = db.query(models.Session).filter(models.Session.id == bm.session_id).first()
-    dialogue_messages = _extract_bookmark_dialogue(
-        bm.session_id,
-        db,
-        bookmark_created_at=bm.created_at,
-        problem_snapshot=bm.problem_snapshot,
-        attachment_url=bm.attachment_url,
-    )
-
-    return schemas.BookmarkResponse(
-        id=bm.id,
-        student_id=bm.student_id,
-        session_id=bm.session_id,
-        session_title=session.title if session else None,
-        problem_snapshot=bm.problem_snapshot,
-        attachment_url=bm.attachment_url,
-        chat_summary=bm.chat_summary,
-        independence_score=bm.independence_score,
-        note=bm.note,
-        created_at=bm.created_at,
-        dialogue_messages=dialogue_messages,
-    )
+    return _to_bookmark_response(bm, db, session_title=session.title if session else None)
 
 
 # ==============================================================================
-# PATCH /bookmarks/{bookmark_id} — Cập nhật ghi chú
+# PATCH /bookmarks/{bookmark_id} — Cập nhật tiêu đề, ghi chú hoặc playlist
 # ==============================================================================
 
-class BookmarkNoteUpdate(schemas.BaseModel if hasattr(schemas, "BaseModel") else object):
-    note: Optional[str] = None
-
-
-# Dùng pydantic trực tiếp
-from pydantic import BaseModel
-
-class BookmarkNoteUpdate(BaseModel):
-    note: Optional[str] = None
+# Giữ alias BookmarkNoteUpdate để tương thích ngược nếu có import ngoài
+BookmarkNoteUpdate = schemas.BookmarkUpdate
 
 
 @router.patch("/{bookmark_id}", response_model=schemas.BookmarkResponse)
-def update_bookmark_note(
+def update_bookmark(
     bookmark_id: str,
-    body: BookmarkNoteUpdate,
+    body: schemas.BookmarkUpdate,
     current_user: dict = Depends(dependencies.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Cập nhật ghi chú (note) của một bookmark."""
+    """
+    Cập nhật thông tin bookmark (US 7.2 & US 8.2):
+    - Tên bài toán (title) do học sinh tự đặt hoặc sửa lại theo ý mình
+    - Ghi chú (note)
+    - Danh sách các playlist bài này thuộc về (playlist_ids)
+    """
     student_id = current_user["id"]
 
     bm = db.query(models.ProblemBookmark).filter(models.ProblemBookmark.id == bookmark_id).first()
@@ -566,26 +1074,55 @@ def update_bookmark_note(
     if bm.student_id != student_id:
         raise HTTPException(status_code=403, detail="Bạn không có quyền chỉnh sửa bookmark này.")
 
-    bm.note = body.note
+    if body.title is not None:
+        bm.title = body.title.strip() if body.title.strip() else None
+
+    if body.note is not None:
+        bm.note = body.note
+
+    if body.playlist_ids is not None:
+        # Xác thực các playlist đều thuộc quyền sở hữu của học sinh
+        valid_pls = (
+            db.query(models.BookmarkPlaylist.id)
+            .filter(
+                models.BookmarkPlaylist.id.in_(body.playlist_ids),
+                models.BookmarkPlaylist.student_id == student_id,
+            )
+            .all()
+        )
+        valid_pids = {row[0] for row in valid_pls}
+
+        curr_items = (
+            db.query(models.BookmarkPlaylistItem)
+            .filter(models.BookmarkPlaylistItem.bookmark_id == bookmark_id)
+            .all()
+        )
+        curr_pids = {item.playlist_id for item in curr_items}
+
+        # Xóa các playlist bị uncheck
+        for item in curr_items:
+            if item.playlist_id not in valid_pids:
+                db.delete(item)
+
+        # Thêm các playlist mới được check
+        for pid in valid_pids - curr_pids:
+            db.add(
+                models.BookmarkPlaylistItem(
+                    id=uuid.uuid4().hex,
+                    playlist_id=pid,
+                    bookmark_id=bookmark_id,
+                )
+            )
+
     db.commit()
     db.refresh(bm)
 
     session = db.query(models.Session).filter(models.Session.id == bm.session_id).first()
-    dialogue_messages = _extract_bookmark_dialogue(bm.session_id, bm.created_at, db)
+    return _to_bookmark_response(bm, db, session_title=session.title if session else None)
 
-    return schemas.BookmarkResponse(
-        id=bm.id,
-        student_id=bm.student_id,
-        session_id=bm.session_id,
-        session_title=session.title if session else None,
-        problem_snapshot=bm.problem_snapshot,
-        attachment_url=bm.attachment_url,
-        chat_summary=bm.chat_summary,
-        independence_score=bm.independence_score,
-        note=bm.note,
-        created_at=bm.created_at,
-        dialogue_messages=dialogue_messages,
-    )
+
+# Alias tương thích hàm cũ
+update_bookmark_note = update_bookmark
 
 
 # ==============================================================================
@@ -600,6 +1137,7 @@ def delete_bookmark(
 ):
     """
     Học sinh xóa một bookmark khỏi Sổ Tay.
+    Tự động cascade xóa khỏi tất cả các danh sách phát liên kết.
     Trả về HTTP 204 No Content khi thành công.
     """
     student_id = current_user["id"]
@@ -612,4 +1150,4 @@ def delete_bookmark(
 
     db.delete(bm)
     db.commit()
-    # 204 No Content — không trả body
+

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LogOut, Settings, Settings2, X, Plus, Trash2, BookMarked } from "lucide-react";
+import { LogOut, Settings, Settings2, X, Plus, Trash2, BookMarked, Trophy } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -13,6 +13,7 @@ interface ChatSidebarProps {
   className?: string;
   isMobileOpen: boolean;
   setIsMobileOpen: (open: boolean) => void;
+  isCollapsed?: boolean;
   conversations: Conversation[];
   activeChatId: string | null;
   onSelectChat: (id: string) => void;
@@ -24,6 +25,7 @@ export function ChatSidebar({
   className,
   isMobileOpen,
   setIsMobileOpen,
+  isCollapsed = false,
   conversations,
   activeChatId,
   onSelectChat,
@@ -56,11 +58,17 @@ export function ChatSidebar({
       {/* Sidebar container trượt mượt mà */}
       <aside
         className={cn(
-          "fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#F1CCA6] flex flex-col h-full transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-[#C1762A]/20 flex-shrink-0",
+          "fixed md:static inset-y-0 left-0 z-50 bg-[#F1CCA6] flex flex-col h-full flex-shrink-0 border-r border-[#C1762A]/20",
+          "transition-[width,transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          "w-64",
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          isCollapsed
+            ? "md:w-0 md:opacity-0 md:pointer-events-none md:border-r-0 md:overflow-hidden"
+            : "md:w-64 md:opacity-100",
           className
         )}
       >
+        <div className="relative w-64 min-w-[16rem] flex flex-col h-full">
         {/* Mobile close button */}
         <div className="md:hidden flex justify-end p-4 pb-0">
           <button onClick={() => setIsMobileOpen(false)} className="text-[#8C4905]">
@@ -69,9 +77,9 @@ export function ChatSidebar({
         </div>
 
         {/* Top Area (Logo & New Chat) */}
-        <div className="p-4 flex flex-col gap-4">
+        <div className="p-4 flex flex-col gap-3">
           <div
-            className="flex items-center gap-3 mb-2 cursor-pointer"
+            className="flex items-center gap-3 mb-1 cursor-pointer"
             onClick={() => router.push("/")}
           >
             <div className="w-10 h-10 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold text-sm shadow-inner">
@@ -97,6 +105,15 @@ export function ChatSidebar({
           >
             <BookMarked size={15} className="text-[#C1762A]" />
             Sổ tay bài học
+          </button>
+
+          <button
+            onClick={() => router.push("/dashboard/leaderboard")}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#F7ECE1]/90 hover:bg-[#F7ECE1] text-[#8C4905] rounded-2xl font-bold text-xs shadow-xs transition-all border border-[#F1CCA6] cursor-pointer"
+            title="Xem Bảng xếp hạng chuỗi ngày học (Streak Leaderboard)"
+          >
+            <Trophy size={15} className="text-[#C1762A]" />
+            Bảng xếp hạng
           </button>
 
           {/* T6.5 – US 6.1: Thanh tiến trình Mastery tự lực */}
@@ -186,6 +203,7 @@ export function ChatSidebar({
           >
             <Settings size={20} />
           </button>
+        </div>
         </div>
       </aside>
     </>
