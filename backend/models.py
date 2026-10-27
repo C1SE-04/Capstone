@@ -10,10 +10,15 @@ class User(Base):
 
     id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
     email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    role = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)  # US 8.3 (T8.18): Nullable cho tài khoản Google OAuth
+    role = Column(String, nullable=False, default="STUDENT")
     grade = Column(Integer, nullable=True)  # Chỉ dùng cho STUDENT (lớp 4-9)
     session_version = Column(Integer, default=1, nullable=False, server_default="1")  # US 6.2 (T6.10): version để đồng bộ session giữa các tab
+    
+    # US 8.3 (T8.18): Google OAuth fields
+    google_id = Column(String, unique=True, index=True, nullable=True)  # ID người dùng từ Google (sub)
+    oauth_provider = Column(String, nullable=True)  # 'google' hoặc None nếu đăng ký bằng mật khẩu
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Quan hệ Phụ huynh - Học sinh

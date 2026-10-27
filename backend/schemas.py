@@ -16,6 +16,8 @@ class UserResponse(BaseModel):
     role: str
     grade: Optional[int] = None  # Trả về lớp học nếu có
     session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
+    google_id: Optional[str] = None  # US 8.3: Google ID nếu liên kết
+    oauth_provider: Optional[str] = None  # US 8.3: 'google' hoặc None
 
     class Config:
         from_attributes = True
@@ -27,7 +29,40 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     grade: Optional[int] = None  # Task #132: trả thêm grade_level về FE sau login
     session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
-    
+
+
+# --- US 8.3: Google OAuth Schemas (Task T8.19) ---
+
+class GoogleCallbackRequest(BaseModel):
+    """Payload gửi lên từ NextAuth khi người dùng đăng nhập bằng Google (US 8.3 - T8.19)."""
+    email: EmailStr
+    google_id: Optional[str] = None       # ID người dùng Google (sub)
+    sub: Optional[str] = None             # Alias hỗ trợ nếu FE gửi sub
+    name: Optional[str] = None            # Tên hiển thị từ Google profile
+    avatar_url: Optional[str] = None      # Avatar URL từ Google
+    role: Optional[str] = None            # Vai trò nếu FE gửi sẵn (STUDENT / MONITOR)
+    grade: Optional[int] = None           # Lớp học nếu FE gửi sẵn (4-9)
+
+
+class GoogleAuthResponse(BaseModel):
+    """Phản hồi sau khi xác thực Google OAuth thành công (US 8.3 - T8.19)."""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    is_new_user: bool                     # True nếu tài khoản mới hoặc chưa onboarding, False nếu đã onboarding
+    user_id: str
+    email: str
+    role: str
+    grade: Optional[int] = None
+    session_version: Optional[int] = 1
+
+
+class OnboardingRequest(BaseModel):
+    """Payload khi người dùng hoàn tất bước Onboarding (US 8.3 - T8.21)."""
+    role: str                             # "STUDENT" hoặc "MONITOR"
+    grade: Optional[int] = None           # Lớp học (4-9), bắt buộc nếu role == "STUDENT"
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 
