@@ -540,3 +540,36 @@ def get_student_badges(
         total_problems=total_problems,
         avg_independence_score=avg_independence,
     )
+
+# ==============================================================================
+# US 8.1 - Task T8.6: Preview API cho 2 Loại Email Alert (Học Tập & Ngôn Từ)
+# ==============================================================================
+from agents.email_alert_generator import (
+    generate_academic_alert_email,
+    generate_safety_alert_email,
+)
+
+@router.post("/parent/alerts/preview-academic", response_model=schemas.AcademicAlertEmailResult)
+def preview_academic_alert_email(
+    payload: schemas.AcademicAlertGenerateRequest,
+    current_user: dict = Depends(dependencies.get_current_user)
+):
+    """
+    API xem trước nội dung Email Cảnh Báo Học Tập Yếu do AI sinh ra (Task T8.6).
+    Cho phép Phụ huynh hoặc Admin xem thử nội dung email trước khi hệ thống gửi thật.
+    """
+    result = generate_academic_alert_email(request_data=payload)
+    return result
+
+
+@router.post("/parent/alerts/preview-safety", response_model=schemas.SafetyAlertEmailResult)
+def preview_safety_alert_email(
+    payload: schemas.SafetyAlertGenerateRequest,
+    current_user: dict = Depends(dependencies.get_current_user)
+):
+    """
+    API xem trước nội dung Email Cảnh Báo Ngôn Từ do AI sinh ra (Task T8.6).
+    Đảm bảo trích đoạn vi phạm được kiểm duyệt che mờ và có lời khuyên tâm lý chuẩn mực.
+    """
+    result = generate_safety_alert_email(request_data=payload)
+    return result
