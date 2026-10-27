@@ -6,10 +6,12 @@ declare module "next-auth" {
   interface Session {
     access_token?: string;
     refresh_token?: string;
+    is_new_user?: boolean;
     user: {
       id: string;
       role?: string;
       grade_level?: string | number;
+      is_new_user?: boolean;
     } & DefaultSession["user"];
   }
 
@@ -19,6 +21,7 @@ declare module "next-auth" {
     access_token?: string;
     refresh_token?: string;
     grade_level?: string | number;
+    is_new_user?: boolean;
   }
 }
 
@@ -30,5 +33,6 @@ declare module "next-auth/jwt" {
     access_token?: string;
     refresh_token?: string;
     grade_level?: string | number;
+    is_new_user?: boolean;
   }
 }
