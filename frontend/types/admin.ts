@@ -52,10 +52,30 @@ export interface AdminTopic {
   };
 }
 
-export type ViolationType = "TOXIC" | "JAILBREAK" | "OFF_TOPIC" | "SENSITIVE";
-export type SeverityLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-export type ActionTaken = "BLOCKED" | "WARNED" | "REDIRECTED";
-export type TargetAgent = "AGENT_TUTOR" | "AGENT_SAFETY" | "ORCHESTRATOR";
+export type ViolationType =
+  | "TOXIC"
+  | "JAILBREAK"
+  | "OFF_TOPIC"
+  | "SENSITIVE"
+  | "PROFANITY"
+  | "ROUTING"
+  | "SAFETY"
+  | string;
+export type SeverityLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+export type ActionTaken =
+  | "BLOCKED"
+  | "WARNED"
+  | "REDIRECTED"
+  | "NOTIFIED_PARENT"
+  | "ROUTED"
+  | "RECORDED"
+  | string;
+export type TargetAgent =
+  | "AGENT_TUTOR"
+  | "AGENT_SAFETY"
+  | "ORCHESTRATOR"
+  | "SAFETY_AGENT"
+  | string;
 export type AuditLogStatus = "PENDING" | "RESOLVED" | "DISMISSED";
 
 export interface SafetyConversationContext {
@@ -73,13 +93,18 @@ export interface AdminSafetyLogItem {
   student_id: string;
   student_name?: string;
   student_email: string;
+  user_id?: string;
+  email?: string;
   student_grade?: number | null;
   message_snippet: string;
+  user_query?: string;
   violation_type: ViolationType;
   severity: SeverityLevel;
   action_taken: ActionTaken;
   target_agent: TargetAgent;
   flagged_reason: string;
+  notify_parent?: boolean;
+  parent_notified_at?: string | null;
   status?: AuditLogStatus;
   conversation_context?: SafetyConversationContext;
 }
