@@ -957,3 +957,81 @@ class CurriculumTopicListResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# =========================================================================
+# --- US 8.1: Dual Email Alert System Schemas (Task T8.6) ---
+# =========================================================================
+
+class AcademicProblemSummary(BaseModel):
+    """Tóm tắt thông tin một bài toán gần đây của học sinh."""
+    problem_title: Optional[str] = "Bài toán không tên"
+    score: int                                      # Điểm tự lập (0 - 100)
+    hints_used: int = 0                             # Số gợi ý đã sử dụng
+    not_understood_count: int = 0                   # Số lần bấm "Chưa hiểu"
+    created_at: Optional[str] = None                # Ngày làm bài (YYYY-MM-DD)
+
+
+class AcademicAlertGenerateRequest(BaseModel):
+    """Dữ liệu đầu vào để AI sinh email Cảnh báo học tập yếu cho phụ huynh."""
+    student_id: str
+    student_name: str
+    grade: int                                      # Khối lớp (4 - 9)
+    trigger_reason: str = "Học sinh có điểm tự lập dưới 60 trong 3 bài liên tiếp"
+    consecutive_low_scores_count: int = 3
+    recent_problems: list[AcademicProblemSummary] = []
+    average_recent_score: float = 0.0
+    difficult_topics: list[str] = []
+
+
+class AcademicAlertEmailResult(BaseModel):
+    """
+    Kết quả cấu trúc Email Cảnh báo học tập yếu gửi cho Phụ huynh.
+    Được sinh ra từ Gemini và kiểm duyệt qua Pydantic.
+    """
+    alert_type: str = "ACADEMIC_ALERT"
+    email_subject: str                              # Tiêu đề email ấm áp, tinh tế
+    student_name: str
+    grade: int
+    trigger_reason: str                             # Lý do cảnh báo rõ ràng
+    summary: str                                    # Tóm tắt tình trạng học tập (2-3 câu)
+    strengths_observed: str                         # Điểm tích cực / nỗ lực kiên trì của con
+    learning_gap_analysis: str                      # Phân tích khúc mắc tư duy / dạng toán đang vướng
+    actionable_parent_advice: list[str] = []        # 2-3 lời khuyên hành động thiết thực tại nhà
+    suggested_conversation_opener: str              # Câu gợi ý mở lời nhẹ nhàng để cha mẹ hỏi han con
+    is_fallback: bool = False
+    fallback_reason: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SafetyAlertGenerateRequest(BaseModel):
+    """Dữ liệu đầu vào để AI sinh email Cảnh báo ngôn từ không phù hợp."""
+    student_id: str
+    student_name: str
+    grade: int                                      # Khối lớp (4 - 9)
+    violation_type: str = "TOXIC_LANGUAGE"          # "TOXIC_LANGUAGE" | "PROFANITY" | "DISRESPECT"
+    original_message: str                           # Câu nói thô của học sinh trong chat
+    conversation_context: Optional[str] = None      # Ngữ cảnh bài toán hoặc câu hỏi của trợ lý trước đó
+    incident_time: Optional[str] = None
+
+
+class SafetyAlertEmailResult(BaseModel):
+    """
+    Kết quả cấu trúc Email Cảnh báo ngôn từ gửi cho Phụ huynh.
+    Đảm bảo trích đoạn vi phạm đã được che mờ (masked) và định hướng tâm lý nhẹ nhàng.
+    """
+    alert_type: str = "SAFETY_ALERT"
+    email_subject: str                              # Tiêu đề email nhã nhặn, tôn trọng
+    student_name: str
+    grade: int
+    violation_category: str                         # "Ngôn từ không phù hợp" | "Chửi thề / Thô tục" | "Vô lễ"
+    censored_snippet: str                           # Trích đoạn vi phạm ĐÃ CHE MỜ (VD: "đ**", "v**")
+    context_analysis: str                           # Phân tích bối cảnh tâm lý (cáu gắt do bài khó, đùa vui...)
+    tone_guidance_for_parent: str                   # Lời khuyên giữ thái độ điềm tĩnh, lắng nghe
+    actionable_parent_advice: list[str] = []        # 2-3 chỉ dẫn giúp con làm chủ cảm xúc và văn hóa ứng xử
+    suggested_conversation_opener: str              # Câu gợi ý cha mẹ tâm sự cởi mở với con
+    is_fallback: bool = False
+    fallback_reason: Optional[str] = None
+
+    class Config:
+        from_attributes = True
