@@ -52,6 +52,31 @@ export interface AdminTopic {
   };
 }
 
+export interface CurriculumTopicItem {
+  id: string;
+  grade: number;
+  book_series: string;
+  semester?: number | null;
+  chapter_name: string;
+  topic_name: string;
+  order_index: number;
+  school_year?: string | null;
+  is_active: boolean;
+  source_url?: string | null;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SyncVietjackResult {
+  success: boolean;
+  total_synced: number;
+  current_total_in_db: number;
+  grades: number[];
+  message: string;
+  elapsed_seconds: number;
+}
+
 export type ViolationType = "TOXIC" | "JAILBREAK" | "OFF_TOPIC" | "SENSITIVE";
 export type SeverityLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type ActionTaken = "BLOCKED" | "WARNED" | "REDIRECTED";
