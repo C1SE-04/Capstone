@@ -134,8 +134,8 @@ interface StreakBadgeProps {
   className?: string;
   /** Đường dẫn file lottie tùy chỉnh (mặc định /lottie/streak_flame.json hoặc /lottie/flame.json) */
   lottieSrc?: string;
-  /** Callback trả về số ngày streak sau khi tải xong để kiểm tra thành tựu */
-  onStreakLoaded?: (streak: number) => void;
+  /** Callback trả về số ngày streak và maxStreak sau khi tải xong để kiểm tra thành tựu */
+  onStreakLoaded?: (streak: number, maxStreak?: number) => void;
 }
 
 /**
@@ -472,12 +472,13 @@ export function StreakBadge({
 
   // Derive state trực tiếp từ props hoặc từ API fetch (tránh setState trong effect)
   const streak = initialStreak !== undefined ? initialStreak : fetchedStreak;
-  const maxStreak = initialMaxStreak !== undefined ? initialMaxStreak : fetchedMaxStreak;
+  const rawMaxStreak = initialMaxStreak !== undefined ? initialMaxStreak : fetchedMaxStreak;
+  const maxStreak = Math.max(rawMaxStreak, streak);
 
   // Nếu không truyền streak từ ngoài, tự động query từ /api/metrics/summary
   useEffect(() => {
     if (initialStreak !== undefined) {
-      onStreakLoaded?.(initialStreak);
+      onStreakLoaded?.(initialStreak, maxStreak);
       return;
     }
 
@@ -492,7 +493,7 @@ export function StreakBadge({
             const currentMax = data.maxStreak ?? data.max_streak ?? 0;
             setFetchedStreak(currentVal);
             setFetchedMaxStreak(currentMax);
-            onStreakLoaded?.(currentVal);
+            onStreakLoaded?.(currentVal, Math.max(currentMax, currentVal));
           }
         }
       } catch (err) {
@@ -504,7 +505,7 @@ export function StreakBadge({
     return () => {
       isMounted = false;
     };
-  }, [initialStreak, onStreakLoaded]);
+  }, [initialStreak, maxStreak, onStreakLoaded]);
 
   // Thử tải file Lottie hoạt hình ngọn lửa nếu có sẵn
   useEffect(() => {
