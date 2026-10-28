@@ -814,13 +814,18 @@ class AdminSafetyLogItem(BaseModel):
     timestamp: str
     student_id: str
     student_email: str
+    user_id: Optional[str] = None
+    email: Optional[str] = None
     student_grade: Optional[int] = None
     message_snippet: str
-    violation_type: str  # TOXIC, JAILBREAK, OFF_TOPIC, SENSITIVE
-    severity: str        # LOW, MEDIUM, HIGH, CRITICAL
-    action_taken: str    # BLOCKED, WARNED, REDIRECTED
-    target_agent: str    # AGENT_TUTOR, AGENT_SAFETY, ORCHESTRATOR
-    flagged_reason: str
+    user_query: Optional[str] = None
+    violation_type: str = "OFF_TOPIC"  # TOXIC, JAILBREAK, OFF_TOPIC, SENSITIVE, SAFETY, ROUTING, PROFANITY
+    severity: str = "LOW"        # LOW, MEDIUM, HIGH, CRITICAL
+    action_taken: str = "RECORDED"    # BLOCKED, WARNED, REDIRECTED, NOTIFIED_PARENT, ROUTED, RECORDED
+    target_agent: str = "ORCHESTRATOR"    # AGENT_TUTOR, AGENT_SAFETY, ORCHESTRATOR, SAFETY_AGENT
+    flagged_reason: str = ""
+    notify_parent: Optional[bool] = False
+    parent_notified_at: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -832,6 +837,11 @@ class AdminSafetyLogsResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# US 8.5 (Task T8.29B): Alias cho API Admin Logs lọc theo tài khoản
+AdminLogItem = AdminSafetyLogItem
+AdminLogsResponse = AdminSafetyLogsResponse
 
 
 class AdminDifficultTopicStat(BaseModel):

@@ -53,13 +53,34 @@ def build_teaching_instruction(mode: str, wrong_count: int, hint_count: int) -> 
     return ""
 
 
-def save_orchestrator_log(db: Session, user_query: str, target_agent: str, reason: str):
+def save_orchestrator_log(
+    db: Session,
+    user_query: str,
+    target_agent: str,
+    reason: str,
+    session_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    notify_parent: bool = False,
+):
     """Lưu lịch sử quyết định của Orchestrator vào DB (chạy background)."""
     try:
+        if not notify_parent:
+            is_safety = (
+                target_agent in ("SAFETY_AGENT", "SAFETY")
+                or "safety" in (reason or "").lower()
+                or "violation" in (reason or "").lower()
+                or "profan" in (reason or "").lower()
+            )
+            if is_safety:
+                notify_parent = True
+
         new_log = models.OrchestratorLog(
             user_query=user_query,
             target_agent=target_agent,
-            reason=reason
+            reason=reason,
+            session_id=session_id,
+            user_id=user_id,
+            notify_parent=notify_parent,
         )
         db.add(new_log)
         db.commit()
@@ -132,6 +153,7 @@ def process_query_with_orchestrator(
     stats = None
     teaching_mode = "socratic"
 
+    session_user_id = None
     if session_id:
         # 1. Lưu tin nhắn của học sinh vào Database
         user_msg = models.Message(session_id=session_id, sender_type="USER", content=user_query, attachment_url=attachment_url)
@@ -141,6 +163,7 @@ def process_query_with_orchestrator(
         session_obj = db.query(models.Session).filter(models.Session.id == session_id).first()
         if session_obj:
             session_obj.updated_at = func.now()
+            session_user_id = session_obj.user_id
             
         db.commit()
 
@@ -210,8 +233,21 @@ def process_query_with_orchestrator(
     emotion_flag = result.get("emotion_flag", "GUIDING")
     print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0} | emotion={emotion_flag} | session_images={len(session_image_urls)}")
 
-    # Lưu log ngầm
-    background_tasks.add_task(save_orchestrator_log, db, user_query, target_agent, reason)
+    # Lưu log ngầm (US 8.1 - T8.7: kèm session_id, user_id, notify_parent)
+    is_safety_violation = (
+        target_agent in ("SAFETY_AGENT", "SAFETY")
+        or (reason and any(k in reason.lower() for k in ("profan", "toxic", "violation", "disrespect")))
+    )
+    background_tasks.add_task(
+        save_orchestrator_log,
+        db,
+        user_query,
+        target_agent,
+        reason,
+        session_id,
+        session_user_id,
+        is_safety_violation,
+    )
 
     # Yield event orchestrator (kèm stats, teaching_mode và emotion_flag để FE debug)
     decision = {
