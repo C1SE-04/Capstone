@@ -14,9 +14,22 @@ export interface BookmarkItem {
   attachment_url?: string | null;
   chat_summary?: string | null;
   independence_score?: number | null;
+  title?: string | null;
   note?: string | null;
+  playlist_ids?: string[];
   created_at: string;
   dialogue_messages?: BookmarkDialogueMessage[];
+}
+
+export interface PlaylistOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  color?: string | null;
+  is_default?: boolean;
+  item_count: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface BookmarkCreatePayload {
