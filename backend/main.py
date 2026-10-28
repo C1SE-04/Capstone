@@ -66,6 +66,7 @@ from routers import bookmarks  # US 7.2 (Task T7.13): CRUD Sổ Tay Bài Toán
 app.include_router(bookmarks.router)
 from routers import admin_mock  # US 7.3 (Task T7.31): Mock Data Router cho Admin Portal
 app.include_router(admin_mock.router)
+app.include_router(admin_mock.admin_router)  # US 8.5 (Task T8.29B): API Admin Logs GET /admin/logs
 
 
 
@@ -130,6 +131,12 @@ async def startup_event():
         ensure_single_admin()
     except Exception as e:
         print(f"⚠️ Không thể khởi tạo Admin: {e}")
+    # 4. US 8.1 (Task T8.7): Khởi động Background Worker gửi Email Cảnh Báo Phụ Huynh trong 5 phút
+    try:
+        from workers.alert_email_worker import schedule_alert_email_worker
+        asyncio.create_task(schedule_alert_email_worker(interval_seconds=300))
+    except Exception as e:
+        print(f"⚠️ Không thể khởi động Alert Email Worker: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():

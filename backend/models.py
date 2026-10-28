@@ -75,6 +75,12 @@ class OrchestratorLog(Base):
     reason = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # US 8.1 - Task T8.7: Cảnh báo kép tự động cho phụ huynh & tra cứu log theo tài khoản
+    notify_parent = Column(Boolean, default=False, nullable=False, server_default="false", index=True)
+    parent_notified_at = Column(DateTime(timezone=True), nullable=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    session_id = Column(String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+
 class Session(Base):
     __tablename__ = "sessions"
 
@@ -488,6 +494,33 @@ class CurriculumTopic(Base):
         Index("ix_curriculum_grade_active", "grade", "is_active"),
         # Index tối ưu hiển thị danh mục theo chương và thứ tự bài học
         Index("ix_curriculum_grade_chapter_order", "grade", "chapter_name", "order_index"),
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 8.1: Lịch Sử Gửi Email Cảnh Báo Phụ Huynh (Parent Alert Logs)
+# ────────────────────────────────────────────────────────────────────────────
+
+class ParentAlertLog(Base):
+    """
+    US 8.1 - Task T8.7:
+    Ghi vết lịch sử email cảnh báo học tập (Academic Alert) và ngôn từ (Safety Alert)
+    gửi cho phụ huynh, tránh gửi trùng lặp nhiều lần trong chu kỳ 5 phút.
+    """
+    __tablename__ = "parent_alert_logs"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    student_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    alert_type = Column(String, nullable=False)  # "ACADEMIC" hoặc "SAFETY"
+    recipient_email = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    email_body = Column(String, nullable=True)
+    trigger_reason = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    __table_args__ = (
+        Index("ix_parent_alert_logs_student_created", "student_id", "created_at"),
     )
 
 

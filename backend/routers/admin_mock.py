@@ -10,10 +10,13 @@
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
 
+import database
+import models
 import schemas
 import dependencies
 
@@ -21,6 +24,13 @@ import dependencies
 router = APIRouter(
     prefix="/admin/mock",
     tags=["Admin Mock Portal"],
+    dependencies=[Depends(dependencies.require_role(["ADMIN"]))],
+)
+
+# US 8.5 (Task T8.29B): Router API Admin Portal thực tế: GET /admin/logs?...
+admin_router = APIRouter(
+    prefix="/admin",
+    tags=["Admin Portal"],
     dependencies=[Depends(dependencies.require_role(["ADMIN"]))],
 )
 
@@ -524,27 +534,233 @@ def update_mock_user_status(user_id: str, body: schemas.AdminUserStatusUpdateReq
 
 
 # ==============================================================================
-# ENDPOINTS: 4. GIÁM SÁT AN TOÀN & CHẤT LƯỢNG AI (/admin/mock/safety)
+# ENDPOINTS: 4. GIÁM SÁT AN TOÀN & TRA CỨU LOG THEO TÀI KHOẢN (/admin/logs & /admin/mock/safety)
 # ==============================================================================
+
+def fetch_and_filter_logs(
+    user_id: Optional[str] = None,
+    email: Optional[str] = None,
+    search: Optional[str] = None,
+    violation_type: Optional[str] = "ALL",
+    severity: Optional[str] = "ALL",
+    db: Optional[Session] = None,
+) -> schemas.AdminSafetyLogsResponse:
+    """
+    US 8.5 (Task T8.29B):
+    Tra cứu và lọc log hệ thống theo tài khoản (user_id hoặc email).
+    Hợp nhất dữ liệu thật từ bảng orchestrator_logs trong Neon DB và Mock logs để đảm bảo
+    mọi tài khoản demo hoặc tài khoản thật đều kiểm tra được log chuẩn xác.
+    """
+    items: list[schemas.AdminSafetyLogItem] = []
+
+    # 1. Truy vấn Database thật nếu có db session
+    if db is not None:
+        try:
+            query = db.query(models.OrchestratorLog)
+
+            if user_id and user_id.strip():
+                clean_uid = user_id.strip()
+                query = query.filter(models.OrchestratorLog.user_id == clean_uid)
+            elif email and email.strip():
+                clean_email = email.strip()
+                matched_users = db.query(models.User).filter(models.User.email.ilike(f"%{clean_email}%")).all()
+                if matched_users:
+                    matched_ids = [u.id for u in matched_users]
+                    query = query.filter(models.OrchestratorLog.user_id.in_(matched_ids))
+                else:
+                    # Nếu tìm theo email mà không có user nào trong DB -> query không trả về log nào
+                    query = query.filter(models.OrchestratorLog.id == "__none__")
+            elif search and search.strip():
+                term = search.strip()
+                matched_users = db.query(models.User).filter(
+                    (models.User.email.ilike(f"%{term}%")) | (models.User.id == term)
+                ).all()
+                if matched_users:
+                    matched_ids = [u.id for u in matched_users]
+                    query = query.filter(models.OrchestratorLog.user_id.in_(matched_ids))
+                else:
+                    query = query.filter(models.OrchestratorLog.id == "__none__")
+
+            db_logs = query.order_by(models.OrchestratorLog.created_at.desc()).limit(100).all()
+
+            user_cache: dict[str, models.User] = {}
+            for log in db_logs:
+                uid = log.user_id
+                u_email = "unknown@socratickid.edu.vn"
+                u_grade = None
+                if uid:
+                    if uid not in user_cache:
+                        user_obj = db.query(models.User).filter(models.User.id == uid).first()
+                        if user_obj:
+                            user_cache[uid] = user_obj
+                    cached_user = user_cache.get(uid)
+                    if cached_user:
+                        u_email = cached_user.email
+                        u_grade = cached_user.grade
+
+                is_safety = (
+                    log.target_agent in ("SAFETY_AGENT", "SAFETY")
+                    or log.notify_parent
+                    or any(k in (log.reason or "").lower() for k in ("profan", "toxic", "violation", "disrespect"))
+                )
+                v_type = "PROFANITY" if "profan" in (log.reason or "").lower() else ("TOXIC" if is_safety else "ROUTING")
+                sev = "CRITICAL" if log.notify_parent else ("MEDIUM" if is_safety else "LOW")
+                act = "NOTIFIED_PARENT" if log.notify_parent else ("BLOCKED" if is_safety else "REDIRECTED")
+
+                ts = log.created_at.isoformat() if log.created_at else datetime.now(timezone.utc).isoformat()
+                notified_ts = log.parent_notified_at.isoformat() if log.parent_notified_at else None
+
+                items.append(
+                    schemas.AdminSafetyLogItem(
+                        id=log.id,
+                        timestamp=ts,
+                        student_id=uid or "unknown",
+                        student_email=u_email,
+                        user_id=uid,
+                        email=u_email,
+                        student_grade=u_grade,
+                        message_snippet=log.user_query,
+                        user_query=log.user_query,
+                        violation_type=v_type,
+                        severity=sev,
+                        action_taken=act,
+                        target_agent=log.target_agent,
+                        flagged_reason=log.reason or "Điều phối tác vụ Orchestrator",
+                        notify_parent=log.notify_parent,
+                        parent_notified_at=notified_ts,
+                    )
+                )
+        except Exception as e:
+            print(f"[AdminLogs] ⚠️ Lỗi khi query orchestrator_logs DB: {e}")
+
+    # 2. Lọc từ MOCK_SAFETY_LOGS
+    mock_filtered = MOCK_SAFETY_LOGS.copy()
+
+    if user_id and user_id.strip():
+        uid_clean = user_id.strip().lower()
+        mock_filtered = [
+            l for l in mock_filtered
+            if l.get("student_id", "").lower() == uid_clean or l.get("user_id", "").lower() == uid_clean
+        ]
+    elif email and email.strip():
+        em_clean = email.strip().lower()
+        mock_filtered = [
+            l for l in mock_filtered
+            if em_clean in l.get("student_email", "").lower() or em_clean in l.get("email", "").lower()
+        ]
+    elif search and search.strip():
+        s_clean = search.strip().lower()
+        mock_filtered = [
+            l for l in mock_filtered
+            if s_clean in l.get("student_email", "").lower() or s_clean in l.get("student_id", "").lower()
+        ]
+
+    for m in mock_filtered:
+        items.append(
+            schemas.AdminSafetyLogItem(
+                id=m["id"],
+                timestamp=m["timestamp"],
+                student_id=m["student_id"],
+                student_email=m["student_email"],
+                user_id=m.get("user_id", m["student_id"]),
+                email=m.get("email", m["student_email"]),
+                student_grade=m.get("student_grade"),
+                message_snippet=m["message_snippet"],
+                user_query=m.get("user_query", m["message_snippet"]),
+                violation_type=m["violation_type"],
+                severity=m["severity"],
+                action_taken=m["action_taken"],
+                target_agent=m["target_agent"],
+                flagged_reason=m["flagged_reason"],
+                notify_parent=m.get("notify_parent", False),
+                parent_notified_at=m.get("parent_notified_at"),
+            )
+        )
+
+    # 3. Lọc theo violation_type & severity nếu được chỉ định
+    if violation_type and violation_type.upper() != "ALL":
+        items = [it for it in items if it.violation_type.upper() == violation_type.upper()]
+
+    if severity and severity.upper() != "ALL":
+        items = [it for it in items if it.severity.upper() == severity.upper()]
+
+    # 4. Deduplicate theo ID bảo toàn thứ tự
+    seen = set()
+    deduped: list[schemas.AdminSafetyLogItem] = []
+    for it in items:
+        if it.id not in seen:
+            seen.add(it.id)
+            deduped.append(it)
+
+    return schemas.AdminSafetyLogsResponse(total=len(deduped), items=deduped)
+
+
+@admin_router.get("/logs", response_model=schemas.AdminSafetyLogsResponse)
+def get_admin_logs(
+    user_id: Optional[str] = Query(None, description="Lọc theo user_id tài khoản"),
+    email: Optional[str] = Query(None, description="Lọc theo email tài khoản"),
+    search: Optional[str] = Query(None, description="Tìm kiếm theo email hoặc user_id"),
+    violation_type: Optional[str] = Query("ALL", description="Lọc: ALL | TOXIC | JAILBREAK | OFF_TOPIC | SENSITIVE | PROFANITY"),
+    severity: Optional[str] = Query("ALL", description="Lọc: ALL | LOW | MEDIUM | HIGH | CRITICAL"),
+    db: Session = Depends(database.get_db),
+):
+    """
+    US 8.5 - Task T8.29B:
+    API Tra cứu và lọc log hệ thống theo tài khoản: GET /admin/logs?user_id=...&email=...
+    Cho phép Admin tra cứu chính xác sự kiện và lỗi của tài khoản cần hỗ trợ CSKH.
+    """
+    return fetch_and_filter_logs(
+        user_id=user_id,
+        email=email,
+        search=search,
+        violation_type=violation_type,
+        severity=severity,
+        db=db,
+    )
+
+
+@router.get("/logs", response_model=schemas.AdminSafetyLogsResponse)
+def get_mock_logs(
+    user_id: Optional[str] = Query(None, description="Lọc theo user_id tài khoản"),
+    email: Optional[str] = Query(None, description="Lọc theo email tài khoản"),
+    search: Optional[str] = Query(None, description="Tìm kiếm theo email hoặc user_id"),
+    violation_type: Optional[str] = Query("ALL", description="Lọc: ALL | TOXIC | JAILBREAK | OFF_TOPIC | SENSITIVE | PROFANITY"),
+    severity: Optional[str] = Query("ALL", description="Lọc: ALL | LOW | MEDIUM | HIGH | CRITICAL"),
+    db: Session = Depends(database.get_db),
+):
+    """API Mock Logs (/admin/mock/logs) hỗ trợ lọc theo tài khoản user_id / email."""
+    return fetch_and_filter_logs(
+        user_id=user_id,
+        email=email,
+        search=search,
+        violation_type=violation_type,
+        severity=severity,
+        db=db,
+    )
+
 
 @router.get("/safety/logs", response_model=schemas.AdminSafetyLogsResponse)
 def get_mock_safety_logs(
+    user_id: Optional[str] = Query(None, description="Lọc theo user_id tài khoản"),
+    email: Optional[str] = Query(None, description="Lọc theo email tài khoản"),
+    search: Optional[str] = Query(None, description="Tìm kiếm theo email hoặc user_id"),
     violation_type: Optional[str] = Query("ALL", description="Lọc: ALL | TOXIC | JAILBREAK | OFF_TOPIC | SENSITIVE"),
     severity: Optional[str] = Query("ALL", description="Lọc: ALL | LOW | MEDIUM | HIGH | CRITICAL"),
+    db: Session = Depends(database.get_db),
 ):
     """
     Bảng nhật ký các câu hỏi bị chặn bởi Safety Agent hoặc chuyển hướng an toàn:
     - Bám sát schema orchestrator_logs và bộ quy tắc Safety
+    - Hỗ trợ lọc theo user_id / email để tích hợp thanh search chăm sóc khách hàng
     """
-    logs = MOCK_SAFETY_LOGS.copy()
-
-    if violation_type and violation_type.upper() != "ALL":
-        logs = [l for l in logs if l["violation_type"] == violation_type.upper()]
-
-    if severity and severity.upper() != "ALL":
-        logs = [l for l in logs if l["severity"] == severity.upper()]
-
-    return schemas.AdminSafetyLogsResponse(total=len(logs), items=logs)
+    return fetch_and_filter_logs(
+        user_id=user_id,
+        email=email,
+        search=search,
+        violation_type=violation_type,
+        severity=severity,
+        db=db,
+    )
 
 
 @router.get("/safety/stats", response_model=schemas.AdminSafetyStatsResponse)
