@@ -12,6 +12,7 @@ import {
   LogOut,
   X,
   ShieldCheck,
+  FileText,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -61,6 +62,11 @@ const NAV_GROUPS: NavGroup[] = [
         name: "Giám sát Safety AI",
         href: "/admin/safety",
         icon: ShieldAlert,
+      },
+      {
+        name: "Tra Cứu Logs",
+        href: "/admin/logs",
+        icon: FileText,
       },
     ],
   },

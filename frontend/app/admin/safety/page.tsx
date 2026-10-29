@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useCallback, useSyncExternalStore } from "react";
+import { useState, useMemo, useCallback, useSyncExternalStore, useEffect, Suspense } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ShieldAlert,
@@ -32,6 +33,7 @@ import {
   Settings,
   Info,
   Shield,
+  BellRing,
 } from "lucide-react";
 import {
   BarChart,
@@ -347,8 +349,19 @@ const VIOLATION_PIE_DATA = [
   { name: "Thông tin nhạy cảm (PII)", value: 14, color: "#0284C7" },
 ];
 
-export default function AdminSafetyPage() {
+function AdminSafetyContent() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+
+  // Đọc search param từ URL (?email=... hoặc ?user_id=... hoặc ?search=...)
+  const urlSearch = useMemo(() => {
+    return (
+      searchParams?.get("email") ||
+      searchParams?.get("user_id") ||
+      searchParams?.get("search") ||
+      ""
+    );
+  }, [searchParams]);
 
   // --- States ---
   const [logs, setLogs] = useState<AdminSafetyLogItem[]>(INITIAL_SAFETY_LOGS);
@@ -371,7 +384,7 @@ export default function AdminSafetyPage() {
   );
 
   // Filters
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(urlSearch);
   const [violationFilter, setViolationFilter] = useState<string>("ALL");
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
   const [actionFilter, setActionFilter] = useState<string>("ALL");
@@ -407,24 +420,53 @@ export default function AdminSafetyPage() {
     []
   );
 
-  // Fetch backend data if available with automatic fallback
-  const fetchSafetyData = useCallback(async () => {
+  // US 8.5 (Task T8.30): Fetch backend data qua API GET /admin/logs kèm tham số tìm kiếm Email/UserID
+  const fetchSafetyData = useCallback(async (customSearch?: string) => {
     setIsRefreshing(true);
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
       const token = (session as { access_token?: string })?.access_token || "";
 
-      // 1. Fetch Logs
-      const resLogs = await fetch(`${backendUrl}/admin/mock/safety/logs`, {
+      const queryToUse = customSearch !== undefined ? customSearch.trim() : searchQuery.trim();
+      const logParams = new URLSearchParams();
+      if (queryToUse) {
+        if (queryToUse.includes("@")) {
+          logParams.append("email", queryToUse);
+        } else if (
+          queryToUse.startsWith("std_") ||
+          queryToUse.startsWith("usr_") ||
+          queryToUse.startsWith("par_") ||
+          queryToUse.startsWith("adm_")
+        ) {
+          logParams.append("user_id", queryToUse);
+        } else {
+          logParams.append("search", queryToUse);
+        }
+      }
+      if (violationFilter !== "ALL") logParams.append("violation_type", violationFilter);
+      if (severityFilter !== "ALL") logParams.append("severity", severityFilter);
+
+      // 1. Fetch Logs: Gọi API GET /admin/logs theo đúng Task T8.29B & T8.30
+      let resLogs = await fetch(`${backendUrl}/admin/logs?${logParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!resLogs.ok) {
+        resLogs = await fetch(`${backendUrl}/admin/mock/safety/logs?${logParams.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+
       if (resLogs.ok) {
         const dataLogs = await resLogs.json();
-        if (dataLogs.items && Array.isArray(dataLogs.items) && dataLogs.items.length > 0) {
+        if (dataLogs.items && Array.isArray(dataLogs.items)) {
           // Merge with detailed context if missing
           const enrichedLogs = (dataLogs.items as Partial<AdminSafetyLogItem>[]).map((item, idx: number) => ({
             ...INITIAL_SAFETY_LOGS[idx % INITIAL_SAFETY_LOGS.length],
             ...item,
+            id: item.id || `safe_log_${idx}`,
+            student_id: item.student_id || item.user_id || "unknown",
+            student_email: item.student_email || item.email || "unknown@socratickid.edu.vn",
+            message_snippet: item.message_snippet || item.user_query || "",
             status: item.status || (idx % 2 === 0 ? "RESOLVED" : "PENDING"),
             conversation_context: item.conversation_context || INITIAL_SAFETY_LOGS[idx % INITIAL_SAFETY_LOGS.length].conversation_context,
           })) as AdminSafetyLogItem[];
@@ -446,14 +488,27 @@ export default function AdminSafetyPage() {
         }
       }
 
-      showToast("Đã đồng bộ dữ liệu giám sát an toàn & chất lượng AI mới nhất!", "success");
+      showToast(
+        queryToUse
+          ? `Đã tra cứu log cho tài khoản: ${queryToUse}`
+          : "Đã đồng bộ dữ liệu giám sát an toàn & chất lượng AI mới nhất!",
+        "success"
+      );
     } catch {
       // Fallback: refresh state smoothly
       showToast("Đã làm mới dữ liệu cục bộ thành công!", "info");
     } finally {
       setIsRefreshing(false);
     }
-  }, [session, showToast]);
+  }, [session, searchQuery, violationFilter, severityFilter, showToast]);
+
+  // Đồng bộ search param URL nếu có
+  useEffect(() => {
+    if (urlSearch) {
+      setSearchQuery(urlSearch);
+      fetchSafetyData(urlSearch);
+    }
+  }, [urlSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Filtered Logs ---
   const filteredLogs = useMemo(() => {
@@ -462,11 +517,12 @@ export default function AdminSafetyPage() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = log.student_name?.toLowerCase().includes(q);
-        const matchEmail = log.student_email.toLowerCase().includes(q);
-        const matchSnippet = log.message_snippet.toLowerCase().includes(q);
-        const matchReason = log.flagged_reason.toLowerCase().includes(q);
-        const matchId = log.id.toLowerCase().includes(q);
-        if (!matchName && !matchEmail && !matchSnippet && !matchReason && !matchId) {
+        const matchEmail = (log.student_email || log.email || "").toLowerCase().includes(q);
+        const matchSnippet = (log.message_snippet || log.user_query || "").toLowerCase().includes(q);
+        const matchReason = (log.flagged_reason || "").toLowerCase().includes(q);
+        const matchId = (log.id || "").toLowerCase().includes(q);
+        const matchUserId = (log.student_id || log.user_id || "").toLowerCase().includes(q);
+        if (!matchName && !matchEmail && !matchSnippet && !matchReason && !matchId && !matchUserId) {
           return false;
         }
       }
@@ -802,7 +858,7 @@ export default function AdminSafetyPage() {
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Nút Làm mới */}
           <button
-            onClick={fetchSafetyData}
+            onClick={() => fetchSafetyData()}
             disabled={isRefreshing}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#FDF7F2] active:scale-95 transition-all duration-150 cursor-pointer disabled:opacity-50"
             title="Làm mới dữ liệu từ server"
@@ -1262,7 +1318,7 @@ export default function AdminSafetyPage() {
           </div>
         </div>
 
-        {/* Filter & Search Bar */}
+        {/* Filter & Search Bar - US 8.5 Task T8.30: Thêm thanh search Email/UserID */}
         <div className="space-y-3">
           <div className="flex flex-col md:flex-row gap-3">
             {/* Search Input */}
@@ -1278,18 +1334,35 @@ export default function AdminSafetyPage() {
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                placeholder="Tìm theo tên học sinh, email, nội dung chat, mã log..."
-                className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#FAF6F0] border border-[#E8D5C4] text-xs md:text-sm text-[#2A1C0E] placeholder:text-[#7E6B5A] focus:outline-none focus:ring-2 focus:ring-[#C1762A]/30 focus:border-[#C1762A] transition-all"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    fetchSafetyData(searchQuery);
+                  }
+                }}
+                placeholder="Tra cứu theo Email (vd: an.dinh@example.com), User ID (vd: std_1009), nội dung..."
+                className="w-full pl-10 pr-24 py-2.5 rounded-xl bg-[#FAF6F0] border border-[#E8D5C4] text-xs md:text-sm text-[#2A1C0E] placeholder:text-[#7E6B5A] focus:outline-none focus:ring-2 focus:ring-[#C1762A]/30 focus:border-[#C1762A] transition-all"
               />
-              {searchQuery && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {searchQuery && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery("");
+                      fetchSafetyData("");
+                    }}
+                    className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+                    title="Xóa tìm kiếm"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
                 <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  title="Xóa tìm kiếm"
+                  onClick={() => fetchSafetyData(searchQuery)}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#C1762A] text-white hover:bg-[#8C4905] transition-colors cursor-pointer shadow-xs"
+                  title="Tìm kiếm"
                 >
-                  <X size={15} />
+                  Tìm
                 </button>
-              )}
+              </div>
             </div>
 
             {/* Filter: Loại vi phạm */}
@@ -1454,14 +1527,24 @@ export default function AdminSafetyPage() {
                       {/* Cột 2: Học sinh */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="font-bold text-[#2A1C0E] flex items-center gap-1.5">
-                          <span>{log.student_name || "Học sinh ẩn danh"}</span>
+                          <span>{log.student_name || "Học sinh"}</span>
                           {log.student_grade && (
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6]">
                               Lớp {log.student_grade}
                             </span>
                           )}
+                          {log.notify_parent && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-100 text-red-700 border border-red-200 flex items-center gap-0.5">
+                              <BellRing size={10} /> Email PH
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[11px] text-[#7E6B5A]">{log.student_email}</div>
+                        <div className="text-[11px] text-[#7E6B5A]">
+                          {log.student_email || log.email}
+                        </div>
+                        <div className="text-[10px] text-gray-400 font-mono">
+                          ID: {log.student_id || log.user_id}
+                        </div>
                       </td>
 
                       {/* Cột 3: Nội dung câu chat */}
@@ -1794,5 +1877,20 @@ export default function AdminSafetyPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminSafetyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-12 text-center text-[#7E6B5A] text-sm flex flex-col items-center justify-center gap-3">
+          <div className="w-8 h-8 border-3 border-[#C1762A] border-t-transparent rounded-full animate-spin" />
+          <span>Đang tải màn hình giám sát an toàn...</span>
+        </div>
+      }
+    >
+      <AdminSafetyContent />
+    </Suspense>
   );
 }
