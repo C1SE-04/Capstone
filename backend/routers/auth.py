@@ -10,6 +10,32 @@ from database import get_db
 
 router = APIRouter(tags=["Auth"])
 
+@router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
+def register_user(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
+    """
+    Đăng ký tài khoản mới bằng Email/Password đồng bộ với luồng Onboarding:
+    - Tạo tài khoản ban đầu với role='PENDING' (chưa chọn vai trò và khối lớp).
+    - Sau khi đăng ký xong, Frontend sẽ đưa người dùng sang /onboarding để chọn vai trò
+      giống hệt luồng Google Login, đảm bảo giao diện đồng bộ 100%.
+    """
+    normalized_email = user_data.email.lower().strip()
+    existing_user = db.query(models.User).filter(func.lower(models.User.email) == normalized_email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email đã được sử dụng")
+
+    new_user = models.User(
+        email=normalized_email,
+        hashed_password=auth.hash_password(user_data.password),
+        role="PENDING",
+        grade=None,
+        session_version=1,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
 @router.post("/register/student", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
     normalized_email = user_data.email.lower()
@@ -217,9 +243,9 @@ def google_callback(
     is_new = False
 
     if not user:
-        # User hoàn toàn mới -> Tạo mới bản ghi user trong DB
+        # User hoàn toàn mới -> Tạo mới bản ghi user trong DB với role='PENDING' (chưa chọn vai trò)
         is_new = True
-        initial_role = payload.role if (payload.role in ("STUDENT", "MONITOR")) else "STUDENT"
+        initial_role = payload.role if (payload.role in ("STUDENT", "MONITOR")) else "PENDING"
         initial_grade = payload.grade if (payload.grade and payload.grade in range(4, 10)) else None
 
         user = models.User(
@@ -252,8 +278,8 @@ def google_callback(
             db.refresh(user)
 
         # Xác định user có cần Onboarding không:
-        # Nếu là STUDENT và grade chưa có (None) do đăng ký qua Google chưa chọn lớp -> is_new = True
-        if user.role == "STUDENT" and user.grade is None:
+        # Nếu role là PENDING hoặc là STUDENT nhưng chưa chọn lớp -> is_new = True
+        if user.role == "PENDING" or (user.role == "STUDENT" and user.grade is None):
             is_new = True
         else:
             is_new = False
@@ -359,4 +385,25 @@ def complete_onboarding(
         grade=user.grade,
         session_version=user.session_version,
     )
+
+
+@router.post("/auth/cancel-onboarding")
+@router.post("/cancel-onboarding", include_in_schema=False)
+def cancel_onboarding(
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Hủy tiến trình Onboarding:
+    - Nếu user mới đang ở trạng thái 'PENDING' (chưa chọn vai trò), xóa bản ghi khỏi DB để không lưu tài khoản rác.
+    - Xóa các RefreshToken liên quan của user.
+    """
+    user = db.query(models.User).filter(models.User.id == current_user["id"]).first()
+    if user and user.role == "PENDING":
+        db.query(models.RefreshToken).filter(models.RefreshToken.user_id == user.id).delete()
+        db.delete(user)
+        db.commit()
+        return {"success": True, "message": "Đã hủy phiên onboarding và dọn dẹp tài khoản tạm trong cơ sở dữ liệu."}
+    return {"success": True, "message": "Tài khoản đã hoàn tất vai trò, không cần dọn dẹp."}
+
 
