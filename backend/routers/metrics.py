@@ -544,7 +544,7 @@ def get_streak_leaderboard(
     - Bảo vệ riêng tư: Chỉ hiện Tên hiển thị (display_name), Avatar, Khối lớp, Số ngày Streak và Rank.
     - Xác định vị trí xếp hạng của học sinh đang đăng nhập (current_user_entry).
     - Tối ưu hóa truy vấn dạng batch (tránh N+1 queries).
-    - Sắp xếp: Số ngày streak hiện tại giảm dần, kỷ lục streak giảm dần.
+    - Sắp xếp: Kỷ lục chuỗi ngày học (max_streak) giảm dần, số ngày streak hiện tại giảm dần.
     """
     query = db.query(models.User).filter(models.User.role == "STUDENT")
     if grade is not None:
@@ -627,11 +627,11 @@ def get_streak_leaderboard(
             "created_at": s_obj.created_at,
         })
 
-    # Sắp xếp: streak_days giảm dần, max_streak giảm dần, created_at tăng dần
+    # Sắp xếp theo Kỷ Lục (max_streak) giảm dần; nếu bằng nhau thì xét chuỗi hiện tại (streak_days) giảm dần, created_at tăng dần
     ranked_list.sort(
         key=lambda x: (
-            -x["streak_days"],
             -x["max_streak"],
+            -x["streak_days"],
             x["created_at"] or datetime.min,
         )
     )
@@ -823,11 +823,12 @@ def get_summary_metrics(
         prev_start = None
         prev_end = None
 
-    # 2. Tổng số bài toán hoàn thành từ bảng independence_scores
+    # 2. Tổng số bài toán hoàn thành từ bảng independence_scores (US 8.1: Không tính bài trùng lặp)
     completed_problems = (
         db.query(func.count(models.IndependenceScore.id))
         .filter(
             models.IndependenceScore.student_id == student_id,
+            models.IndependenceScore.is_duplicate == False,
             cast(models.IndependenceScore.created_at, Date) >= start_date,
             cast(models.IndependenceScore.created_at, Date) <= today,
         )
@@ -840,6 +841,7 @@ def get_summary_metrics(
             db.query(func.count(models.IndependenceScore.id))
             .filter(
                 models.IndependenceScore.student_id == student_id,
+                models.IndependenceScore.is_duplicate == False,
                 cast(models.IndependenceScore.created_at, Date) >= prev_start,
                 cast(models.IndependenceScore.created_at, Date) <= prev_end,
             )
@@ -860,6 +862,7 @@ def get_summary_metrics(
         db.query(func.avg(models.IndependenceScore.score))
         .filter(
             models.IndependenceScore.student_id == student_id,
+            models.IndependenceScore.is_duplicate == False,
             cast(models.IndependenceScore.created_at, Date) >= start_date,
             cast(models.IndependenceScore.created_at, Date) <= today,
         )
@@ -1009,7 +1012,10 @@ def get_child_problems(
     base_query = (
         db.query(models.IndependenceScore, models.Session)
         .join(models.Session, models.IndependenceScore.session_id == models.Session.id)
-        .filter(models.IndependenceScore.student_id == student_id)
+        .filter(
+            models.IndependenceScore.student_id == student_id,
+            models.IndependenceScore.is_duplicate == False,
+        )
     )
 
     # --- Áp dụng bộ lọc ---

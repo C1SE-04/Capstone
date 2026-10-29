@@ -15,7 +15,8 @@ import {
   Star,
   Plus,
   PanelLeft,
-  ChevronDown,
+  Trash2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookmarkItem, PlaylistOption } from "@/types/bookmark";
@@ -36,9 +37,10 @@ export default function NotebookPage() {
   const [playlists, setPlaylists] = useState<PlaylistOption[]>([]);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
 
-  // Trạng thái Sidebar collapsible
+  // Trạng thái Sidebar collapsible & Modal
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
 
   // Phân trang
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -315,124 +317,116 @@ export default function NotebookPage() {
   // Tính số trang
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
-  // Tên playlist hiện tại đang xem
+  // Tên ngăn lưu trữ hiện tại đang xem
   const currentPlaylist = useMemo(() => {
     if (!selectedPlaylistId) return null;
     return playlists.find((p) => p.id === selectedPlaylistId) || null;
   }, [selectedPlaylistId, playlists]);
 
+  // Handler xóa ngăn lưu trữ từ nút trên thanh menu
+  const handleDeleteStorageClick = () => {
+    // Nếu đang chọn 1 ngăn lưu trữ tùy chỉnh (không phải mặc định)
+    if (currentPlaylist && !currentPlaylist.is_default) {
+      if (
+        window.confirm(
+          `Bạn có chắc chắn muốn xóa ngăn lưu trữ "${currentPlaylist.name}"? Các bài toán đã lưu sẽ không bị mất mà vẫn nằm trong "Tất cả bài".`
+        )
+      ) {
+        handleDeletePlaylist(currentPlaylist.id);
+      }
+    } else {
+      // Nếu đang ở "Tất cả bài" hoặc ngăn mặc định "Yêu thích", mở modal danh sách các ngăn để xóa
+      const customPlaylists = playlists.filter((p) => !p.is_default);
+      if (customPlaylists.length === 0) {
+        alert("Hiện không có ngăn lưu trữ tùy chỉnh nào để xóa (ngăn mặc định Yêu thích không thể xóa).");
+        return;
+      }
+      setIsDeleteModalOpen(true);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[#FAFAF9] overflow-y-auto">
       {/* 1. Header trang Sổ tay: Typography cân bằng, màu sắc tinh tế, nền trắng sạch sẽ */}
-      <header className="bg-white border-b border-stone-200/80 px-4 sm:px-6 py-4 sticky top-0 z-20 shadow-2xs">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Tiêu đề trang hài hòa */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-[#C1762A] border border-amber-200/60 flex items-center justify-center shrink-0">
-              <BookMarked size={20} />
+      <header className="bg-white border-b border-stone-200/80 px-3.5 sm:px-6 py-3 sm:py-4 sticky top-0 z-20 shadow-2xs">
+        {/* Hàng 1: Tiêu đề trang & Nút Đồng bộ thẳng hàng */}
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-[#C1762A] border border-amber-200/60 flex items-center justify-center shrink-0 shadow-2xs">
+              <BookMarked size={18} className="sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-stone-900 tracking-tight">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className="text-sm sm:text-lg font-bold text-stone-900 tracking-tight truncate">
                   Sổ Tay Bài Toán Yêu Thích
                 </h1>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600">
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 shrink-0">
                   {totalAllCount > 0 ? totalAllCount : totalCount} bài
                 </span>
               </div>
-              <p className="text-xs text-stone-500 mt-0.5">
+              <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5 truncate hidden sm:block">
                 Ôn tập các bài toán trọng tâm và bí kíp Socratic đã học
               </p>
             </div>
           </div>
 
-          {/* Các nút hành động trên Header */}
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {/* Nút Ẩn/Hiện Sidebar Danh sách phát */}
-            <button
-              onClick={() => setIsSidebarOpen((prev) => !prev)}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border",
-                isSidebarOpen
-                  ? "bg-amber-50 text-[#8C4905] border-amber-200"
-                  : "bg-white text-stone-700 hover:bg-stone-50 border-stone-200"
-              )}
-              title={isSidebarOpen ? "Đóng danh sách phát" : "Mở danh sách phát"}
-              aria-label="Danh sách phát"
-            >
-              <PanelLeft size={14} />
-              <span>{isSidebarOpen ? "Thu gọn danh sách" : "Danh sách phát"}</span>
-            </button>
-
-            {/* Nút Đồng bộ */}
-            <button
-              onClick={() => {
-                fetchPlaylists();
-                fetchBookmarks(currentPage, selectedPlaylistId);
-              }}
-              disabled={isLoading || isLoadingPlaylists}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-white hover:bg-stone-50 border border-stone-200 transition-all cursor-pointer active:scale-95 shadow-2xs"
-            >
-              <RefreshCw size={12} className={cn((isLoading || isLoadingPlaylists) && "animate-spin")} />
-              <span>Đồng bộ</span>
-            </button>
-          </div>
+          {/* Nút Đồng bộ luôn nằm cố định góc phải */}
+          <button
+            onClick={() => {
+              fetchPlaylists();
+              fetchBookmarks(currentPage, selectedPlaylistId);
+            }}
+            disabled={isLoading || isLoadingPlaylists}
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-white hover:bg-stone-50 border border-stone-200 transition-all cursor-pointer active:scale-95 shadow-2xs shrink-0"
+            title="Đồng bộ dữ liệu"
+          >
+            <RefreshCw size={12} className={cn((isLoading || isLoadingPlaylists) && "animate-spin")} />
+            <span className="hidden sm:inline">Đồng bộ</span>
+          </button>
         </div>
 
-        {/* 2. Thanh tìm kiếm gọn gàng & Bộ lọc Chips & Dropdown danh sách */}
-        <div className="max-w-7xl mx-auto mt-3.5 pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
-            {/* Ô tìm kiếm rút gọn */}
-            <div className="relative w-64 sm:w-72">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
-              />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
+        {/* Hàng 2: Ô tìm kiếm & Bộ lọc Chips (Tất cả / Tự lập 100đ / Có ảnh đề bài) */}
+        <div className="max-w-7xl mx-auto mt-2.5 pt-2.5 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          {/* Ô tìm kiếm: 100% chiều rộng trên mobile, không bị bóp nghẹt */}
+          <div className="relative w-full sm:w-72 md:w-80">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Tìm bài toán, đề bài, bí kíp..."
+              className="w-full pl-9 pr-7 py-1.5 bg-stone-50/80 sm:bg-white border border-stone-200 rounded-xl text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:bg-white focus:border-[#C1762A] focus:ring-1 focus:ring-[#C1762A]/20 transition-all shadow-2xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
                   setCurrentPage(1);
                 }}
-                placeholder="Tìm bài toán, đề bài, bí kíp..."
-                className="w-full pl-9 pr-3 py-1.5 bg-white border border-stone-200 rounded-xl text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-[#C1762A] focus:ring-1 focus:ring-[#C1762A]/20 transition-all shadow-2xs"
-              />
-            </div>
-
-            {/* Dropdown chọn nhanh Playlist tích hợp ngay cạnh ô tìm kiếm */}
-            <div className="relative">
-              <select
-                value={selectedPlaylistId ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  handleSelectPlaylist(val === "" ? null : val);
-                }}
-                className="appearance-none pl-3 pr-8 py-1.5 bg-white border border-stone-200 rounded-xl text-xs font-semibold text-stone-700 hover:border-stone-300 focus:outline-none focus:border-[#C1762A] cursor-pointer shadow-2xs transition-all"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-0.5 cursor-pointer"
+                aria-label="Xóa tìm kiếm"
               >
-                <option value="">⭐ Tất cả bài toán ({totalAllCount > 0 ? totalAllCount : totalCount})</option>
-                {playlists.map((pl) => (
-                  <option key={`opt-${pl.id}`} value={pl.id}>
-                    {pl.name} ({pl.item_count} bài)
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={13}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
-              />
-            </div>
+                <X size={12} />
+              </button>
+            )}
           </div>
 
-          {/* Bộ lọc Chips (viên thuốc nhỏ gọn gàng) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {/* Bộ lọc Chips: Vuốt ngang mượt mà trên mobile */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none shrink-0">
             <button
               onClick={() => {
                 setScoreFilter("all");
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-3 py-1 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer touch-manipulation",
+                "px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer touch-manipulation whitespace-nowrap",
                 scoreFilter === "all"
                   ? "bg-[#C1762A] text-white shadow-2xs"
                   : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
@@ -446,14 +440,14 @@ export default function NotebookPage() {
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation",
+                "px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation whitespace-nowrap",
                 scoreFilter === "perfect"
                   ? "bg-[#C1762A] text-white shadow-2xs"
                   : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
               )}
             >
               <Award size={12} />
-              Tự lập 100đ
+              <span>Tự lập 100đ</span>
             </button>
             <button
               onClick={() => {
@@ -461,32 +455,34 @@ export default function NotebookPage() {
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation",
+                "px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation whitespace-nowrap",
                 hasAttachmentOnly
                   ? "bg-[#C1762A] text-white shadow-2xs"
                   : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
               )}
             >
               <ImageIcon size={12} />
-              Có ảnh đề bài
+              <span>Có ảnh đề bài</span>
             </button>
           </div>
         </div>
 
-        {/* 3. Horizontal Menu / Tabs (Menu ngang danh sách phát) giải phóng không gian bên trái */}
-        <div className="max-w-7xl mx-auto mt-3 flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5">
+        {/* Hàng 3: Danh sách Ngăn Lưu Trữ (Playlists) - Dạng Tabs Pill vuốt ngang sạch sẽ */}
+        <div className="max-w-7xl mx-auto mt-2 pt-2 border-t border-stone-100 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           <button
             onClick={() => handleSelectPlaylist(null)}
             className={cn(
-              "px-3 py-1 rounded-lg text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5",
+              "px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5 whitespace-nowrap",
               selectedPlaylistId === null
-                ? "bg-amber-100/70 text-[#8C4905] border border-amber-300/80 font-bold"
+                ? "bg-amber-100/80 text-[#8C4905] border border-amber-300 font-bold shadow-2xs"
                 : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
             )}
           >
-            <Star size={12} className={selectedPlaylistId === null ? "fill-current" : ""} />
+            <Star size={12} className={selectedPlaylistId === null ? "fill-[#8C4905] text-[#8C4905]" : "text-stone-400"} />
             <span>Tất cả bài</span>
-            <span className="text-[11px] opacity-75">({totalAllCount > 0 ? totalAllCount : totalCount})</span>
+            <span className="text-[10px] opacity-75 bg-black/5 px-1 rounded-md">
+              {totalAllCount > 0 ? totalAllCount : totalCount}
+            </span>
           </button>
 
           {playlists.map((pl) => (
@@ -494,26 +490,38 @@ export default function NotebookPage() {
               key={`tab-${pl.id}`}
               onClick={() => handleSelectPlaylist(pl.id)}
               className={cn(
-                "px-3 py-1 rounded-lg text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5",
+                "px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5 whitespace-nowrap",
                 selectedPlaylistId === pl.id
-                  ? "bg-amber-100/70 text-[#8C4905] border border-amber-300/80 font-bold"
+                  ? "bg-amber-100/80 text-[#8C4905] border border-amber-300 font-bold shadow-2xs"
                   : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
               )}
             >
-              <Folder size={12} />
+              <Folder size={12} className={selectedPlaylistId === pl.id ? "text-[#8C4905]" : "text-stone-400"} />
               <span>{pl.name}</span>
-              <span className="text-[11px] opacity-75">({pl.item_count})</span>
+              <span className="text-[10px] opacity-75 bg-black/5 px-1 rounded-md">
+                {pl.item_count}
+              </span>
             </button>
           ))}
 
-          {/* Nút thêm playlist nhanh trên thanh tab */}
+          {/* Nút thêm ngăn lưu trữ */}
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-[#C1762A] hover:bg-amber-50 border border-dashed border-amber-300/80 shrink-0 transition-all flex items-center gap-1 cursor-pointer"
-            title="Tạo danh sách mới"
+            className="px-2.5 py-1 rounded-xl text-xs font-semibold text-[#C1762A] hover:bg-amber-50 border border-dashed border-amber-300/80 shrink-0 transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap active:scale-95"
+            title="Tạo ngăn lưu trữ mới"
           >
             <Plus size={13} />
-            <span>Thêm playlist</span>
+            <span>Thêm ngăn</span>
+          </button>
+
+          {/* Nút xóa ngăn lưu trữ */}
+          <button
+            onClick={handleDeleteStorageClick}
+            className="px-2 py-1 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200/80 shrink-0 transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 ml-auto sm:ml-0"
+            title="Xóa ngăn lưu trữ"
+          >
+            <Trash2 size={13} />
+            <span className="hidden sm:inline">Xóa ngăn</span>
           </button>
         </div>
       </header>
@@ -600,10 +608,10 @@ export default function NotebookPage() {
                   <Folder size={24} />
                 </div>
                 <h3 className="text-sm font-bold text-stone-900">
-                  Danh sách này đang trống
+                  Ngăn lưu trữ này đang trống
                 </h3>
                 <p className="text-xs text-stone-500 leading-relaxed">
-                  Chưa có bài toán nào trong danh sách &quot;{currentPlaylist?.name}&quot;. Hãy chọn thêm bài vào danh sách này khi lưu bài nhé!
+                  Chưa có bài toán nào trong ngăn lưu trữ &quot;{currentPlaylist?.name}&quot;. Hãy chọn thêm bài vào ngăn lưu trữ này khi lưu bài nhé!
                 </p>
                 <button
                   type="button"
@@ -643,7 +651,7 @@ export default function NotebookPage() {
                 </h3>
                 <p className="text-xs text-stone-500 leading-relaxed">
                   Khi giải xong một bài toán trong khung Chat và bấm &quot;Đã hiểu&quot;, hãy bấm
-                  <span className="font-semibold text-stone-800"> ⭐ &quot;Lưu vào Sổ tay&quot;</span> để tạo playlist và lưu lại bí kíp tư duy nhé!
+                  <span className="font-semibold text-stone-800"> ⭐ &quot;Lưu vào Sổ tay&quot;</span> để tạo ngăn lưu trữ và lưu lại bí kíp tư duy nhé!
                 </p>
                 <button
                   onClick={() => router.push("/dashboard/chat")}
@@ -681,20 +689,73 @@ export default function NotebookPage() {
         </main>
       </div>
 
-      {/* 5. Floating Action Button (FAB) cho "Tạo playlist" góc dưới bên phải */}
-      <div className="fixed bottom-6 right-6 z-30">
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-3 bg-[#C1762A] hover:bg-[#8C4905] text-white text-xs font-bold rounded-full shadow-lg hover:shadow-xl active:scale-95 transition-all cursor-pointer touch-manipulation group"
-          title="Tạo danh sách phát mới"
-          aria-label="Tạo playlist"
-        >
-          <Plus size={16} strokeWidth={2.4} className="group-hover:rotate-90 transition-transform duration-200" />
-          <span className="hidden sm:inline">Tạo playlist</span>
-        </button>
-      </div>
+      {/* Modal Xóa Ngăn Lưu Trữ */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/35 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsDeleteModalOpen(false)}
+          />
+          <div className="relative z-10 bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl border border-stone-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-stone-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+                  <Trash2 size={16} />
+                </div>
+                <h3 className="text-sm font-bold text-stone-900">Xóa ngăn lưu trữ</h3>
+              </div>
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="p-1 text-stone-400 hover:text-stone-700 rounded-lg cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-stone-500 mb-3">
+              Chọn ngăn lưu trữ bạn muốn xóa (các bài toán đã lưu sẽ không bị mất mà vẫn nằm trong &quot;Tất cả bài&quot;):
+            </p>
+            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 mb-4">
+              {playlists
+                .filter((p) => !p.is_default)
+                .map((pl) => (
+                  <div
+                    key={`del-${pl.id}`}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-stone-50 hover:bg-stone-100/80 border border-stone-200/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 truncate min-w-0">
+                      <Folder size={14} className="text-[#C1762A] shrink-0" />
+                      <span className="text-xs font-semibold text-stone-800 truncate">{pl.name}</span>
+                      <span className="text-[11px] text-stone-400 shrink-0">({pl.item_count} bài)</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Xóa ngăn lưu trữ "${pl.name}"?`)) {
+                          handleDeletePlaylist(pl.id);
+                          if (playlists.filter((p) => !p.is_default).length <= 1) {
+                            setIsDeleteModalOpen(false);
+                          }
+                        }
+                      }}
+                      className="px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer shrink-0 ml-2"
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                ))}
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-xl cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* 6. Modal Tạo Playlist Mới */}
+      {/* 6. Modal Tạo Ngăn Lưu Trữ Mới */}
       <CreatePlaylistModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}

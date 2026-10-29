@@ -14,8 +14,6 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<'student' | 'monitor' | null>(null);
-  const [grade, setGrade] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -24,8 +22,6 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     email?: string;
     password?: string;
     confirmPassword?: string;
-    role?: string;
-    grade?: string;
     form?: string;
   }>({});
 
@@ -35,7 +31,6 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     setEmail("");
     setPassword("");
     setConfirmPassword("");
-    setGrade(null);
   };
 
   const validateForm = () => {
@@ -61,16 +56,6 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
     if (!isLoginMode && password !== confirmPassword) {
       newErrors.confirmPassword = "Mật khẩu xác nhận không khớp";
-      hasError = true;
-    }
-
-    if (!isLoginMode && !role) {
-      newErrors.role = "Vui lòng chọn vai trò";
-      hasError = true;
-    }
-
-    if (!isLoginMode && role === 'student' && !grade) {
-      newErrors.grade = "Vui lòng chọn lớp học";
       hasError = true;
     }
 
@@ -112,41 +97,58 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           // Lấy session mới nhất để kiểm tra role
           const currentSession = await getSession();
           const userRole = (currentSession?.user as any)?.role;
+          const isNewUser = (currentSession as any)?.is_new_user || (currentSession?.user as any)?.is_new_user;
           
-          if (userRole === "ADMIN") {
+          if (userRole === "PENDING" || isNewUser) {
+            router.push("/onboarding");
+          } else if (userRole === "ADMIN") {
             router.push("/admin");
           } else if (userRole === "MONITOR") {
             router.push("/dashboard/monitor");
           } else {
             router.push("/dashboard/chat");
           }
-        }, 1500);
+        }, 1200);
       } else {
-        // Tích hợp API Đăng ký — gửi email lowercase về DB
-        const endpoint = role === 'student' ? '/register/student' : '/register/monitor';
+        // Đăng ký mới đồng bộ với luồng Google OAuth:
+        // 1. Gửi email & password sang backend POST /register (tạo user với role='PENDING')
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
-        const response = await fetch(`${backendUrl}${endpoint}`, {
+        const response = await fetch(`${backendUrl}/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.toLowerCase(), password, grade })
+          body: JSON.stringify({ email: email.toLowerCase().trim(), password })
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.detail || "Đã có lỗi xảy ra khi đăng ký");
         }
 
-        // Đăng ký xong → chuyển sang tab đăng nhập
-        setIsLoginMode(true);
-        setEmail("");
-        setPassword("");
-        setConfirmPassword("");
-        setRole(null);
-        setGrade(null);
-        setToastMessage("Đăng ký thành công! Vui lòng đăng nhập.");
+        setToastMessage("Đăng ký thành công! Đang chuyển đến bước thiết lập hồ sơ...");
         setShowSuccessToast(true);
-        setTimeout(() => setShowSuccessToast(false), 3000);
-        setIsLoading(false);
+
+        // 2. Tự động đăng nhập vào NextAuth phiên làm việc
+        const signInResult = await signIn("credentials", {
+          redirect: false,
+          email: email.toLowerCase().trim(),
+          password,
+        });
+
+        if (signInResult?.error) {
+          // Fallback nếu vì lý do nào đó tự động đăng nhập lỗi: quay lại tab Đăng Nhập
+          setIsLoginMode(true);
+          setPassword("");
+          setConfirmPassword("");
+          setToastMessage("Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.");
+          setIsLoading(false);
+          return;
+        }
+
+        // 3. Đóng modal và chuyển hướng sang trang Onboarding đồng bộ như Google Login
+        setTimeout(() => {
+          if (onClose) onClose();
+          router.push("/onboarding");
+        }, 1200);
       }
     } catch (err) {
       setErrors({ form: err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định" });
@@ -246,63 +248,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             </div>
           )}
 
-          {/* Role Selection (Only in Sign up) */}
-          {!isLoginMode && (
-            <div className="flex gap-4 pt-2">
-              <button
-                type="button"
-                onClick={() => setRole('student')}
-                className={`flex-1 py-2 rounded-xl font-bold transition-all cursor-pointer ${role === 'student'
-                    ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
-                    : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
-                  }`}
-                disabled={isLoading}
-              >
-                Học sinh
-              </button>
-              <button
-                type="button"
-                onClick={() => { setRole('monitor'); setGrade(null); }}
-                className={`flex-1 py-2 rounded-xl font-bold transition-all cursor-pointer ${role === 'monitor'
-                    ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
-                    : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
-                  }`}
-                disabled={isLoading}
-              >
-                Người giám sát
-              </button>
-            </div>
-          )}
 
-          {/* Grade Dropdown — chỉ hiện khi chọn Học sinh */}
-          {!isLoginMode && role === 'student' && (
-            <div className="pt-1">
-              <label className="block text-[#8C4905] text-sm font-bold mb-1">
-                Lớp học <span className="text-[#CB6600]">*</span>
-              </label>
-              <select
-                value={grade ?? ""}
-                onChange={(e) => setGrade(e.target.value ? Number(e.target.value) : null)}
-                disabled={isLoading}
-                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 cursor-pointer ${
-                  errors.grade
-                    ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]'
-                    : 'focus:ring-[#F7AD62] border-transparent'
-                }`}
-              >
-                <option value="" disabled>-- Chọn lớp --</option>
-                {[4, 5, 6, 7, 8, 9].map((g) => (
-                  <option key={g} value={g}>Lớp {g}</option>
-                ))}
-              </select>
-              {errors.grade && (
-                <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.grade}</p>
-              )}
-            </div>
-          )}
-          {errors.role && !isLoginMode && (
-            <p className="mt-1 text-sm text-[#CB6600] font-bold text-center">{errors.role}</p>
-          )}
 
           {/* Login Options */}
           {isLoginMode && (
@@ -357,7 +303,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         <button
           type="button"
           disabled={isLoading}
-          onClick={() => signIn("google")}
+          onClick={() => signIn("google", { callbackUrl: "/onboarding" })}
           className="w-full flex items-center justify-center gap-3 py-3 bg-white text-[#8C4905] rounded-xl font-bold text-sm shadow-xs hover:shadow transition-all border border-[#F1CCA6] cursor-pointer hover:bg-[#F7ECE1]/60 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           <img src="/google-logo.svg" alt="Google Login" className="w-5 h-5 object-contain" />

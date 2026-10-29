@@ -181,7 +181,9 @@ class OrchestratorAgent:
         "con cặc", "cục cặc", "cái cặc", "đầu cặc", "cái quần què", "quần què","phò", "điếm", "cave", "đĩ điếm", "gái điếm", "con đĩ",
         "nứng", "nứng lồn", "nứng sảng", "chịch", "xoạc", "bú cu", "bú lồn", "liếm lồn","súc vật", "súc sinh", "óc chó", "óc lợn", "ngu học", 
         "ngu như bò", "ngu lồn", "khốn nạn", "khốn kiếp", "chó má",  "đĩ chó", "đĩ ngựa", "đĩ thoã",
-        "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này"
+        "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này",
+        "fuck", "fuck you", "fck", "fk", "fucking", "shit", "bitch", "asshole", "dick", "cunt",
+        "mặt ghẻ", "óc cứt", "óc bò", "đĩ mẹ", "mẹ mày"
     )
 
     # ── Danh sách tiếng hú hét, gọi cộc lốc, vô nghĩa, quấy rối ─────────
@@ -1089,8 +1091,9 @@ class OrchestratorAgent:
             max_prob = float(proba.max())
             predicted = self._local_model.classes_[proba.argmax()]
 
-            if max_prob < self.ML_CONFIDENCE_THRESHOLD:
-                print(f"[ML-Router] Phân vân: {predicted} ({max_prob:.1%}) < {self.ML_CONFIDENCE_THRESHOLD:.0%} → Trụ cột 3")
+            safety_threshold = 0.50 if predicted == "SAFETY" else self.ML_CONFIDENCE_THRESHOLD
+            if max_prob < safety_threshold:
+                print(f"[ML-Router] Phân vân: {predicted} ({max_prob:.1%}) < {safety_threshold:.0%} → Trụ cột 3")
                 return None
 
             # BẢO VỆ CHỐNG FALSE POSITIVE CHO SAFETY:
@@ -1112,7 +1115,7 @@ class OrchestratorAgent:
                     return None
 
             task = _build_task_description(predicted, text, problem_context)
-            print(f"[ML-Router ⚡] {predicted} ({max_prob:.1%})")
+            print(f"[ML-Router] [MATCH] {predicted} ({max_prob:.1%})")
             return RoutingResult(
                 selected_agent=predicted,
                 task_description=task,
@@ -1124,7 +1127,7 @@ class OrchestratorAgent:
                 ),
             )
         except Exception as e:
-            print(f"[ML-Router] Lỗi: {e}")
+            print(f"[ML-Router] Error: {e}")
             return None
     
     async def route(
@@ -1144,6 +1147,13 @@ class OrchestratorAgent:
         )
         if result is not None:
             return result
+
+        # Trụ cột 2 - Dự đoán ML trước
+        ml_res = self._ml_route(text_clean, problem_context)
+
+        # Ưu tiên An toàn ngôn từ (SAFETY): Kể cả tin nhắn đầu tiên, nếu vi phạm thì phải chuyển SAFETY ngay
+        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT"):
+            return ml_res
 
         # Phễu "Bắt đầu phiên học mới"
         is_empty_history = (
@@ -1169,10 +1179,9 @@ class OrchestratorAgent:
                     emotion_flag=emotion_new,
                 )
 
-        # Trụ cột 2
-        result = self._ml_route(text_clean, problem_context)
-        if result is not None:
-            return result
+        # Áp dụng kết quả ML nếu không phải phiên học mới
+        if ml_res is not None:
+            return ml_res
 
         # Trụ cột 3
         return self._state_machine_route(text_clean, history_text, problem_context, latest_message)

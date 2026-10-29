@@ -231,6 +231,35 @@ def process_query_with_orchestrator(
     )
     enriched_task_description = f"{hint_instruction}\n\n{task_description}"
 
+    # US 8.1: Kiểm tra xem đề bài học sinh vừa gửi có trùng 100% với bài đã giải trước đó không
+    is_exact_duplicate = False
+    if session_user_id and session_user_id != "guest-user-id":
+        try:
+            from deduplication import compute_problem_hash, is_likely_problem_text
+            if is_likely_problem_text(user_query):
+                query_hash = compute_problem_hash(user_query)
+                prev_solved = (
+                    db.query(models.IndependenceScore)
+                    .filter(
+                        models.IndependenceScore.student_id == session_user_id,
+                        models.IndependenceScore.problem_hash == query_hash,
+                    )
+                    .first()
+                )
+                if prev_solved:
+                    is_exact_duplicate = True
+                    dup_instruction = (
+                        "[CHỈ ĐẠO SƯ PHẠM ĐẶC BIỆT - BÀI TOÁN ĐÃ TỪNG HOÀN THÀNH TRƯỚC ĐÓ]:\n"
+                        "Học sinh đang gửi lại một bài toán mà em đã từng giải đúng và hoàn thành trước đó!\n"
+                        "YÊU CẦU BẮT BUỘC:\n"
+                        "1. Hãy MỞ ĐẦU câu trả lời bằng một lời khen và câu nhắc nhở nhẹ nhàng, ấm áp: "
+                        "'Thầy thấy bài toán này em đã từng giải rất tốt rồi đó! Lần này em muốn tự luyện tập lại để ôn tập, hay muốn thầy ra một bài toán nâng cao hơn để thử sức nhé?'.\n"
+                        "2. Sau đó nếu học sinh vẫn muốn giải bài này, hãy dẫn dắt Socratic như bình thường."
+                    )
+                    enriched_task_description = f"{dup_instruction}\n\n{enriched_task_description}"
+        except Exception as e:
+            print(f"[Deduplication Check Error] {e}")
+
     emotion_flag = result.get("emotion_flag", "GUIDING")
     print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0} | emotion={emotion_flag} | session_images={len(session_image_urls)}")
 

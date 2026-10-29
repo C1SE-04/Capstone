@@ -45,6 +45,10 @@ export const authOptions: NextAuthOptions = {
             Buffer.from(data.access_token.split(".")[1], "base64").toString()
           );
 
+          const isPending =
+            payload.role === "PENDING" ||
+            (payload.role === "STUDENT" && !payload.grade_level);
+
           // Trả về object user để NextAuth lưu vào phiên đăng nhập (Session)
           return {
             id: payload.sub,
@@ -54,7 +58,7 @@ export const authOptions: NextAuthOptions = {
             grade_level: payload.grade_level,
             access_token: data.access_token,
             refresh_token: data.refresh_token, // US 6.2 (T6.13): lưu refresh_token của Backend
-            is_new_user: false,
+            is_new_user: isPending,
           };
         } catch {
           return null;

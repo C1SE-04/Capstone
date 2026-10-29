@@ -45,27 +45,27 @@ export function YourRankCard({
 
   const streak = currentUserEntry.streak_days;
   const maxStreak = currentUserEntry.max_streak || streak;
-  const milestone = getStreakMilestone(streak);
-  const { nextMilestone, daysRemaining } = getNextStreakMilestone(streak);
+  const milestone = getStreakMilestone(maxStreak);
+  const { nextMilestone, daysRemaining } = getNextStreakMilestone(maxStreak);
 
-  // Tính phần trăm tiến độ đến mốc tiếp theo
+  // Tính phần trăm tiến độ đến mốc kỷ lục tiếp theo
   let progressPercent = 100;
   if (nextMilestone) {
     const prevMinDays = milestone.minDays;
     const nextMinDays = nextMilestone.minDays;
     const span = nextMinDays - prevMinDays;
-    const currentProgress = streak - prevMinDays;
+    const currentProgress = maxStreak - prevMinDays;
     progressPercent = Math.min(100, Math.max(0, Math.round((currentProgress / span) * 100)));
   }
 
   // Lời nhắn khích lệ dựa trên thứ hạng
   let motivationalMessage = "Tiếp tục duy trì thói quen học tập mỗi ngày để thăng hạng nhé!";
   if (currentUserEntry.rank === 1) {
-    motivationalMessage = "👑 Tuyệt đỉnh! Bạn đang dẫn đầu bảng xếp hạng! Hãy giữ vững phong độ!";
+    motivationalMessage = "Tuyệt đỉnh! Bạn đang dẫn đầu bảng xếp hạng! Hãy giữ vững phong độ!";
   } else if (currentUserEntry.rank <= 3) {
-    motivationalMessage = "🎉 Xuất sắc! Bạn đang đứng trên bục vinh danh Top 3 danh giá!";
+    motivationalMessage = "Xuất sắc! Bạn đang đứng trên bục vinh danh Top 3 danh giá!";
   } else if (currentUserEntry.rank <= 10) {
-    motivationalMessage = "💪 Thật tuyệt vời! Bạn đang ở trong Top 10 cao nhất bảng xếp hạng!";
+    motivationalMessage = "Thật tuyệt vời! Bạn đang ở trong Top 10 cao nhất bảng xếp hạng!";
   }
 
   return (
@@ -112,25 +112,25 @@ export function YourRankCard({
         {/* Streak Stats */}
         <div className="flex items-center gap-3 sm:gap-4 shrink-0 bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-[#F1CCA6]">
           <div className="text-center px-2">
+            <div className="flex items-center justify-center gap-1 text-amber-600">
+              <Trophy size={18} className="fill-current text-amber-500" />
+              <span className="font-extrabold text-lg md:text-xl text-[#8C4905] tabular-nums">
+                {maxStreak}
+              </span>
+            </div>
+            <span className="text-[11px] font-bold text-amber-800">Kỷ lục</span>
+          </div>
+
+          <div className="h-8 w-px bg-stone-200" />
+
+          <div className="text-center px-2">
             <div className="flex items-center justify-center gap-1 text-[#C1762A]">
               <Flame size={18} className="fill-current text-orange-500" />
               <span className="font-extrabold text-lg md:text-xl text-[#8C4905] tabular-nums">
                 {streak}
               </span>
             </div>
-            <span className="text-[11px] font-semibold text-stone-500">Chuỗi ngày</span>
-          </div>
-
-          <div className="h-8 w-px bg-stone-200" />
-
-          <div className="text-center px-2">
-            <div className="flex items-center justify-center gap-1 text-amber-600">
-              <Trophy size={16} className="fill-current text-amber-500" />
-              <span className="font-extrabold text-lg md:text-xl text-[#8C4905] tabular-nums">
-                {maxStreak}
-              </span>
-            </div>
-            <span className="text-[11px] font-semibold text-stone-500">Kỷ lục</span>
+            <span className="text-[11px] font-semibold text-stone-500">Chuỗi hiện tại</span>
           </div>
 
           <div className="h-8 w-px bg-stone-200" />

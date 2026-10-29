@@ -9,13 +9,9 @@ export default function Home() {
   const router = useRouter();
   const [showAuthForm, setShowAuthForm] = useState(false);
 
-  // Nếu là user mới (chưa onboarding) hoặc là ADMIN, tự động chuyển hướng
+  // Nếu là ADMIN, tự động chuyển hướng sang /admin
   useEffect(() => {
     if (session) {
-      if (session.is_new_user || (session.user as any)?.is_new_user) {
-        router.replace("/onboarding");
-        return;
-      }
       const role = (session.user as any)?.role;
       if (role === "ADMIN") {
         router.replace("/admin");
@@ -68,7 +64,25 @@ export default function Home() {
                 <div className="w-10 h-10 rounded-full border-2 border-[#C1762A] bg-[#D9D9D9]" />
               )}
               <button
-                onClick={() => signOut()}
+                onClick={async () => {
+                  try {
+                    const token = session?.access_token;
+                    if (token) {
+                      const backendUrl =
+                        process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+                      await fetch(`${backendUrl}/auth/cancel-onboarding`, {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                      });
+                    }
+                  } catch (e) {
+                    // ignore
+                  }
+                  await signOut({ callbackUrl: "/" });
+                }}
                 className="bg-[#C1762A] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#8C4905] transition-colors text-sm cursor-pointer"
               >
                 Đăng xuất
@@ -94,14 +108,18 @@ export default function Home() {
         <button 
           onClick={() => {
             if (session) {
-              if (session.is_new_user || (session.user as any)?.is_new_user) {
+              const userRole = (session.user as any)?.role;
+              if (
+                session.is_new_user ||
+                (session.user as any)?.is_new_user ||
+                userRole === "PENDING"
+              ) {
                 router.push("/onboarding");
                 return;
               }
-              const role = (session.user as any)?.role;
-              if (role === "ADMIN") {
+              if (userRole === "ADMIN") {
                 router.push("/admin");
-              } else if (role === "MONITOR") {
+              } else if (userRole === "MONITOR") {
                 router.push("/dashboard/monitor");
               } else {
                 router.push("/dashboard/chat");
@@ -112,7 +130,7 @@ export default function Home() {
           }}
           className="bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold text-lg py-3.5 px-10 rounded-xl hover:brightness-105 active:scale-95 transition-all shadow-md cursor-pointer">
           {session 
-            ? (session.is_new_user || (session.user as any)?.is_new_user
+            ? (session.is_new_user || (session.user as any)?.is_new_user || (session.user as any)?.role === "PENDING"
                 ? "Hoàn tất thiết lập ngay"
                 : (session.user as any)?.role === "ADMIN" 
                   ? "Vào Dashboard Quản Trị" 

@@ -53,6 +53,44 @@ def send_email(
         "status": "SENT"
     }
 
+    if smtp_pass:
+        smtp_pass = smtp_pass.replace(" ", "").strip()
+
+    # 1. Ưu tiên gửi qua Brevo API (Cổng 443 HTTPS - Hoạt động trên Render và Cloud không bị chặn cổng)
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    if brevo_api_key and brevo_api_key.strip():
+        try:
+            import requests
+            url = "https://api.brevo.com/v3/smtp/email"
+            headers = {
+                "accept": "application/json",
+                "api-key": brevo_api_key.strip(),
+                "content-type": "application/json",
+            }
+            sender_name = os.getenv("BREVO_SENDER_NAME", "SocraticKid AI")
+            sender_email = os.getenv("BREVO_SENDER_EMAIL", from_email or "socratickid@gmail.com")
+            payload = {
+                "sender": {"name": sender_name, "email": sender_email},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "textContent": text_content,
+            }
+            if html_content:
+                payload["htmlContent"] = html_content
+
+            res = requests.post(url, json=payload, headers=headers, timeout=10)
+            if res.status_code in [200, 201, 202]:
+                record["delivery_method"] = "BREVO_API"
+                record["status"] = "SENT"
+                SENT_EMAILS_LOG.append(record)
+                print(f"[EmailService] [OK] Da gui email qua Brevo API thanh cong toi {to_email}: '{subject}'")
+                return True
+            else:
+                print(f"[EmailService] [WARN] Loi Brevo API ({res.status_code}): {res.text}. Fallback sang SMTP...")
+        except Exception as e:
+            print(f"[EmailService] [WARN] Exception khi goi Brevo API: {e}. Fallback sang SMTP...")
+
+    # 2. Gửi qua SMTP truyền thống (Dùng khi test local hoặc server mở cổng 587)
     if smtp_host and smtp_user and smtp_pass:
         try:
             msg = MIMEMultipart("alternative")
@@ -74,19 +112,19 @@ def send_email(
 
             record["delivery_method"] = "SMTP"
             SENT_EMAILS_LOG.append(record)
-            print(f"[EmailService] ✅ Đã gửi email SMTP thành công tới {to_email}: '{subject}'")
+            print(f"[EmailService] [OK] Da gui email SMTP thanh cong toi {to_email}: '{subject}'")
             return True
         except Exception as e:
             record["status"] = "FAILED"
             record["error"] = str(e)
             SENT_EMAILS_LOG.append(record)
-            print(f"[EmailService] ❌ Lỗi khi gửi SMTP tới {to_email}: {e}")
+            print(f"[EmailService] [ERROR] Loi khi gui SMTP toi {to_email}: {e}")
             return False
     else:
         # Chế độ Mock / Dev log
         record["delivery_method"] = "MOCK_LOG"
         SENT_EMAILS_LOG.append(record)
-        print(f"[EmailService] 📨 [DEV MODE - ĐÃ GỬI EMAIL GIẢ LẬP] Tới: {to_email} | Tiêu đề: '{subject}'")
+        print(f"[EmailService] [DEV MODE - DA GUI EMAIL GIA LAP] Toi: {to_email} | Tieu de: '{subject}'")
         return True
 
 

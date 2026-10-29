@@ -22,6 +22,8 @@ import {
   ShieldCheck,
   ChevronRight,
   Info,
+  Lock,
+  X,
 } from "lucide-react";
 import {
   StreakLeaderboardResponse,
@@ -29,6 +31,7 @@ import {
   GradeFilter,
 } from "@/types/leaderboard";
 import { STREAK_MILESTONES } from "@/lib/streakMilestones";
+import { FigmaStreakFlame, STREAK_TIERS } from "@/components/chat/StreakBadge";
 import { LeaderboardPodium } from "@/components/dashboard/LeaderboardPodium";
 import { YourRankCard } from "@/components/dashboard/YourRankCard";
 import { LeaderboardTable } from "@/components/dashboard/LeaderboardTable";
@@ -132,6 +135,15 @@ export default function LeaderboardPage() {
   const totalParticipants = data?.total_participants || 0;
   const currentUserEntry = data?.current_user_entry;
 
+  // Tính số ngày streak đã đạt được cao nhất của học sinh (để mở khóa các mốc)
+  const userStreak = Math.max(
+    currentUserEntry?.max_streak ?? 0,
+    currentUserEntry?.streak_days ?? 0,
+    (session?.user as any)?.streak_days ?? 0,
+    (session?.user as any)?.max_streak ?? 0
+  );
+  const unlockedCount = STREAK_MILESTONES.slice(1).filter((m) => userStreak >= m.minDays).length;
+
   return (
     <div className="max-w-6xl mx-auto flex flex-col min-h-full pb-12 animate-in fade-in duration-500">
       {/* Header Banner */}
@@ -146,7 +158,7 @@ export default function LeaderboardPage() {
             </h1>
           </div>
           <p className="text-sm md:text-base text-[#C1762A] font-medium">
-            Thi đua chuỗi ngày học liên tục (Streak 🔥) — Càng kiên trì, ngọn lửa càng rực sáng!
+            Xếp hạng theo kỷ lục chuỗi ngày học bền bỉ nhất — Càng kiên trì, ngọn lửa càng rực sáng!
           </p>
         </div>
 
@@ -175,44 +187,116 @@ export default function LeaderboardPage() {
         </div>
       </div>
 
-      {/* Guide 7 Mốc Lửa Tiến Hóa (Collapsible) */}
+      {/* Guide 7 Mốc Lửa Tiến Hóa (Collapsible Showcase - Gọn gàng, trải dài 1 hàng không xuống dòng) */}
       {showMilestonesGuide && (
-        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm mb-6 animate-in slide-in-from-top-3 duration-200">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-extrabold text-[#8C4905] text-sm md:text-base flex items-center gap-2">
-              <Sparkles size={18} className="text-amber-500" />
-              Hệ thống 7 mốc tiến hóa Ngọn Lửa Streak
-            </h3>
+        <div className="bg-white rounded-2xl p-3.5 sm:p-4.5 border border-[#F1CCA6] shadow-sm mb-6 animate-in slide-in-from-top-3 duration-200">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-extrabold text-[#8C4905] text-sm sm:text-base flex items-center gap-1.5">
+                <Sparkles size={16} className="text-amber-500 shrink-0" />
+                Hệ thống 7 mốc tiến hóa Ngọn Lửa Streak
+              </h3>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6]">
+                Kỷ lục của bạn: <strong>{userStreak}</strong> ngày ({unlockedCount}/7 mốc đã mở)
+              </span>
+            </div>
             <button
               onClick={() => setShowMilestonesGuide(false)}
-              className="text-stone-400 hover:text-stone-600 text-xs font-semibold"
+              className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-xl transition-colors shrink-0"
+              title="Đóng"
             >
-              Đóng
+              <X size={16} />
             </button>
           </div>
-          <p className="text-xs text-stone-600 mb-4">
-            Mỗi ngày bạn giải toán hoặc học bài cùng Thầy Socratic, chuỗi ngày học sẽ tăng lên 1 và ngọn lửa sẽ tiến hóa qua các mốc kỳ diệu:
+          <p className="text-xs text-stone-500 mb-3">
+            Học bài và giải toán kiên trì mỗi ngày cùng Thầy Socratic để thắp sáng và mở khóa các mốc ngọn lửa:
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-2.5">
-            {STREAK_MILESTONES.slice(1).map((m) => (
-              <div
-                key={m.tier}
-                className={cn(
-                  "p-2.5 rounded-xl border flex flex-col justify-between",
-                  m.badgeBg,
-                  m.badgeBorder
-                )}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-base">{m.emoji}</span>
-                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-white/80 text-stone-700">
-                    {m.minDays} ngày+
-                  </span>
-                </div>
-                <p className={cn("font-bold text-xs", m.textColor)}>{m.name}</p>
-                <p className="text-[10px] text-stone-500 mt-1 line-clamp-2">{m.description}</p>
-              </div>
-            ))}
+
+          {/* Dải 7 mốc lửa trải dài trên 1 hàng không xuống dòng */}
+          <div className="overflow-x-auto pb-1.5 pt-0.5 -mx-1 px-1 scrollbar-none">
+            <div className="grid grid-cols-7 gap-2 min-w-[560px] sm:min-w-0">
+              {STREAK_MILESTONES.slice(1).map((m) => {
+                const isUnlocked = userStreak >= m.minDays;
+                const tierConfig = STREAK_TIERS.find((t) => t.minDays === m.minDays);
+
+                if (isUnlocked) {
+                  return (
+                    <div
+                      key={m.tier}
+                      className={cn(
+                        "group relative p-2.5 rounded-xl border flex flex-col items-center justify-between min-h-[114px] text-center shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer",
+                        m.badgeBg,
+                        m.badgeBorder
+                      )}
+                      title={`${m.name}: ${m.description} (Đã mở khóa!)`}
+                    >
+                      {/* Icon lửa SVG ở trên */}
+                      <div className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center relative">
+                        {tierConfig && (
+                          <FigmaStreakFlame
+                            tier={tierConfig}
+                            className="w-8 h-8 sm:w-9 sm:h-9 transition-transform duration-200 group-hover:scale-110"
+                          />
+                        )}
+                      </div>
+
+                      {/* Số ngày & tên mốc ở dưới */}
+                      <div className="flex flex-col items-center w-full mt-1">
+                        <span className="font-black text-xs sm:text-sm text-stone-800 tracking-tight leading-tight">
+                          {m.minDays} ngày
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[10px] sm:text-[11px] font-bold truncate max-w-full block leading-tight mt-0.5",
+                            m.textColor
+                          )}
+                        >
+                          {m.name}
+                        </span>
+                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/90 border border-emerald-300/60 px-1.5 py-0.5 rounded-full mt-1.5 leading-none shadow-2xs">
+                          Đã mở
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={m.tier}
+                    className="relative p-2.5 rounded-xl border border-stone-200/90 bg-stone-100/90 flex flex-col items-center justify-between min-h-[114px] text-center select-none overflow-hidden"
+                    title={`Cần đạt chuỗi ${m.minDays} ngày để mở khóa (Hiện tại: ${userStreak}/${m.minDays} ngày)`}
+                  >
+                    {/* Khung skeleton xám với icon cái khóa ở phía trước */}
+                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-stone-200/80 border border-stone-300/60 flex items-center justify-center relative shadow-2xs">
+                      {tierConfig && (
+                        <div className="w-6 h-6 sm:w-7 sm:h-7 opacity-15 grayscale blur-[1.5px] pointer-events-none">
+                          <FigmaStreakFlame tier={tierConfig} className="w-full h-full" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-6 h-6 rounded-lg bg-white/95 shadow-xs border border-stone-200 flex items-center justify-center">
+                          <Lock size={12} className="text-stone-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Số ngày & tên mốc ở dưới */}
+                    <div className="flex flex-col items-center w-full mt-1">
+                      <span className="font-extrabold text-xs sm:text-sm text-stone-400 tracking-tight leading-tight">
+                        {m.minDays} ngày
+                      </span>
+                      <span className="text-[10px] sm:text-[11px] font-medium text-stone-400 truncate max-w-full block leading-tight mt-0.5">
+                        {m.name}
+                      </span>
+                      <span className="text-[9px] font-medium text-stone-400 bg-stone-200/80 px-1.5 py-0.5 rounded-full mt-1.5 leading-none">
+                        Khóa
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

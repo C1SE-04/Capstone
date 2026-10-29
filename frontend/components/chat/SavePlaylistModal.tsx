@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Bookmark, X, Check, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authFetch } from "@/lib/authFetch";
@@ -51,6 +52,22 @@ export function SavePlaylistModal({
   // Trạng thái lưu
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Đảm bảo client đã mount để render qua Portal an toàn
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Khóa cuộn trang web khi modal đang mở để bảng luôn đi theo tầm nhìn
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
 
   // Tải danh sách playlist và gợi ý tên bài toán khi mở modal
   useEffect(() => {
@@ -149,7 +166,7 @@ export function SavePlaylistModal({
         setErrorMsg(err.detail || "Không thể tạo danh sách mới, vui lòng thử lại!");
       }
     } catch {
-      setErrorMsg("Lỗi kết nối khi tạo danh sách phát.");
+      setErrorMsg("Lỗi kết nối khi tạo ngăn lưu trữ.");
     } finally {
       setIsCreatingPlaylist(false);
     }
@@ -200,7 +217,9 @@ export function SavePlaylistModal({
     }
   };
 
-  return (
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Lớp mờ nền Apple-style: độ mờ 40% nhẹ nhàng, blur sâu */}
       <div
@@ -260,16 +279,16 @@ export function SavePlaylistModal({
           </div>
         </div>
 
-        {/* Khối 2: CHỌN DANH SÁCH */}
+        {/* Khối 2: CHỌN NGĂN LƯU TRỮ */}
         <div className="mb-6">
           <label className="block text-[11px] font-bold text-stone-400 tracking-wider uppercase mb-2.5">
-            CHỌN DANH SÁCH
+            CHỌN NGĂN LƯU TRỮ
           </label>
 
           {isLoadingPlaylists ? (
             <div className="py-6 flex flex-col items-center justify-center gap-2 text-stone-400 text-xs">
               <Loader2 size={20} className="animate-spin text-[#C1762A]" />
-              <span>Đang tải danh sách phát...</span>
+              <span>Đang tải ngăn lưu trữ...</span>
             </div>
           ) : (
             <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
@@ -312,7 +331,7 @@ export function SavePlaylistModal({
             </div>
           )}
 
-          {/* Nút + Tạo danh sách mới */}
+          {/* Nút + Tạo ngăn lưu trữ mới */}
           <div className="mt-3">
             <button
               type="button"
@@ -320,10 +339,10 @@ export function SavePlaylistModal({
               className="inline-flex items-center gap-1.5 text-sm font-bold text-[#A05215] hover:text-[#8C4905] active:scale-[0.98] transition-[transform,color] duration-150 cursor-pointer mb-2 touch-manipulation"
             >
               <Plus size={16} strokeWidth={2.5} />
-              Tạo danh sách mới
+              Tạo ngăn lưu trữ mới
             </button>
 
-            {/* Khung nhập tạo danh sách mới */}
+            {/* Khung nhập tạo ngăn lưu trữ mới */}
             {showCreateBox && (
               <div className="p-2.5 rounded-2xl border-2 border-dashed border-[#F1CCA6] bg-[#FFFBF7] flex items-center gap-2">
                 <input
@@ -336,7 +355,7 @@ export function SavePlaylistModal({
                       handleCreateAndSavePlaylist();
                     }
                   }}
-                  placeholder="Tên danh sách mới"
+                  placeholder="Tên ngăn lưu trữ mới"
                   className="flex-1 px-3.5 py-2 rounded-xl bg-white border border-stone-200 text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-[border-color,box-shadow] duration-150"
                 />
                 <button
@@ -348,7 +367,7 @@ export function SavePlaylistModal({
                   {isCreatingPlaylist ? (
                     <Loader2 size={13} className="animate-spin" />
                   ) : (
-                    "[ Tạo & Lưu ]"
+                    "Tạo"
                   )}
                 </button>
               </div>
@@ -372,11 +391,12 @@ export function SavePlaylistModal({
             className="px-6 py-2.5 bg-[#A05215] hover:bg-[#8C4905] active:scale-[0.97] text-white text-sm font-bold rounded-2xl shadow-md shadow-amber-900/10 cursor-pointer transition-[transform,background-color,box-shadow] duration-150 flex items-center gap-2 touch-manipulation"
           >
             {isSaving && <Loader2 size={15} className="animate-spin" />}
-            Lưu thay đổi
+            Lưu bài
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
