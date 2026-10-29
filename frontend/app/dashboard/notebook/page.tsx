@@ -15,7 +15,6 @@ import {
   Star,
   Plus,
   PanelLeft,
-  ChevronDown,
   Trash2,
   X,
 } from "lucide-react";
@@ -349,99 +348,85 @@ export default function NotebookPage() {
   return (
     <div className="flex-1 flex flex-col h-full bg-[#FAFAF9] overflow-y-auto">
       {/* 1. Header trang Sổ tay: Typography cân bằng, màu sắc tinh tế, nền trắng sạch sẽ */}
-      <header className="bg-white border-b border-stone-200/80 px-4 sm:px-6 py-4 sticky top-0 z-20 shadow-2xs">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Tiêu đề trang hài hòa */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-[#C1762A] border border-amber-200/60 flex items-center justify-center shrink-0">
-              <BookMarked size={20} />
+      <header className="bg-white border-b border-stone-200/80 px-3.5 sm:px-6 py-3 sm:py-4 sticky top-0 z-20 shadow-2xs">
+        {/* Hàng 1: Tiêu đề trang & Nút Đồng bộ thẳng hàng */}
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-[#C1762A] border border-amber-200/60 flex items-center justify-center shrink-0 shadow-2xs">
+              <BookMarked size={18} className="sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-stone-900 tracking-tight">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className="text-sm sm:text-lg font-bold text-stone-900 tracking-tight truncate">
                   Sổ Tay Bài Toán Yêu Thích
                 </h1>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600">
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 shrink-0">
                   {totalAllCount > 0 ? totalAllCount : totalCount} bài
                 </span>
               </div>
-              <p className="text-xs text-stone-500 mt-0.5">
+              <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5 truncate hidden sm:block">
                 Ôn tập các bài toán trọng tâm và bí kíp Socratic đã học
               </p>
             </div>
           </div>
 
-          {/* Các nút hành động trên Header */}
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {/* Nút Đồng bộ */}
-            <button
-              onClick={() => {
-                fetchPlaylists();
-                fetchBookmarks(currentPage, selectedPlaylistId);
-              }}
-              disabled={isLoading || isLoadingPlaylists}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-white hover:bg-stone-50 border border-stone-200 transition-all cursor-pointer active:scale-95 shadow-2xs"
-            >
-              <RefreshCw size={12} className={cn((isLoading || isLoadingPlaylists) && "animate-spin")} />
-              <span>Đồng bộ</span>
-            </button>
-          </div>
+          {/* Nút Đồng bộ luôn nằm cố định góc phải */}
+          <button
+            onClick={() => {
+              fetchPlaylists();
+              fetchBookmarks(currentPage, selectedPlaylistId);
+            }}
+            disabled={isLoading || isLoadingPlaylists}
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-white hover:bg-stone-50 border border-stone-200 transition-all cursor-pointer active:scale-95 shadow-2xs shrink-0"
+            title="Đồng bộ dữ liệu"
+          >
+            <RefreshCw size={12} className={cn((isLoading || isLoadingPlaylists) && "animate-spin")} />
+            <span className="hidden sm:inline">Đồng bộ</span>
+          </button>
         </div>
 
-        {/* 2. Thanh tìm kiếm gọn gàng & Bộ lọc Chips & Dropdown danh sách */}
-        <div className="max-w-7xl mx-auto mt-3.5 pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
-            {/* Ô tìm kiếm rút gọn */}
-            <div className="relative w-64 sm:w-72">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
-              />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
+        {/* Hàng 2: Ô tìm kiếm & Bộ lọc Chips (Tất cả / Tự lập 100đ / Có ảnh đề bài) */}
+        <div className="max-w-7xl mx-auto mt-2.5 pt-2.5 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          {/* Ô tìm kiếm: 100% chiều rộng trên mobile, không bị bóp nghẹt */}
+          <div className="relative w-full sm:w-72 md:w-80">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Tìm bài toán, đề bài, bí kíp..."
+              className="w-full pl-9 pr-7 py-1.5 bg-stone-50/80 sm:bg-white border border-stone-200 rounded-xl text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:bg-white focus:border-[#C1762A] focus:ring-1 focus:ring-[#C1762A]/20 transition-all shadow-2xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
                   setCurrentPage(1);
                 }}
-                placeholder="Tìm bài toán, đề bài, bí kíp..."
-                className="w-full pl-9 pr-3 py-1.5 bg-white border border-stone-200 rounded-xl text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-[#C1762A] focus:ring-1 focus:ring-[#C1762A]/20 transition-all shadow-2xs"
-              />
-            </div>
-
-            {/* Dropdown chọn nhanh Playlist tích hợp ngay cạnh ô tìm kiếm */}
-            <div className="relative">
-              <select
-                value={selectedPlaylistId ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  handleSelectPlaylist(val === "" ? null : val);
-                }}
-                className="appearance-none pl-3 pr-8 py-1.5 bg-white border border-stone-200 rounded-xl text-xs font-semibold text-stone-700 hover:border-stone-300 focus:outline-none focus:border-[#C1762A] cursor-pointer shadow-2xs transition-all"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-0.5 cursor-pointer"
+                aria-label="Xóa tìm kiếm"
               >
-                <option value="">⭐ Tất cả bài toán ({totalAllCount > 0 ? totalAllCount : totalCount})</option>
-                {playlists.map((pl) => (
-                  <option key={`opt-${pl.id}`} value={pl.id}>
-                    {pl.name} ({pl.item_count} bài)
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={13}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
-              />
-            </div>
+                <X size={12} />
+              </button>
+            )}
           </div>
 
-          {/* Bộ lọc Chips (viên thuốc nhỏ gọn gàng) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {/* Bộ lọc Chips: Vuốt ngang mượt mà trên mobile */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none shrink-0">
             <button
               onClick={() => {
                 setScoreFilter("all");
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-3 py-1 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer touch-manipulation",
+                "px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer touch-manipulation whitespace-nowrap",
                 scoreFilter === "all"
                   ? "bg-[#C1762A] text-white shadow-2xs"
                   : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
@@ -455,14 +440,14 @@ export default function NotebookPage() {
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation",
+                "px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation whitespace-nowrap",
                 scoreFilter === "perfect"
                   ? "bg-[#C1762A] text-white shadow-2xs"
                   : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
               )}
             >
               <Award size={12} />
-              Tự lập 100đ
+              <span>Tự lập 100đ</span>
             </button>
             <button
               onClick={() => {
@@ -470,32 +455,34 @@ export default function NotebookPage() {
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation",
+                "px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation whitespace-nowrap",
                 hasAttachmentOnly
                   ? "bg-[#C1762A] text-white shadow-2xs"
                   : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
               )}
             >
               <ImageIcon size={12} />
-              Có ảnh đề bài
+              <span>Có ảnh đề bài</span>
             </button>
           </div>
         </div>
 
-        {/* 3. Horizontal Menu / Tabs (Menu ngang danh sách phát) giải phóng không gian bên trái */}
-        <div className="max-w-7xl mx-auto mt-3 flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5">
+        {/* Hàng 3: Danh sách Ngăn Lưu Trữ (Playlists) - Dạng Tabs Pill vuốt ngang sạch sẽ */}
+        <div className="max-w-7xl mx-auto mt-2 pt-2 border-t border-stone-100 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           <button
             onClick={() => handleSelectPlaylist(null)}
             className={cn(
-              "px-3 py-1 rounded-lg text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5",
+              "px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5 whitespace-nowrap",
               selectedPlaylistId === null
-                ? "bg-amber-100/70 text-[#8C4905] border border-amber-300/80 font-bold"
+                ? "bg-amber-100/80 text-[#8C4905] border border-amber-300 font-bold shadow-2xs"
                 : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
             )}
           >
-            <Star size={12} className={selectedPlaylistId === null ? "fill-current" : ""} />
+            <Star size={12} className={selectedPlaylistId === null ? "fill-[#8C4905] text-[#8C4905]" : "text-stone-400"} />
             <span>Tất cả bài</span>
-            <span className="text-[11px] opacity-75">({totalAllCount > 0 ? totalAllCount : totalCount})</span>
+            <span className="text-[10px] opacity-75 bg-black/5 px-1 rounded-md">
+              {totalAllCount > 0 ? totalAllCount : totalCount}
+            </span>
           </button>
 
           {playlists.map((pl) => (
@@ -503,36 +490,38 @@ export default function NotebookPage() {
               key={`tab-${pl.id}`}
               onClick={() => handleSelectPlaylist(pl.id)}
               className={cn(
-                "px-3 py-1 rounded-lg text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5",
+                "px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5 whitespace-nowrap",
                 selectedPlaylistId === pl.id
-                  ? "bg-amber-100/70 text-[#8C4905] border border-amber-300/80 font-bold"
+                  ? "bg-amber-100/80 text-[#8C4905] border border-amber-300 font-bold shadow-2xs"
                   : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
               )}
             >
-              <Folder size={12} />
+              <Folder size={12} className={selectedPlaylistId === pl.id ? "text-[#8C4905]" : "text-stone-400"} />
               <span>{pl.name}</span>
-              <span className="text-[11px] opacity-75">({pl.item_count})</span>
+              <span className="text-[10px] opacity-75 bg-black/5 px-1 rounded-md">
+                {pl.item_count}
+              </span>
             </button>
           ))}
 
-          {/* Nút thêm ngăn lưu trữ trên thanh tab */}
+          {/* Nút thêm ngăn lưu trữ */}
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-[#C1762A] hover:bg-amber-50 border border-dashed border-amber-300/80 shrink-0 transition-all flex items-center gap-1 cursor-pointer"
+            className="px-2.5 py-1 rounded-xl text-xs font-semibold text-[#C1762A] hover:bg-amber-50 border border-dashed border-amber-300/80 shrink-0 transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap active:scale-95"
             title="Tạo ngăn lưu trữ mới"
           >
             <Plus size={13} />
-            <span>Thêm ngăn lưu trữ</span>
+            <span>Thêm ngăn</span>
           </button>
 
           {/* Nút xóa ngăn lưu trữ */}
           <button
             onClick={handleDeleteStorageClick}
-            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200/80 shrink-0 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+            className="px-2 py-1 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200/80 shrink-0 transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 ml-auto sm:ml-0"
             title="Xóa ngăn lưu trữ"
           >
             <Trash2 size={13} />
-            <span>Xóa ngăn lưu trữ</span>
+            <span className="hidden sm:inline">Xóa ngăn</span>
           </button>
         </div>
       </header>
