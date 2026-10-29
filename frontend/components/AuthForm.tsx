@@ -357,7 +357,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         <button
           type="button"
           disabled={isLoading}
-          onClick={() => signIn("google")}
+          onClick={() => signIn("google", { callbackUrl: "/onboarding" })}
           className="w-full flex items-center justify-center gap-3 py-3 bg-white text-[#8C4905] rounded-xl font-bold text-sm shadow-xs hover:shadow transition-all border border-[#F1CCA6] cursor-pointer hover:bg-[#F7ECE1]/60 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           <img src="/google-logo.svg" alt="Google Login" className="w-5 h-5 object-contain" />

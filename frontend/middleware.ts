@@ -22,11 +22,11 @@ export async function middleware(request: NextRequest) {
 
   const role = token.role as string;
   const path = request.nextUrl.pathname;
-  const isNewUser = (token as any)?.is_new_user === true;
+  const isNewUser = (token as any)?.is_new_user === true || role === "PENDING";
 
-  // 2. [AC 8.3.2] Người dùng mới chưa hoàn tất Onboarding:
+  // 2. [AC 8.3.2] Người dùng mới chưa hoàn tất Onboarding (hoặc role PENDING):
   // Bắt buộc chuyển hướng đến /onboarding, chặn truy cập vào mọi trang Dashboard khác
-  if (isNewUser) {
+  if (isNewUser || role === "PENDING") {
     if (path !== "/onboarding") {
       url.pathname = "/onboarding";
       return NextResponse.redirect(url);
@@ -34,10 +34,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 3. [AC 8.3.3] Người dùng đã hoàn tất Onboarding (is_new_user === false):
+  // 3. [AC 8.3.3] Người dùng đã hoàn tất Onboarding (is_new_user === false & role !== PENDING):
   // Nếu cố tình truy cập lại /onboarding thì tự động chuyển hướng về Dashboard tương ứng
   if (path === "/onboarding") {
-    if (role === "STUDENT") {
+    if (role === "STUDENT" && token.grade_level) {
       url.pathname = "/dashboard/chat";
     } else if (role === "MONITOR") {
       url.pathname = "/dashboard/monitor";

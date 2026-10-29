@@ -217,9 +217,9 @@ def google_callback(
     is_new = False
 
     if not user:
-        # User hoàn toàn mới -> Tạo mới bản ghi user trong DB
+        # User hoàn toàn mới -> Tạo mới bản ghi user trong DB với role='PENDING' (chưa chọn vai trò)
         is_new = True
-        initial_role = payload.role if (payload.role in ("STUDENT", "MONITOR")) else "STUDENT"
+        initial_role = payload.role if (payload.role in ("STUDENT", "MONITOR")) else "PENDING"
         initial_grade = payload.grade if (payload.grade and payload.grade in range(4, 10)) else None
 
         user = models.User(
@@ -252,8 +252,8 @@ def google_callback(
             db.refresh(user)
 
         # Xác định user có cần Onboarding không:
-        # Nếu là STUDENT và grade chưa có (None) do đăng ký qua Google chưa chọn lớp -> is_new = True
-        if user.role == "STUDENT" and user.grade is None:
+        # Nếu role là PENDING hoặc là STUDENT nhưng chưa chọn lớp -> is_new = True
+        if user.role == "PENDING" or (user.role == "STUDENT" and user.grade is None):
             is_new = True
         else:
             is_new = False
@@ -359,4 +359,25 @@ def complete_onboarding(
         grade=user.grade,
         session_version=user.session_version,
     )
+
+
+@router.post("/auth/cancel-onboarding")
+@router.post("/cancel-onboarding", include_in_schema=False)
+def cancel_onboarding(
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Hủy tiến trình Onboarding:
+    - Nếu user mới đang ở trạng thái 'PENDING' (chưa chọn vai trò), xóa bản ghi khỏi DB để không lưu tài khoản rác.
+    - Xóa các RefreshToken liên quan của user.
+    """
+    user = db.query(models.User).filter(models.User.id == current_user["id"]).first()
+    if user and user.role == "PENDING":
+        db.query(models.RefreshToken).filter(models.RefreshToken.user_id == user.id).delete()
+        db.delete(user)
+        db.commit()
+        return {"success": True, "message": "Đã hủy phiên onboarding và dọn dẹp tài khoản tạm trong cơ sở dữ liệu."}
+    return {"success": True, "message": "Tài khoản đã hoàn tất vai trò, không cần dọn dẹp."}
+
 

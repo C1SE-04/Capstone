@@ -32,7 +32,7 @@ export default function GoogleSignInButton() {
 
   return (
     <button
-      onClick={() => signIn("google")}
+      onClick={() => signIn("google", { callbackUrl: "/onboarding" })}
       className="group flex h-12 w-full max-w-sm items-center justify-center gap-3 rounded-full bg-white px-6 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-200 transition-all hover:bg-gray-50 hover:shadow-md hover:ring-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-[0.98] dark:bg-zinc-900 dark:text-gray-200 dark:ring-zinc-800 dark:hover:bg-zinc-800 dark:hover:ring-zinc-700 sm:w-auto"
     >
       <svg className="h-5 w-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24">

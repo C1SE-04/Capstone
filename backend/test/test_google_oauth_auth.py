@@ -120,7 +120,7 @@ def test_t8_19_new_google_user_first_login():
         payload = jwt.decode(data["access_token"], auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
         assert payload["sub"] == data["user_id"]
         assert payload["email"] == TEST_NEW_GOOGLE_EMAIL
-        assert payload["role"] == "STUDENT"
+        assert payload["role"] == "PENDING", "Tài khoản mới phải có role=PENDING khi chưa chọn vai trò"
 
         # Kiểm tra user trong DB
         user_in_db = db.query(models.User).filter(models.User.email == TEST_NEW_GOOGLE_EMAIL).first()
@@ -128,8 +128,44 @@ def test_t8_19_new_google_user_first_login():
         assert user_in_db.google_id == TEST_NEW_GOOGLE_ID
         assert user_in_db.oauth_provider == "google"
         assert user_in_db.hashed_password is None
+        assert user_in_db.role == "PENDING", "Trong DB chưa chọn vai trò thì role phải là PENDING"
 
-        print("  [PASS] T8.19: User Google mới tạo thành công kèm is_new_user=True")
+        print("  [PASS] T8.19: User Google mới tạo thành công kèm role=PENDING & is_new_user=True")
+    finally:
+        cleanup_db(db)
+        db.close()
+
+
+def test_cancel_onboarding_purges_pending_user():
+    """
+    Kiểm tra khi người dùng bấm Hủy / Back ở trang onboarding:
+    - POST /auth/cancel-onboarding dọn dẹp sạch sẽ tài khoản PENDING trong Neon DB.
+    """
+    db = SessionLocal()
+    try:
+        cleanup_db(db)
+        # 1. Đăng nhập Google tạo tài khoản PENDING
+        login_resp = client.post("/auth/google-callback", json={
+            "email": TEST_NEW_GOOGLE_EMAIL,
+            "google_id": TEST_NEW_GOOGLE_ID,
+        })
+        token = login_resp.json()["access_token"]
+        assert login_resp.json()["role"] == "PENDING"
+
+        # User tạm đang tồn tại trong DB với role='PENDING'
+        user_before = db.query(models.User).filter(models.User.email == TEST_NEW_GOOGLE_EMAIL).first()
+        assert user_before is not None
+        assert user_before.role == "PENDING"
+
+        # 2. Người dùng hủy onboarding
+        cancel_resp = client.post("/auth/cancel-onboarding", headers={"Authorization": f"Bearer {token}"})
+        assert cancel_resp.status_code == 200
+        assert cancel_resp.json()["success"] is True
+
+        # 3. Kiểm tra DB: tài khoản PENDING đã bị xóa hoàn toàn khỏi DB
+        user_after = db.query(models.User).filter(models.User.email == TEST_NEW_GOOGLE_EMAIL).first()
+        assert user_after is None, "Tài khoản PENDING phải được xóa sạch sau khi hủy onboarding"
+        print("  [PASS] cancel_onboarding: Dọn dẹp tài khoản PENDING thành công, không lưu tài khoản rác")
     finally:
         cleanup_db(db)
         db.close()

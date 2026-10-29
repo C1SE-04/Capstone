@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useState, useEffect, useCallback } from "react";
+import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Users, CheckCircle2, ArrowRight, Loader2, Sparkles, BookOpen } from "lucide-react";
+import { GraduationCap, Users, CheckCircle2, ArrowRight, ArrowLeft, Loader2, Sparkles, BookOpen } from "lucide-react";
 
 export default function OnboardingPage() {
   const { data: session, status, update } = useSession();
@@ -14,6 +14,39 @@ export default function OnboardingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Hàm hủy đăng nhập, dọn dẹp tài khoản PENDING trong DB và đăng xuất sạch NextAuth
+  const handleCancel = useCallback(async () => {
+    try {
+      const token = session?.access_token;
+      if (token) {
+        const backendUrl =
+          process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+        await fetch(`${backendUrl}/auth/cancel-onboarding`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("[Onboarding] Lỗi khi hủy đăng nhập:", err);
+    }
+    await signOut({ callbackUrl: "/" });
+  }, [session]);
+
+  // Bắt sự kiện người dùng nhấn nút Back trên trình duyệt để hủy an toàn
+  useEffect(() => {
+    const handlePopState = () => {
+      handleCancel();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [handleCancel]);
+
   // Điều hướng nếu chưa đăng nhập hoặc đã hoàn tất onboarding
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -23,8 +56,12 @@ export default function OnboardingPage() {
       const userRole = (session.user as any)?.role;
       const grade = (session.user as any)?.grade_level;
 
-      // Nếu không phải user mới và đã có khối lớp (với STUDENT) hoặc là MONITOR
-      if (isNew === false && (userRole === "MONITOR" || (userRole === "STUDENT" && grade))) {
+      // TUYỆT ĐỐI KHÔNG chuyển hướng sang Dashboard nếu userRole đang là PENDING
+      if (
+        isNew === false &&
+        userRole !== "PENDING" &&
+        (userRole === "MONITOR" || (userRole === "STUDENT" && grade))
+      ) {
         if (userRole === "MONITOR") {
           router.replace("/dashboard/monitor");
         } else {
@@ -136,24 +173,36 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        {session?.user && (
-          <div className="flex items-center gap-2.5 bg-white/70 backdrop-blur-xs py-1.5 px-3 rounded-full border border-[#F1CCA6] shadow-xs">
-            {session.user.image ? (
-              <img
-                src={session.user.image}
-                alt="Avatar"
-                className="w-7 h-7 rounded-full border border-[#C1762A]"
-              />
-            ) : (
-              <div className="w-7 h-7 rounded-full bg-[#C1762A] text-white flex items-center justify-center font-bold text-xs">
-                {session.user.name?.[0] || "U"}
-              </div>
-            )}
-            <span className="text-xs font-semibold text-[#8C4905] hidden sm:inline max-w-[150px] truncate">
-              {session.user.name || session.user.email}
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {session?.user && (
+            <div className="flex items-center gap-2.5 bg-white/70 backdrop-blur-xs py-1.5 px-3 rounded-full border border-[#F1CCA6] shadow-xs">
+              {session.user.image ? (
+                <img
+                  src={session.user.image}
+                  alt="Avatar"
+                  className="w-7 h-7 rounded-full border border-[#C1762A]"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-[#C1762A] text-white flex items-center justify-center font-bold text-xs">
+                  {session.user.name?.[0] || "U"}
+                </div>
+              )}
+              <span className="text-xs font-semibold text-[#8C4905] hidden sm:inline max-w-[150px] truncate">
+                {session.user.name || session.user.email}
+              </span>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-[#8C4905] bg-white/80 hover:bg-[#F1CCA6]/40 border border-[#F1CCA6] transition-all cursor-pointer shadow-xs"
+            title="Hủy đăng nhập và quay về Trang chủ"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Hủy / Quay lại</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Container */}
@@ -321,6 +370,17 @@ export default function OnboardingPage() {
               </>
             )}
           </button>
+
+          {/* Nút Hủy đăng nhập */}
+          <div className="text-center pt-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="text-xs font-bold text-[#8C4905]/75 hover:text-[#C1762A] hover:underline transition-colors cursor-pointer"
+            >
+              Không muốn tiếp tục? Hủy đăng nhập và quay về Trang chủ
+            </button>
+          </div>
         </form>
       </main>
 
