@@ -24,7 +24,7 @@ export function CreatePlaylistModal({
     e.preventDefault();
     const clean = name.trim();
     if (!clean) {
-      setError("Vui lòng nhập tên danh sách phát");
+      setError("Vui lòng nhập tên ngăn lưu trữ");
       return;
     }
 
@@ -37,7 +37,7 @@ export function CreatePlaylistModal({
       setName("");
       onClose();
     } else {
-      setError("Không thể tạo danh sách phát. Tên có thể đã tồn tại.");
+      setError("Không thể tạo ngăn lưu trữ. Tên có thể đã tồn tại.");
     }
   };
 
@@ -58,7 +58,7 @@ export function CreatePlaylistModal({
               <FolderPlus size={18} />
             </div>
             <h3 className="text-base font-bold text-stone-900">
-              Tạo danh sách mới
+              Tạo ngăn lưu trữ mới
             </h3>
           </div>
 
@@ -76,7 +76,7 @@ export function CreatePlaylistModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-stone-600 mb-1.5">
-              Tên danh sách phát
+              Tên ngăn lưu trữ
             </label>
             <input
               type="text"
@@ -109,7 +109,7 @@ export function CreatePlaylistModal({
               className="px-4 py-2 bg-[#C1762A] hover:bg-[#8C4905] active:scale-95 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
               {isSubmitting && <Loader2 size={13} className="animate-spin" />}
-              <span>Tạo danh sách</span>
+              <span>Tạo ngăn lưu trữ</span>
             </button>
           </div>
         </form>
