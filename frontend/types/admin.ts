@@ -75,6 +75,7 @@ export interface SyncVietjackResult {
   grades: number[];
   message: string;
   elapsed_seconds: number;
+  source?: "LIVE_CRAWL" | "FALLBACK_JSON";
 }
 
 export type ViolationType =

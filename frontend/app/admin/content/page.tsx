@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   BookOpen,
   Search,
@@ -109,7 +110,7 @@ export default function AdminContentPage() {
   }, [BACKEND_URL]);
 
   // 2. Kích hoạt cào và đồng bộ từ VietJack
-  const handleSyncVietjack = async (): Promise<SyncVietjackResult | null> => {
+  const handleSyncVietjack = useCallback(async (): Promise<SyncVietjackResult | null> => {
     try {
       const res = await authFetch(`${BACKEND_URL}/admin/curriculum/sync-vietjack`, {
         method: "POST",
@@ -130,7 +131,12 @@ export default function AdminContentPage() {
     } catch {
       return null;
     }
-  };
+  }, [BACKEND_URL]);
+
+  const handleSyncSuccessDone = useCallback(() => {
+    fetchTopics();
+    showToast("Đã đồng bộ thành công chuyên đề môn Toán từ VietJack!");
+  }, [fetchTopics, showToast]);
 
   // 3. Toggle trạng thái Ẩn/Hiện tức thì theo [AC 8.4.3]
   const handleToggleTopic = async (topicId: string, currentActive: boolean) => {
@@ -176,34 +182,40 @@ export default function AdminContentPage() {
     }
   };
 
-  // Lọc danh sách chuyên đề theo bộ lọc
+  // Lọc và sắp xếp danh sách chuyên đề theo đúng thứ tự bài học từ trên xuống dưới
   const filteredTopics = useMemo(() => {
-    return topics.filter((t) => {
-      // Lọc khối lớp
-      if (selectedGrade !== "ALL" && t.grade !== selectedGrade) {
-        return false;
-      }
-      // Lọc học kỳ
-      if (selectedSemester !== "ALL" && t.semester !== selectedSemester) {
-        return false;
-      }
-      // Lọc trạng thái
-      if (selectedStatus === "ACTIVE" && !t.is_active) {
-        return false;
-      }
-      if (selectedStatus === "INACTIVE" && t.is_active) {
-        return false;
-      }
-      // Tìm kiếm theo từ khóa
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const inTopic = t.topic_name?.toLowerCase().includes(q);
-        const inChapter = t.chapter_name?.toLowerCase().includes(q);
-        const inBook = t.book_series?.toLowerCase().includes(q);
-        if (!inTopic && !inChapter && !inBook) return false;
-      }
-      return true;
-    });
+    return topics
+      .filter((t) => {
+        // Lọc khối lớp
+        if (selectedGrade !== "ALL" && t.grade !== selectedGrade) {
+          return false;
+        }
+        // Lọc học kỳ
+        if (selectedSemester !== "ALL" && t.semester !== selectedSemester) {
+          return false;
+        }
+        // Lọc trạng thái
+        if (selectedStatus === "ACTIVE" && !t.is_active) {
+          return false;
+        }
+        if (selectedStatus === "INACTIVE" && t.is_active) {
+          return false;
+        }
+        // Tìm kiếm theo từ khóa
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          const inTopic = t.topic_name?.toLowerCase().includes(q);
+          const inChapter = t.chapter_name?.toLowerCase().includes(q);
+          const inBook = t.book_series?.toLowerCase().includes(q);
+          if (!inTopic && !inChapter && !inBook) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        // Ưu tiên khối lớp trước, sau đó sắp xếp theo order_index (từ Bài 1 đến Bài cuối)
+        if (a.grade !== b.grade) return a.grade - b.grade;
+        return (a.order_index ?? 0) - (b.order_index ?? 0);
+      });
   }, [topics, selectedGrade, selectedSemester, selectedStatus, searchQuery]);
 
   // Phân trang
@@ -226,7 +238,7 @@ export default function AdminContentPage() {
     <div className="space-y-6">
       {/* Toast thông báo */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 px-4 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-semibold shadow-xl border border-stone-700 animate-in fade-in slide-in-from-top-2 duration-150 flex items-center gap-2">
+        <div className="fixed top-5 right-5 z-[70] px-4 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-semibold shadow-xl border border-stone-700 animate-in fade-in slide-in-from-top-2 duration-150 flex items-center gap-2">
           <CheckCircle2 size={15} className="text-emerald-400" />
           <span>{toastMessage}</span>
         </div>
@@ -256,6 +268,16 @@ export default function AdminContentPage() {
 
           {/* Cụm nút hành động bên phải */}
           <div className="flex items-center gap-2.5 self-start lg:self-auto">
+            {/* Nút Xem danh sách các bài sau khi lọc nạp vào AI Prompt */}
+            <Link
+              href="/admin/content/prompt-topics"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold text-amber-950 bg-amber-50 hover:bg-amber-100/90 border border-amber-300/80 transition-all shadow-2xs active:scale-95 cursor-pointer touch-manipulation group"
+              title="Xem danh sách 235 dạng toán cốt lõi sau khi lọc nạp vào System Prompt AI"
+            >
+              <Sparkles size={14} className="text-[#C1762A] group-hover:scale-110 transition-transform" />
+              <span>Xem Bài Lọc Cho AI Prompt</span>
+            </Link>
+
             {/* Nút Cào & Đồng bộ từ VietJack nổi bật theo Sprint 8 */}
             <button
               onClick={() => setIsSyncModalOpen(true)}
@@ -616,10 +638,7 @@ export default function AdminContentPage() {
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
         onSync={handleSyncVietjack}
-        onSuccessDone={() => {
-          fetchTopics();
-          showToast("Đã đồng bộ thành công chuyên đề môn Toán từ VietJack!");
-        }}
+        onSuccessDone={handleSyncSuccessDone}
       />
     </div>
   );

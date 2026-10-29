@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   RefreshCw,
   CheckCircle2,
@@ -10,6 +10,8 @@ import {
   BookOpen,
   ArrowRight,
   Database,
+  Wifi,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncVietjackResult } from "@/types/admin";
@@ -35,7 +37,20 @@ export function SyncVietjackModal({
 
   const GRADES = [4, 5, 6, 7, 8, 9];
 
-  // Bắt đầu cào tự động khi mở modal
+  // Sử dụng ref để tránh re-trigger khi component cha re-render
+  const onSyncRef = useRef(onSync);
+  const onSuccessDoneRef = useRef(onSuccessDone);
+  const hasTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    onSyncRef.current = onSync;
+  }, [onSync]);
+
+  useEffect(() => {
+    onSuccessDoneRef.current = onSuccessDone;
+  }, [onSuccessDone]);
+
+  // Bắt đầu cào tự động đúng 1 lần khi mở modal
   useEffect(() => {
     if (!isOpen) {
       setPhase("idle");
@@ -43,22 +58,27 @@ export function SyncVietjackModal({
       setActiveGradeIndex(0);
       setResult(null);
       setErrorMessage(null);
+      hasTriggeredRef.current = false;
       return;
     }
 
+    // Đảm bảo chỉ kích hoạt cào 1 lần duy nhất trong suốt phiên mở modal
+    if (hasTriggeredRef.current) return;
+    hasTriggeredRef.current = true;
+
     let isMounted = true;
-    let timerId: NodeJS.Timeout | null = null;
+    let progressInterval: NodeJS.Timeout | null = null;
 
     const startProcess = async () => {
       setPhase("crawling");
       setProgressPercent(15);
       setActiveGradeIndex(0);
 
-      // Mô phỏng tiến trình 2-4 giây theo đúng tiêu chí Sprint 8 [AC 8.4.1]
-      const stepInterval = 450; // Mỗi 450ms hoàn tất 1 lớp
+      // Mô phỏng tiến trình từng khối lớp theo đúng tiêu chí Sprint 8 [AC 8.4.1]
+      const stepInterval = 450;
       let currentStep = 0;
 
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
         currentStep++;
         if (!isMounted) return;
 
@@ -69,8 +89,8 @@ export function SyncVietjackModal({
       }, stepInterval);
 
       try {
-        const syncRes = await onSync();
-        clearInterval(progressInterval);
+        const syncRes = await onSyncRef.current();
+        if (progressInterval) clearInterval(progressInterval);
 
         if (!isMounted) return;
 
@@ -79,13 +99,13 @@ export function SyncVietjackModal({
           setActiveGradeIndex(GRADES.length);
           setResult(syncRes);
           setPhase("success");
-          onSuccessDone?.();
+          onSuccessDoneRef.current?.();
         } else {
           setPhase("error");
           setErrorMessage(syncRes?.message || "Quá trình đồng bộ từ VietJack không thành công.");
         }
       } catch (err: unknown) {
-        clearInterval(progressInterval);
+        if (progressInterval) clearInterval(progressInterval);
         if (isMounted) {
           setPhase("error");
           setErrorMessage(err instanceof Error ? err.message : "Lỗi kết nối máy chủ khi cào dữ liệu.");
@@ -93,13 +113,14 @@ export function SyncVietjackModal({
       }
     };
 
-    timerId = setTimeout(startProcess, 200);
+    const timerId = setTimeout(startProcess, 200);
 
     return () => {
       isMounted = false;
       if (timerId) clearTimeout(timerId);
+      if (progressInterval) clearInterval(progressInterval);
     };
-  }, [isOpen, onSync, onSuccessDone]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -240,6 +261,18 @@ export function SyncVietjackModal({
                   <BookOpen size={13} />
                   Đủ 6 khối lớp (4 - 9)
                 </span>
+              </div>
+              {/* Nguồn dữ liệu */}
+              <div className="pt-1">
+                {result.source === "LIVE_CRAWL" || !result.source ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-100/80 text-emerald-800 border border-emerald-200">
+                    Nguồn: Bóc tách trực tiếp từ VietJack
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-700 border border-stone-200">
+                    Nguồn: Dữ liệu lưu trữ nội bộ
+                  </span>
+                )}
               </div>
             </div>
           )}

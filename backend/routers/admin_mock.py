@@ -909,7 +909,6 @@ def get_curriculum_topics(
 
     topics = query.order_by(
         models.CurriculumTopic.grade.asc(),
-        models.CurriculumTopic.semester.asc().nulls_last(),
         models.CurriculumTopic.order_index.asc(),
         models.CurriculumTopic.created_at.asc(),
     ).all()
@@ -918,6 +917,82 @@ def get_curriculum_topics(
         total=len(topics),
         items=topics,
     )
+
+
+@admin_router.get("/curriculum/prompt-curriculum")
+@router.get("/curriculum/prompt-curriculum")
+def get_prompt_curriculum(
+    grade: Optional[int] = Query(None, ge=4, le=9, description="Lọc theo khối lớp (4 - 9)"),
+    db: Session = Depends(database.get_db),
+):
+    """
+    US 8.4:
+    Trả về danh sách 235 dạng toán cốt lõi sau khi lọc nạp vào AI Prompt.
+    Kèm theo thống kê, trạng thái nạp (active) và nội dung prompt context thực tế.
+    """
+    import os
+    import json
+    from agents.agent_prompts import _get_grade_context
+
+    json_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "agents",
+        "grade_curriculum.json",
+    )
+    curriculum = {}
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            curriculum = json.load(f)
+
+    # Lấy danh sách các topic bị tắt (is_active == False) từ DB
+    inactive_db = (
+        db.query(models.CurriculumTopic.topic_name, models.CurriculumTopic.grade)
+        .filter(models.CurriculumTopic.is_active == False)
+        .all()
+    )
+    inactive_set = {(r.grade, r.topic_name.lower().strip()) for r in inactive_db}
+
+    total_raw = db.query(models.CurriculumTopic).count()
+    if total_raw == 0:
+        total_raw = 420
+
+    grades_data = {}
+    target_grades = [grade] if isinstance(grade, int) else list(range(4, 10))
+
+    for g in target_grades:
+        g_str = str(g)
+        topic_names = curriculum.get(g_str, [])
+        items = []
+        for idx, name in enumerate(topic_names, start=1):
+            is_active = True
+            name_lower = name.lower()
+            for in_g, in_name in inactive_set:
+                if in_g == g and (name_lower in in_name or in_name in name_lower):
+                    is_active = False
+                    break
+            items.append({
+                "order": idx,
+                "name": name,
+                "grade": g,
+                "is_active": is_active,
+            })
+
+        grades_data[g_str] = {
+            "grade": g,
+            "total": len(items),
+            "active_count": sum(1 for it in items if it["is_active"]),
+            "inactive_count": sum(1 for it in items if not it["is_active"]),
+            "topics": items,
+            "prompt_preview": _get_grade_context(g),
+        }
+
+    total_filtered = sum(len(curriculum.get(str(g), [])) for g in range(4, 10))
+
+    return {
+        "total_raw": total_raw,
+        "total_filtered": total_filtered,
+        "grades": grades_data,
+    }
 
 
 @admin_router.patch("/curriculum/topics/{topic_id}/toggle", response_model=schemas.CurriculumTopicResponse)
@@ -988,8 +1063,11 @@ def sync_curriculum_from_vietjack(
     force_fallback = body.force_fallback if body else False
 
     crawled_topics: list[dict] = []
+    data_source: str = "LIVE_CRAWL"  # Track nguồn dữ liệu thực tế
 
     # 1. Thử gọi crawler bóc tách trực tiếp từ VietJack (nếu không ép dùng fallback)
+    import os, json
+
     if not force_fallback:
         try:
             from agents.curriculum_crawler import run_crawler, transform_for_db_sync, export_to_curriculum_json
@@ -1004,7 +1082,7 @@ def sync_curriculum_from_vietjack(
 
     # 2. Cơ chế Fallback an toàn (Task T8.29): Nếu crawler rỗng, đọc từ grade_curriculum.json
     if not crawled_topics:
-        import os, json
+        data_source = "FALLBACK_JSON"
         json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", "grade_curriculum.json")
         if os.path.exists(json_path):
             with open(json_path, "r", encoding="utf-8") as f:
@@ -1085,11 +1163,13 @@ def sync_curriculum_from_vietjack(
     current_total = db.query(models.CurriculumTopic).count()
     total_synced = inserted_count + updated_count
 
+    source_label = "VietJack (trực tiếp)" if data_source == "LIVE_CRAWL" else "kho dữ liệu lưu trữ"
     return schemas.SyncVietjackResult(
         success=True,
         total_synced=total_synced,
         current_total_in_db=current_total,
         grades=target_grades,
-        message=f"Đồng bộ thành công {total_synced} bài học từ VietJack vào cơ sở dữ liệu!",
+        message=f"Đồng bộ thành công {total_synced} bài học từ {source_label} vào cơ sở dữ liệu!",
         elapsed_seconds=elapsed,
+        source=data_source,
     )

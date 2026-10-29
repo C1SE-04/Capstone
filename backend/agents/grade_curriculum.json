@@ -1,7 +1,5 @@
 {
   "4": [
-    "Ôn tập các số đến 100 000",
-    "Ôn tập các phép tính trong phạm vi 100 000",
     "Số chẵn, số lẻ",
     "Biểu thức chứa chữ",
     "Giải bài toán có ba bước tính",
@@ -23,10 +21,6 @@
     "Hai đường thẳng vuông góc",
     "Hai đường thẳng song song",
     "Hình bình hành, hình thoi",
-    "Ôn tập các số đến lớp triệu",
-    "Ôn tập phép cộng, phép trừ",
-    "Ôn tập hình học",
-    "Ôn tập đo lường",
     "Nhân với số có một chữ số",
     "Chia cho số có một chữ số",
     "Tính chất giao hoán và kết hợp của phép nhân",
@@ -52,14 +46,9 @@
     "Tìm phân số của một số"
   ],
   "5": [
-    "Ôn tập số tự nhiên",
-    "Ôn tập các phép tính với số tự nhiên",
-    "Ôn tập phân số",
     "Phân số thập phân",
-    "Ôn tập các phép tính với phân số",
     "Cộng, trừ hai phân số khác mẫu số",
     "Hỗn số",
-    "Ôn tập hình học và đo lường",
     "Khái niệm số thập phân",
     "So sánh các số thập phân",
     "Viết số đo đại lượng dưới dạng số thập phân",
@@ -74,11 +63,6 @@
     "Hình tam giác. Diện tích hình tam giác",
     "Hình thang. Diện tích hình thang",
     "Đường tròn. Chu vi và diện tích hình tròn",
-    "Ôn tập số thập phân",
-    "Ôn tập các phép tính với số thập phân",
-    "Ôn tập một số hình phẳng",
-    "Ôn tập diện tích, chu vi một số hình phẳng",
-    "Ôn tập đo lường",
     "Tỉ số. Tỉ số phần trăm",
     "Tỉ lệ bản đồ và ứng dụng",
     "Tìm hai số khi biết tổng và tỉ số của hai số đó",
@@ -126,9 +110,6 @@
     "Chu vi và diện tích của một số tứ giác đã học",
     "Hình có trục đối xứng",
     "Hình có tâm đối xứng",
-    "Tấm thiệp và phòng học của em",
-    "Vẽ hình đơn giản với phần mềm geogebra",
-    "Sử dụng máy tính cầm tay",
     "Mở rộng phân số. Phân số bằng nhau",
     "So sánh phân số. Hỗn số dương",
     "Phép cộng và phép trừ phân số",
@@ -149,9 +130,7 @@
     "Biểu đồ cột",
     "Biểu đồ cột kép",
     "Kết quả có thể và sự kiện trong trò chơi, thí nghiệm",
-    "Xác suất thực nghiệm",
-    "Kế hoạch chi tiêu cá nhân và gia đình",
-    "Hoạt động thể thao nào được yêu thích nhất trong hè?"
+    "Xác suất thực nghiệm"
   ],
   "7": [
     "Tập hợp các số hữu tỉ",
@@ -173,8 +152,6 @@
     "Thu thập và phân loại dữ liệu",
     "Biểu đồ hình quạt tròn",
     "Biểu đồ đoạn thẳng",
-    "Vẽ hình đơn giản với phần mềm Geogebra",
-    "Dân số và cơ cấu dân số Việt Nam",
     "Tỉ lệ thức",
     "Tính chất của dãy tỉ số bằng nhau",
     "Đại lượng tỉ lệ thuận",
@@ -192,9 +169,7 @@
     "Sự đồng quy của ba đường trung tuyến, ba đường phân giác trong một tam giác",
     "Sự đồng quy của ba đường trung trực, ba đường cao trong một tam giác",
     "Hình hộp chữ nhật và hình lập phương",
-    "Hình lăng trụ đứng tam giác và hình lăng trụ đứng tứ giác",
-    "Đại lượng tỉ lệ trong đời sống",
-    "Hộp quà và chân đế lịch để bàn của em"
+    "Hình lăng trụ đứng tam giác và hình lăng trụ đứng tứ giác"
   ],
   "8": [
     "Đơn thức",
@@ -217,10 +192,6 @@
     "Thu thập và phân loại dữ liệu",
     "Biểu diễn dữ liệu bằng bảng, biểu đồ",
     "Phân tích số liệu thống kê dựa vào biểu đồ",
-    "Công thức lãi kép",
-    "Thực hiện tính toán trên đa thức với phần mềm GeoGebra",
-    "Vẽ hình đơn giản với phần mềm GeoGebra",
-    "Phân tích đặc điểm khí hậu Việt Nam",
     "Phân thức đại số",
     "Tính chất cơ bản của phân thức đại số",
     "Phép cộng và phép trừ phân thức đại số",
@@ -239,10 +210,7 @@
     "Các trường hợp đồng dạng của hai tam giác vuông",
     "Hình đồng dạng",
     "Hình chóp tam giác đều",
-    "Hình chóp tứ giác đều",
-    "Một vài ứng dụng của hàm số bậc nhất trong tài chính",
-    "Ứng dụng định lí Thalès, định lí Pythagore và tam giác đồng dạng để đo chiều cao, khoảng cách",
-    "Mô tả thí nghiệm ngẫu nhiên với phần mềm Excel"
+    "Hình chóp tứ giác đều"
   ],
   "9": [
     "Khái niệm phương trình và hệ hai phương trình bậc nhất hai ẩn",
@@ -262,8 +230,6 @@
     "Độ dài của cung tròn. Diện tích hình quạt tròn và hình vành khuyên",
     "Vị trí tương đối của đường thẳng và đường tròn",
     "Vị trí tương đối của hai đường tròn",
-    "Pha chế dung dịch theo nồng độ yêu cầu",
-    "Tính chiều cao và xác định khoảng cách",
     "Hàm số y = ax2 (a ≠ 0)",
     "Phương trình bậc hai một ẩn",
     "Định lí Viète và ứng dụng",
@@ -278,10 +244,6 @@
     "Tứ giác nội tiếp",
     "Đa giác đều",
     "Hình trụ và hình nón",
-    "Hình cầu",
-    "Giải phương trình, hệ phương trình và vẽ đồ thị hàm số với phần mềm GeoGebra",
-    "Vẽ hình đơn giản với phần mềm GeoGebra",
-    "Xác định tần số, tần số tương đối, vẽ các biểu đồ biểu diễn bảng tần số, tần số tương đối bằng Excel",
-    "Gene trội trong các thế hệ lai"
+    "Hình cầu"
   ]
 }
