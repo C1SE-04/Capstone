@@ -348,9 +348,11 @@ def export_to_curriculum_json(
     Biến đổi 424 bài học thô thành cấu trúc phân tầng {'4': [...], '5': [...]}
     tương thích chuẩn với file 'grade_curriculum.json' (phục vụ Task T8.26 cho AI Prompts).
 
-    Tự động tối ưu:
+    Tự động tối ưu theo Đề xuất 2:
       - Cắt bỏ tiền tố 'Bài X: ' để chỉ giữ lại khái niệm / tên dạng toán cốt lõi.
       - Lọc bỏ các bài chung chung không mang ngữ nghĩa toán học ('Luyện tập chung', 'Ôn tập chung'...).
+      - Lọc bỏ các chương ôn tập tổng kết cuối năm (Chủ đề 13 lớp 4, Chủ đề 12 lớp 5).
+      - Lọc bỏ các bài luyện tập theo trang ở cấp 2 ('Luyện tập (trang...').
       - Tùy chọn lưu thẳng ra file JSON nếu truyền 'save_path'.
     """
     result: dict[str, list[str]] = {str(g): [] for g in range(4, 10)}
@@ -360,14 +362,27 @@ def export_to_curriculum_json(
         "ôn tập cuối năm",
         "bài tập cuối chương",
         "bài tập cuối",
+        "bài tập ôn cuối",
+        "bài tập ôn",
+        "luyện tập (trang",
+        "thực hành và trải nghiệm",
+        "hoạt động thực hành",
+        "thực hành tính toán",
+        "thực hành phần mềm",
     )
 
     for item in raw_topics:
         g_str = str(item["grade"])
+        ch = item.get("chapter", "").lower()
+
+        # Bỏ qua các chương ôn tập tổng kết cuối năm (Chủ đề 13 lớp 4, Chủ đề 12 lớp 5)
+        if "cuối năm" in ch:
+            continue
+
         topic = item["topic_name"].strip()
         topic_lower = topic.lower()
 
-        # Bỏ qua bài luyện tập chung không có tên kiến thức cụ thể
+        # Bỏ qua bài luyện tập chung / thực hành / ôn tập chung
         if any(ign in topic_lower for ign in ignore_keywords):
             continue
 
