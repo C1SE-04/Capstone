@@ -200,7 +200,7 @@ export default function OnboardingPage() {
             title="Hủy đăng nhập và quay về Trang chủ"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Hủy / Quay lại</span>
+            <span>Quay lại</span>
           </button>
         </div>
       </header>
@@ -238,11 +238,10 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 onClick={() => setRole("STUDENT")}
-                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                  role === "STUDENT"
+                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${role === "STUDENT"
                     ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
                     : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
-                }`}
+                  }`}
               >
                 {role === "STUDENT" && (
                   <div className="absolute top-4 right-4 text-[#C1762A]">
@@ -270,11 +269,10 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 onClick={() => setRole("MONITOR")}
-                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                  role === "MONITOR"
+                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${role === "MONITOR"
                     ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
                     : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
-                }`}
+                  }`}
               >
                 {role === "MONITOR" && (
                   <div className="absolute top-4 right-4 text-[#C1762A]">
@@ -317,19 +315,17 @@ export default function OnboardingPage() {
                       key={item.grade}
                       type="button"
                       onClick={() => setSelectedGrade(item.grade)}
-                      className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                        isSelected
+                      className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${isSelected
                           ? "border-[#C1762A] bg-[#C1762A] text-white shadow-sm scale-102"
                           : "border-stone-200 bg-white text-[#8C4905] hover:border-[#F1CCA6] hover:bg-stone-50"
-                      }`}
+                        }`}
                     >
                       <span className="font-extrabold text-base">
                         {item.label}
                       </span>
                       <span
-                        className={`text-[10px] font-semibold ${
-                          isSelected ? "text-[#F7ECE1]" : "text-[#8C4905]/60"
-                        }`}
+                        className={`text-[10px] font-semibold ${isSelected ? "text-[#F7ECE1]" : "text-[#8C4905]/60"
+                          }`}
                       >
                         {item.level}
                       </span>

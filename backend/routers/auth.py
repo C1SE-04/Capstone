@@ -10,6 +10,32 @@ from database import get_db
 
 router = APIRouter(tags=["Auth"])
 
+@router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
+def register_user(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
+    """
+    Đăng ký tài khoản mới bằng Email/Password đồng bộ với luồng Onboarding:
+    - Tạo tài khoản ban đầu với role='PENDING' (chưa chọn vai trò và khối lớp).
+    - Sau khi đăng ký xong, Frontend sẽ đưa người dùng sang /onboarding để chọn vai trò
+      giống hệt luồng Google Login, đảm bảo giao diện đồng bộ 100%.
+    """
+    normalized_email = user_data.email.lower().strip()
+    existing_user = db.query(models.User).filter(func.lower(models.User.email) == normalized_email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email đã được sử dụng")
+
+    new_user = models.User(
+        email=normalized_email,
+        hashed_password=auth.hash_password(user_data.password),
+        role="PENDING",
+        grade=None,
+        session_version=1,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
 @router.post("/register/student", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
     normalized_email = user_data.email.lower()

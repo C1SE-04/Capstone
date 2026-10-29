@@ -358,3 +358,77 @@ def test_refresh_token_flow_for_google_user():
     finally:
         cleanup_db(db)
         db.close()
+
+
+def test_register_email_password_unified_onboarding_flow():
+    """
+    Kiểm tra luồng đăng ký bằng Email/Password đồng bộ với giao diện Onboarding:
+    1. Đăng ký tài khoản qua POST /register -> tạo user role='PENDING'.
+    2. Đăng nhập qua POST /login -> nhận token role='PENDING'.
+    3. Hoàn tất Onboarding qua POST /auth/onboarding -> role='STUDENT', grade=7.
+    4. Thử hủy Onboarding với tài khoản PENDING khác -> tài khoản bị dọn dẹp sạch khỏi DB.
+    """
+    db = SessionLocal()
+    reg_email = "test_unified_reg@example.com"
+    cancel_email = "test_unified_cancel@example.com"
+    password = "TestPassword123!"
+
+    try:
+        # Dọn dẹp trước nếu có
+        db.query(models.User).filter(models.User.email.in_([reg_email, cancel_email])).delete()
+        db.commit()
+
+        # 1. Đăng ký tài khoản mới bằng Email/Password
+        reg_resp = client.post("/register", json={"email": reg_email, "password": password})
+        assert reg_resp.status_code == 201, f"Register failed: {reg_resp.text}"
+        reg_data = reg_resp.json()
+        assert reg_data["role"] == "PENDING"
+        assert reg_data["grade"] is None
+
+        # 2. Đăng nhập để lấy Token
+        login_resp = client.post("/login", data={"username": reg_email, "password": password})
+        assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
+        login_tokens = login_resp.json()
+        access_token = login_tokens["access_token"]
+
+        # 3. Hoàn tất Onboarding chọn Học sinh lớp 7
+        onboard_resp = client.post(
+            "/auth/onboarding",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"role": "STUDENT", "grade": 7},
+        )
+        assert onboard_resp.status_code == 200, f"Onboarding failed: {onboard_resp.text}"
+        onboard_data = onboard_resp.json()
+        assert onboard_data["role"] == "STUDENT"
+        assert onboard_data["grade"] == 7
+        assert onboard_data["is_new_user"] is False
+
+        # Kiểm tra qua /users/me
+        me_resp = client.get("/users/me", headers={"Authorization": f"Bearer {onboard_data['access_token']}"})
+        assert me_resp.status_code == 200
+        assert me_resp.json()["role"] == "STUDENT"
+        assert me_resp.json()["grade"] == 7
+
+        # 4. Kiểm tra hủy Onboarding cho tài khoản đăng ký Email/Password PENDING
+        reg_cancel_resp = client.post("/register", json={"email": cancel_email, "password": password})
+        assert reg_cancel_resp.status_code == 201
+        cancel_login = client.post("/login", data={"username": cancel_email, "password": password})
+        assert cancel_login.status_code == 200
+        cancel_token = cancel_login.json()["access_token"]
+
+        cancel_resp = client.post(
+            "/auth/cancel-onboarding",
+            headers={"Authorization": f"Bearer {cancel_token}"},
+        )
+        assert cancel_resp.status_code == 200
+
+        # Kiểm tra tài khoản đã bị xóa sạch khỏi DB
+        deleted_user = db.query(models.User).filter(models.User.email == cancel_email).first()
+        assert deleted_user is None
+        print("  [PASS] Luong dang ky Email/Password dong bo Onboarding & Cancel hoat dong hoan hao!")
+
+    finally:
+        db.query(models.User).filter(models.User.email.in_([reg_email, cancel_email])).delete()
+        db.commit()
+        db.close()
+
