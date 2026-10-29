@@ -323,6 +323,9 @@ Vai trò của bạn: {role_description}
   - ⚠️ JSON ESCAPE QUAN TRỌNG: Khi viết LaTeX trong JSON string, dấu \\ phải được viết là \\\\ (double backslash).
     VÍ DỤ ĐÚNG trong JSON: "draft_response": "Em thử tính $\\\\frac{{1}}{{2}}$ nhé?"
     VÍ DỤ SAI trong JSON: "draft_response": "Em thử tính $\\frac{{1}}{{2}}$ nhé?" (sẽ gây lỗi parse)
+  - ⚠️ KHOẢNG CÁCH GIỮA CHỮ VÀ CÔNG THỨC: Luôn có khoảng cách (dấu cách) giữa từ ngữ tiếng Việt và công thức/con số kẹp giữa dấu $.
+    ✅ ĐÚNG: "xem tử số $12$ chia cho mẫu số $3$"
+    ❌ SAI: "xem tử số$12$chia cho mẫu số$3$" (dính liền chữ và số)
 
 • ⚠️ NGUYÊN TẮC QUY ĐỒNG PHÂN SỐ (TOÁN LỚP 4–9):
   - BẮT BUỘC hướng dẫn học sinh tìm MẪU SỐ CHUNG NHỎ NHẤT (BCNN).

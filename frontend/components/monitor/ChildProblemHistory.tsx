@@ -682,7 +682,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                                 {msg.content}
                               </p>
                             ) : (
-                              <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#5A3818] min-w-0 break-words overflow-hidden">
+                              <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#5A3818] min-w-0 break-words overflow-visible">
                                 <ReactMarkdown
                                   remarkPlugins={[remarkMath, remarkGfm]}
                                   rehypePlugins={[rehypeKatex]}
