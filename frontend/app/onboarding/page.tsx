@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Users, CheckCircle2, ArrowRight, ArrowLeft, Loader2, Sparkles, BookOpen } from "lucide-react";
+import { GraduationCap, Users, CheckCircle2, ArrowRight, Loader2, Sparkles, BookOpen } from "lucide-react";
 
 export default function OnboardingPage() {
   const { data: session, status, update } = useSession();
@@ -192,16 +192,6 @@ export default function OnboardingPage() {
               </span>
             </div>
           )}
-
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-[#8C4905] bg-white/80 hover:bg-[#F1CCA6]/40 border border-[#F1CCA6] transition-all cursor-pointer shadow-xs"
-            title="Hủy đăng nhập và quay về Trang chủ"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Quay lại</span>
-          </button>
         </div>
       </header>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Bookmark, X, Check, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authFetch } from "@/lib/authFetch";
@@ -51,6 +52,22 @@ export function SavePlaylistModal({
   // Trạng thái lưu
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Đảm bảo client đã mount để render qua Portal an toàn
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Khóa cuộn trang web khi modal đang mở để bảng luôn đi theo tầm nhìn
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
 
   // Tải danh sách playlist và gợi ý tên bài toán khi mở modal
   useEffect(() => {
@@ -200,7 +217,9 @@ export function SavePlaylistModal({
     }
   };
 
-  return (
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Lớp mờ nền Apple-style: độ mờ 40% nhẹ nhàng, blur sâu */}
       <div
@@ -372,11 +391,12 @@ export function SavePlaylistModal({
             className="px-6 py-2.5 bg-[#A05215] hover:bg-[#8C4905] active:scale-[0.97] text-white text-sm font-bold rounded-2xl shadow-md shadow-amber-900/10 cursor-pointer transition-[transform,background-color,box-shadow] duration-150 flex items-center gap-2 touch-manipulation"
           >
             {isSaving && <Loader2 size={15} className="animate-spin" />}
-            Lưu thay đổi
+            Lưu bài
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
