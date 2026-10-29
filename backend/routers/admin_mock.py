@@ -1107,6 +1107,14 @@ def sync_curriculum_from_vietjack(
                     })
 
     # 3. Tối ưu Bulk Upsert vào Neon DB (1 query lấy toàn bộ existing topics thay vì N query)
+    # Nếu cào trực tiếp thành công (LIVE_CRAWL), tự động dọn dẹp các bản ghi fallback cũ dạng 'Trọng tâm'
+    if data_source == "LIVE_CRAWL":
+        db.query(models.CurriculumTopic).filter(
+            models.CurriculumTopic.grade.in_(target_grades),
+            models.CurriculumTopic.chapter_name.like("%Trọng tâm%"),
+        ).delete(synchronize_session=False)
+        db.commit()
+
     existing_records = (
         db.query(models.CurriculumTopic)
         .filter(
