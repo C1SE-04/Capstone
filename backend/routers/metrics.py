@@ -823,11 +823,12 @@ def get_summary_metrics(
         prev_start = None
         prev_end = None
 
-    # 2. Tổng số bài toán hoàn thành từ bảng independence_scores
+    # 2. Tổng số bài toán hoàn thành từ bảng independence_scores (US 8.1: Không tính bài trùng lặp)
     completed_problems = (
         db.query(func.count(models.IndependenceScore.id))
         .filter(
             models.IndependenceScore.student_id == student_id,
+            models.IndependenceScore.is_duplicate == False,
             cast(models.IndependenceScore.created_at, Date) >= start_date,
             cast(models.IndependenceScore.created_at, Date) <= today,
         )
@@ -840,6 +841,7 @@ def get_summary_metrics(
             db.query(func.count(models.IndependenceScore.id))
             .filter(
                 models.IndependenceScore.student_id == student_id,
+                models.IndependenceScore.is_duplicate == False,
                 cast(models.IndependenceScore.created_at, Date) >= prev_start,
                 cast(models.IndependenceScore.created_at, Date) <= prev_end,
             )
@@ -860,6 +862,7 @@ def get_summary_metrics(
         db.query(func.avg(models.IndependenceScore.score))
         .filter(
             models.IndependenceScore.student_id == student_id,
+            models.IndependenceScore.is_duplicate == False,
             cast(models.IndependenceScore.created_at, Date) >= start_date,
             cast(models.IndependenceScore.created_at, Date) <= today,
         )
@@ -1009,7 +1012,10 @@ def get_child_problems(
     base_query = (
         db.query(models.IndependenceScore, models.Session)
         .join(models.Session, models.IndependenceScore.session_id == models.Session.id)
-        .filter(models.IndependenceScore.student_id == student_id)
+        .filter(
+            models.IndependenceScore.student_id == student_id,
+            models.IndependenceScore.is_duplicate == False,
+        )
     )
 
     # --- Áp dụng bộ lọc ---
