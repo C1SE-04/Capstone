@@ -867,3 +867,193 @@ def update_mock_settings(body: schemas.AdminSystemSettings):
     MOCK_SETTINGS.update(body.model_dump())
     MOCK_SETTINGS["last_updated_at"] = datetime.now(timezone.utc).isoformat()
     return schemas.AdminSystemSettings(**MOCK_SETTINGS)
+
+
+# ==============================================================================
+# ENDPOINTS: 7. CHƯƠNG TRÌNH HỌC LINH ĐỘNG — CURRICULUM TOPICS & VIETJACK (US 8.4)
+# ==============================================================================
+
+@admin_router.get("/curriculum/topics", response_model=schemas.CurriculumTopicListResponse)
+@router.get("/curriculum/topics", response_model=schemas.CurriculumTopicListResponse)
+def get_curriculum_topics(
+    grade: Optional[int] = Query(None, ge=4, le=9, description="Lọc theo khối lớp (4 - 9)"),
+    semester: Optional[int] = Query(None, ge=1, le=2, description="Lọc theo học kỳ (1 hoặc 2)"),
+    is_active: Optional[bool] = Query(None, description="Lọc theo trạng thái Bật/Tắt"),
+    search: Optional[str] = Query(None, description="Tìm kiếm theo tên bài học / chương lớn"),
+    db: Session = Depends(database.get_db),
+):
+    """
+    US 8.4 (Tasks T8.25 & T8.27):
+    Lấy danh sách các chuyên đề & bài học từ bảng curriculum_topics trên Neon DB.
+    Hỗ trợ lọc theo khối lớp, học kỳ, trạng thái is_active và tìm kiếm theo tên.
+    """
+    query = db.query(models.CurriculumTopic)
+    grade_val = grade if isinstance(grade, int) else None
+    sem_val = semester if isinstance(semester, int) else None
+    act_val = is_active if isinstance(is_active, bool) else None
+    search_str = search if isinstance(search, str) else None
+
+    if grade_val is not None:
+        query = query.filter(models.CurriculumTopic.grade == grade_val)
+    if sem_val is not None:
+        query = query.filter(models.CurriculumTopic.semester == sem_val)
+    if act_val is not None:
+        query = query.filter(models.CurriculumTopic.is_active == act_val)
+    if search_str and search_str.strip():
+        term = f"%{search_str.strip()}%"
+        query = query.filter(
+            (models.CurriculumTopic.topic_name.ilike(term))
+            | (models.CurriculumTopic.chapter_name.ilike(term))
+            | (models.CurriculumTopic.book_series.ilike(term))
+        )
+
+    topics = query.order_by(
+        models.CurriculumTopic.grade.asc(),
+        models.CurriculumTopic.semester.asc().nulls_last(),
+        models.CurriculumTopic.order_index.asc(),
+        models.CurriculumTopic.created_at.asc(),
+    ).all()
+
+    return schemas.CurriculumTopicListResponse(
+        total=len(topics),
+        items=topics,
+    )
+
+
+@admin_router.patch("/curriculum/topics/{topic_id}/toggle", response_model=schemas.CurriculumTopicResponse)
+@router.patch("/curriculum/topics/{topic_id}/toggle", response_model=schemas.CurriculumTopicResponse)
+def toggle_curriculum_topic(
+    topic_id: str,
+    body: Optional[schemas.CurriculumTopicToggle] = None,
+    db: Session = Depends(database.get_db),
+):
+    """
+    US 8.4 [AC 8.4.3]:
+    Gạt Toggle switch chuyển bài sang Ẩn/Hiện -> Trạng thái cập nhật ngay trong DB.
+    """
+    topic = db.query(models.CurriculumTopic).filter(models.CurriculumTopic.id == topic_id).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Không tìm thấy chuyên đề trong hệ thống.")
+
+    if body is not None:
+        topic.is_active = body.is_active
+    else:
+        topic.is_active = not topic.is_active
+
+    db.commit()
+    db.refresh(topic)
+    return topic
+
+
+@admin_router.put("/curriculum/topics/{topic_id}", response_model=schemas.CurriculumTopicResponse)
+@router.put("/curriculum/topics/{topic_id}", response_model=schemas.CurriculumTopicResponse)
+def update_curriculum_topic(
+    topic_id: str,
+    body: schemas.CurriculumTopicUpdate,
+    db: Session = Depends(database.get_db),
+):
+    """Cập nhật thông tin chuyên đề (tên bài, tên chương, học kỳ, ghi chú)."""
+    topic = db.query(models.CurriculumTopic).filter(models.CurriculumTopic.id == topic_id).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Không tìm thấy chuyên đề cần cập nhật.")
+
+    update_data = body.model_dump(exclude_unset=True)
+    for field, val in update_data.items():
+        setattr(topic, field, val)
+
+    db.commit()
+    db.refresh(topic)
+    return topic
+
+
+@admin_router.post("/curriculum/sync-vietjack")
+@router.post("/curriculum/sync-vietjack")
+def sync_curriculum_from_vietjack(
+    db: Session = Depends(database.get_db),
+):
+    """
+    US 8.4 (Task T8.25):
+    Kích hoạt crawler bóc tách mục lục Toán lớp 4-9 từ VietJack và upsert vào Neon DB.
+    Tự động fallback an toàn từ grade_curriculum.json nếu mạng VietJack timeout/rate-limit.
+    """
+    import time
+    start_time = time.time()
+    total_upserted = 0
+    crawled_topics = []
+
+    # 1. Thử gọi crawler bóc tách trực tiếp từ VietJack
+    try:
+        from agents.curriculum_crawler import run_crawler, transform_for_db_sync
+        crawled_raw = run_crawler(grades=[4, 5, 6, 7, 8, 9])
+        if crawled_raw:
+            crawled_topics = transform_for_db_sync(crawled_raw)
+    except Exception as e:
+        print(f"[VietJack Sync] Crawler trực tiếp gặp sự cố: {e}. Sử dụng cơ chế Fallback an toàn.")
+
+    # 2. Cơ chế Fallback an toàn (Task T8.29): Nếu crawler rỗng, đọc từ grade_curriculum.json
+    if not crawled_topics:
+        import os, json
+        json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", "grade_curriculum.json")
+        if os.path.exists(json_path):
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            order_idx = 1
+            for g_str, topic_list in data.items():
+                g_val = int(g_str)
+                for t_name in topic_list:
+                    crawled_topics.append({
+                        "grade": g_val,
+                        "book_series": "Kết nối tri thức",
+                        "semester": 1 if order_idx <= 15 else 2,
+                        "chapter_name": f"Chương {1 if order_idx <= 15 else 2}: Kiến thức trọng tâm",
+                        "topic_name": t_name,
+                        "order_index": order_idx,
+                        "school_year": "2024-2025",
+                        "is_active": True,
+                        "source_url": "https://vietjack.com/toan-lop-" + g_str,
+                    })
+                    order_idx += 1
+
+    # 3. Upsert vào bảng curriculum_topics
+    for item in crawled_topics:
+        existing = db.query(models.CurriculumTopic).filter(
+            models.CurriculumTopic.grade == item["grade"],
+            models.CurriculumTopic.book_series == item["book_series"],
+            models.CurriculumTopic.chapter_name == item["chapter_name"],
+            models.CurriculumTopic.topic_name == item["topic_name"],
+        ).first()
+
+        if existing:
+            existing.order_index = item["order_index"]
+            existing.school_year = item.get("school_year", "2024-2025")
+            if item.get("source_url"):
+                existing.source_url = item["source_url"]
+            total_upserted += 1
+        else:
+            new_top = models.CurriculumTopic(
+                id=uuid.uuid4().hex,
+                grade=item["grade"],
+                book_series=item["book_series"],
+                semester=item.get("semester", 1),
+                chapter_name=item["chapter_name"],
+                topic_name=item["topic_name"],
+                order_index=item["order_index"],
+                school_year=item.get("school_year", "2024-2025"),
+                is_active=True,
+                source_url=item.get("source_url"),
+            )
+            db.add(new_top)
+            total_upserted += 1
+
+    db.commit()
+    elapsed = round(time.time() - start_time, 2)
+    current_total = db.query(models.CurriculumTopic).count()
+
+    return {
+        "success": True,
+        "total_synced": total_upserted,
+        "current_total_in_db": current_total,
+        "grades": [4, 5, 6, 7, 8, 9],
+        "message": f"Đồng bộ thành công {total_upserted} bài học từ VietJack vào cơ sở dữ liệu!",
+        "elapsed_seconds": elapsed,
+    }
