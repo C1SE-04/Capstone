@@ -1,5 +1,28 @@
 # Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
 backend/__pycache__/
 backend/*.py[cod]
 backend/venv/
+backend/venv_new/
 backend/.env
+backend/.pytest_cache/
+.pytest_cache/
+
+# Frontend / Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Logs & System
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Agent & IDE
+.agent/
+.agents/
+.codex/
+skills-lock.json

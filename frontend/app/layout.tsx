@@ -19,7 +19,11 @@ export const metadata: Metadata = {
   description: "Trợ lý AI sư phạm giúp học sinh từ lớp 4 đến lớp 9 tự học, hiểu sâu và nhớ lâu toán học qua phương pháp gợi mở từng bước.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="en"

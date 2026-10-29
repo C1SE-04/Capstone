@@ -15,7 +15,7 @@ import schemas
 import dependencies
 from typing import Optional
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
@@ -524,6 +524,7 @@ def list_bookmarks(
     has_attachment: Optional[bool] = Query(None, description="Chỉ lấy bookmark có ảnh đề bài"),
     page: int = Query(1, ge=1, description="Trang hiện tại"),
     page_size: int = Query(20, ge=1, le=100, description="Số bookmark mỗi trang (mặc định 20, Sổ tay có thể dùng 10)"),
+    response: Response = Response(),
     current_user: dict = Depends(dependencies.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -585,6 +586,12 @@ def list_bookmarks(
     # Lọc có ảnh đính kèm
     if has_att is True:
         query = query.filter(models.ProblemBookmark.attachment_url.isnot(None))
+
+    # Tính tổng số bản ghi trước khi phân trang để trả về qua header X-Total-Count
+    total_count = query.count()
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total_count)
+        response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
 
     # Sắp xếp mới nhất lên đầu + phân trang
     offset = (p_num - 1) * p_size

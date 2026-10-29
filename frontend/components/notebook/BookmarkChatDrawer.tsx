@@ -65,9 +65,13 @@ export function BookmarkChatDrawer({
         content: m.content || "",
         attachment_url: m.attachment_url || undefined,
       }));
-      setMessages(formatted);
-      setIsLoading(false);
-      setError(null);
+      queueMicrotask(() => {
+        if (!ignore) {
+          setMessages(formatted);
+          setIsLoading(false);
+          setError(null);
+        }
+      });
       return;
     }
 
@@ -128,7 +132,7 @@ export function BookmarkChatDrawer({
     return () => {
       ignore = true;
     };
-  }, [isOpen, sessionId]);
+  }, [isOpen, sessionId, dialogueMessages]);
 
   // Đóng Drawer khi bấm phím Escape
   useEffect(() => {
