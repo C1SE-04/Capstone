@@ -61,11 +61,11 @@ export function YourRankCard({
   // Lời nhắn khích lệ dựa trên thứ hạng
   let motivationalMessage = "Tiếp tục duy trì thói quen học tập mỗi ngày để thăng hạng nhé!";
   if (currentUserEntry.rank === 1) {
-    motivationalMessage = "👑 Tuyệt đỉnh! Bạn đang dẫn đầu bảng xếp hạng! Hãy giữ vững phong độ!";
+    motivationalMessage = "Tuyệt đỉnh! Bạn đang dẫn đầu bảng xếp hạng! Hãy giữ vững phong độ!";
   } else if (currentUserEntry.rank <= 3) {
-    motivationalMessage = "🎉 Xuất sắc! Bạn đang đứng trên bục vinh danh Top 3 danh giá!";
+    motivationalMessage = "Xuất sắc! Bạn đang đứng trên bục vinh danh Top 3 danh giá!";
   } else if (currentUserEntry.rank <= 10) {
-    motivationalMessage = "💪 Thật tuyệt vời! Bạn đang ở trong Top 10 cao nhất bảng xếp hạng!";
+    motivationalMessage = "Thật tuyệt vời! Bạn đang ở trong Top 10 cao nhất bảng xếp hạng!";
   }
 
   return (
