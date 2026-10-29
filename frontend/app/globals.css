@@ -189,6 +189,12 @@ input:disabled,
 .markdown-prose {
   overflow-wrap: break-word;
   word-break: break-word;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.markdown-prose p {
+  line-height: 1.75;
 }
 
 /* Đảm bảo công thức toán khối (Display Math) tự động cuộn ngang mượt mà trên mobile (375px) */
@@ -196,7 +202,7 @@ input:disabled,
   overflow-x: auto;
   overflow-y: hidden;
   max-width: 100%;
-  padding: 0.5rem 0.25rem;
+  padding: 0.75rem 0.25rem;
   margin: 0.75rem 0;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
@@ -221,17 +227,14 @@ input:disabled,
   background: transparent;
 }
 
-/* Đảm bảo công thức toán nội dòng (Inline Math) không làm xô lệch dòng văn bản */
+/* Đảm bảo công thức toán nội dòng (Inline Math) hiển thị trọn vẹn, không bị che mất đỉnh tử số */
 .markdown-prose .katex {
   max-width: 100%;
-  line-height: normal;
   white-space: normal;
+  text-indent: 0;
 }
 
 .markdown-prose .katex-html {
-  overflow-x: auto;
-  overflow-y: hidden;
-  max-width: 100%;
-  vertical-align: middle;
+  overflow: visible;
 }
 

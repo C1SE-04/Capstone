@@ -429,7 +429,7 @@ export default function TryPage() {
               ) : msg.role === "user" ? (
                 msg.content
               ) : (
-                <div className="markdown-prose prose-sm max-w-none min-w-0 break-words overflow-hidden
+                <div className="markdown-prose prose-sm max-w-none min-w-0 break-words overflow-visible
                   prose-p:leading-relaxed prose-p:mb-2
                   prose-pre:bg-gray-100 prose-pre:p-3 prose-pre:rounded-lg
                   prose-code:text-[#CB6600] prose-code:bg-[#F1CCA6]/40 prose-code:px-1 prose-code:rounded
