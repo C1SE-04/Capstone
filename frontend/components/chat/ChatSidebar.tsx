@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LogOut, Settings, Settings2, X, Plus, Trash2, BookMarked, Trophy } from "lucide-react";
+import { LogOut, Settings, Settings2, X, Plus, Trash2, BookMarked } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -105,15 +105,6 @@ export function ChatSidebar({
           >
             <BookMarked size={15} className="text-[#C1762A]" />
             Sổ tay bài học
-          </button>
-
-          <button
-            onClick={() => router.push("/dashboard/leaderboard")}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#F7ECE1]/90 hover:bg-[#F7ECE1] text-[#8C4905] rounded-2xl font-bold text-xs shadow-xs transition-all border border-[#F1CCA6] cursor-pointer"
-            title="Xem Bảng xếp hạng chuỗi ngày học (Streak Leaderboard)"
-          >
-            <Trophy size={15} className="text-[#C1762A]" />
-            Bảng xếp hạng
           </button>
 
           {/* T6.5 – US 6.1: Thanh tiến trình Mastery tự lực */}

@@ -74,16 +74,17 @@ export function LeaderboardTable({ items }: LeaderboardTableProps) {
       {/* Table Header */}
       <div className="hidden sm:grid sm:grid-cols-12 px-6 py-4 bg-[#F1CCA6]/30 border-b border-[#F1CCA6] text-xs font-bold text-[#8C4905] uppercase tracking-wider">
         <div className="col-span-1 text-center">Hạng</div>
-        <div className="col-span-5">Học sinh</div>
+        <div className="col-span-4">Học sinh</div>
         <div className="col-span-3 text-center">Cấp độ ngọn lửa</div>
-        <div className="col-span-1 text-center">Kỷ lục</div>
+        <div className="col-span-2 text-center">Kỷ lục</div>
         <div className="col-span-2 text-right">Chuỗi ngày</div>
       </div>
 
       {/* Rows */}
       <div className="divide-y divide-[#F1CCA6]/40">
         {items.map((item) => {
-          const milestone = getStreakMilestone(item.streak_days);
+          const record = item.max_streak ?? item.streak_days ?? 0;
+          const milestone = getStreakMilestone(record);
 
           return (
             <div
@@ -104,7 +105,7 @@ export function LeaderboardTable({ items }: LeaderboardTableProps) {
               </div>
 
               {/* Cột Học sinh */}
-              <div className="flex items-center gap-3 sm:col-span-5 w-full">
+              <div className="flex items-center gap-3 sm:col-span-4 w-full">
                 <div className="relative shrink-0">
                   <div className="w-10 h-10 rounded-full overflow-hidden bg-stone-100 border border-[#F1CCA6]">
                     <img
@@ -146,7 +147,7 @@ export function LeaderboardTable({ items }: LeaderboardTableProps) {
                 </div>
               </div>
 
-              {/* Cột Cấp độ ngọn lửa */}
+              {/* Cột Cấp độ ngọn lửa (dựa trên Kỷ lục đạt được) */}
               <div className="sm:col-span-3 sm:text-center w-full flex sm:justify-center items-center">
                 <div
                   className={cn(
@@ -163,22 +164,24 @@ export function LeaderboardTable({ items }: LeaderboardTableProps) {
                 </div>
               </div>
 
-              {/* Cột Kỷ lục (Max Streak) */}
-              <div className="sm:col-span-1 sm:text-center text-xs font-semibold text-stone-600 flex sm:justify-center items-center gap-1">
-                <Trophy size={13} className="text-amber-500 sm:hidden" />
-                <span className="sm:hidden text-stone-400">Kỷ lục:</span>
-                <span className="tabular-nums font-bold text-stone-700">
-                  {item.max_streak || item.streak_days}
-                </span>
-                <span className="sm:hidden text-stone-400">ngày</span>
+              {/* Cột Kỷ lục (Tiêu chí xếp hạng chính) */}
+              <div className="sm:col-span-2 sm:text-center w-full flex sm:justify-center items-center justify-between">
+                <span className="sm:hidden text-xs font-bold text-[#8C4905]">Kỷ lục:</span>
+                <div className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-100 to-amber-50 px-3 py-1 rounded-xl border border-amber-300 shadow-2xs">
+                  <Trophy size={14} className="text-amber-600 fill-amber-400 shrink-0" />
+                  <span className="font-extrabold text-sm sm:text-base text-[#8C4905] tabular-nums">
+                    {record}
+                  </span>
+                  <span className="text-xs font-bold text-amber-800">ngày</span>
+                </div>
               </div>
 
               {/* Cột Chuỗi ngày hiện tại */}
               <div className="sm:col-span-2 sm:text-right w-full flex sm:justify-end items-center justify-between pt-1 sm:pt-0 border-t sm:border-0 border-stone-100">
                 <span className="sm:hidden text-xs font-semibold text-[#8C4905]">Chuỗi hiện tại:</span>
-                <div className="inline-flex items-center gap-1.5 bg-[#F7ECE1] px-3 py-1 rounded-xl border border-[#F1CCA6]">
-                  <Flame size={16} className="fill-current text-orange-500" />
-                  <span className="font-extrabold text-base text-[#8C4905] tabular-nums">
+                <div className="inline-flex items-center gap-1.5 bg-[#F7ECE1] px-2.5 py-1 rounded-xl border border-[#F1CCA6]">
+                  <Flame size={14} className={cn("fill-current", item.streak_days > 0 ? "text-orange-500" : "text-stone-300")} />
+                  <span className="font-bold text-sm text-[#8C4905] tabular-nums">
                     {item.streak_days}
                   </span>
                   <span className="text-xs font-semibold text-stone-600">ngày</span>

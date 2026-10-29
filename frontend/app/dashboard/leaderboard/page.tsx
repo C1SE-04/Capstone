@@ -146,7 +146,7 @@ export default function LeaderboardPage() {
             </h1>
           </div>
           <p className="text-sm md:text-base text-[#C1762A] font-medium">
-            Thi đua chuỗi ngày học liên tục (Streak 🔥) — Càng kiên trì, ngọn lửa càng rực sáng!
+            Xếp hạng theo kỷ lục chuỗi ngày học bền bỉ nhất — Càng kiên trì, ngọn lửa càng rực sáng!
           </p>
         </div>
 

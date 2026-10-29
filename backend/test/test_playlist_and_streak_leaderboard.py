@@ -384,18 +384,27 @@ def test_streak_leaderboard_all_and_grade():
     db = get_db()
     today = date.today()
 
-    # Tạo 3 học sinh:
-    # s1: Lớp 5, streak 3 ngày (hôm nay, hôm qua, 2 ngày trước)
-    # s2: Lớp 5, streak 1 ngày (hôm nay)
-    # s3: Lớp 6, streak 5 ngày (hôm nay và 4 ngày liên tiếp trước)
+    # Tạo 4 học sinh:
+    # s1: Lớp 5, streak 3 ngày (hôm nay, hôm qua, 2 ngày trước) -> max_streak = 3
+    # s2: Lớp 5, streak 1 ngày (hôm nay) -> max_streak = 1
+    # s3: Lớp 6, streak 5 ngày (hôm nay và 4 ngày liên tiếp trước) -> max_streak = 5
+    # s4: Lớp 5, kỷ lục 7 ngày trong quá khứ, hiện tại streak = 0 -> max_streak = 7
     s1 = _create_student(db, "student_streak_s1", grade=5)
     s2 = _create_student(db, "student_streak_s2", grade=5)
     s3 = _create_student(db, "student_streak_s3", grade=6)
+    s4 = _create_student(db, "student_streak_s4", grade=5)
 
     try:
         sess1 = _create_session_with_message(db, s1.id, "Bài của s1")
         sess2 = _create_session_with_message(db, s2.id, "Bài của s2")
         sess3 = _create_session_with_message(db, s3.id, "Bài của s3")
+        sess4 = _create_session_with_message(db, s4.id, "Bài của s4")
+        # Đặt sess4 về quá khứ 15 ngày để s4 không có hoạt động hôm nay (streak_days = 0)
+        sess4.created_at = datetime.now(timezone.utc) - timedelta(days=15)
+        db.query(models.Message).filter(models.Message.session_id == sess4.id).update(
+            {"created_at": datetime.now(timezone.utc) - timedelta(days=15)}
+        )
+        db.commit()
 
         # Ghi nhận ngày học cho s1: 3 ngày liên tiếp
         for d_offset in [0, 1, 2]:
@@ -431,6 +440,18 @@ def test_streak_leaderboard_all_and_grade():
                 end_time=dt3,
                 active_seconds=500,
             ))
+
+        # Ghi nhận ngày học cho s4: 7 ngày liên tiếp trong quá khứ (cách đây 10 -> 16 ngày, hiện tại streak = 0)
+        for d_offset in range(10, 17):
+            dt4 = datetime.combine(today - timedelta(days=d_offset), datetime.min.time(), tzinfo=timezone.utc)
+            db.add(models.SessionActiveInterval(
+                id=make_id(),
+                session_id=sess4.id,
+                user_id=s4.id,
+                start_time=dt4,
+                end_time=dt4,
+                active_seconds=400,
+            ))
         db.commit()
 
         # TEST TOÀN SERVER (grade=None) với s1 là current_user
@@ -439,27 +460,38 @@ def test_streak_leaderboard_all_and_grade():
 
         assert board_all.scope == "ALL"
         assert board_all.grade is None
-        assert board_all.total_participants >= 3
+        assert board_all.total_participants >= 4
 
-        # Tìm 3 bạn này trong leaderboard
+        # Tìm các bạn này trong leaderboard
+        entry_s4 = next(item for item in board_all.leaderboard if item.student_id == s4.id)
         entry_s3 = next(item for item in board_all.leaderboard if item.student_id == s3.id)
         entry_s1 = next(item for item in board_all.leaderboard if item.student_id == s1.id)
         entry_s2 = next(item for item in board_all.leaderboard if item.student_id == s2.id)
 
+        assert entry_s4.max_streak == 7
+        assert entry_s4.streak_days == 0
+
+        assert entry_s3.max_streak == 5
         assert entry_s3.streak_days == 5
+
+        assert entry_s1.max_streak == 3
         assert entry_s1.streak_days == 3
+
+        assert entry_s2.max_streak == 1
         assert entry_s2.streak_days == 1
 
-        # s3 phải xếp trên s1, s1 phải xếp trên s2
-        assert entry_s3.rank < entry_s1.rank < entry_s2.rank
+        # Xếp hạng theo KỶ LỤC: s4 (7) > s3 (5) > s1 (3) > s2 (1)
+        # s4 dù streak hiện tại = 0 nhưng kỷ lục = 7 nên phải đứng trên s3 (5) và s1 (3)
+        assert entry_s4.rank < entry_s3.rank < entry_s1.rank < entry_s2.rank
 
         # current_user_entry phải là của s1
         assert board_all.current_user_entry is not None
         assert board_all.current_user_entry.student_id == s1.id
         assert board_all.current_user_entry.is_current_user is True
         assert board_all.current_user_entry.streak_days == 3
+        assert board_all.current_user_entry.max_streak == 3
 
-        print("[PASS] Test 8: Bảng xếp hạng Streak Toàn Server tính toán & sắp xếp chính xác.")
+        print("[PASS] Test 8: Bảng xếp hạng Streak sắp xếp theo KỶ LỤC (max_streak) chính xác.")
 
         # TEST LỌC THEO KHỐI LỚP: grade=5
         board_g5 = metrics_router.get_streak_leaderboard(grade=5, limit=20, current_user=user_s1, db=db)
@@ -473,12 +505,13 @@ def test_streak_leaderboard_all_and_grade():
         g5_ids = [item.student_id for item in board_g5.leaderboard]
         assert s1.id in g5_ids
         assert s2.id in g5_ids
+        assert s4.id in g5_ids
         assert s3.id not in g5_ids  # s3 là lớp 6 nên không xuất hiện
 
         print("[PASS] Test 9: Lọc Bảng xếp hạng Streak theo Khối Lớp (Lớp 5) chuẩn xác.")
 
     finally:
-        _cleanup(db, [s1.id, s2.id, s3.id])
+        _cleanup(db, [s1.id, s2.id, s3.id, s4.id])
         db.close()
 
 

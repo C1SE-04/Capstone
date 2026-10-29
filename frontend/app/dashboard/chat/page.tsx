@@ -12,7 +12,7 @@ import { StreakBadge } from "@/components/chat/StreakBadge";
 import { BadgeModal, BadgeItem, DEFAULT_BADGES } from "@/components/chat/BadgeModal";
 import { getMergedBadges, saveStoredBadge, resetStoredBadge } from "@/lib/badgeStorage";
 import { Conversation, Message } from "@/types/chat";
-import { Menu, PanelRight } from "lucide-react";
+import { Menu, PanelRight, Trophy } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/authFetch";
 import { cn } from "@/lib/utils";
@@ -977,7 +977,7 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Khu vực Streak ngọn lửa & Nút bật/tắt thanh ảnh bài tập bên phải */}
+          {/* Khu vực Streak ngọn lửa, Bảng xếp hạng (Cúp) & Nút bật/tắt thanh ảnh bài tập bên phải */}
           <div className="flex items-center gap-2">
             {/* T7.18: Biểu tượng ngọn lửa hoạt hình Streak 🔥 */}
             <StreakBadge
@@ -987,6 +987,16 @@ export default function ChatPage() {
                 setIsBadgeModalOpen(true);
               }}
             />
+
+            {/* Nút Bảng xếp hạng (Icon cái cúp 🏆) */}
+            <button
+              onClick={() => router.push("/dashboard/leaderboard")}
+              className="flex items-center justify-center h-[34px] w-[34px] rounded-xl bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F1CCA6]/40 hover:text-[#C1762A] transition-all shadow-2xs cursor-pointer group active:scale-95"
+              title="Xem Bảng xếp hạng (Streak Leaderboard)"
+              aria-label="Xem Bảng xếp hạng"
+            >
+              <Trophy size={17} className="text-[#C1762A] group-hover:scale-110 transition-transform" />
+            </button>
 
             <button
               onClick={() => setIsRightSidebarOpen((prev) => !prev)}

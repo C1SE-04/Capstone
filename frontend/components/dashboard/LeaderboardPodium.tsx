@@ -41,7 +41,8 @@ export function LeaderboardPodium({ topThree }: LeaderboardPodiumProps) {
       );
     }
 
-    const milestone = getStreakMilestone(item.streak_days);
+    const record = item.max_streak ?? item.streak_days ?? 0;
+    const milestone = getStreakMilestone(record);
 
     const config = {
       first: {
@@ -113,7 +114,7 @@ export function LeaderboardPodium({ topThree }: LeaderboardPodiumProps) {
               </span>
             ) : null}
             <span className={cn("text-[11px] font-bold px-1.5 py-0.2 rounded-md", milestone.badgeBg, milestone.textColor)}>
-              {milestone.emoji} {item.streak_days}d
+              {milestone.emoji} {record}d
             </span>
           </div>
         </div>
@@ -136,18 +137,22 @@ export function LeaderboardPodium({ topThree }: LeaderboardPodiumProps) {
             {config.label}
           </span>
 
-          {/* Ngọn lửa & Số ngày streak */}
+          {/* Kỷ lục & Cấp độ ngọn lửa */}
           <div className="flex flex-col items-center justify-center my-auto">
-            <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-xl shadow-xs">
-              <Flame size={20} className={cn(milestone.flameColor, "shrink-0 fill-current")} />
+            <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-xs px-2.5 py-1 rounded-xl shadow-xs">
+              <Trophy size={18} className="text-amber-500 fill-amber-400 shrink-0" />
               <span className="font-black text-base md:text-lg text-[#8C4905]">
-                {item.streak_days}
+                {record}
               </span>
               <span className="text-[11px] font-semibold text-stone-600 hidden sm:inline">ngày</span>
             </div>
-            <span className="text-[11px] font-medium text-[#8C4905]/80 mt-1 italic hidden md:inline">
+            <span className="text-[11px] font-bold text-[#8C4905]/80 mt-1 italic hidden md:inline">
               {milestone.name}
             </span>
+            <div className="flex items-center gap-1 mt-0.5 text-[10px] font-semibold text-stone-600">
+              <Flame size={12} className={cn("fill-current", item.streak_days > 0 ? "text-orange-500" : "text-stone-400")} />
+              <span>Chuỗi: {item.streak_days}d</span>
+            </div>
           </div>
         </div>
       </div>
