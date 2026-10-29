@@ -4,15 +4,18 @@ import re
 import json
 import google.generativeai as genai
 from schemas import ProblemClassificationResult
+from agents.problem_title_generator import _heuristic_title_fallback, _CURRICULUM_DATA
 
 # =====================================================================
-# 1. SYSTEM INSTRUCTION SƯ PHẠM CHO PROBLEM CLASSIFICATION & DEDUPLICATION
+# 1. SYSTEM INSTRUCTION SƯ PHẠM CHO PROBLEM CLASSIFICATION & DEDUPLICATION (GỘP T8.1 + T8.3)
 # =====================================================================
 PROBLEM_CLASSIFICATION_SYSTEM_INSTRUCTION = """
 Bạn là một Chuyên gia Khảo thí và Đánh giá Năng lực Toán học Sư phạm Tiểu học & THCS của hệ thống SocraticKid.
-Nhiệm vụ của bạn là: So sánh Đề bài toán hiện tại (CURRENT_PROBLEM) với Danh sách đề bài học sinh đã làm trước đó (HISTORY_PROBLEMS) để PHÂN LOẠI CHÍNH XÁC VÀO 1 TRONG 3 NHÓM và NHẬN DIỆN BÀI HỎI LẠI NHIỀU LẦN.
+Nhiệm vụ của bạn là:
+1. So sánh Đề bài toán hiện tại (CURRENT_PROBLEM) với Danh sách đề bài học sinh đã làm trước đó (HISTORY_PROBLEMS) để PHÂN LOẠI CHÍNH XÁC VÀO 1 TRONG 3 NHÓM và NHẬN DIỆN BÀI HỎI LẠI NHIỀU LẦN.
+2. ĐỒNG THỜI đặt tiêu đề bài toán chuẩn sư phạm (friendly_parent_title) cho Đề bài hiện tại để phụ huynh theo dõi.
 
-BẠN BẮT BUỘC PHẢI TUÂN THỦ CÁC QUY TẮC PHÂN LOẠI SAU:
+BẠN BẮT BUỘC PHẢI TUÂN THỦ CÁC QUY TẮC SAU:
 
 1. QUY TẮC PHÂN LOẠI 3 NHÓM (category):
    - "EXACT_DUPLICATE" (Trùng lặp y hệt):
@@ -29,7 +32,7 @@ BẠN BẮT BUỘC PHẢI TUÂN THỦ CÁC QUY TẮC PHÂN LOẠI SAU:
      + pedagogical_recommendation: "Ghi nhận luyện tập củng cố, tăng chỉ số thành thạo dạng bài, không tính trùng chuyên đề mới."
 
    - "NEW_TOPIC" (Dạng bài mới):
-     + Bài toán thuộc dạng toán mới, chuyên đề mới hoặc phương pháp giải khác biệt hoàn toàn so với tất cả các bài trong lịch sử.
+     + Bài toán thuộc dạng toán mới, chuyên đề mới hoặc phương pháp giải khác biệt hoàn toàn so với tất cả các bài trong lịch sử (hoặc lịch sử rỗng).
      + Ví dụ: Lịch sử chỉ có bài Cộng phân số, bài mới là Tính diện tích hình tam giác hoặc Giải toán bằng tỉ số phần trăm.
      + pedagogical_recommendation: "Ghi nhận dạng bài mới, đánh giá năng lực và cộng dồn điểm tự lập đầy đủ."
 
@@ -38,7 +41,18 @@ BẠN BẮT BUỘC PHẢI TUÂN THỦ CÁC QUY TẮC PHÂN LOẠI SAU:
    - Nếu xuất hiện từ 2 lần trở lên: đặt is_repeated_query = true, repeat_count = số lần xuất hiện + 1.
    - Nếu là lần đầu hoặc chỉ xuất hiện 1 lần trước đó dạng đổi số: is_repeated_query = false, repeat_count = 1.
 
-3. ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:
+3. QUY TẮC SINH TIÊU ĐỀ BÀI TOÁN CHUẨN SƯ PHẠM (friendly_parent_title):
+   - Phân tích Đề bài hiện tại và đặt tên theo đúng cấu trúc:
+     [Lớp X] [Chủ đề] – [Tên dạng toán cụ thể]
+   - Trong đó:
+     + X là khối lớp học sinh (4 đến 9), ưu tiên khối lớp được cung cấp.
+     + [Chủ đề]: Tên chủ đề SGK lớn (ví dụ: Phân số, Số tự nhiên, Hình học, Chuyển động đều, Đại số, Phương trình, Hệ phương trình,...)
+     + [Tên dạng toán cụ thể]: Tên dạng toán rõ ràng, thân thiện cho Phụ huynh và Học sinh (ví dụ: Tìm hai số khi biết Tổng và Hiệu, Giải hệ phương trình bậc nhất hai ẩn, Cộng hai phân số khác mẫu số,...)
+   - Ví dụ chuẩn:
+     "[Lớp 5] Phân số – Phép cộng hai phân số khác mẫu số"
+     "[Lớp 9] Hệ hai phương trình – Giải hệ bằng phương pháp thế"
+
+4. ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:
    - Trả về JSON thuần túy (Plain JSON).
    - TUYỆT ĐỐI KHÔNG bọc trong ```json ... ``` hoặc thêm bất kỳ ký tự nào ngoài JSON.
 """
@@ -61,31 +75,21 @@ def _format_history_for_gemini(history_problems: List[Union[Dict[str, Any], str]
 def classify_problem(
     current_problem: str,
     history_problems: Optional[List[Union[Dict[str, Any], str]]] = None,
+    grade: Optional[int] = None,
     api_key: Optional[str] = None,
 ) -> ProblemClassificationResult:
     """
-    Gọi Gemini API để phân loại bài tập vào NEW_TOPIC, ISOMORPHIC_PRACTICE, hoặc EXACT_DUPLICATE.
+    Gọi Gemini API DUY NHẤT 1 LẦN để làm cả 2 nhiệm vụ:
+    1. Phân loại bài tập vào NEW_TOPIC, ISOMORPHIC_PRACTICE, hoặc EXACT_DUPLICATE.
+    2. Đặt tên tiêu đề chuẩn sư phạm friendly_parent_title: [Lớp X] [Chủ đề] – [Dạng toán].
     """
     cleaned_current = current_problem.strip() if current_problem else ""
     if not cleaned_current:
         return _heuristic_classification_fallback(
             current_problem="",
             history_problems=history_problems,
+            grade=grade,
             reason="Đề bài hiện tại rỗng"
-        )
-
-    # Tối ưu thông minh: Nếu chưa có lịch sử bài tập -> Hiển nhiên là Dạng bài mới (0 token)
-    if not history_problems:
-        return ProblemClassificationResult(
-            category="NEW_TOPIC",
-            confidence_score=1.0,
-            reasoning="Đây là bài toán đầu tiên của học sinh trong hệ thống, chưa có bài tập đối chiếu.",
-            matched_problem=None,
-            is_repeated_query=False,
-            repeat_count=1,
-            gentle_reminder=None,
-            pedagogical_recommendation="Ghi nhận dạng bài mới, đánh giá năng lực và cộng dồn điểm tự lập đầy đủ.",
-            is_fallback=False
         )
 
     key = api_key or os.getenv("GEMINI_API_KEY")
@@ -93,22 +97,43 @@ def classify_problem(
         return _heuristic_classification_fallback(
             current_problem=cleaned_current,
             history_problems=history_problems,
+            grade=grade,
             reason="Không tìm thấy GEMINI_API_KEY"
         )
 
     genai.configure(api_key=key)
     model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
-    formatted_history = _format_history_for_gemini(history_problems)
+    formatted_history = (
+        _format_history_for_gemini(history_problems)
+        if history_problems
+        else "(Học sinh chưa có bài tập nào trước đó trong lịch sử)"
+    )
+
+    curriculum_hint = ""
+    target_grade_str = str(grade) if (grade and str(grade) in _CURRICULUM_DATA) else "5"
+    if target_grade_str in _CURRICULUM_DATA:
+        sample_topics = _CURRICULUM_DATA[target_grade_str][:15]
+        curriculum_hint = f"Các chuyên đề SGK Lớp {target_grade_str} tham chiếu:\n" + "\n".join([f"- {t}" for t in sample_topics])
+
+    student_grade_text = f"Lớp {grade}" if grade else "Tiểu học/THCS (tự suy luận từ 4 đến 9)"
 
     prompt = f"""
-Hãy so sánh Đề bài hiện tại với Danh sách đề bài lịch sử dưới đây và phân loại:
+Hãy phân tích Đề bài hiện tại, đối chiếu với Danh sách đề bài lịch sử (nếu có) và thực hiện CẢ 2 NHIỆM VỤ:
+1. Phân loại dạng bài (category) & kiểm tra trùng lặp
+2. Đặt tên tiêu đề chuẩn sư phạm (friendly_parent_title) theo format [Lớp X] [Chủ đề] – [Tên dạng toán cụ thể]
+
+─── KHỐI LỚP HỌC SINH ───
+{student_grade_text}
 
 ─── ĐỀ BÀI HIỆN TẠI (CURRENT_PROBLEM) ───
 {cleaned_current}
 
 ─── DANH SÁCH ĐỀ BÀI LỊCH SỬ (HISTORY_PROBLEMS) ───
 {formatted_history}
+
+─── THAM KHẢO CHUYÊN ĐỀ CHUẨN SGK (NẾU PHÙ HỢP) ───
+{curriculum_hint}
 
 ─── YÊU CẦU ĐỊNH DẠNG JSON ĐẦU RA ───
 Chỉ trả về JSON thuần túy theo cấu trúc:
@@ -120,7 +145,8 @@ Chỉ trả về JSON thuần túy theo cấu trúc:
   "is_repeated_query": <true nếu hỏi lại bài này/dạng này >= 2 lần, ngược lại false>,
   "repeat_count": <số nguyên đếm số lần xuất hiện>,
   "gentle_reminder": "Lời nhắc nhở nhẹ nhàng nếu là EXACT_DUPLICATE hoặc hỏi lại nhiều lần, ngược lại null",
-  "pedagogical_recommendation": "Khuyến nghị sư phạm cho hệ thống đánh giá"
+  "pedagogical_recommendation": "Khuyến nghị sư phạm cho hệ thống đánh giá",
+  "friendly_parent_title": "[Lớp X] [Chủ đề] – [Tên dạng toán cụ thể]"
 }}
 """
 
@@ -141,6 +167,12 @@ Chỉ trả về JSON thuần túy theo cấu trúc:
 
         result_dict = json.loads(raw_text)
 
+        # Chuẩn hóa friendly_parent_title
+        title = result_dict.get("friendly_parent_title", "")
+        if not title or not re.match(r"^\[Lớp \d\] .+ – .+$", str(title).strip()):
+            title = _heuristic_title_fallback(cleaned_current, grade=grade).friendly_parent_title
+        result_dict["friendly_parent_title"] = title
+
         # Validate qua Pydantic v2
         validated = ProblemClassificationResult.model_validate(result_dict)
         return validated
@@ -150,6 +182,7 @@ Chỉ trả về JSON thuần túy theo cấu trúc:
         return _heuristic_classification_fallback(
             current_problem=cleaned_current,
             history_problems=history_problems,
+            grade=grade,
             reason=str(e)
         )
 
@@ -157,7 +190,6 @@ Chỉ trả về JSON thuần túy theo cấu trúc:
 def _normalize_text(text: str) -> str:
     """Chuẩn hóa chuỗi văn bản: xóa ký tự đặc biệt, dấu câu, đưa về chữ thường."""
     lower = text.lower()
-    # Loại bỏ dấu câu và ký hiệu toán học đặc biệt để so sánh cốt lõi
     cleaned = re.sub(r"[^\w\s]", " ", lower)
     return " ".join(cleaned.split())
 
@@ -165,14 +197,18 @@ def _normalize_text(text: str) -> str:
 def _heuristic_classification_fallback(
     current_problem: str,
     history_problems: Optional[List[Union[Dict[str, Any], str]]] = None,
+    grade: Optional[int] = None,
     reason: str = ""
 ) -> ProblemClassificationResult:
     """
     Thuật toán Heuristic dự phòng khi không thể gọi Gemini API (mất mạng hoặc lỗi quota):
-    1. So khớp chuỗi chuẩn hóa chính xác 100% -> EXACT_DUPLICATE
-    2. So khớp từ khóa toán học tương đồng cao -> ISOMORPHIC_PRACTICE
-    3. Ngược lại -> NEW_TOPIC
+    - Tự động sinh tiêu đề sư phạm friendly_parent_title bằng heuristic
+    - So khớp chuỗi chuẩn hóa chính xác 100% -> EXACT_DUPLICATE
+    - So khớp từ khóa toán học tương đồng cao -> ISOMORPHIC_PRACTICE
+    - Ngược lại -> NEW_TOPIC
     """
+    fallback_title = _heuristic_title_fallback(current_problem or "Bài toán", grade=grade).friendly_parent_title
+
     if not current_problem:
         return ProblemClassificationResult(
             category="NEW_TOPIC",
@@ -183,6 +219,7 @@ def _heuristic_classification_fallback(
             repeat_count=1,
             gentle_reminder=None,
             pedagogical_recommendation="Ghi nhận dạng bài mới mặc định.",
+            friendly_parent_title=fallback_title,
             is_fallback=True
         )
 
@@ -196,6 +233,7 @@ def _heuristic_classification_fallback(
             repeat_count=1,
             gentle_reminder=None,
             pedagogical_recommendation="Ghi nhận dạng bài mới.",
+            friendly_parent_title=fallback_title,
             is_fallback=True
         )
 
@@ -239,6 +277,7 @@ def _heuristic_classification_fallback(
             repeat_count=exact_match_count + 1,
             gentle_reminder="Thầy thấy em đã giải rất tốt bài này rồi. Em có muốn thử sức bài nâng cao hơn không?",
             pedagogical_recommendation="Bỏ qua cộng dồn vào tổng bài hoàn thành, khuyến khích học sinh thử sức bài nâng cao.",
+            friendly_parent_title=fallback_title,
             is_fallback=True
         )
 
@@ -252,6 +291,7 @@ def _heuristic_classification_fallback(
             repeat_count=1,
             gentle_reminder=None,
             pedagogical_recommendation="Ghi nhận luyện tập củng cố, tăng chỉ số thành thạo dạng bài, không tính trùng chuyên đề mới.",
+            friendly_parent_title=fallback_title,
             is_fallback=True
         )
 
@@ -264,5 +304,6 @@ def _heuristic_classification_fallback(
         repeat_count=1,
         gentle_reminder=None,
         pedagogical_recommendation="Ghi nhận dạng bài mới, đánh giá năng lực và cộng dồn điểm tự lập đầy đủ.",
+        friendly_parent_title=fallback_title,
         is_fallback=True
     )

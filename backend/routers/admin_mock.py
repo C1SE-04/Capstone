@@ -1017,6 +1017,15 @@ def toggle_curriculum_topic(
 
     db.commit()
     db.refresh(topic)
+
+    # Xóa cache curriculum ngay lập tức để prompt AI cập nhật tức thì
+    # (không cần chờ hết TTL 5 phút)
+    try:
+        from agents.agent_prompts import _load_curriculum
+        _load_curriculum(force_refresh=True)
+    except Exception:
+        pass
+
     return topic
 
 

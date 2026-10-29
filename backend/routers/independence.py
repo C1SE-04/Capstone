@@ -99,33 +99,35 @@ def save_independence_score(
         score = calc_result["score"]
         evaluation = custom_evaluation or calc_result["level"]
 
-    # ── 4. US 8.1 (T8.2): KIỂM TRA DEDUPLICATION VÀ BĂM HASH ĐỀ BÀI ─────
+    # ── 4. US 8.1 (T8.2): KIỂM TRA DEDUPLICATION VÀ BĂM HASH ĐỀ BÀI (GỘP T8.1 + T8.3) ─────
     resolved_problem_text = problem_text_input or extract_session_problem_text(db, session_id)
     problem_hash = compute_problem_hash(resolved_problem_text)
 
-    # Gọi kiểm tra phân loại bài tập (Fast-path SHA-256 + Gemini fallback)
+    student_user = db.query(models.User).filter(models.User.id == resolved_student_id).first()
+    student_grade = student_user.grade if (student_user and student_user.grade) else 5
+
+    # Gọi kiểm tra phân loại bài tập & sinh tên (Fast-path SHA-256 + Gemini gộp 2 trong 1)
     dedup_result = check_problem_deduplication(
         db=db,
         student_id=resolved_student_id,
-        current_problem=resolved_problem_text
+        current_problem=resolved_problem_text,
+        grade=student_grade
     )
 
     is_duplicate_flag = (dedup_result.category == "EXACT_DUPLICATE")
 
-    # ── 4.5. US 8.1 (T8.3 & T8.4): SINH TÊN CHUẨN SƯ PHẠM (friendly_parent_title) ─────
-    resolved_friendly_title = friendly_parent_title
+    # ── 4.5. US 8.1 (T8.3 & T8.4): TIÊU ĐỀ CHUẨN SƯ PHẠM (friendly_parent_title) ─────
+    # Lấy tiêu đề đã được Gemini sinh đồng thời trong dedup_result (tiết kiệm 1 lần gọi Gemini)
+    resolved_friendly_title = (
+        friendly_parent_title
+        or getattr(dedup_result, "friendly_parent_title", None)
+    )
     if not resolved_friendly_title:
-        try:
-            student_user = db.query(models.User).filter(models.User.id == resolved_student_id).first()
-            student_grade = student_user.grade if (student_user and student_user.grade) else 5
-            from agents.problem_title_generator import generate_friendly_problem_title
-            title_obj = generate_friendly_problem_title(
-                problem_text=resolved_problem_text or (session_obj.title if session_obj else "Bài toán"),
-                grade=student_grade
-            )
-            resolved_friendly_title = title_obj.friendly_parent_title
-        except Exception:
-            resolved_friendly_title = None
+        from agents.problem_title_generator import _heuristic_title_fallback
+        resolved_friendly_title = _heuristic_title_fallback(
+            problem_text=resolved_problem_text or (session_obj.title if session_obj else "Bài toán"),
+            grade=student_grade
+        ).friendly_parent_title
 
     # ── 5. Lưu bản ghi vào bảng independence_scores ───────────────────────
     record = models.IndependenceScore(

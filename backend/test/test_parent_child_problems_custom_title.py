@@ -416,3 +416,55 @@ def test_update_bookmark_title_syncs_to_parent_api():
     finally:
         cleanup_db(db)
         db.close()
+
+
+def test_child_problems_returns_isomorphic_practice_category():
+    """US 8.1 - AC 8.1.2 & TC-E2E-06: API /parent/child-problems trả về đúng category ISOMORPHIC_PRACTICE."""
+    global current_mock_user
+    db = SessionLocal()
+    try:
+        cleanup_db(db)
+        setup_users_and_link(db)
+
+        # Tạo session cho học sinh
+        session = models.Session(
+            id=uuid.uuid4().hex,
+            user_id=TEST_STUDENT_ID,
+            title="Phiên học Toán ngày 27/10",
+        )
+        db.add(session)
+        db.commit()
+
+        # Tạo bản ghi IndependenceScore với category ISOMORPHIC_PRACTICE
+        score = models.IndependenceScore(
+            id=uuid.uuid4().hex,
+            session_id=session.id,
+            student_id=TEST_STUDENT_ID,
+            score=88,
+            hints_used=1,
+            not_understood_count=0,
+            evaluation="Xuất sắc",
+            problem_text="Tìm hai số có tổng là 60 và hiệu là 20",
+            category="ISOMORPHIC_PRACTICE",
+            is_duplicate=False,
+            friendly_parent_title="[Lớp 5] Toán tìm hai số khi biết Tổng và Hiệu",
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(score)
+        db.commit()
+
+        # Phụ huynh truy vấn API /parent/child-problems
+        current_mock_user = {"id": TEST_PARENT_ID, "role": "MONITOR"}
+        resp = client.get(f"/parent/child-problems?student_id={TEST_STUDENT_ID}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["items"]) == 1
+        item = data["items"][0]
+        assert item["category"] == "ISOMORPHIC_PRACTICE"
+        assert item["is_duplicate"] is False
+        print(f"  [PASS] AC 8.1.2: category={item['category']}, is_duplicate={item['is_duplicate']}")
+
+    finally:
+        cleanup_db(db)
+        db.close()
+

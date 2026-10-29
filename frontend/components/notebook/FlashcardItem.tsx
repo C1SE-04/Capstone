@@ -9,6 +9,7 @@ import {
   Calendar,
   Award,
   BookOpen,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookmarkItem } from "@/types/bookmark";
@@ -40,9 +41,15 @@ export function FlashcardItem({
 
   const handleDeleteClick = async () => {
     if (isDeleting) return;
-    setIsDeleting(true);
-    await onDelete(bookmark.id);
-    setIsDeleting(false);
+    const confirmed = window.confirm("Em có chắc chắn muốn xóa bài toán này khỏi Sổ tay không?");
+    if (!confirmed) return;
+
+    try {
+      setIsDeleting(true);
+      await onDelete(bookmark.id);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const displayTitle =
@@ -163,11 +170,15 @@ export function FlashcardItem({
           <button
             onClick={handleDeleteClick}
             disabled={isDeleting}
-            className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+            className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             title="Xóa bài toán này"
             aria-label="Xóa khỏi sổ tay"
           >
-            <Trash2 size={15} />
+            {isDeleting ? (
+              <Loader2 size={15} className="animate-spin text-red-500" />
+            ) : (
+              <Trash2 size={15} />
+            )}
           </button>
         </div>
       </div>

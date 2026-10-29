@@ -25,6 +25,8 @@ export interface IndependenceScorePayload {
   not_understood_count?: number;
   evaluation?: string;
   created_at?: string;
+  is_duplicate?: boolean;
+  category?: string;
 }
 
 interface MasteryProgressBarProps {
@@ -71,14 +73,21 @@ export function MasteryProgressBar({ className }: MasteryProgressBarProps) {
       const newScore = detail.score;
       setLatestScore(newScore);
 
-      // Hiển thị pill chúc mừng điểm bài vừa xong trong 5 giây
-      setRecentGain({
-        score: newScore,
-        text: `+${newScore}đ bài vừa xong!`,
-      });
+      const isDup = Boolean(detail.is_duplicate || detail.category === "EXACT_DUPLICATE");
 
-      // Tăng số bài hoàn thành tạm thời trong UI
-      setTotalCompleted((prev) => prev + 1);
+      // US 8.1 - AC 8.1.1: Chỉ cộng dồn bài mới vào tổng bài hoàn thành khi KHÔNG phải bài trùng lặp
+      if (!isDup) {
+        setTotalCompleted((prev) => prev + 1);
+        setRecentGain({
+          score: newScore,
+          text: `+${newScore}đ bài vừa xong!`,
+        });
+      } else {
+        setRecentGain({
+          score: newScore,
+          text: `Đã ôn lại bài (${newScore}đ)`,
+        });
+      }
 
       // Đồng bộ lại dữ liệu chuẩn từ database
       setTimeout(() => {

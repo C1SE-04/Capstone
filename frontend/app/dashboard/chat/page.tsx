@@ -299,18 +299,50 @@ export default function ChatPage() {
     }
   };
 
-  // US4.1 & US6.1 - Handler: Hoc sinh nhan "Da hieu" -> them tin nhan chuc mung + luu diem tu luc vao DB
+  // US4.1 & US6.1 & US8.1 - Handler: Hoc sinh nhan "Da hieu"
+  // 1. An ngay lap tuc 2 nut "Da hieu / Chua hieu"
+  // 2. Hien thi bubble "SocraticKid dang nghi" (isTyping = true) trong khi Backend goi Gemini phan loai va sinh ten
+  // 3. Sau khi Backend phan loai xong:
+  //    - Neu la bai trung lap (EXACT_DUPLICATE / is_duplicate): Hien loi nhac bai da giai roi, khong tang so bai hoan thanh
+  //    - Neu la bai moi: Hien tin nhan chuc mung, doi cam xuc Cu "correct", nhay so bai + 1 bai va mo khoa huy hieu
   const handleUnderstood = async () => {
+    const prevNotUnderstoodCount = notUnderstoodCount;
     setNotUnderstoodCount(0);
-    console.log("[US4.1 & US6.1] Hoc sinh da hieu bai.");
+    console.log("[US4.1, US6.1, US8.1] Hoc sinh nhan Da hieu -> An nut, hien Socratic dang nghi...");
 
-    // Chỉ thêm message chúc mừng khi đang có cuộc trò chuyện
     if (!activeChatId) return;
 
-    let scoreCreatedAt: string | undefined = undefined;
-    let customCompletionMessage: string | null = null;
+    const feedbackMsgId = `feedback-${Date.now()}`;
 
-    // Gửi request lên Backend (Task #160 - T6.4) để kích hoạt tính điểm và lưu vào DB
+    // 1. Cập nhật state ngay lập tức: Ẩn 2 nút & Chèn bong bóng SocraticKid đang nghĩ (content: "")
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeChatId
+          ? {
+            ...c,
+            messages: [
+              ...c.messages.map((m) => ({
+                ...m,
+                isAnswerRevealed: false, // Ẩn tức thì nút Đã hiểu/Chưa hiểu ở tin nhắn trước
+              })),
+              {
+                id: feedbackMsgId,
+                role: "assistant" as const,
+                content: "", // Rỗng -> Kích hoạt hiển thị "SocraticKid đang nghĩ" kèm 3 chấm động trong ChatMessage!
+                emotion: "thinking",
+                isAnswerRevealed: false,
+                isCongrats: false,
+                created_at: new Date().toISOString(),
+              },
+            ],
+          }
+          : c
+      )
+    );
+
+    setIsTyping(true);
+
+    // 2. Gửi request POST /chat/comprehension lên Backend để phân loại & sinh tên (Gemini chạy gộp 1 lần duy nhất)
     try {
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -326,27 +358,102 @@ export default function ChatPage() {
 
       if (res.ok) {
         const resData = await res.json();
+        const isDuplicate = Boolean(
+          resData?.deduplication?.is_duplicate ||
+          resData?.independence?.is_duplicate ||
+          resData?.deduplication?.category === "EXACT_DUPLICATE"
+        );
 
-        // US 8.1: Nếu là bài trùng lặp 100% -> hiển thị câu nhắc nhở nhẹ nhàng thay vì chúc mừng mới
-        if (resData.deduplication?.is_duplicate && resData.deduplication?.gentle_reminder) {
-          customCompletionMessage = `**${resData.deduplication.gentle_reminder}**\n\n*(Thầy ghi nhận em đã ôn tập lại bài này. Vì bài đã được hoàn thành trước đó nên hệ thống sẽ không cộng dồn thêm vào tổng số bài nhé!)*`;
-        }
+        if (isDuplicate) {
+          // --- TRƯỜNG HỢP 1: BÀI TRÙNG LẶP Y HỆT ĐÃ LÀM TRƯỚC ĐÓ (AC 8.1.1) ---
+          const reminderMsg = resData.deduplication?.gentle_reminder
+            ? `**${resData.deduplication.gentle_reminder}**
 
-        if (resData.independence) {
-          scoreCreatedAt = resData.independence.created_at;
-          // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time (T6.5)
-          window.dispatchEvent(
-            new CustomEvent("INDEPENDENCE_SCORE_UPDATED", {
-              detail: resData.independence,
-            })
+*(Thầy ghi nhận em đã ôn tập lại bài này. Vì bài đã được hoàn thành trước đó nên hệ thống sẽ không cộng dồn thêm vào tổng số bài nhé!)*`
+            : "Thầy thấy em đã giải rất tốt bài này rồi. Em có muốn thử sức bài nâng cao hơn không?";
+
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === activeChatId
+                ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === feedbackMsgId
+                      ? {
+                        ...m,
+                        content: reminderMsg,
+                        emotion: "idle",
+                        isAnswerRevealed: false,
+                        isCongrats: false, // Không hiện nhãn chúc mừng / lưu sổ tay cho bài trùng
+                        created_at: resData?.independence?.created_at || new Date().toISOString(),
+                      }
+                      : m
+                  ),
+                }
+                : c
+            )
           );
 
-          // T7.18 (US 7.2): Chỉ mở khóa huy hiệu nếu không phải là bài trùng lặp
-          if (!resData.deduplication?.is_duplicate) {
-            if (resData.independence.score === 100 || notUnderstoodCount === 0) {
+          // Phát sự kiện cập nhật điểm nhưng kèm cờ is_duplicate: true để Sidebar KHÔNG nhảy số bài (+1 bài)
+          if (resData.independence) {
+            window.dispatchEvent(
+              new CustomEvent("INDEPENDENCE_SCORE_UPDATED", {
+                detail: {
+                  ...resData.independence,
+                  is_duplicate: true,
+                  category: "EXACT_DUPLICATE",
+                },
+              })
+            );
+          }
+        } else {
+          // --- TRƯỜNG HỢP 2: BÀI MỚI (NEW_TOPIC HOẶC ISOMORPHIC_PRACTICE) ---
+          const congratsMessages = [
+            "**Tuyệt vời!** Em đã hiểu rồi! Thầy rất vui vì em nắm được vấn đề. Hãy tiếp tục phát huy nhé!",
+            "**Xuất sắc!** Em đã hiểu bài rồi! Học toán mà hiểu được như vậy là rất giỏi đó. Tiếp tục nhé!",
+            "**Giỏi lắm!** Em đã nắm được kiến thức này rồi! Mỗi câu hỏi hiểu được là một bước tiến lớn. Cứ tiếp tục học nhé!",
+          ];
+          const randomMsg = congratsMessages[Math.floor(Math.random() * congratsMessages.length)];
+
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === activeChatId
+                ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === feedbackMsgId
+                      ? {
+                        ...m,
+                        content: randomMsg,
+                        emotion: "correct",
+                        isAnswerRevealed: false,
+                        isCongrats: true, // Hiện nút Lưu vào Sổ tay
+                        created_at: resData?.independence?.created_at || new Date().toISOString(),
+                      }
+                      : m
+                  ),
+                }
+                : c
+            )
+          );
+
+          // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time & NHẢY SỐ BÀI (+1 bài)
+          if (resData.independence) {
+            window.dispatchEvent(
+              new CustomEvent("INDEPENDENCE_SCORE_UPDATED", {
+                detail: {
+                  ...resData.independence,
+                  is_duplicate: false,
+                },
+              })
+            );
+
+            // T7.18 (US 7.2): Nếu đạt 100 điểm tự lập -> Mở khóa huy hiệu "Tự lập nhí" (hiện 1 lần duy nhất)
+            if (resData.independence.score === 100 || prevNotUnderstoodCount === 0) {
               triggerUnlockBadge("independence_100");
             }
 
+            // T7.18 (US 7.2): Nếu bài toán có kèm ảnh bài tập -> Mở khóa huy hiệu "Thám Tử Hình Ảnh" (hiện 1 lần duy nhất)
             const currentConv = conversations.find((c) => c.id === activeChatId);
             const hasImageInSession = Boolean(
               currentImages.length > 0 ||
@@ -359,40 +466,31 @@ export default function ChatPage() {
         }
       }
     } catch (e) {
-      console.warn("[US6.1] Lỗi gửi comprehension feedback lên backend:", e);
+      console.warn("[US6.1 & US8.1] Lỗi gửi comprehension feedback lên backend:", e);
+      // Fallback khi lỗi mạng: hiện thông báo chúc mừng mặc định
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeChatId
+            ? {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === feedbackMsgId
+                  ? {
+                    ...m,
+                    content: "**Tuyệt vời!** Em đã hiểu rồi! Thầy rất vui vì em nắm được vấn đề. Hãy tiếp tục phát huy nhé!",
+                    emotion: "correct",
+                    isAnswerRevealed: false,
+                    isCongrats: true,
+                  }
+                  : m
+              ),
+            }
+            : c
+        )
+      );
+    } finally {
+      setIsTyping(false);
     }
-
-    const congratsMessages = [
-      "**Tuyệt vời!** Em đã hiểu rồi! Thầy rất vui vì em nắm được vấn đề. Hãy tiếp tục phát huy nhé!",
-      "**Xuất sắc!** Em đã hiểu bài rồi! Học toán mà hiểu được như vậy là rất giỏi đó. Tiếp tục nhé!",
-      "**Giỏi lắm!** Em đã nắm được kiến thức này rồi! Mỗi câu hỏi hiểu được là một bước tiến lớn. Cứ tiếp tục học nhé!",
-    ];
-    const randomMsg = customCompletionMessage || congratsMessages[Math.floor(Math.random() * congratsMessages.length)];
-    const congratsId = `congrats-${Date.now()}`;
-
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeChatId
-          ? {
-            ...c,
-            messages: [
-              ...c.messages,
-              {
-                id: congratsId,
-                role: "assistant" as const,
-                content: randomMsg,
-                emotion: "correct",
-                isAnswerRevealed: false, // Không hiện lại nút Đã hiểu/Chưa hiểu
-                isCongrats: true, // Đánh dấu tin nhắn chúc mừng để hiển thị nút Lưu vào Sổ tay
-                created_at: scoreCreatedAt || new Date().toISOString(),
-              },
-            ],
-          }
-          : c
-      )
-    );
-
-    // Con cú giữ nguyên trạng thái correct — không reset về idle
   };
 
   // US4.1 - Trigger AI giai thich lai (AN, khong them tin nhan user vao UI)
