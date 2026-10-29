@@ -309,6 +309,7 @@ export default function ChatPage() {
     if (!activeChatId) return;
 
     let scoreCreatedAt: string | undefined = undefined;
+    let customCompletionMessage: string | null = null;
 
     // Gửi request lên Backend (Task #160 - T6.4) để kích hoạt tính điểm và lưu vào DB
     try {
@@ -326,6 +327,12 @@ export default function ChatPage() {
 
       if (res.ok) {
         const resData = await res.json();
+
+        // US 8.1: Nếu là bài trùng lặp 100% -> hiển thị câu nhắc nhở nhẹ nhàng thay vì chúc mừng mới
+        if (resData.deduplication?.is_duplicate && resData.deduplication?.gentle_reminder) {
+          customCompletionMessage = `**${resData.deduplication.gentle_reminder}**\n\n*(Thầy ghi nhận em đã ôn tập lại bài này. Vì bài đã được hoàn thành trước đó nên hệ thống sẽ không cộng dồn thêm vào tổng số bài nhé!)*`;
+        }
+
         if (resData.independence) {
           scoreCreatedAt = resData.independence.created_at;
           // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time (T6.5)
@@ -335,19 +342,20 @@ export default function ChatPage() {
             })
           );
 
-          // T7.18 (US 7.2): Nếu đạt 100 điểm tự lập -> Mở khóa huy hiệu "Tự lập nhí" (hiện 1 lần duy nhất)
-          if (resData.independence.score === 100 || notUnderstoodCount === 0) {
-            triggerUnlockBadge("independence_100");
-          }
+          // T7.18 (US 7.2): Chỉ mở khóa huy hiệu nếu không phải là bài trùng lặp
+          if (!resData.deduplication?.is_duplicate) {
+            if (resData.independence.score === 100 || notUnderstoodCount === 0) {
+              triggerUnlockBadge("independence_100");
+            }
 
-          // T7.18 (US 7.2): Nếu bài toán có kèm ảnh bài tập -> Mở khóa huy hiệu "Thám Tử Hình Ảnh" (hiện 1 lần duy nhất)
-          const currentConv = conversations.find((c) => c.id === activeChatId);
-          const hasImageInSession = Boolean(
-            currentImages.length > 0 ||
-            currentConv?.messages.some((m) => Boolean(m.attachment_url))
-          );
-          if (hasImageInSession) {
-            triggerUnlockBadge("photo_solver");
+            const currentConv = conversations.find((c) => c.id === activeChatId);
+            const hasImageInSession = Boolean(
+              currentImages.length > 0 ||
+              currentConv?.messages.some((m) => Boolean(m.attachment_url))
+            );
+            if (hasImageInSession) {
+              triggerUnlockBadge("photo_solver");
+            }
           }
         }
       }
@@ -360,7 +368,7 @@ export default function ChatPage() {
       "**Xuất sắc!** Em đã hiểu bài rồi! Học toán mà hiểu được như vậy là rất giỏi đó. Tiếp tục nhé!",
       "**Giỏi lắm!** Em đã nắm được kiến thức này rồi! Mỗi câu hỏi hiểu được là một bước tiến lớn. Cứ tiếp tục học nhé!",
     ];
-    const randomMsg = congratsMessages[Math.floor(Math.random() * congratsMessages.length)];
+    const randomMsg = customCompletionMessage || congratsMessages[Math.floor(Math.random() * congratsMessages.length)];
     const congratsId = `congrats-${Date.now()}`;
 
     setConversations((prev) =>
