@@ -992,10 +992,13 @@ def sync_curriculum_from_vietjack(
     # 1. Thử gọi crawler bóc tách trực tiếp từ VietJack (nếu không ép dùng fallback)
     if not force_fallback:
         try:
-            from agents.curriculum_crawler import run_crawler, transform_for_db_sync
+            from agents.curriculum_crawler import run_crawler, transform_for_db_sync, export_to_curriculum_json
             crawled_raw = run_crawler(grades=target_grades)
             if crawled_raw:
                 crawled_topics = transform_for_db_sync(crawled_raw, school_year=school_year)
+                # Tự động lọc bỏ các bài ôn tập / thực hành và cập nhật vào grade_curriculum.json cho AI Prompts
+                json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", "grade_curriculum.json")
+                export_to_curriculum_json(crawled_raw, save_path=json_path)
         except Exception as e:
             print(f"[VietJack Sync] Crawler trực tiếp gặp sự cố: {e}. Sử dụng cơ chế Fallback an toàn.")
 
@@ -1070,6 +1073,13 @@ def sync_curriculum_from_vietjack(
             inserted_count += 1
 
     db.commit()
+
+    # Làm mới cache in-memory của AI Prompts ngay lập tức
+    try:
+        from agents.agent_prompts import _load_curriculum
+        _load_curriculum(force_refresh=True)
+    except Exception as e:
+        print(f"[VietJack Sync] Không thể làm mới cache prompts: {e}")
 
     elapsed = round(time.time() - start_time, 2)
     current_total = db.query(models.CurriculumTopic).count()

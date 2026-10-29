@@ -1,17 +1,97 @@
 from typing import Optional
 import json
 import os
+import time
+import logging
 
-def _load_curriculum() -> dict:
-    """Tai grade_curriculum.json mot lan khi khoi dong module."""
+logger = logging.getLogger(__name__)
+
+# =========================================================================
+# US 8.4 - Task T8.26: In-memory Cache & Dynamic DB Loader cho Curriculum
+# =========================================================================
+_CURRICULUM_CACHE: dict[str, list[str]] = {}
+_LAST_FETCH_TIME: float = 0.0
+_CACHE_TTL_SECONDS: int = 300  # Thời gian sống của cache: 5 phút (300 giây)
+
+
+def _load_curriculum_from_file() -> dict[str, list[str]]:
+    """
+    Cơ chế nạp danh mục chuyên đề đã lọc từ grade_curriculum.json.
+    File này đã được tự động loại bỏ các bài luyện tập chung, bài tập cuối chương, thực hành.
+    """
     json_path = os.path.join(os.path.dirname(__file__), "grade_curriculum.json")
     try:
         with open(json_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return {str(k): list(v) for k, v in data.items()}
+            return {}
+    except Exception as e:
+        logger.warning(f"[_load_curriculum_from_file] Không đọc được file {json_path}: {e}")
         return {}
 
-# Cache curriculum khi module duoc load (khong doc file nhieu lan)
+
+def _load_curriculum(force_refresh: bool = False) -> dict[str, list[str]]:
+    """
+    US 8.4 (Task T8.26):
+    Tải danh mục chuyên đề tinh gọn phục vụ Prompt AI:
+    - Nguồn dữ liệu cốt lõi: Đọc từ grade_curriculum.json (đã loại bỏ bài ôn tập, thực hành, luyện tập chung).
+    - Đồng bộ trạng thái Giảm tải (Admin Toggle): Kiểm tra Neon DB để loại trừ những bài mà Admin đã tắt (is_active == False).
+    - Cache RAM 5 phút (300s) giúp tin nhắn chat phản hồi tức thì (<0.01ms).
+    - Hỗ trợ force_refresh=True để xóa cache và ép nạp mới ngay lập tức.
+    """
+    global _CURRICULUM_CACHE, _LAST_FETCH_TIME
+
+    current_time = time.time()
+
+    # 1. Kiểm tra cache còn hạn (dưới 5 phút) và không bị ép làm mới
+    if not force_refresh and _CURRICULUM_CACHE and (current_time - _LAST_FETCH_TIME < _CACHE_TTL_SECONDS):
+        return _CURRICULUM_CACHE
+
+    # 2. Đọc danh mục bài học đã được lọc sạch từ file JSON
+    curriculum = _load_curriculum_from_file()
+
+    # 3. Đồng bộ trạng thái giảm tải từ Neon DB (loại trừ các bài is_active == False do Admin cấu hình)
+    if curriculum:
+        try:
+            from database import SessionLocal
+            import models
+            import re
+
+            db = SessionLocal()
+            try:
+                inactive_topics = (
+                    db.query(models.CurriculumTopic.grade, models.CurriculumTopic.topic_name)
+                    .filter(models.CurriculumTopic.is_active == False)
+                    .all()
+                )
+                if inactive_topics:
+                    # Tạo tập hợp các bài bị tắt (đã chuẩn hóa tên)
+                    disabled_set = set()
+                    for grade, topic_name in inactive_topics:
+                        clean_name = re.sub(r"^(?:Giáo án\s+Toán\s+\d+\s+)?(?:Bài\s*\d+:\s*)?", "", topic_name, flags=re.IGNORECASE).strip().lower()
+                        disabled_set.add((str(grade), clean_name))
+
+                    # Loại bỏ các bài bị tắt khỏi curriculum đưa vào prompt
+                    for g_str in curriculum:
+                        curriculum[g_str] = [
+                            t for t in curriculum[g_str]
+                            if (g_str, t.lower().strip()) not in disabled_set
+                        ]
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"[_load_curriculum] Không truy vấn được bài tắt từ DB: {e}. Giữ nguyên danh mục file JSON.")
+
+    # 4. Cập nhật cache nếu lấy được dữ liệu hợp lệ
+    if curriculum:
+        _CURRICULUM_CACHE = curriculum
+        _LAST_FETCH_TIME = current_time
+
+    return _CURRICULUM_CACHE or curriculum
+
+
+# Khởi tạo cache ban đầu khi import module và hỗ trợ tương thích ngược
 _CURRICULUM = _load_curriculum()
 
 
@@ -22,13 +102,18 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
     Nguyên tắc tích lũy: Lớp 7 biết hết kiến thức lớp 4 + 5 + 6 + 7.
     Nếu grade_level=None → trả về chuỗi rỗng (không ảnh hưởng prompt).
     """
-    if not grade_level or not _CURRICULUM:
+    if not grade_level:
+        return ""
+
+    # Tải curriculum động từ cache 5 phút / DB Neon thay vì biến tĩnh
+    curriculum = _load_curriculum()
+    if not curriculum:
         return ""
 
     grade = int(grade_level)
     all_topics = []
     for lvl in range(4, grade + 1):
-        for topic in _CURRICULUM.get(str(lvl), []):
+        for topic in curriculum.get(str(lvl), []):
             all_topics.append(f"  - [Lớp {lvl}] {topic}")
 
     if not all_topics:
