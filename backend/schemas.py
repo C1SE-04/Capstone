@@ -967,6 +967,31 @@ class CurriculumTopicListResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class SyncVietjackRequest(BaseModel):
+    """Tham số tùy chọn cho API POST /admin/curriculum/sync-vietjack"""
+    grades: Optional[list[int]] = [4, 5, 6, 7, 8, 9]
+    school_year: Optional[str] = "2024-2025"
+    force_fallback: Optional[bool] = False
+
+
+class SyncVietjackResult(BaseModel):
+    """
+    Kết quả đồng bộ mục lục VietJack (Task T8.25 - US 8.4).
+    Đồng bộ với frontend type SyncVietjackResult.
+    """
+    success: bool = True
+    total_synced: int
+    current_total_in_db: int
+    grades: list[int]
+    message: str
+    elapsed_seconds: float
+
+    class Config:
+        from_attributes = True
+
+SyncVietjackResponse = SyncVietjackResult
+
 # =========================================================================
 # --- US 8.1: Dual Email Alert System Schemas (Task T8.6) ---
 # =========================================================================

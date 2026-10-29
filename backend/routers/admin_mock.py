@@ -966,29 +966,38 @@ def update_curriculum_topic(
     return topic
 
 
-@admin_router.post("/curriculum/sync-vietjack")
-@router.post("/curriculum/sync-vietjack")
+@admin_router.post("/curriculum/sync-vietjack", response_model=schemas.SyncVietjackResult)
+@router.post("/curriculum/sync-vietjack", response_model=schemas.SyncVietjackResult)
 def sync_curriculum_from_vietjack(
+    body: Optional[schemas.SyncVietjackRequest] = None,
     db: Session = Depends(database.get_db),
 ):
     """
     US 8.4 (Task T8.25):
     Kích hoạt crawler bóc tách mục lục Toán lớp 4-9 từ VietJack và upsert vào Neon DB.
-    Tự động fallback an toàn từ grade_curriculum.json nếu mạng VietJack timeout/rate-limit.
+    - Hỗ trợ cào trực tiếp BeautifulSoup từ VietJack các khối lớp chỉ định (mặc định 4-9).
+    - Tự động fallback an toàn từ grade_curriculum.json nếu mạng VietJack timeout / rate-limit.
+    - Upsert tối ưu O(1) in-memory cache chống N+1 query, hoàn tất trong 2-4 giây [AC 8.4.1].
+    - Bảo toàn trạng thái is_active (Bật/Tắt) nếu Admin đã cấu hình giảm tải trước đó.
     """
     import time
     start_time = time.time()
-    total_upserted = 0
-    crawled_topics = []
 
-    # 1. Thử gọi crawler bóc tách trực tiếp từ VietJack
-    try:
-        from agents.curriculum_crawler import run_crawler, transform_for_db_sync
-        crawled_raw = run_crawler(grades=[4, 5, 6, 7, 8, 9])
-        if crawled_raw:
-            crawled_topics = transform_for_db_sync(crawled_raw)
-    except Exception as e:
-        print(f"[VietJack Sync] Crawler trực tiếp gặp sự cố: {e}. Sử dụng cơ chế Fallback an toàn.")
+    target_grades = body.grades if (body and body.grades) else [4, 5, 6, 7, 8, 9]
+    school_year = body.school_year if (body and body.school_year) else "2024-2025"
+    force_fallback = body.force_fallback if body else False
+
+    crawled_topics: list[dict] = []
+
+    # 1. Thử gọi crawler bóc tách trực tiếp từ VietJack (nếu không ép dùng fallback)
+    if not force_fallback:
+        try:
+            from agents.curriculum_crawler import run_crawler, transform_for_db_sync
+            crawled_raw = run_crawler(grades=target_grades)
+            if crawled_raw:
+                crawled_topics = transform_for_db_sync(crawled_raw, school_year=school_year)
+        except Exception as e:
+            print(f"[VietJack Sync] Crawler trực tiếp gặp sự cố: {e}. Sử dụng cơ chế Fallback an toàn.")
 
     # 2. Cơ chế Fallback an toàn (Task T8.29): Nếu crawler rỗng, đọc từ grade_curriculum.json
     if not crawled_topics:
@@ -997,40 +1006,54 @@ def sync_curriculum_from_vietjack(
         if os.path.exists(json_path):
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            order_idx = 1
-            for g_str, topic_list in data.items():
-                g_val = int(g_str)
-                for t_name in topic_list:
+
+            for g in target_grades:
+                topics_list = data.get(str(g), [])
+                half_len = max(1, len(topics_list) // 2)
+                for idx, t_name in enumerate(topics_list, start=1):
+                    sem = 1 if idx <= half_len else 2
+                    ch_num = 1 if sem == 1 else 2
                     crawled_topics.append({
-                        "grade": g_val,
+                        "grade": g,
                         "book_series": "Kết nối tri thức",
-                        "semester": 1 if order_idx <= 15 else 2,
-                        "chapter_name": f"Chương {1 if order_idx <= 15 else 2}: Kiến thức trọng tâm",
+                        "semester": sem,
+                        "chapter_name": f"Chương {ch_num}: Trọng tâm môn Toán Lớp {g}",
                         "topic_name": t_name,
-                        "order_index": order_idx,
-                        "school_year": "2024-2025",
+                        "order_index": idx,
+                        "school_year": school_year,
                         "is_active": True,
-                        "source_url": "https://vietjack.com/toan-lop-" + g_str,
+                        "source_url": f"https://vietjack.com/toan-lop-{g}",
                     })
-                    order_idx += 1
 
-    # 3. Upsert vào bảng curriculum_topics
+    # 3. Tối ưu Bulk Upsert vào Neon DB (1 query lấy toàn bộ existing topics thay vì N query)
+    existing_records = (
+        db.query(models.CurriculumTopic)
+        .filter(
+            models.CurriculumTopic.grade.in_(target_grades),
+            models.CurriculumTopic.book_series == "Kết nối tri thức",
+        )
+        .all()
+    )
+    existing_map = {
+        (t.grade, t.book_series, t.chapter_name, t.topic_name): t
+        for t in existing_records
+    }
+
+    inserted_count = 0
+    updated_count = 0
+
     for item in crawled_topics:
-        existing = db.query(models.CurriculumTopic).filter(
-            models.CurriculumTopic.grade == item["grade"],
-            models.CurriculumTopic.book_series == item["book_series"],
-            models.CurriculumTopic.chapter_name == item["chapter_name"],
-            models.CurriculumTopic.topic_name == item["topic_name"],
-        ).first()
-
-        if existing:
-            existing.order_index = item["order_index"]
-            existing.school_year = item.get("school_year", "2024-2025")
+        key = (item["grade"], item["book_series"], item["chapter_name"], item["topic_name"])
+        if key in existing_map:
+            rec = existing_map[key]
+            rec.order_index = item["order_index"]
+            rec.semester = item.get("semester", rec.semester)
+            rec.school_year = item.get("school_year", school_year)
             if item.get("source_url"):
-                existing.source_url = item["source_url"]
-            total_upserted += 1
+                rec.source_url = item["source_url"]
+            updated_count += 1
         else:
-            new_top = models.CurriculumTopic(
+            new_topic = models.CurriculumTopic(
                 id=uuid.uuid4().hex,
                 grade=item["grade"],
                 book_series=item["book_series"],
@@ -1038,22 +1061,25 @@ def sync_curriculum_from_vietjack(
                 chapter_name=item["chapter_name"],
                 topic_name=item["topic_name"],
                 order_index=item["order_index"],
-                school_year=item.get("school_year", "2024-2025"),
+                school_year=item.get("school_year", school_year),
                 is_active=True,
                 source_url=item.get("source_url"),
             )
-            db.add(new_top)
-            total_upserted += 1
+            db.add(new_topic)
+            existing_map[key] = new_topic
+            inserted_count += 1
 
     db.commit()
+
     elapsed = round(time.time() - start_time, 2)
     current_total = db.query(models.CurriculumTopic).count()
+    total_synced = inserted_count + updated_count
 
-    return {
-        "success": True,
-        "total_synced": total_upserted,
-        "current_total_in_db": current_total,
-        "grades": [4, 5, 6, 7, 8, 9],
-        "message": f"Đồng bộ thành công {total_upserted} bài học từ VietJack vào cơ sở dữ liệu!",
-        "elapsed_seconds": elapsed,
-    }
+    return schemas.SyncVietjackResult(
+        success=True,
+        total_synced=total_synced,
+        current_total_in_db=current_total,
+        grades=target_grades,
+        message=f"Đồng bộ thành công {total_synced} bài học từ VietJack vào cơ sở dữ liệu!",
+        elapsed_seconds=elapsed,
+    )
