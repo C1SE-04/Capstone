@@ -9,7 +9,7 @@
  * - Kết nối API thật: GET /family/students, DELETE /family/students/{id}
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
@@ -21,6 +21,8 @@ import {
   User,
   Home,
   Edit2,
+  Settings,
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LinkStudentModal from "@/components/LinkStudentModal";
@@ -47,6 +49,26 @@ export default function MonitorSidebar({
   const [isLoading, setIsLoading] = useState(true);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  // Đóng dropdown khi click bên ngoài
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        settingsRef.current &&
+        !settingsRef.current.contains(event.target as Node)
+      ) {
+        setShowSettings(false);
+      }
+    };
+    if (showSettings) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showSettings]);
 
   // Fetch danh sách con từ API
   const fetchStudents = async () => {
@@ -155,7 +177,7 @@ export default function MonitorSidebar({
 
   return (
     <>
-      <aside className="w-72 bg-[#F1CCA6] flex flex-col h-full border-r border-[#C1762A]/20 shrink-0">
+      <aside className="w-72 bg-[#F1CCA6] flex flex-col h-full border-r border-[#C1762A]/20 shrink-0 relative">
         {/* Logo / Header */}
         <div className="p-6 border-b border-[#C1762A]/20">
           <div
@@ -330,21 +352,47 @@ export default function MonitorSidebar({
           </button>
         </div>
 
-        {/* Mini Profile + Đăng xuất */}
-        <div className="p-4 border-t border-[#C1762A]/20 flex items-center justify-between">
+        {/* Settings Dropdown (Floating) */}
+        {showSettings && (
+          <div
+            ref={settingsRef}
+            className="absolute bottom-20 left-4 right-4 bg-white rounded-xl shadow-lg border border-[#F1CCA6] p-2 z-50 animate-in fade-in zoom-in-95 duration-200 flex flex-col gap-1"
+          >
+            <button
+              onClick={() => {
+                setShowSettings(false);
+                router.push("/dashboard/monitor/settings");
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#8C4905] hover:bg-[#F7ECE1] rounded-lg transition-colors font-medium cursor-pointer"
+            >
+              <Settings2 size={16} />
+              Cài đặt
+            </button>
+            <button
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#8C4905] hover:bg-[#F7ECE1] rounded-lg transition-colors font-medium cursor-pointer"
+            >
+              <LogOut size={16} />
+              Đăng xuất
+            </button>
+          </div>
+        )}
+
+        {/* Mini Profile Area */}
+        <div className="p-4 border-t border-[#C1762A]/20 bg-[#F1CCA6] flex items-center justify-between">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {session?.user?.image ? (
               <img
                 src={session.user.image}
                 alt="Avatar"
-                className="w-8 h-8 rounded-full border border-[#C1762A]"
+                className="w-8 h-8 rounded-full border border-[#C1762A] shrink-0"
               />
             ) : (
-              <div className="w-8 h-8 bg-[#C1762A] rounded-full flex items-center justify-center text-white font-bold text-sm">
+              <div className="w-8 h-8 bg-[#C1762A] rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
                 {session?.user?.name?.charAt(0) || "P"}
               </div>
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-[#8C4905] truncate">
                 {session?.user?.name || "Phụ huynh"}
               </p>
@@ -352,11 +400,11 @@ export default function MonitorSidebar({
             </div>
           </div>
           <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            className="p-2 text-[#8C4905] hover:bg-[#F7AD62]/30 rounded-lg transition-colors"
-            title="Đăng xuất"
+            onClick={() => setShowSettings(!showSettings)}
+            className="p-2 text-[#8C4905] hover:bg-[#F7AD62]/30 rounded-lg transition-colors cursor-pointer"
+            title="Cài đặt"
           >
-            <LogOut size={18} />
+            <Settings size={20} />
           </button>
         </div>
       </aside>

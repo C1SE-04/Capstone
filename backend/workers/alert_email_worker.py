@@ -23,6 +23,18 @@ from agents.email_alert_generator import (
 from agents.problem_title_generator import generate_friendly_problem_title
 
 
+def get_parent_notify_email(parent: "models.User") -> str:
+    """
+    Lấy email để gửi thông báo cho phụ huynh.
+    - Nếu phụ huynh đã cài notification_email riêng → dùng email đó.
+    - Nếu phụ huynh đăng nhập bằng Google OAuth → dùng email Google (= email tài khoản).
+    - Fallback về email tài khoản chính.
+    """
+    if parent.notification_email and parent.notification_email.strip():
+        return parent.notification_email.strip()
+    return parent.email
+
+
 def resolve_problem_display_title(
     db: Session,
     student_id: str,
@@ -168,8 +180,9 @@ def process_safety_alerts(db: Session) -> int:
                 )
 
                 for parent in parents:
+                    notify_email = get_parent_notify_email(parent)
                     send_email(
-                        to_email=parent.email,
+                        to_email=notify_email,
                         subject=email_result.email_subject,
                         text_content=text_body,
                         html_content=html_body,
@@ -181,7 +194,7 @@ def process_safety_alerts(db: Session) -> int:
                         student_id=student.id,
                         parent_id=parent.id,
                         alert_type="SAFETY",
-                        recipient_email=parent.email,
+                        recipient_email=notify_email,
                         subject=email_result.email_subject,
                         email_body=html_body,
                         trigger_reason=log.reason or "Vi phạm quy tắc ngôn từ trong chat",
@@ -322,8 +335,9 @@ def process_academic_alerts(db: Session, cooldown_hours: int = 24) -> int:
             )
 
             for parent in parents:
+                notify_email = get_parent_notify_email(parent)
                 send_email(
-                    to_email=parent.email,
+                    to_email=notify_email,
                     subject=email_result.email_subject,
                     text_content=text_body,
                     html_content=html_body,
@@ -334,7 +348,7 @@ def process_academic_alerts(db: Session, cooldown_hours: int = 24) -> int:
                     student_id=student.id,
                     parent_id=parent.id,
                     alert_type="ACADEMIC",
-                    recipient_email=parent.email,
+                    recipient_email=notify_email,
                     subject=email_result.email_subject,
                     email_body=html_body,
                     trigger_reason=trigger_reason,
@@ -362,7 +376,7 @@ def process_email_alerts_once(db: Session, cooldown_hours: int = 24) -> Dict[str
     }
 
 
-async def schedule_alert_email_worker(interval_seconds: int = 300):
+async def schedule_alert_email_worker(interval_seconds: int = 20):
     """
     Background worker chạy định kỳ (mặc định mỗi 300s = 5 phút)
     tự động gửi email cảnh báo kép cho phụ huynh.
@@ -374,7 +388,7 @@ async def schedule_alert_email_worker(interval_seconds: int = 300):
             try:
                 counts = process_email_alerts_once(db)
                 if counts["safety_alerts"] > 0 or counts["academic_alerts"] > 0:
-                    print(f"[AlertWorker] 🔔 Chu kỳ 5 phút hoàn tất: Đã gửi {counts['safety_alerts']} cảnh báo ngôn từ & {counts['academic_alerts']} cảnh báo học tập.")
+                    print(f"[AlertWorker] 🔔 Chu kỳ hoàn tất: Đã gửi {counts['safety_alerts']} cảnh báo ngôn từ & {counts['academic_alerts']} cảnh báo học tập.")
             finally:
                 db.close()
         except Exception as e:
