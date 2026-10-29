@@ -134,7 +134,7 @@ async def startup_event():
     # 4. US 8.1 (Task T8.7): Khởi động Background Worker gửi Email Cảnh Báo Phụ Huynh trong 5 phút
     try:
         from workers.alert_email_worker import schedule_alert_email_worker
-        asyncio.create_task(schedule_alert_email_worker(interval_seconds=300))
+        asyncio.create_task(schedule_alert_email_worker(interval_seconds=20))
     except Exception as e:
         print(f"⚠️ Không thể khởi động Alert Email Worker: {e}")
 

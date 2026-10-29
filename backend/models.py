@@ -18,6 +18,10 @@ class User(Base):
     # US 8.3 (T8.18): Google OAuth fields
     google_id = Column(String, unique=True, index=True, nullable=True)  # ID người dùng từ Google (sub)
     oauth_provider = Column(String, nullable=True)  # 'google' hoặc None nếu đăng ký bằng mật khẩu
+
+    # Email riêng để nhận thông báo/cảnh báo (chủ yếu dùng cho MONITOR/phụ huynh)
+    # Nếu NULL → dùng email tài khoản chính. Nếu OAuth Google → không cho sửa (email = tài khoản Google).
+    notification_email = Column(String, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
@@ -523,4 +527,4 @@ class ParentAlertLog(Base):
         Index("ix_parent_alert_logs_student_created", "student_id", "created_at"),
     )
 
-
+

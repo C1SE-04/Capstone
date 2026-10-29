@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 import dependencies
 import models
@@ -27,6 +27,9 @@ def get_current_user_profile(
         "role": user_db.role,
         "grade": user_db.grade,
         "session_version": user_db.session_version,
+        "google_id": user_db.google_id,
+        "oauth_provider": user_db.oauth_provider,
+        "notification_email": user_db.notification_email,
     }
 
 @router.get("/monitor/dashboard")
@@ -73,3 +76,41 @@ def update_my_grade(
         "session_version": user_db.session_version,
     }
 
+
+class NotificationEmailPatchRequest(BaseModel):
+    notification_email: EmailStr
+
+
+@router.patch("/users/me/notification-email")
+def update_notification_email(
+    body: NotificationEmailPatchRequest,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Phụ huynh (MONITOR) cập nhật email nhận cảnh báo/thông báo.
+    - Chỉ cho phép role MONITOR.
+    - Nếu đăng nhập bằng Google OAuth → từ chối (email Google là cố định).
+    """
+    if current_user.get("role") != "MONITOR":
+        raise HTTPException(status_code=403, detail="Chỉ phụ huynh mới có thể cập nhật email thông báo.")
+
+    user_db = db.query(models.User).filter(models.User.id == current_user["id"]).first()
+    if not user_db:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại.")
+
+    # Nếu đăng nhập bằng Google OAuth → email thông báo = email Google, không cho sửa
+    if user_db.oauth_provider == "google":
+        raise HTTPException(
+            status_code=400,
+            detail="Tài khoản Google OAuth không thể thay đổi email thông báo. Email thông báo luôn là email Google của bạn."
+        )
+
+    user_db.notification_email = str(body.notification_email)
+    db.commit()
+    db.refresh(user_db)
+
+    return {
+        "message": "Đã cập nhật email thông báo thành công.",
+        "notification_email": user_db.notification_email,
+    }
