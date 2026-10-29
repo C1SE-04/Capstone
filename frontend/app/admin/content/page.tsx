@@ -285,7 +285,7 @@ export default function AdminContentPage() {
               title="Kích hoạt tự động cào và đồng bộ mục lục SGK mới từ VietJack"
             >
               <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
-              <span>[ 🔄 Cào & Đồng bộ từ VietJack ]</span>
+              <span>Cào & Đồng bộ từ VietJack</span>
             </button>
 
             {/* Nút Tải lại danh sách */}

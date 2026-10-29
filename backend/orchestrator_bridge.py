@@ -215,6 +215,7 @@ def process_query_with_orchestrator(
         latest_message=user_query,
         history_text=history_text,
         problem_context=problem_context,
+        student_grade=grade_level,
     )
 
     selected = result["selected_agent"]

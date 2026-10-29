@@ -26,6 +26,31 @@ def _detect_uncovered_claim(message: str) -> bool:
         return True
     return False
 
+def _normalize_curriculum_text(text: str) -> str:
+    """Xóa dấu câu, khoảng trắng thừa để so khớp tên chuyên đề chính xác."""
+    cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+    return " ".join(cleaned.split())
+
+def _is_topic_in_active_curriculum(message: str, grade: Optional[int] = None) -> bool:
+    """Kiểm tra xem nội dung học sinh đề cập có nằm trong danh mục chuyên đề ĐANG BẬT (active) hay không."""
+    try:
+        from agents.agent_prompts import _load_curriculum
+        curriculum = _load_curriculum()
+        if not curriculum:
+            return True
+        target_grade = int(grade) if grade else 9
+        active_topics = []
+        for g in range(4, target_grade + 1):
+            active_topics.extend(curriculum.get(str(g), []))
+        norm_msg = _normalize_curriculum_text(message)
+        for topic in active_topics:
+            norm_topic = _normalize_curriculum_text(topic)
+            if norm_topic and norm_topic in norm_msg:
+                return True
+        return False
+    except Exception:
+        return True
+
 def _build_task_description(
     agent: str,
     message: str,
@@ -33,6 +58,7 @@ def _build_task_description(
     student_ans: Optional[str] = None,
     expected_ans: Optional[str] = None,
     safety_subtype: Optional[str] = None,
+    student_grade: Optional[int] = None,
 ) -> str:
     """
     Tạo task_description có ngữ cảnh bài học và vai trò người thầy.
@@ -83,12 +109,25 @@ def _build_task_description(
         )
 
     if _detect_uncovered_claim(message):
-        return (
-            f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
-            "BẮT BUỘC kiểm tra kỹ chủ đề toán này CÓ nằm trong danh sách THÔNG TIN LỚP HỌC SINH không, và chọn đúng 1 trong 2 kịch bản:\n"
-            "KỊCH BẢN A (CÓ trong danh sách) – Học sinh đang nói dối hoặc quên. TUYỆT ĐỐI KHÔNG xin lỗi. Nhẹ nhàng nhắc: 'Theo chương trình, đây là kiến thức cơ bản em đã học. Thầy tin em có thể nhớ lại...' rồi tiếp tục hướng dẫn.\n"
-            "KỊCH BẢN B (KHÔNG có trong danh sách) – Đây là kiến thức vượt cấp (VD: phương trình với HS tiểu học). BẮT BUỘC an ủi: 'Vì em đang học lớp [X] nên chưa quen với kiến thức lớp cao hơn này là bình thường...' rồi giải thích đơn giản hóa theo cấp học của em."
-        )
+        curr_grade = student_grade or 9
+        is_active = _is_topic_in_active_curriculum(message, grade=curr_grade)
+        if is_active:
+            return (
+                f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
+                "HỆ THỐNG ĐÃ XÁC NHẬN: Chủ đề này CÓ trong danh sách kiến thức đã học của học sinh. "
+                "BẮT BUỘC THỰC HIỆN KỊCH BẢN A (HỌC SINH ĐÃ HỌC RỒI): "
+                "Nhẹ nhàng nhắc: 'Theo chương trình, đây là kiến thức mà em đã học. Thầy tin em có thể nhớ lại...' "
+                "rồi tiếp tục hướng dẫn gợi mở, tuyệt đối không xin lỗi hay nói học sinh chưa học."
+            )
+        else:
+            return (
+                f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
+                "HỆ THỐNG ĐÃ XÁC NHẬN: Chủ đề này KHÔNG CÓ trong danh sách kiến thức đã học của học sinh (đã bị giảm tải/ẩn hoặc chưa học tới). "
+                "BẮT BUỘC THỰC HIỆN KỊCH BẢN B (HỌC SINH CHƯA HỌC): "
+                "TUYỆT ĐỐI KHÔNG nói 'em đã học rồi' hay 'theo chương trình lớp em đã học'. "
+                f"BẮT BUỘC an ủi: 'Vì em đang học lớp {curr_grade} nên chưa quen với kiến thức này là chuyện bình thường, đừng lo nhé. Thầy sẽ giải thích thật đơn giản...' "
+                "rồi giải thích ngắn gọn, dễ hiểu và kết thúc bằng một câu hỏi gợi mở nhẹ nhàng."
+            )
     
     if agent == "KNOWLEDGE_TRACING":
         topic = message.replace("là gì", "").replace("thầy ơi", "").replace("vậy thầy", "").strip()
@@ -714,6 +753,7 @@ class OrchestratorAgent:
         text_clean: str,
         original_message: str,
         problem_context: Optional[dict],
+        student_grade: Optional[int] = None,
     ) -> Optional[RoutingResult]:
         """
         Trụ cột 1 — Phân luồng bằng quy tắc ngữ pháp và toán học tất định.
@@ -767,7 +807,7 @@ class OrchestratorAgent:
         if _detect_uncovered_claim(text_clean):
             return RoutingResult(
                 selected_agent="SCAFFOLDING",
-                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context, student_grade=student_grade),
                 routing_scratchpad=f"[Trụ1] Uncovered claim detected: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )
@@ -903,12 +943,13 @@ class OrchestratorAgent:
         latest_message: str,
         history_text: str = "",
         problem_context: Optional[dict] = None,
+        student_grade: Optional[int] = None,
     ) -> RoutingResult:
         """Phân luồng tin nhắn học sinh — 100% cục bộ, không gọi API nào."""
         text_clean = self._normalize(latest_message)
 
         # Trụ cột 1
-        result = self._structural_route(text_clean, latest_message, problem_context)
+        result = self._structural_route(text_clean, latest_message, problem_context, student_grade=student_grade)
         if result is not None:
             return result
 
@@ -992,11 +1033,12 @@ class OrchestratorAgent:
         latest_message: str,
         history_text: str = "",
         problem_context: Optional[dict] = None,
+        student_grade: Optional[int] = None,
     ) -> RoutingResult:
         """Phiên bản đồng bộ (sync) của route() — dùng trong context non-async."""
         text_clean = self._normalize(latest_message)
 
-        result = self._structural_route(text_clean, latest_message, problem_context)
+        result = self._structural_route(text_clean, latest_message, problem_context, student_grade=student_grade)
         if result is not None:
             return result
 
