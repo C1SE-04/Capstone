@@ -30,6 +30,7 @@ import {
   Bot,
   User,
   CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
@@ -59,6 +60,9 @@ export interface ChildProblemItem {
   evaluation: string | null;
   attachment_url: string | null;
   chat_summary: string | null;
+  problem_text?: string | null;
+  category?: "NEW_TOPIC" | "ISOMORPHIC_PRACTICE" | "EXACT_DUPLICATE" | string | null;
+  is_duplicate?: boolean | null;
   dialogue_messages?: ProblemDialogueMessage[];
 }
 
@@ -183,6 +187,39 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
       label: evaluation || "Cần hỗ trợ",
       bg: "bg-orange-50 text-orange-700 border-orange-200",
       dotColor: "bg-orange-500",
+    };
+  };
+
+  // Phân loại nhãn dạng bài toán (US 8.1 - AC 8.1.2: Nhận diện bài cùng dạng đổi số / Luyện tập củng cố)
+  const getCategoryBadge = (
+    category?: string | null,
+    isDuplicate?: boolean | null
+  ) => {
+    if (category === "ISOMORPHIC_PRACTICE") {
+      return {
+        label: "Luyện tập củng cố",
+        tooltip:
+          "Bài toán cùng dạng đổi số liệu, giúp con củng cố kiến thức và rèn luyện thành thạo mà không tính trùng dạng mới",
+        bg: "bg-purple-50 text-purple-700 border-purple-200",
+        iconColor: "text-purple-600",
+        icon: RotateCcw,
+      };
+    }
+    if (category === "EXACT_DUPLICATE" || isDuplicate) {
+      return {
+        label: "Bài trùng lặp",
+        tooltip: "Bài toán trùng lặp nội dung với bài đã giải trước đó",
+        bg: "bg-gray-100 text-gray-600 border-gray-300",
+        iconColor: "text-gray-500",
+        icon: Sparkles,
+      };
+    }
+    return {
+      label: "Dạng bài mới",
+      tooltip: "Dạng toán hoặc chủ đề mới con vừa khám phá",
+      bg: "bg-blue-50 text-blue-700 border-blue-200",
+      iconColor: "text-blue-500",
+      icon: Sparkles,
     };
   };
 
@@ -345,7 +382,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                       {/* Cột thông tin bài */}
                       <div className="space-y-2 flex-1">
-                        {/* Thời gian & Badge tự lập */}
+                        {/* Thời gian & Badge tự lập & Nhãn dạng bài (AC 8.1.2) */}
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-[11px] font-medium text-[#C1762A] flex items-center gap-1">
                             <Clock size={12} />
@@ -356,6 +393,21 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                           >
                             {badge.label} • {item.score}/100đ
                           </span>
+
+                          {/* Nhãn dạng bài toán (AC 8.1.2: Luyện tập củng cố) */}
+                          {(() => {
+                            const catBadge = getCategoryBadge(item.category, item.is_duplicate);
+                            const IconComp = catBadge.icon;
+                            return (
+                              <span
+                                title={catBadge.tooltip}
+                                className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 shadow-2xs transition-colors ${catBadge.bg}`}
+                              >
+                                <IconComp size={11} className={catBadge.iconColor} />
+                                {catBadge.label}
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         {/* Tiêu đề bài toán */}
@@ -375,13 +427,13 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                           </span>
                         </div>
 
-                        {/* Đoạn trích chat tóm tắt nếu có */}
-                        {item.chat_summary && (
+                        {/* Đoạn trích chat tóm tắt hoặc đề bài toán con gửi */}
+                        {(item.chat_summary || item.problem_text) && (
                           <div className="mt-3 p-3 rounded-xl bg-white border border-[#F1CCA6]/70 text-xs text-[#8C4905] line-clamp-2 italic leading-relaxed">
                             <span className="font-bold text-[#C1762A] not-italic mr-1.5">
                               Con hỏi:
                             </span>
-                            &ldquo;{item.chat_summary.split(" | ")[0]}&rdquo;
+                            &ldquo;{(item.chat_summary ? item.chat_summary.split(" | ")[0] : item.problem_text)}&rdquo;
                           </div>
                         )}
                       </div>

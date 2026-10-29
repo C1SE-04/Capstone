@@ -1151,6 +1151,8 @@ def get_child_problems(
         user_messages = [m for m in valid_messages if m.sender_type == "USER"]
         summary_parts = [msg.content for msg in user_messages if msg.content]
         chat_summary: Optional[str] = " | ".join(summary_parts[:5]) if summary_parts else None
+        if not chat_summary and score.problem_text:
+            chat_summary = score.problem_text
 
         # Danh sách đầy đủ các bước đối thoại giữa con và hệ thống
         dialogue_messages = [
@@ -1256,6 +1258,9 @@ def get_child_problems(
                 evaluation=eval_text,
                 attachment_url=attachment_url,
                 chat_summary=chat_summary,
+                problem_text=score.problem_text or (summary_parts[0] if summary_parts else None),
+                category=getattr(score, "category", None) or "NEW_TOPIC",
+                is_duplicate=bool(getattr(score, "is_duplicate", False)),
                 dialogue_messages=dialogue_messages,
             )
         )

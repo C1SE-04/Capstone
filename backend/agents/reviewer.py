@@ -193,6 +193,18 @@ class LocalReviewerAgent:
         has_choice_in_question = bool(re.search(r"\b[a-dA-D]\b", clean_question))
         student_answered = has_number_in_question or has_choice_in_question
 
+        # LỚP 2.0: KIỂM TRA KHEN SAI (False Praise Check)
+        # Nếu đã có expected_answer xác định mà học sinh nộp số khác, nhưng AI lại khen "hoàn toàn đúng/chính xác"
+        if expected_lower and is_praise_correct:
+            numbers_in_student_q = re.findall(r"-?\d+(?:\.\d+)?(?:/\d+)?", clean_question)
+            if numbers_in_student_q and expected_lower not in numbers_in_student_q:
+                reasoning_logs.append(f"[FAIL Lớp 2]: False Praise! Học sinh nộp {numbers_in_student_q} không khớp expected '{expected_lower}'.")
+                return {
+                    "is_approved": False,
+                    "reasoning": " -> ".join(reasoning_logs),
+                    "feedback": f"Học sinh chưa đưa ra đáp án đúng ('{expected_lower}'). Tuyệt đối không khen 'hoàn toàn đúng' hay xác nhận đáp án sai của học sinh.",
+                }
+
         student_has_answer = (
             (bool(expected_lower) and (expected_lower in question_lower))
             or (is_praise_correct and student_answered)

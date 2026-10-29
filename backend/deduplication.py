@@ -1,3 +1,4 @@
+from typing import Optional
 import re
 import hashlib
 import models
@@ -111,16 +112,21 @@ def check_problem_deduplication(
     db: Session,
     student_id: str,
     current_problem: str,
+    grade: Optional[int] = None,
     limit_history: int = 15,
 ) -> ProblemClassificationResult:
     """
-    Quy trình kiểm tra Deduplication 2 tầng:
+    Quy trình kiểm tra Deduplication & Sinh tên bài toán 2 tầng (Gộp T8.1 + T8.3):
     1. Fast-Path: So sánh SHA-256 hash với các bài học sinh đã làm trước đó trong DB.
-       Nếu trùng khớp 100% -> Trả về EXACT_DUPLICATE ngay lập tức (0 token Gemini).
+       Nếu trùng khớp 100% -> Tái sử dụng friendly_parent_title đã có, trả về EXACT_DUPLICATE ngay lập tức (0 token Gemini).
     2. Slow-Path: Nếu không trùng hash trực tiếp, lấy top 15 bài đã giải gần nhất của học sinh
-       và gọi Gemini classify_problem(...) để phân loại NEW_TOPIC hoặc ISOMORPHIC_PRACTICE.
+       và gọi Gemini classify_problem(...) DUY NHẤT 1 LẦN để vừa phân loại NEW_TOPIC / ISOMORPHIC_PRACTICE
+       vừa sinh friendly_parent_title chuẩn SGK.
     """
+    from agents.problem_title_generator import _heuristic_title_fallback
+
     if not current_problem:
+        fallback_title = _heuristic_title_fallback("Bài toán", grade=grade).friendly_parent_title
         return ProblemClassificationResult(
             category="NEW_TOPIC",
             confidence_score=1.0,
@@ -128,6 +134,7 @@ def check_problem_deduplication(
             is_repeated_query=False,
             repeat_count=1,
             pedagogical_recommendation="Ghi nhận dạng bài mới.",
+            friendly_parent_title=fallback_title,
             is_fallback=True
         )
 
@@ -153,6 +160,14 @@ def check_problem_deduplication(
             )
             .count()
         )
+        # Tái sử dụng friendly_parent_title đã lưu trong bản ghi trước (0 token Gemini)
+        cached_title = exact_match.friendly_parent_title
+        if not cached_title:
+            cached_title = _heuristic_title_fallback(
+                exact_match.problem_text or current_problem,
+                grade=grade
+            ).friendly_parent_title
+
         return ProblemClassificationResult(
             category="EXACT_DUPLICATE",
             confidence_score=1.0,
@@ -162,10 +177,11 @@ def check_problem_deduplication(
             repeat_count=dup_count + 1,
             gentle_reminder="Thầy thấy em đã giải rất tốt bài này rồi. Em có muốn thử sức bài nâng cao hơn không?",
             pedagogical_recommendation="Bỏ qua cộng dồn vào tổng bài hoàn thành, khuyến khích học sinh thử sức bài nâng cao.",
+            friendly_parent_title=cached_title,
             is_fallback=False
         )
 
-    # ─── TẦNG 2: AI SEMANTIC CHECK (GỌI GEMINI T8.1) ──────────────────────
+    # ─── TẦNG 2: AI SEMANTIC CHECK (GỌI GEMINI GỘP 1 LẦN DUY NHẤT) ─────────
     # Lấy danh sách tối đa N bài tập học sinh đã hoàn thành gần nhất
     recent_records = (
         db.query(models.IndependenceScore)
@@ -180,10 +196,11 @@ def check_problem_deduplication(
 
     history_texts = [r.problem_text for r in recent_records if r.problem_text]
 
-    # Gọi hàm AI đã hoàn thành ở Task T8.1
+    # Gọi hàm AI classify_problem (1 lần duy nhất cho cả deduplication + friendly_parent_title)
     ai_result = classify_problem(
         current_problem=current_problem,
-        history_problems=history_texts
+        history_problems=history_texts,
+        grade=grade
     )
 
     return ai_result

@@ -1190,6 +1190,12 @@ def delete_bookmark(
     if bm.student_id != student_id:
         raise HTTPException(status_code=403, detail="Bạn không có quyền xóa bookmark này.")
 
+    # US 8.2: Xóa triệt để các liên kết Playlist trước khi xóa bản ghi Bookmark gốc
+    db.query(models.BookmarkPlaylistItem).filter(
+        models.BookmarkPlaylistItem.bookmark_id == bookmark_id
+    ).delete(synchronize_session=False)
+
     db.delete(bm)
     db.commit()
+    return Response(status_code=204)
 

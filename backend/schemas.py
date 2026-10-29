@@ -382,7 +382,10 @@ class ChildProblemItem(BaseModel):
     not_understood_count: int                # Số lần bấm "Chưa hiểu"
     evaluation: Optional[str] = None        # Nhãn đánh giá mức độ ("Xuất sắc", "Khá", ...)
     attachment_url: Optional[str] = None    # Ảnh đề bài từ Cloudinary (nếu có)
-    chat_summary: Optional[str] = None      # Đoạn chat tóm tắt
+    chat_summary: Optional[str] = None       # Đoạn trích câu hỏi / tóm tắt các tin nhắn con gửi
+    problem_text: Optional[str] = None       # Đề bài toán gốc con gửi
+    category: Optional[str] = "NEW_TOPIC"   # US 8.1 - AC 8.1.2: NEW_TOPIC | ISOMORPHIC_PRACTICE | EXACT_DUPLICATE
+    is_duplicate: bool = False               # US 8.1 - AC 8.1.1: Đánh dấu bài trùng lặp
     dialogue_messages: list[ProblemDialogueMessage] = [] # Danh sách đầy đủ các bước đối thoại giữa con và hệ thống
 
     class Config:
@@ -653,6 +656,7 @@ class ProblemClassificationResult(BaseModel):
     repeat_count: int = 1                # Số lần xuất hiện của bài này hoặc dạng bài này
     gentle_reminder: Optional[str] = None # Lời nhắc nhở nhẹ nhàng nếu là EXACT_DUPLICATE hoặc hỏi lại nhiều lần
     pedagogical_recommendation: str      # Khuyến nghị sư phạm cho hệ thống đánh giá
+    friendly_parent_title: Optional[str] = None # Tiêu đề chuẩn sư phạm gợi ý cho Sổ tay & Phụ huynh: [Lớp X] [Chủ đề] – [Tên dạng toán]
     is_fallback: bool = False            # Đánh dấu nếu kết quả trả về từ Heuristic Fallback
 
     class Config:

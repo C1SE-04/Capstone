@@ -296,6 +296,12 @@ class ProblemBookmark(Base):
 
     student = relationship("User", backref="bookmarks")
     session = relationship("Session", backref="bookmarks")
+    playlist_items = relationship(
+        "BookmarkPlaylistItem",
+        back_populates="bookmark",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class BookmarkPlaylist(Base):
@@ -364,7 +370,7 @@ class BookmarkPlaylistItem(Base):
     )
 
     playlist = relationship("BookmarkPlaylist", back_populates="items")
-    bookmark = relationship("ProblemBookmark", backref="playlist_items")
+    bookmark = relationship("ProblemBookmark", back_populates="playlist_items")
 
 
 

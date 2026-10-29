@@ -43,6 +43,12 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
      -> BẮT BUỘC chèn thêm tag đặc biệt [COMPREHENSION_CHECK] vào CUỐI CÙNG của câu trả lời.
    - Khi học sinh mới trả lời một câu hỏi gợi mở trung gian, định nghĩa khái niệm, hoặc bài toán chưa giải xong, hoặc bạn vẫn đang đặt câu hỏi tiếp theo cho học sinh:
      -> TUYỆT ĐỐI KHÔNG chèn tag [COMPREHENSION_CHECK].
+
+7. KIỂM TRA TÍNH ĐÚNG ĐẮN TOÁN HỌC (FACT-CHECK BẮT BUỘC):
+   - Trước khi công nhận học sinh đúng, BẮT BUỘC phải tự kiểm tra lại các bước tính và nghiệm của bài toán.
+   - TUYỆT ĐỐI KHÔNG khen 'hoàn toàn đúng', 'chính xác', 'chuẩn rồi' nếu học sinh tính sai kết quả (ví dụ: phương trình 2x + 3 = 5 mà học sinh bảo x = 2 là SAI, nghiệm đúng phải là x = 1).
+   - Nếu học sinh mới làm đúng một phần (ví dụ chuyển vế đúng) nhưng kết luận sai nghiệm: Hãy khen bước làm đúng, nhưng chỉ rõ nghiệm cuối chưa đúng và yêu cầu học sinh làm lại bước cuối.
+   - TUYỆT ĐỐI KHÔNG gắn thẻ [COMPREHENSION_CHECK] khi học sinh chưa tìm ra nghiệm đúng.
 """
 
 _IMAGE_MEMORY_CACHE: dict[str, Image.Image] = {}
@@ -136,6 +142,7 @@ NHẮC LẠI NGUYÊN TẮC:
     -> BẮT BUỘC gắn tag [COMPREHENSION_CHECK] ở CUỐI CÙNG của câu trả lời.
   + Nếu bài toán CHƯA XONG (học sinh mới trả lời một câu hỏi phụ, định nghĩa trung gian, hoặc bạn vẫn đang tiếp tục đặt câu hỏi cho học sinh):
     -> TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK].
+- FACT-CHECK TOÁN HỌC: Bắt buộc nhẩm lại các bước tính của học sinh trước khi phản hồi. Tuyệt đối không khen 'hoàn toàn đúng', 'chính xác' nếu kết quả sai (như x = 2 cho phương trình 2x + 3 = 5).
 """
     
     example_keywords = ["ví dụ", "vi du", "vd", "vdu", "dí dụ", "di du", "vidu", "mẫu", "bài mẫu", "làm mẫu", "giải mẫu"]
@@ -228,24 +235,31 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
             # Nếu câu kết thúc bằng dấu '?', AI vẫn đang hỏi dở học sinh -> TUYỆT ĐỐI KHÔNG kích hoạt comprehension check!
             ends_with_question = cleaned_text.strip().rstrip("*_~` \t\r\n").endswith("?")
 
+            # TUYỆT ĐỐI KHÔNG kích hoạt comprehension check khi:
+            # - Đang phân luồng MISCONCEPTION hoặc SAFETY (học sinh đang hiểu sai hoặc vi phạm ngoài lề)
+            # - Hoặc câu trả lời kết thúc bằng câu hỏi '?'
+            is_misconception_or_safety = target_agent in (
+                "MISCONCEPTION_AGENT", "SAFETY_AGENT", "MISCONCEPTION", "SAFETY"
+            )
+
             praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em", "khen ngợi", "rất giỏi")
             is_praise = any(p in cleaned_text.lower() for p in praise_markers)
             conclusive_keywords = ("đáp án", "kết quả", "chọn đúng", "đáp án a", "đáp án b", "đáp án c", "đáp án d", "nghiệm của phương trình", "nghiệm là", "vô nghiệm")
             has_conclusive_markers = any(k in cleaned_text.lower() for k in conclusive_keywords)
 
-            # Chỉ kích hoạt khi bài toán đã kết luận và KHÔNG kết thúc bằng câu hỏi gợi mở
+            # Chỉ kích hoạt khi bài toán đã kết luận, KHÔNG ở mode sửa sai/safety và KHÔNG kết thúc bằng câu hỏi gợi mở
             attempt_has_comprehension = False
-            if not ends_with_question:
+            if not ends_with_question and not is_misconception_or_safety:
                 if has_comp_tag or (is_praise and has_conclusive_markers):
                     attempt_has_comprehension = True
 
-            # Chỉ kiểm duyệt gắt gao nếu đang đóng vai SCAFFOLDING_AGENT
-            if target_agent == "SCAFFOLDING_AGENT":
+            # Kiểm duyệt gắt gao với cả SCAFFOLDING_AGENT và MISCONCEPTION_AGENT
+            if target_agent in ("SCAFFOLDING_AGENT", "MISCONCEPTION_AGENT"):
                 review_result = reviewer.review(
                     user_query,
                     expected_answer,
                     cleaned_text,
-                    has_comprehension=has_comp_tag or attempt_has_comprehension,
+                    has_comprehension=attempt_has_comprehension,
                 )
                 if not review_result["is_approved"]:
                     current_attempt += 1

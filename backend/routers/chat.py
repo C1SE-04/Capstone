@@ -138,6 +138,9 @@ def submit_comprehension_feedback(
             "not_understood_count": record.not_understood_count,
             "evaluation": record.evaluation,
             "created_at": record.created_at.isoformat() if record.created_at else None,
+            "is_duplicate": record.is_duplicate,
+            "category": record.category,
+            "friendly_parent_title": record.friendly_parent_title,
         }
         deduplication_data = {
             "category": record.category,
