@@ -986,6 +986,7 @@ class SyncVietjackResult(BaseModel):
     grades: list[int]
     message: str
     elapsed_seconds: float
+    source: str = "LIVE_CRAWL"  # "LIVE_CRAWL" | "FALLBACK_JSON"
 
     class Config:
         from_attributes = True

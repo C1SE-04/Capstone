@@ -10,6 +10,7 @@
 # =============================================================================
 
 import json
+import os
 import logging
 import re
 import time
@@ -325,13 +326,23 @@ def transform_for_db_sync(
                 elif grade >= 6 and num >= 6:
                     sem = 2
 
+        # 3. Chuẩn hoá order_index theo thứ tự bài chuẩn sư phạm (từ Bài 1 đến Bài cuối cùng)
+        final_order = item["order_index"]
+        bai_match = re.search(r"Bài\s+(\d+)", clean_topic)
+        if grade in (4, 5) and bai_match:
+            final_order = int(bai_match.group(1))
+        elif grade >= 6:
+            ch_num_match = re.search(r"(?:Chương|Chủ đề)\s*(\d+)", clean_chapter, re.IGNORECASE)
+            ch_num = int(ch_num_match.group(1)) if ch_num_match else (95 if "trải nghiệm" in clean_chapter.lower() else 50)
+            final_order = ch_num * 100 + item["order_index"]
+
         transformed.append({
             "grade": grade,
             "book_series": "Kết nối tri thức",
             "semester": sem,
             "chapter_name": clean_chapter,
             "topic_name": clean_topic,
-            "order_index": item["order_index"],
+            "order_index": final_order,
             "school_year": school_year,
             "is_active": True,
             "source_url": item["source_url"],
@@ -345,17 +356,41 @@ def export_to_curriculum_json(
     save_path: Optional[str] = None,
 ) -> dict[str, list[str]]:
     """
-    Biến đổi 424 bài học thô thành cấu trúc phân tầng {'4': [...], '5': [...]}
+    Biến đổi danh sách bài học thô thành cấu trúc phân tầng {'4': [...], '5': [...]}
     tương thích chuẩn với file 'grade_curriculum.json' (phục vụ Task T8.26 cho AI Prompts).
 
-    Tự động tối ưu theo Đề xuất 2:
-      - Cắt bỏ tiền tố 'Bài X: ' để chỉ giữ lại khái niệm / tên dạng toán cốt lõi.
-      - Lọc bỏ các bài chung chung không mang ngữ nghĩa toán học ('Luyện tập chung', 'Ôn tập chung'...).
-      - Lọc bỏ các chương ôn tập tổng kết cuối năm (Chủ đề 13 lớp 4, Chủ đề 12 lớp 5).
-      - Lọc bỏ các bài luyện tập theo trang ở cấp 2 ('Luyện tập (trang...').
+    Tự động tối ưu theo chuẩn sư phạm Socratic:
+      - Cắt bỏ tiền tố 'Giáo án Toán X' và 'Bài X: ' để chỉ giữ lại khái niệm / tên dạng toán cốt lõi.
+      - Lọc bỏ các chương ôn tập tổng kết:
+          + Ôn tập học kì 1 (Chủ đề 7 lớp 4, Chủ đề 6 lớp 5)
+          + Ôn tập cuối năm (Chủ đề 13 lớp 4, Chủ đề 12 lớp 5, hoặc có chữ 'cuối năm')
+          + Toàn bộ chương Hoạt động thực hành trải nghiệm
+      - Lọc bỏ các bài chung chung không mang ngữ nghĩa toán học:
+          + Luyện tập chung, Luyện tập (trang X)
+          + Bài tập cuối chương, bài tập ôn cuối
+          + Các hoạt động thực hành, phần mềm GeoGebra, máy tính cầm tay
+      - Lọc bỏ các bài ôn tập đầu năm nhắc lại lớp dưới (Bài 1, 2 lớp 4; Bài 1, 2, 3, 5, 8 lớp 5).
       - Tùy chọn lưu thẳng ra file JSON nếu truyền 'save_path'.
     """
     result: dict[str, list[str]] = {str(g): [] for g in range(4, 10)}
+
+    # Giữ lại dữ liệu các lớp khác nếu file cũ đã tồn tại (tránh ghi đè mất dữ liệu khi sync lẻ từng lớp)
+    if save_path and os.path.exists(save_path):
+        try:
+            with open(save_path, "r", encoding="utf-8") as f_old:
+                old_data = json.load(f_old)
+                if isinstance(old_data, dict):
+                    for k in [str(g) for g in range(4, 10)]:
+                        if k in old_data and isinstance(old_data[k], list) and len(old_data[k]) > 0:
+                            result[k] = list(old_data[k])
+        except Exception:
+            pass
+
+    # Reset danh sách các lớp có mặt trong raw_topics để cập nhật mới
+    present_grades = {str(item.get("grade")) for item in raw_topics if item.get("grade")}
+    for k in present_grades:
+        if k in result:
+            result[k] = []
     ignore_keywords = (
         "luyện tập chung",
         "ôn tập chung",
@@ -372,21 +407,44 @@ def export_to_curriculum_json(
     )
 
     for item in raw_topics:
-        g_str = str(item["grade"])
-        ch = item.get("chapter", "").lower()
-
-        # Bỏ qua các chương ôn tập tổng kết cuối năm (Chủ đề 13 lớp 4, Chủ đề 12 lớp 5)
-        if "cuối năm" in ch:
+        grade = item.get("grade")
+        if not grade:
             continue
+        g_str = str(grade)
 
-        topic = item["topic_name"].strip()
+        # Lấy tên chương (hỗ trợ cả schema raw crawl 'chapter' và DB record 'chapter_name')
+        ch = (item.get("chapter") or item.get("chapter_name") or "").strip().lower()
+        topic = (item.get("topic_name") or "").strip()
         topic_lower = topic.lower()
 
-        # Bỏ qua bài luyện tập chung / thực hành / ôn tập chung
-        if any(ign in topic_lower for ign in ignore_keywords):
+        # 1. Bỏ qua các chương/chủ đề ôn tập tổng kết học kì, cuối năm & hoạt động trải nghiệm
+        if "cuối năm" in ch or "cuối năm" in topic_lower:
+            continue
+        if "ôn tập học kì" in ch or "ôn tập học kỳ" in ch:
+            continue
+        if "trải nghiệm" in ch or "hoạt động thực hành" in ch:
             continue
 
-        # Cắt bỏ tiền tố "Giáo án Toán X" và "Bài X: " (ví dụ: "Bài 10: Số nguyên tố" -> "Số nguyên tố")
+        # 2. Bỏ qua bài luyện tập chung / thực hành / ôn tập chung / bài tập cuối chương
+        if any(ign in topic_lower for ign in ignore_keywords) or topic_lower.startswith("luyện tập"):
+            continue
+
+        # 3. Bỏ qua các bài ôn tập đầu năm nhắc lại lớp dưới của Tiểu học (Lớp 4 & 5)
+        if grade == 4 and (
+            topic_lower.startswith("bài 1: ôn tập") or
+            topic_lower.startswith("bài 2: ôn tập")
+        ):
+            continue
+        if grade == 5 and (
+            topic_lower.startswith("bài 1: ôn tập") or
+            topic_lower.startswith("bài 2: ôn tập") or
+            topic_lower.startswith("bài 3: ôn tập") or
+            topic_lower.startswith("bài 5: ôn tập") or
+            topic_lower.startswith("bài 8: ôn tập")
+        ):
+            continue
+
+        # 4. Cắt bỏ tiền tố 'Giáo án Toán X' và 'Bài X: ' (ví dụ: 'Bài 10: Số nguyên tố' -> 'Số nguyên tố')
         clean_topic = re.sub(r"^(?:Giáo án\s+Toán\s+\d+\s+)?(?:Bài\s*\d+:\s*)?", "", topic, flags=re.IGNORECASE).strip()
 
         if clean_topic and clean_topic not in result[g_str]:
