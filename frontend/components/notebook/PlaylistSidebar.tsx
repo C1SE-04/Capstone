@@ -81,7 +81,7 @@ export function PlaylistSidebar({
             </span>
             <div>
               <h2 className="text-xs font-bold uppercase tracking-wider text-stone-800">
-                Danh Sách Phát
+                Ngăn Lưu Trữ
               </h2>
               <p className="text-[11px] text-stone-400">
                 {playlists.length} danh mục
@@ -94,8 +94,8 @@ export function PlaylistSidebar({
               type="button"
               onClick={() => setShowCreateBox((prev) => !prev)}
               className="w-7 h-7 rounded-lg hover:bg-stone-100 text-stone-500 hover:text-stone-800 active:scale-95 flex items-center justify-center transition-all cursor-pointer"
-              title="Tạo danh sách mới"
-              aria-label="Tạo danh sách mới"
+              title="Tạo ngăn lưu trữ mới"
+              aria-label="Tạo ngăn lưu trữ mới"
             >
               {showCreateBox ? <X size={14} /> : <Plus size={15} />}
             </button>
@@ -114,11 +114,11 @@ export function PlaylistSidebar({
           </div>
         </div>
 
-        {/* Khung tạo nhanh danh sách phát mới */}
+        {/* Khung tạo nhanh ngăn lưu trữ mới */}
         {showCreateBox && (
           <div className="p-2.5 rounded-lg bg-stone-50 border border-stone-200 shadow-2xs space-y-2 animate-in fade-in duration-150">
             <label className="block text-[11px] font-semibold text-stone-700">
-              Tên danh sách mới
+              Tên ngăn lưu trữ mới
             </label>
             <div className="flex items-center gap-1.5">
               <input
@@ -244,8 +244,8 @@ export function PlaylistSidebar({
                         onClick={(e) => handleDelete(e, pl)}
                         disabled={isDeleting}
                         className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
-                        title="Xóa danh sách này"
-                        aria-label="Xóa danh sách"
+                        title="Xóa ngăn lưu trữ này"
+                        aria-label="Xóa ngăn lưu trữ"
                       >
                         {isDeleting ? (
                           <Loader2 size={12} className="animate-spin text-red-500" />

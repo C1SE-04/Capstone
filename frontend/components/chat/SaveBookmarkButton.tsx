@@ -37,8 +37,8 @@ export function SaveBookmarkButton({
         )}
         title={
           status === "saved"
-            ? "Bấm để đổi tên bài hoặc đổi danh sách Sổ tay"
-            : "Lưu bài toán vào Sổ tay dạng Playlist"
+            ? "Bấm để đổi tên bài hoặc đổi ngăn lưu trữ Sổ tay"
+            : "Lưu bài toán vào Sổ tay (Ngăn lưu trữ)"
         }
       >
         {status === "saved" ? (
