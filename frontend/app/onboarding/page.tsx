@@ -203,7 +203,7 @@ export default function OnboardingPage() {
             Khởi đầu cùng Trợ lý AI
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#C1762A] tracking-tight mb-2">
-            Chào mừng bạn đến với SocraticKid! 🎉
+            Chào mừng bạn đến với SocraticKid!
           </h1>
           <p className="text-sm sm:text-base text-[#8C4905]/80 font-medium max-w-lg mx-auto">
             Hãy chọn vai trò và khối lớp để AI chuẩn hóa phương pháp gợi mở và đồng hành phù hợp nhất với bạn.
@@ -229,8 +229,8 @@ export default function OnboardingPage() {
                 type="button"
                 onClick={() => setRole("STUDENT")}
                 className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${role === "STUDENT"
-                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
-                    : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
+                  ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
+                  : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
                   }`}
               >
                 {role === "STUDENT" && (
@@ -260,8 +260,8 @@ export default function OnboardingPage() {
                 type="button"
                 onClick={() => setRole("MONITOR")}
                 className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${role === "MONITOR"
-                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
-                    : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
+                  ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
+                  : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
                   }`}
               >
                 {role === "MONITOR" && (
@@ -306,8 +306,8 @@ export default function OnboardingPage() {
                       type="button"
                       onClick={() => setSelectedGrade(item.grade)}
                       className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${isSelected
-                          ? "border-[#C1762A] bg-[#C1762A] text-white shadow-sm scale-102"
-                          : "border-stone-200 bg-white text-[#8C4905] hover:border-[#F1CCA6] hover:bg-stone-50"
+                        ? "border-[#C1762A] bg-[#C1762A] text-white shadow-sm scale-102"
+                        : "border-stone-200 bg-white text-[#8C4905] hover:border-[#F1CCA6] hover:bg-stone-50"
                         }`}
                     >
                       <span className="font-extrabold text-base">
