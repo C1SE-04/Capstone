@@ -327,7 +327,7 @@ export default function OnboardingPage() {
           ) : (
             /* Thông báo cho Phụ huynh */
             <div className="p-4 rounded-2xl bg-[#F7ECE1]/60 border border-[#F1CCA6] flex items-start gap-3">
-              <span className="text-xl">💡</span>
+              <span className="text-xl"></span>
               <p className="text-xs sm:text-sm text-[#8C4905] font-medium leading-relaxed">
                 Sau khi hoàn tất, bạn có thể nhập <strong>Mã liên kết (Pairing Code)</strong> từ tài khoản của con trong mục <em>Báo cáo & Giám sát</em> để theo dõi kết quả học tập mọi lúc mọi nơi.
               </p>
