@@ -1071,11 +1071,11 @@ export default function ChatPage() {
               <Menu size={22} />
             </button>
             <div
-              className="flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-2 cursor-pointer group"
               onClick={() => router.push("/")}
             >
-              <div className="w-8 h-8 bg-[#D9D9D9] rounded-lg flex items-center justify-center text-[#8C4905] font-bold text-xs shadow-inner">
-                SK
+              <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-xs group-hover:opacity-85 transition-opacity">
+                <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
               </div>
               <span className="font-bold italic text-[#C1762A] text-base">
                 SocraticKid

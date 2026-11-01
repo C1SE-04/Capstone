@@ -45,7 +45,7 @@ export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             placeholder="Tìm học sinh, chủ đề..."
-            className="w-48 lg:w-60 pl-9 pr-3 py-1.5 text-xs lg:text-sm bg-[#F7ECE1]/60 hover:bg-white focus:bg-white border border-[#F1CCA6] focus:border-[#C1762A] rounded-xl text-[#2A1C0E] placeholder:text-[#C1762A]/60 focus:outline-hidden transition-all"
+            className="w-48 lg:w-60 pl-9 pr-3 py-1.5 text-xs lg:text-sm bg-[#F7ECE1]/60 hover:bg-white focus:bg-white border border-[#F1CCA6] focus:border-[#C1762A] rounded-xl text-[#1C1917] placeholder:text-[#C1762A]/60 focus:outline-hidden transition-all"
           />
         </div>
 
@@ -58,19 +58,19 @@ export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
             aria-label="Thông báo"
           >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#D93829] ring-2 ring-white" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#EF4444] ring-2 ring-white" />
           </button>
 
           {/* Toast thông báo popup nhanh */}
           {showNotificationToast && (
             <div className="absolute right-0 top-12 w-72 bg-white rounded-xl shadow-lg border border-[#F1CCA6] p-3 z-50 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="flex items-start gap-2.5">
-                <div className="p-1 rounded-full bg-[#FDF0ED] text-[#D93829] shrink-0">
+                <div className="p-1 rounded-full bg-[#FEF2F2] text-[#EF4444] shrink-0">
                   <Bell className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <div className="font-bold text-[#2A1C0E]">3 Cảnh báo Safety chưa duyệt</div>
-                  <div className="text-[#7E6B5A] mt-0.5">
+                  <div className="font-bold text-[#1C1917]">3 Cảnh báo Safety chưa duyệt</div>
+                  <div className="text-[#7A3E04] mt-0.5">
                     Hệ thống phát hiện câu hỏi cần kiểm tra tại mục Giám sát Safety AI.
                   </div>
                   <Link

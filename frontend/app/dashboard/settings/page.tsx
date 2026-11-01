@@ -301,7 +301,7 @@ export default function SettingsPage() {
           <p className="mt-3 text-sm font-bold text-green-600 animate-in slide-in-from-top-1">{successMsg}</p>
         )}
         {errorMsg && (
-          <p className="mt-3 text-sm font-bold text-[#CB6600] animate-in slide-in-from-top-1">{errorMsg}</p>
+          <p className="mt-3 text-sm font-bold text-[#EF4444] animate-in slide-in-from-top-1">{errorMsg}</p>
         )}
       </div>
 
@@ -324,7 +324,7 @@ export default function SettingsPage() {
               </div>
               <button
                 onClick={handleCopyCode}
-                className="px-4 py-2 bg-white text-[#8C4905] font-bold rounded-lg border border-[#F1CCA6] hover:bg-gray-50 transition-all shadow-sm cursor-pointer flex items-center gap-1.5 min-w-[80px] justify-center"
+                className="px-4 py-2 bg-white text-[#8C4905] font-bold rounded-lg border border-[#F1CCA6] hover:bg-[#F7ECE1] transition-all shadow-sm cursor-pointer flex items-center gap-1.5 min-w-[80px] justify-center"
               >
                 {copyFeedback ? (
                   <span className="text-green-600 animate-in fade-in duration-200">✓ Đã copy</span>

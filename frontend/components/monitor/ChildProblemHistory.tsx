@@ -200,8 +200,8 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
         label: "Luyện tập củng cố",
         tooltip:
           "Bài toán cùng dạng đổi số liệu, giúp con củng cố kiến thức và rèn luyện thành thạo mà không tính trùng dạng mới",
-        bg: "bg-purple-50 text-purple-700 border-purple-200",
-        iconColor: "text-purple-600",
+        bg: "bg-amber-50 text-amber-800 border-amber-300",
+        iconColor: "text-amber-600",
         icon: RotateCcw,
       };
     }
@@ -209,16 +209,16 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
       return {
         label: "Bài trùng lặp",
         tooltip: "Bài toán trùng lặp nội dung với bài đã giải trước đó",
-        bg: "bg-gray-100 text-gray-600 border-gray-300",
-        iconColor: "text-gray-500",
+        bg: "bg-stone-100 text-stone-600 border-stone-200",
+        iconColor: "text-stone-500",
         icon: Sparkles,
       };
     }
     return {
       label: "Dạng bài mới",
       tooltip: "Dạng toán hoặc chủ đề mới con vừa khám phá",
-      bg: "bg-blue-50 text-blue-700 border-blue-200",
-      iconColor: "text-blue-500",
+      bg: "bg-orange-50 text-orange-800 border-orange-200",
+      iconColor: "text-orange-600",
       icon: Sparkles,
     };
   };
@@ -499,7 +499,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 className={`p-2 rounded-xl border border-[#F1CCA6] text-xs font-bold transition flex items-center gap-1 ${
                   currentPage <= 1
-                    ? "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400"
+                    ? "opacity-40 cursor-not-allowed bg-stone-50 text-stone-400"
                     : "bg-white text-[#8C4905] hover:bg-[#F7ECE1]"
                 }`}
               >
@@ -510,7 +510,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 className={`p-2 rounded-xl border border-[#F1CCA6] text-xs font-bold transition flex items-center gap-1 ${
                   currentPage >= totalPages
-                    ? "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400"
+                    ? "opacity-40 cursor-not-allowed bg-stone-50 text-stone-400"
                     : "bg-white text-[#8C4905] hover:bg-[#F7ECE1]"
                 }`}
               >
@@ -530,7 +530,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
           onClick={() => setActiveImage(null)}
         >
           <div
-            className="relative max-w-4xl w-full bg-[#1e1b18] rounded-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[90vh]"
+            className="relative max-w-4xl w-full bg-[#1C1917] rounded-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -670,7 +670,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                             className={`p-3.5 rounded-2xl border transition-all ${
                               isUser
                                 ? "bg-[#FFFBF7] border-[#F1CCA6] shadow-2xs ml-1"
-                                : "bg-[#FAF8F5] border-[#E2D9CF] shadow-2xs ml-1"
+                                : "bg-white border-[#F1CCA6] shadow-2xs ml-1"
                             }`}
                           >
                             {/* Header tin nhắn */}
@@ -696,7 +696,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                               </span>
 
                               {msg.created_at && (
-                                <span className="text-[10px] text-gray-400">
+                                <span className="text-[10px] text-stone-400">
                                   {format(parseISO(msg.created_at), "HH:mm")}
                                 </span>
                               )}
@@ -734,7 +734,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                                 {msg.content}
                               </p>
                             ) : (
-                              <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#5A3818] min-w-0 break-words overflow-visible">
+                              <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#1C1917] min-w-0 break-words overflow-visible">
                                 <ReactMarkdown
                                   remarkPlugins={[remarkMath, remarkGfm]}
                                   rehypePlugins={[rehypeKatex]}
@@ -784,7 +784,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                     </div>
                   ))
                 ) : (
-                  <div className="p-4 rounded-xl bg-gray-50 text-center text-xs text-gray-500">
+                  <div className="p-4 rounded-xl bg-stone-50 text-center text-xs text-stone-500">
                     Chưa có trích đoạn văn bản cho phiên giải này.
                   </div>
                 )}

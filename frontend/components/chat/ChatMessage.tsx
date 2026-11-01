@@ -152,8 +152,8 @@ export function ChatMessage({
             // Sử dụng các class `prose-*` của Tailwind (hoặc tùy chỉnh thủ công) để định dạng các thẻ HTML (h1, p, pre, code, table) bên trong Markdown.
             <div className="markdown-prose prose-sm max-w-none text-stone-900 min-w-0 break-words overflow-visible
               prose-p:leading-relaxed prose-p:mb-3 
-              prose-pre:bg-[#D9D9D9]/30 prose-pre:text-[#8C4905] prose-pre:p-3 prose-pre:rounded-lg
-              prose-code:text-[#CB6600] prose-code:bg-[#F1CCA6]/40 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
+              prose-pre:bg-[#F1CCA6]/30 prose-pre:text-[#8C4905] prose-pre:p-3 prose-pre:rounded-lg
+              prose-code:text-[#8C4905] prose-code:bg-[#F1CCA6]/40 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
               prose-ul:list-disc prose-ul:ml-4 prose-ul:mb-3
               prose-ol:list-decimal prose-ol:ml-4 prose-ol:mb-3
               prose-table:w-full prose-table:border-collapse prose-table:mb-3

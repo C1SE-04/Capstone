@@ -1,21 +1,32 @@
 @import "tailwindcss";
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #F7ECE1;
+  --foreground: #1C1917;
 }
 
-@theme inline {
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* SocraticKid Pedagogical Warm Color Palette (DESIGN.md) */
+  --color-primary: #C1762A;
+  --color-primary-hover: #8C4905;
+  --color-primary-gradient-end: #8C4905;
+  --color-ink: #8C4905;
+  --color-ink-body: #1C1917;
+  --color-ink-muted: #7A3E04;
+  --color-neutral-bg: #F7ECE1;
+  --color-surface-card: #FFFFFF;
+  --color-surface-secondary: #F1CCA6;
+  --color-surface-accent: #F7AD62;
+  --color-border-warm: #F1CCA6;
+  --color-success: #10B981;
+  --color-success-bg: #ECFDF5;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
 }
 
 body {
@@ -237,4 +248,3 @@ input:disabled,
 .markdown-prose .katex-html {
   overflow: visible;
 }
-

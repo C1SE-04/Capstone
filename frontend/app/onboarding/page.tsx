@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Users, CheckCircle2, ArrowRight, Loader2, Sparkles, BookOpen } from "lucide-react";
+import { GraduationCap, Users, CheckCircle2, ArrowRight, Loader2, Sparkles, BookOpen, Mail, KeyRound } from "lucide-react";
 
 export default function OnboardingPage() {
   const { data: session, status, update } = useSession();
@@ -13,6 +13,13 @@ export default function OnboardingPage() {
   const [selectedGrade, setSelectedGrade] = useState<number>(6);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // OTP flow for MONITOR
+  const [parentEmail, setParentEmail] = useState("");
+  const [otpValue, setOtpValue] = useState("");
+  const [otpStage, setOtpStage] = useState<"email" | "otp">("email");
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpError, setOtpError] = useState("");
 
   // Hàm hủy đăng nhập, dọn dẹp tài khoản PENDING trong DB và đăng xuất sạch NextAuth
   const handleCancel = useCallback(async () => {
@@ -71,6 +78,24 @@ export default function OnboardingPage() {
     }
   }, [status, session, router]);
 
+  const handleSendOtp = async () => {
+    if (!parentEmail.trim()) {
+      setOtpError("Vui lòng nhập email của bạn");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+    if (!emailRegex.test(parentEmail.trim())) {
+      setOtpError("Vui lòng nhập đúng định dạng email");
+      return;
+    }
+    setOtpError("");
+    setIsSendingOtp(true);
+    // Simulate sending OTP — replace with real API call when ready
+    await new Promise((r) => setTimeout(r, 1000));
+    setOtpStage("otp");
+    setIsSendingOtp(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -78,6 +103,21 @@ export default function OnboardingPage() {
     if (role === "STUDENT" && (!selectedGrade || selectedGrade < 4 || selectedGrade > 9)) {
       setErrorMessage("Vui lòng chọn khối lớp từ lớp 4 đến lớp 9.");
       return;
+    }
+
+    if (role === "MONITOR") {
+      if (!parentEmail.trim()) {
+        setErrorMessage("Vui lòng nhập email phụ huynh để nhận mã OTP.");
+        return;
+      }
+      if (otpStage === "email") {
+        setErrorMessage("Vui lòng bấm \"Gửi mã OTP\" để nhận mã xác thực trước khi tiếp tục.");
+        return;
+      }
+      if (!otpValue.trim()) {
+        setErrorMessage("Vui lòng nhập mã OTP đã được gửi đến email của bạn.");
+        return;
+      }
     }
 
     const token = session?.access_token;
@@ -325,12 +365,105 @@ export default function OnboardingPage() {
               </div>
             </div>
           ) : (
-            /* Thông báo cho Phụ huynh */
-            <div className="p-4 rounded-2xl bg-[#F7ECE1]/60 border border-[#F1CCA6] flex items-start gap-3">
-              <span className="text-xl"></span>
-              <p className="text-xs sm:text-sm text-[#8C4905] font-medium leading-relaxed">
-                Sau khi hoàn tất, bạn có thể nhập <strong>Mã liên kết (Pairing Code)</strong> từ tài khoản của con trong mục <em>Báo cáo & Giám sát</em> để theo dõi kết quả học tập mọi lúc mọi nơi.
-              </p>
+            /* OTP Email Flow cho Phụ huynh */
+            <div className="bg-[#F7ECE1]/60 rounded-2xl border border-[#F1CCA6] p-5 space-y-4">
+              {otpStage === "email" ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[#8C4905]">Xác thực Email Phụ huynh</p>
+                      <p className="text-xs text-[#8C4905]/70">Nhập email để nhận mã OTP liên kết tài khoản giám sát</p>
+                    </div>
+                  </div>
+                  <div>
+                    <input
+                      type="email"
+                      value={parentEmail}
+                      onChange={(e) => {
+                        setParentEmail(e.target.value);
+                        setOtpError("");
+                      }}
+                      placeholder="vidu: phuhuynh@gmail.com"
+                      className="w-full px-4 py-3 rounded-xl bg-white border border-[#F1CCA6] focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 focus:outline-none text-[#1C1917] text-sm font-medium transition-all"
+                    />
+                    {otpError && (
+                      <p className="mt-1.5 text-xs text-[#EF4444] font-bold">{otpError}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={isSendingOtp}
+                    className="w-full py-3 rounded-xl bg-[#C1762A] text-white font-bold text-sm hover:bg-[#8C4905] transition-all active:scale-[0.99] disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                  >
+                    {isSendingOtp ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Đang gửi mã OTP...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Gửi mã OTP</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center">
+                      <KeyRound className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[#8C4905]">Nhập mã xác nhận OTP</p>
+                      <p className="text-xs text-[#8C4905]/70">
+                        Mã gồm 6 chữ số đã được gửi tới <strong className="text-[#C1762A]">{parentEmail}</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={otpValue}
+                      onChange={(e) => {
+                        setOtpValue(e.target.value);
+                        setOtpError("");
+                      }}
+                      placeholder="••••••"
+                      maxLength={6}
+                      className="w-full px-4 py-3 rounded-xl bg-white border border-[#F1CCA6] focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 focus:outline-none text-[#1C1917] tracking-[0.5em] text-center font-mono text-xl font-bold transition-all"
+                    />
+                    {otpError && (
+                      <p className="mt-1.5 text-xs text-[#EF4444] font-bold text-center">{otpError}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOtpStage("email");
+                        setOtpValue("");
+                        setOtpError("");
+                      }}
+                      className="text-xs text-[#8C4905]/70 hover:text-[#C1762A] hover:underline cursor-pointer font-medium"
+                    >
+                      ← Đổi email khác
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={isSendingOtp}
+                      className="text-xs font-bold text-[#C1762A] hover:text-[#8C4905] hover:underline cursor-pointer disabled:opacity-50"
+                    >
+                      {isSendingOtp ? "Đang gửi lại..." : "Gửi lại mã"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

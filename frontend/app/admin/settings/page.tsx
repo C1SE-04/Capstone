@@ -195,8 +195,8 @@ export default function AdminSettingsPage() {
           <div
             className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl border text-sm font-medium ${
               toastType === "success"
-                ? "bg-[#2A1C0E] text-[#FFFDF9] border-[#C1762A]/50"
-                : "bg-white text-[#2A1C0E] border-[#E8D5C4]"
+                ? "bg-[#1C1917] text-[#FFFFFF] border-[#C1762A]/50"
+                : "bg-white text-[#1C1917] border-[#F1CCA6]"
             }`}
           >
             <div
@@ -215,7 +215,7 @@ export default function AdminSettingsPage() {
             <span>{toastMessage}</span>
             <button
               onClick={() => setShowToast(false)}
-              className="text-[#A18E7F] hover:text-white transition-colors ml-2"
+              className="text-[#7A3E04] hover:text-white transition-colors ml-2"
             >
               <X className="w-4 h-4" />
             </button>
@@ -223,45 +223,50 @@ export default function AdminSettingsPage() {
         </div>
       )}
 
-      {/* ── Page Header & Quick Actions ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl md:text-2xl font-extrabold text-[#2A1C0E]">
-              Cài Đặt Hệ Thống & Tham Số AI
-            </h1>
-            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#EAF7EE] text-[#2A8C4A] border border-[#B7E4C4]">
-              v1.7.0 Live
-            </span>
+      {/* ── Page Header & Quick Actions (Đồng bộ cùng hàng & chuẩn nhận diện) ── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0 max-w-2xl">
+          <div className="w-12 h-12 bg-[#C1762A] rounded-2xl flex items-center justify-center text-white shadow-md shrink-0">
+            <Settings className="w-6 h-6" />
           </div>
-          <p className="text-xs md:text-sm text-[#7E6B5A] mt-1">
-            Cấu hình mô hình ngôn ngữ lớn, nhiệt độ sáng tạo, hạn mức token và bảo vệ hệ thống
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl md:text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
+                Cài Đặt Hệ Thống & Tham Số AI
+              </h1>
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#ECFDF5] text-[#10B981] border border-[#A7F3D0]">
+                v1.7.0 Live
+              </span>
+            </div>
+            <p className="text-sm text-[#7A3E04] mt-1 font-medium">
+              Cấu hình mô hình ngôn ngữ lớn, nhiệt độ sáng tạo, hạn mức token và bảo vệ hệ thống
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0 whitespace-nowrap self-start md:self-auto">
           <button
             type="button"
             onClick={handleResetDefaults}
             disabled={isSaving}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-[#7E6B5A] bg-white border border-[#E8D5C4] hover:bg-[#F7ECE1] hover:text-[#2A1C0E] transition-all shadow-xs active:scale-98"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold text-[#7A3E04] bg-white border border-[#F1CCA6] hover:bg-[#F7ECE1] hover:text-[#1C1917] hover:border-[#C1762A] transition-all shadow-xs active:scale-95 cursor-pointer whitespace-nowrap"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Đặt lại mặc định
+            <RotateCcw className="w-3.5 h-3.5 text-[#C1762A]" />
+            <span>Đặt lại mặc định</span>
           </button>
 
           <button
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#C1762A] to-[#8C4905] hover:opacity-95 shadow-md shadow-[#C1762A]/20 transition-all active:scale-98"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs md:text-sm font-bold text-white bg-gradient-to-r from-[#C1762A] to-[#8C4905] hover:brightness-105 shadow-sm transition-all active:scale-95 cursor-pointer whitespace-nowrap"
           >
             {isSaving ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
               <Save className="w-4 h-4" />
             )}
-            {isSaving ? "Đang lưu cấu hình..." : "Lưu Cấu Hình"}
+            <span>{isSaving ? "Đang lưu cấu hình..." : "Lưu Cấu Hình"}</span>
           </button>
         </div>
       </div>
@@ -273,16 +278,16 @@ export default function AdminSettingsPage() {
             =================================================================== */}
         <div className="lg:col-span-2 space-y-6">
           {/* ── CARD 1: Cấu hình Tham số AI (Gemini API) ── */}
-          <div className="bg-white rounded-2xl border border-[#E8D5C4] p-6 shadow-xs space-y-6">
+          <div className="bg-white rounded-2xl border border-[#F1CCA6] p-6 shadow-xs space-y-6">
             <div className="flex items-center gap-3 pb-4 border-b border-[#F1CCA6]/40">
-              <div className="w-10 h-10 rounded-xl bg-[#FDF6EE] text-[#C1762A] flex items-center justify-center border border-[#F1CCA6]">
+              <div className="w-10 h-10 rounded-xl bg-[#F7ECE1] text-[#C1762A] flex items-center justify-center border border-[#F1CCA6]">
                 <Bot className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-base font-extrabold text-[#2A1C0E]">
+                <h2 className="text-base font-extrabold text-[#1C1917]">
                   Cấu Hình Tham Số Trí Tuệ Nhân Tạo (Gemini API)
                 </h2>
-                <p className="text-xs text-[#7E6B5A]">
+                <p className="text-xs text-[#7A3E04]">
                   Tùy chỉnh model phục vụ gia sư Socratic và độ dài câu gợi mở
                 </p>
               </div>
@@ -290,7 +295,7 @@ export default function AdminSettingsPage() {
 
             {/* Mô hình phục vụ chính */}
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-[#2A1C0E] uppercase tracking-wider">
+              <label className="block text-xs font-bold text-[#1C1917] uppercase tracking-wider">
                 Mô hình AI Phục Vụ Chat Chính (Phản hồi tức thì)
               </label>
               <select
@@ -298,7 +303,7 @@ export default function AdminSettingsPage() {
                 onChange={(e) =>
                   setSettings({ ...settings, modelName: e.target.value })
                 }
-                className="w-full bg-[#FFFDF9] border border-[#E8D5C4] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-all cursor-pointer"
+                className="w-full bg-[#FFFFFF] border border-[#F1CCA6] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-all cursor-pointer"
               >
                 <option value="gemini-1.5-flash">
                   Google Gemini 1.5 Flash (Khuyến nghị cho Toán 4-9 • Phản hồi &lt; 0.4s)
@@ -310,7 +315,7 @@ export default function AdminSettingsPage() {
                   Google Gemini 2.0 Flash Experimental (Thử nghiệm tính năng mới)
                 </option>
               </select>
-              <p className="text-[11px] text-[#7E6B5A] flex items-center gap-1 mt-1">
+              <p className="text-[11px] text-[#7A3E04] flex items-center gap-1 mt-1">
                 <Sparkles className="w-3.5 h-3.5 text-[#C1762A] shrink-0" />
                 Gemini 1.5 Flash đảm bảo tốc độ phản hồi nhanh nhất và tối ưu chi phí hạ tầng trường học.
               </p>
@@ -318,7 +323,7 @@ export default function AdminSettingsPage() {
 
             {/* Mô hình dự phòng Backup */}
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-[#2A1C0E] uppercase tracking-wider">
+              <label className="block text-xs font-bold text-[#1C1917] uppercase tracking-wider">
                 Mô hình AI Dự Phòng (Failover)
               </label>
               <select
@@ -326,12 +331,12 @@ export default function AdminSettingsPage() {
                 onChange={(e) =>
                   setSettings({ ...settings, backupModel: e.target.value })
                 }
-                className="w-full bg-[#FFFDF9] border border-[#E8D5C4] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-all cursor-pointer"
+                className="w-full bg-[#FFFFFF] border border-[#F1CCA6] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-all cursor-pointer"
               >
                 <option value="gemini-1.5-pro">Google Gemini 1.5 Pro</option>
                 <option value="gemini-1.5-flash">Google Gemini 1.5 Flash</option>
               </select>
-              <p className="text-[11px] text-[#7E6B5A]">
+              <p className="text-[11px] text-[#7A3E04]">
                 Tự động kích hoạt khi Google Gemini chính gặp sự cố quota hoặc rate limit.
               </p>
             </div>
@@ -339,10 +344,10 @@ export default function AdminSettingsPage() {
             {/* Slider: Temperature */}
             <div className="space-y-2 pt-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-[#2A1C0E]">
+                <span className="font-bold text-[#1C1917]">
                   Nhiệt độ sáng tạo (Temperature):
                 </span>
-                <span className="font-extrabold px-2.5 py-0.5 rounded-lg bg-[#FDF6EE] text-[#C1762A] border border-[#F1CCA6] text-xs font-mono">
+                <span className="font-extrabold px-2.5 py-0.5 rounded-lg bg-[#F7ECE1] text-[#C1762A] border border-[#F1CCA6] text-xs font-mono">
                   {settings.temperature.toFixed(2)}
                 </span>
               </div>
@@ -360,7 +365,7 @@ export default function AdminSettingsPage() {
                 }
                 className="w-full h-2 bg-[#F7ECE1] rounded-lg appearance-none cursor-pointer accent-[#C1762A]"
               />
-              <div className="flex justify-between text-[11px] text-[#7E6B5A]">
+              <div className="flex justify-between text-[11px] text-[#7A3E04]">
                 <span>0.0 (Chính xác tuyệt đối)</span>
                 <span className="text-[#C1762A] font-semibold">
                   Khuyến nghị Toán học: 0.20 - 0.40 (Tránh ảo giác)
@@ -372,10 +377,10 @@ export default function AdminSettingsPage() {
             {/* Slider: Max Tokens */}
             <div className="space-y-2 pt-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-[#2A1C0E]">
+                <span className="font-bold text-[#1C1917]">
                   Hạn mức độ dài phản hồi (Max Output Tokens):
                 </span>
-                <span className="font-extrabold px-2.5 py-0.5 rounded-lg bg-[#FDF6EE] text-[#C1762A] border border-[#F1CCA6] text-xs font-mono">
+                <span className="font-extrabold px-2.5 py-0.5 rounded-lg bg-[#F7ECE1] text-[#C1762A] border border-[#F1CCA6] text-xs font-mono">
                   {settings.maxTokens} tokens
                 </span>
               </div>
@@ -393,7 +398,7 @@ export default function AdminSettingsPage() {
                 }
                 className="w-full h-2 bg-[#F7ECE1] rounded-lg appearance-none cursor-pointer accent-[#C1762A]"
               />
-              <div className="flex justify-between text-[11px] text-[#7E6B5A]">
+              <div className="flex justify-between text-[11px] text-[#7A3E04]">
                 <span>256 tokens</span>
                 <span className="text-[#C1762A] font-semibold">
                   512 tokens: Giúp AI đặt câu hỏi gợi mở, không giải bài hộ
@@ -406,10 +411,10 @@ export default function AdminSettingsPage() {
             <div className="pt-2 border-t border-[#F1CCA6]/40 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-[#2A1C0E]">
+                  <div className="text-xs font-bold text-[#1C1917]">
                     Kích hoạt Vision Support (Giải toán qua ảnh chụp)
                   </div>
-                  <div className="text-[11px] text-[#7E6B5A]">
+                  <div className="text-[11px] text-[#7A3E04]">
                     Cho phép Gemini 1.5 đọc đề bài viết tay và hình vẽ hình học
                   </div>
                 </div>
@@ -422,7 +427,7 @@ export default function AdminSettingsPage() {
                     })
                   }
                   className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                    settings.enableVisionSupport ? "bg-[#C1762A]" : "bg-[#D9BEA7]"
+                    settings.enableVisionSupport ? "bg-[#C1762A]" : "bg-[#F1CCA6]"
                   }`}
                 >
                   <span
@@ -438,16 +443,16 @@ export default function AdminSettingsPage() {
           </div>
 
           {/* ── CARD 2: Thiết lập Giới hạn gọi API (Rate Limit) ── */}
-          <div className="bg-white rounded-2xl border border-[#E8D5C4] p-6 shadow-xs space-y-5">
+          <div className="bg-white rounded-2xl border border-[#F1CCA6] p-6 shadow-xs space-y-5">
             <div className="flex items-center gap-3 pb-4 border-b border-[#F1CCA6]/40">
               <div className="w-10 h-10 rounded-xl bg-[#EEF6FC] text-[#2B78C5] flex items-center justify-center border border-[#BADEF7]">
                 <Shield className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-base font-extrabold text-[#2A1C0E]">
+                <h2 className="text-base font-extrabold text-[#1C1917]">
                   Giới Hạn Tần Suất Gọi API (Rate Limiting)
                 </h2>
-                <p className="text-xs text-[#7E6B5A]">
+                <p className="text-xs text-[#7A3E04]">
                   Ngăn chặn spam request và cân bằng tải Redis Token-Bucket
                 </p>
               </div>
@@ -455,7 +460,7 @@ export default function AdminSettingsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#2A1C0E]">
+                <label className="block text-xs font-bold text-[#1C1917]">
                   Tài khoản Khách dùng thử (Guest)
                 </label>
                 <div className="relative">
@@ -470,19 +475,19 @@ export default function AdminSettingsPage() {
                         guestRateLimit: parseInt(e.target.value, 10) || 5,
                       })
                     }
-                    className="w-full bg-[#FFFDF9] border border-[#E8D5C4] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] pr-16"
+                    className="w-full bg-[#FFFFFF] border border-[#F1CCA6] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] pr-16"
                   />
-                  <span className="absolute right-3.5 top-2.5 text-xs text-[#7E6B5A] font-semibold pointer-events-none">
+                  <span className="absolute right-3.5 top-2.5 text-xs text-[#7A3E04] font-semibold pointer-events-none">
                     tin / 5 phút
                   </span>
                 </div>
-                <p className="text-[11px] text-[#7E6B5A]">
+                <p className="text-[11px] text-[#7A3E04]">
                   Áp dụng phiên trải nghiệm không cần đăng nhập
                 </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#2A1C0E]">
+                <label className="block text-xs font-bold text-[#1C1917]">
                   Học sinh đã đăng ký (Student)
                 </label>
                 <div className="relative">
@@ -497,13 +502,13 @@ export default function AdminSettingsPage() {
                         studentRateLimit: parseInt(e.target.value, 10) || 30,
                       })
                     }
-                    className="w-full bg-[#FFFDF9] border border-[#E8D5C4] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] pr-16"
+                    className="w-full bg-[#FFFFFF] border border-[#F1CCA6] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] pr-16"
                   />
-                  <span className="absolute right-3.5 top-2.5 text-xs text-[#7E6B5A] font-semibold pointer-events-none">
+                  <span className="absolute right-3.5 top-2.5 text-xs text-[#7A3E04] font-semibold pointer-events-none">
                     tin / 5 phút
                   </span>
                 </div>
-                <p className="text-[11px] text-[#7E6B5A]">
+                <p className="text-[11px] text-[#7A3E04]">
                   Tài khoản có liên kết phụ huynh giám sát
                 </p>
               </div>
@@ -513,10 +518,10 @@ export default function AdminSettingsPage() {
             <div className="pt-3 border-t border-[#F1CCA6]/40">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-[#2A1C0E]">
+                  <div className="text-xs font-bold text-[#1C1917]">
                     Cảnh Báo Khẩn Cấp Tới Phụ Huynh (Safety Agent Alert)
                   </div>
-                  <div className="text-[11px] text-[#7E6B5A]">
+                  <div className="text-[11px] text-[#7A3E04]">
                     Tự động gửi email thông báo khi học sinh vi phạm tiêu chuẩn Safety 3 lần trong ngày
                   </div>
                 </div>
@@ -529,7 +534,7 @@ export default function AdminSettingsPage() {
                     })
                   }
                   className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                    settings.enableParentAlert ? "bg-[#C1762A]" : "bg-[#D9BEA7]"
+                    settings.enableParentAlert ? "bg-[#C1762A]" : "bg-[#F1CCA6]"
                   }`}
                 >
                   <span
@@ -550,11 +555,11 @@ export default function AdminSettingsPage() {
             =================================================================== */}
         <div className="space-y-6">
           {/* ── CARD 3: Trạng thái Dịch vụ Ngoại vi (Healthcheck) ── */}
-          <div className="bg-white rounded-2xl border border-[#E8D5C4] p-5 shadow-xs space-y-4">
+          <div className="bg-white rounded-2xl border border-[#F1CCA6] p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#F1CCA6]/40">
               <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-[#2A8C4A]" />
-                <h3 className="text-sm font-extrabold text-[#2A1C0E]">
+                <Activity className="w-4 h-4 text-[#10B981]" />
+                <h3 className="text-sm font-extrabold text-[#1C1917]">
                   Trạng Thái Dịch Vụ (Healthcheck)
                 </h3>
               </div>
@@ -563,7 +568,7 @@ export default function AdminSettingsPage() {
                 onClick={handleRefreshHealth}
                 disabled={isRefreshingHealth}
                 title="Làm mới trạng thái"
-                className="p-1.5 rounded-lg text-[#7E6B5A] hover:text-[#C1762A] hover:bg-[#F7ECE1] transition-all"
+                className="p-1.5 rounded-lg text-[#7A3E04] hover:text-[#C1762A] hover:bg-[#F7ECE1] transition-all"
               >
                 <RefreshCw
                   className={`w-3.5 h-3.5 ${
@@ -579,17 +584,17 @@ export default function AdminSettingsPage() {
                 return (
                   <div
                     key={srv.id}
-                    className="p-3 rounded-xl bg-[#FFFDFB] border border-[#E8D5C4] flex items-center justify-between"
+                    className="p-3 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6] flex items-center justify-between"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-[#F7ECE1] text-[#8C4905] flex items-center justify-center shrink-0">
                         <Icon className="w-4 h-4" />
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-[#2A1C0E]">
+                        <div className="text-xs font-bold text-[#1C1917]">
                           {srv.name}
                         </div>
-                        <div className="text-[10px] text-[#7E6B5A] line-clamp-1">
+                        <div className="text-[10px] text-[#7A3E04] line-clamp-1">
                           {srv.provider}
                         </div>
                       </div>
@@ -598,14 +603,14 @@ export default function AdminSettingsPage() {
                     <div className="text-right shrink-0">
                       <div className="flex items-center gap-1.5 justify-end">
                         <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2A8C4A] opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2A8C4A]"></span>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
                         </span>
-                        <span className="text-[11px] font-bold text-[#2A8C4A]">
+                        <span className="text-[11px] font-bold text-[#10B981]">
                           Hoạt Động
                         </span>
                       </div>
-                      <div className="text-[10px] text-[#A18E7F] font-mono mt-0.5">
+                      <div className="text-[10px] text-[#7A3E04] font-mono mt-0.5">
                         {srv.latencyMs}ms
                       </div>
                     </div>
@@ -614,57 +619,57 @@ export default function AdminSettingsPage() {
               })}
             </div>
 
-            <div className="p-3 rounded-xl bg-[#EAF7EE] border border-[#B7E4C4] text-[11px] text-[#2A8C4A] flex items-center gap-2">
+            <div className="p-3 rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] text-[11px] text-[#10B981] flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               <span>3/3 Dịch vụ kết nối ổn định, sẵn sàng phục vụ học sinh.</span>
             </div>
           </div>
 
           {/* ── CARD 4: Thông Tin Phiên Bản Hệ Thống ── */}
-          <div className="bg-white rounded-2xl border border-[#E8D5C4] p-5 shadow-xs space-y-3.5">
-            <h3 className="text-sm font-extrabold text-[#2A1C0E] pb-3 border-b border-[#F1CCA6]/40 flex items-center gap-2">
+          <div className="bg-white rounded-2xl border border-[#F1CCA6] p-5 shadow-xs space-y-3.5">
+            <h3 className="text-sm font-extrabold text-[#1C1917] pb-3 border-b border-[#F1CCA6]/40 flex items-center gap-2">
               <Layers className="w-4 h-4 text-[#C1762A]" />
               Thông Tin Phiên Bản Hệ Thống
             </h3>
 
             <div className="space-y-2.5 text-xs">
               <div className="flex justify-between items-center">
-                <span className="text-[#7E6B5A]">Phiên bản Build:</span>
+                <span className="text-[#7A3E04]">Phiên bản Build:</span>
                 <span className="font-bold text-[#8C4905] font-mono bg-[#F7ECE1] px-2 py-0.5 rounded-md">
                   {settings.systemVersion}
                 </span>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-[#7E6B5A]">Môi trường:</span>
-                <span className="font-bold text-[#2A8C4A] bg-[#EAF7EE] px-2 py-0.5 rounded-md">
+                <span className="text-[#7A3E04]">Môi trường:</span>
+                <span className="font-bold text-[#10B981] bg-[#ECFDF5] px-2 py-0.5 rounded-md">
                   Production Live
                 </span>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-[#7E6B5A]">Cập nhật lần cuối:</span>
-                <span className="font-semibold text-[#2A1C0E]">
+                <span className="text-[#7A3E04]">Cập nhật lần cuối:</span>
+                <span className="font-semibold text-[#1C1917]">
                   {settings.lastUpdated}
                 </span>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-[#7E6B5A]">Người phụ trách:</span>
-                <span className="font-semibold text-[#2A1C0E] font-mono text-[11px]">
+                <span className="text-[#7A3E04]">Người phụ trách:</span>
+                <span className="font-semibold text-[#1C1917] font-mono text-[11px]">
                   {settings.updatedBy}
                 </span>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-[#7E6B5A]">Hệ màu chuẩn:</span>
+                <span className="text-[#7A3E04]">Hệ màu chuẩn:</span>
                 <span className="text-[11px] font-mono font-bold text-[#C1762A]">
                   #C1762A / #F7ECE1
                 </span>
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-[#F1CCA6]/40 text-[11px] text-[#A18E7F] text-center">
+            <div className="mt-4 pt-3 border-t border-[#F1CCA6]/40 text-[11px] text-[#7A3E04] text-center">
               SocraticKid Platform • Cổng Quản Trị Hệ Thống
             </div>
           </div>

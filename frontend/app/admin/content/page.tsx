@@ -253,7 +253,7 @@ export default function AdminContentPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-bold text-stone-900 tracking-tight">
+                <h1 className="text-xl sm:text-2xl font-extrabold text-[#8C4905] tracking-tight">
                   Quản Lý Chuyên Đề & Học Liệu
                 </h1>
                 <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-700">
@@ -267,7 +267,7 @@ export default function AdminContentPage() {
           </div>
 
           {/* Cụm nút hành động bên phải */}
-          <div className="flex items-center gap-2.5 self-start lg:self-auto">
+          <div className="flex items-center gap-2.5 shrink-0 whitespace-nowrap self-start lg:self-auto">
             {/* Nút Xem danh sách các bài sau khi lọc nạp vào AI Prompt */}
             <Link
               href="/admin/content/prompt-topics"
@@ -491,12 +491,12 @@ export default function AdminContentPage() {
                         <span
                           className={cn(
                             "inline-flex items-center px-2 py-0.5 rounded-md font-bold text-[11px]",
-                            topic.grade === 4 && "bg-blue-50 text-blue-800 border border-blue-200",
+                            topic.grade === 4 && "bg-stone-100 text-stone-800 border border-stone-200",
                             topic.grade === 5 && "bg-amber-50 text-amber-900 border border-amber-200",
                             topic.grade === 6 && "bg-emerald-50 text-emerald-800 border border-emerald-200",
-                            topic.grade === 7 && "bg-purple-50 text-purple-800 border border-purple-200",
+                            topic.grade === 7 && "bg-amber-50 text-amber-900 border border-amber-200",
                             topic.grade === 8 && "bg-rose-50 text-rose-800 border border-rose-200",
-                            topic.grade === 9 && "bg-indigo-50 text-indigo-800 border border-indigo-200"
+                            topic.grade === 9 && "bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6]"
                           )}
                         >
                           Lớp {topic.grade}

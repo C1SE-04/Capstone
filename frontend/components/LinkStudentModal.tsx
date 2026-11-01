@@ -209,7 +209,7 @@ export default function LinkStudentModal({
 
               {/* Thông báo lỗi */}
               {errorMsg && (
-                <p className="mb-4 text-sm font-bold text-[#CB6600] text-center animate-in slide-in-from-top-1">
+                <p className="mb-4 text-sm font-bold text-[#EF4444] text-center animate-in slide-in-from-top-1">
                   {errorMsg}
                 </p>
               )}

@@ -382,7 +382,7 @@ function AdminLogsPageInner() {
     const t = type?.toUpperCase() || "";
     if (t === "JAILBREAK") {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300">
           <Lock size={11} /> Bẻ khóa
         </span>
       );
@@ -410,13 +410,13 @@ function AdminLogsPageInner() {
     }
     if (t === "SENSITIVE") {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-200">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-orange-50 text-orange-800 border border-orange-200">
           <Shield size={11} /> Nhạy cảm
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-stone-100 text-stone-700 border border-stone-200">
         <Activity size={11} /> {type || "Hệ thống"}
       </span>
     );
@@ -446,7 +446,7 @@ function AdminLogsPageInner() {
       );
     }
     return (
-      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-stone-100 text-stone-700 border border-stone-200">
         LOW
       </span>
     );
@@ -462,7 +462,7 @@ function AdminLogsPageInner() {
             <span>{toastMessage}</span>
             <button
               onClick={() => setToastMessage(null)}
-              className="text-gray-400 hover:text-gray-600 ml-2"
+              className="text-stone-400 hover:text-stone-600 ml-2"
             >
               <X size={16} />
             </button>
@@ -470,54 +470,51 @@ function AdminLogsPageInner() {
         </div>
       )}
 
-      {/* Header Bar */}
+      {/* Header Bar (Đồng bộ cùng hàng & chuẩn nhận diện) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#C1762A] mb-1">
-            <Link href="/admin" className="hover:underline">
-              Admin Portal
-            </Link>
-            <span>/</span>
-            <span className="text-[#8C4905]">Tra Cứu Logs & CSKH</span>
+        <div className="flex items-center gap-3.5 min-w-0 max-w-2xl">
+          <div className="w-12 h-12 bg-[#C1762A] rounded-2xl flex items-center justify-center text-white shadow-md shrink-0">
+            <FileText className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-[#2A1C0E] tracking-tight flex items-center gap-2.5">
-            <FileText className="w-8 h-8 text-[#C1762A]" />
-            Tra Cứu Nhật Ký Hệ Thống (Admin Logs)
-          </h1>
-          <p className="text-sm text-[#7E6B5A] mt-1">
-            Tra cứu log theo Email hoặc UserID tài khoản để kiểm tra lịch sử đối thoại, điều phối Orchestrator, cảnh báo phụ huynh và lỗi vi phạm
-          </p>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
+              Tra Cứu Nhật Ký Hệ Thống
+            </h1>
+            <p className="text-sm text-[#7A3E04] mt-1 font-medium">
+              Tra cứu log theo Email hoặc UserID tài khoản để kiểm tra lịch sử đối thoại, điều phối Orchestrator, cảnh báo phụ huynh và lỗi vi phạm
+            </p>
+          </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Action Buttons: Cùng 1 hàng ngang đồng bộ */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap self-start md:self-auto">
           <button
             onClick={() => fetchLogs()}
             disabled={isRefreshing}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#FDF7F2] active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#F7ECE1] hover:border-[#C1762A] active:scale-95 transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap"
             title="Làm mới danh sách log"
           >
             <RotateCcw
-              size={16}
-              className={isRefreshing ? "animate-spin text-[#C1762A]" : ""}
+              size={15}
+              className={isRefreshing ? "animate-spin text-[#C1762A]" : "text-[#C1762A]"}
             />
             <span>{isRefreshing ? "Đang tải..." : "Làm mới"}</span>
           </button>
 
           <button
             onClick={handleExportCSV}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#FDF7F2] active:scale-95 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#F7ECE1] hover:border-[#C1762A] active:scale-95 transition-all cursor-pointer whitespace-nowrap"
             title="Xuất kết quả lọc ra file CSV"
           >
-            <Download size={16} className="text-[#C1762A]" />
+            <Download size={15} className="text-[#C1762A]" />
             <span>Xuất CSV</span>
           </button>
 
           <Link
             href="/admin/safety"
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-bold bg-[#C1762A] text-white shadow-xs hover:bg-[#8C4905] active:scale-95 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white shadow-sm hover:brightness-105 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
           >
-            <ShieldAlert size={16} />
+            <ShieldAlert size={15} />
             <span>Giám Sát Safety AI</span>
           </Link>
         </div>
@@ -531,20 +528,20 @@ function AdminLogsPageInner() {
             <div className="flex-1 w-full relative">
               <Search
                 size={18}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E6B5A]"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7A3E04]"
               />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tra cứu theo Email (vd: an.dinh@example.com) hoặc User ID (vd: std_1009)..."
-                className="w-full pl-10 pr-20 py-3 rounded-xl bg-[#FAF6F0] border border-[#E8D5C4] text-sm text-[#2A1C0E] placeholder:text-[#7E6B5A] focus:outline-none focus:ring-2 focus:ring-[#C1762A]/40 focus:border-[#C1762A] transition-all font-medium"
+                className="w-full pl-10 pr-20 py-3 rounded-xl bg-[#F7ECE1] border border-[#F1CCA6] text-sm text-[#1C1917] placeholder:text-[#7A3E04] focus:outline-none focus:ring-2 focus:ring-[#C1762A]/40 focus:border-[#C1762A] transition-all font-medium"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={handleResetSearch}
-                  className="absolute right-12 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                  className="absolute right-12 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
                   title="Xóa tìm kiếm"
                 >
                   <X size={16} />
@@ -572,7 +569,7 @@ function AdminLogsPageInner() {
                 onClick={() => setParentAlertOnly(!parentAlertOnly)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   parentAlertOnly
-                    ? "bg-[#D93829] text-white shadow-xs"
+                    ? "bg-[#EF4444] text-white shadow-xs"
                     : "bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6] hover:bg-white"
                 }`}
               >
@@ -586,7 +583,7 @@ function AdminLogsPageInner() {
                   setViolationFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#FAF6F0] text-[#2A1C0E] border border-[#E8D5C4] outline-none cursor-pointer"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer"
               >
                 <option value="ALL">Tất cả loại sự kiện</option>
                 <option value="ROUTING">Điều phối Routing</option>
@@ -603,7 +600,7 @@ function AdminLogsPageInner() {
                   setSeverityFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#FAF6F0] text-[#2A1C0E] border border-[#E8D5C4] outline-none cursor-pointer"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer"
               >
                 <option value="ALL">Tất cả mức độ</option>
                 <option value="CRITICAL">Mức Critical (Nguy cấp)</option>
@@ -620,7 +617,7 @@ function AdminLogsPageInner() {
                 <button
                   type="button"
                   onClick={handleResetSearch}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#FDF0ED] text-[#D93829] border border-[#F5BCB4] hover:bg-[#FBE3DE] transition-colors cursor-pointer flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#FEF2F2] text-[#EF4444] border border-[#FECACA] hover:bg-[#FEE2E2] transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <RotateCcw size={12} />
                   <span>Đặt lại bộ lọc</span>
@@ -629,7 +626,7 @@ function AdminLogsPageInner() {
             </div>
 
             {/* Record Counter */}
-            <div className="text-xs font-semibold text-[#7E6B5A]">
+            <div className="text-xs font-semibold text-[#7A3E04]">
               Hiển thị <strong className="text-[#8C4905]">{filteredLogs.length}</strong> / {logs.length} bản ghi log
             </div>
           </div>
@@ -637,7 +634,7 @@ function AdminLogsPageInner() {
 
         {/* Active Account Search Target Banner */}
         {activeSearchedTarget && (
-          <div className="p-3.5 rounded-xl bg-[#FDF7F2] border border-[#F1CCA6] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+          <div className="p-3.5 rounded-xl bg-[#F7ECE1] border border-[#F1CCA6] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-[#C1762A] text-white flex items-center justify-center font-bold">
                 {activeSearchedTarget.includes("@") ? <Mail size={16} /> : <User size={16} />}
@@ -646,7 +643,7 @@ function AdminLogsPageInner() {
                 <p className="text-xs font-bold text-[#8C4905]">
                   Đang tra cứu lịch sử log của tài khoản:
                 </p>
-                <p className="text-sm font-extrabold text-[#2A1C0E] font-mono">
+                <p className="text-sm font-extrabold text-[#1C1917] font-mono">
                   {activeSearchedTarget}
                 </p>
               </div>
@@ -658,7 +655,7 @@ function AdminLogsPageInner() {
               </span>
               <button
                 onClick={handleResetSearch}
-                className="text-xs font-semibold text-[#D93829] hover:underline cursor-pointer"
+                className="text-xs font-semibold text-[#EF4444] hover:underline cursor-pointer"
               >
                 Xóa lọc tài khoản
               </button>
@@ -672,7 +669,7 @@ function AdminLogsPageInner() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-[#FAF6F0] border-b border-[#E8D5C4] text-[#8C4905] font-extrabold uppercase tracking-wider text-[11px]">
+              <tr className="bg-[#F7ECE1] border-b border-[#F1CCA6] text-[#8C4905] font-extrabold uppercase tracking-wider text-[11px]">
                 <th className="py-3.5 px-4">Thời gian / Mã Log</th>
                 <th className="py-3.5 px-4">Tài khoản (Email / UserID)</th>
                 <th className="py-3.5 px-4 max-w-sm">Nội dung truy vấn (Query)</th>
@@ -682,12 +679,12 @@ function AdminLogsPageInner() {
                 <th className="py-3.5 px-4 text-right">Thao tác</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E8D5C4] bg-white">
+            <tbody className="divide-y divide-[#F1CCA6] bg-white">
               {paginatedLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-14 text-center text-[#7E6B5A]">
+                  <td colSpan={7} className="py-14 text-center text-[#7A3E04]">
                     <ShieldCheck className="w-12 h-12 mx-auto text-emerald-500 mb-2" />
-                    <p className="font-bold text-base text-[#2A1C0E]">
+                    <p className="font-bold text-base text-[#1C1917]">
                       Không tìm thấy log nào khớp với tiêu chí tìm kiếm
                     </p>
                     <p className="text-xs mt-1">
@@ -725,23 +722,23 @@ function AdminLogsPageInner() {
                     <tr
                       key={log.id}
                       onClick={() => setSelectedLog(log)}
-                      className="hover:bg-[#FFFDF9] transition-colors cursor-pointer group"
+                      className="hover:bg-[#FFFFFF] transition-colors cursor-pointer group"
                     >
                       {/* Cột 1: Thời gian & Mã log */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 text-[#2A1C0E] font-semibold">
+                        <div className="flex items-center gap-1.5 text-[#1C1917] font-semibold">
                           <Clock size={13} className="text-[#C1762A]" />
                           <span>{formattedTime}</span>
-                          <span className="text-gray-400 font-normal">({formattedDate})</span>
+                          <span className="text-stone-400 font-normal">({formattedDate})</span>
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] text-[#7E6B5A] mt-0.5">
+                        <div className="flex items-center gap-1 text-[11px] text-[#7A3E04] mt-0.5">
                           <span className="font-mono">{log.id}</span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleCopyText(log.id, "Mã log");
                             }}
-                            className="text-gray-400 hover:text-[#C1762A] transition-colors"
+                            className="text-stone-400 hover:text-[#C1762A] transition-colors"
                             title="Sao chép mã log"
                           >
                             <Copy size={11} />
@@ -751,7 +748,7 @@ function AdminLogsPageInner() {
 
                       {/* Cột 2: Tài khoản (Email & UserID) */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="font-bold text-[#2A1C0E] flex items-center gap-1.5">
+                        <div className="font-bold text-[#1C1917] flex items-center gap-1.5">
                           <span className="hover:underline">{email}</span>
                           {log.student_grade && (
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6]">
@@ -759,14 +756,14 @@ function AdminLogsPageInner() {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] text-[#7E6B5A] mt-0.5 font-mono">
+                        <div className="flex items-center gap-1 text-[11px] text-[#7A3E04] mt-0.5 font-mono">
                           <span>UID: {userId}</span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleCopyText(userId, "User ID");
                             }}
-                            className="text-gray-400 hover:text-[#C1762A] transition-colors"
+                            className="text-stone-400 hover:text-[#C1762A] transition-colors"
                             title="Sao chép User ID"
                           >
                             <Copy size={11} />
@@ -776,10 +773,10 @@ function AdminLogsPageInner() {
 
                       {/* Cột 3: Nội dung câu lệnh / Query */}
                       <td className="py-3.5 px-4 max-w-sm">
-                        <div className="font-medium text-[#2A1C0E] line-clamp-2 bg-[#FAF6F0] p-2 rounded-lg border border-[#E8D5C4]/60 text-xs">
+                        <div className="font-medium text-[#1C1917] line-clamp-2 bg-[#F7ECE1] p-2 rounded-lg border border-[#F1CCA6]/60 text-xs">
                           &quot;{queryText}&quot;
                         </div>
-                        <div className="text-[11px] text-[#7E6B5A] mt-1 line-clamp-1 italic">
+                        <div className="text-[11px] text-[#7A3E04] mt-1 line-clamp-1 italic">
                           Lý do: {log.flagged_reason || "Điều phối Orchestrator thông thường"}
                         </div>
                       </td>
@@ -788,7 +785,7 @@ function AdminLogsPageInner() {
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex flex-col gap-1 items-start">
                           {renderViolationBadge(log.violation_type)}
-                          <span className="text-[10px] font-mono text-gray-500 bg-gray-50 px-1.5 py-0.2 rounded border border-gray-200">
+                          <span className="text-[10px] font-mono text-stone-500 bg-stone-50 px-1.5 py-0.2 rounded border border-stone-200">
                             {log.target_agent}
                           </span>
                         </div>
@@ -807,7 +804,7 @@ function AdminLogsPageInner() {
                             <span>Đã gửi Email</span>
                           </span>
                         ) : (
-                          <span className="text-gray-400 text-xs">—</span>
+                          <span className="text-stone-400 text-xs">—</span>
                         )}
                       </td>
 
@@ -834,22 +831,22 @@ function AdminLogsPageInner() {
 
         {/* Phân trang */}
         {filteredLogs.length > pageSize && (
-          <div className="p-4 border-t border-[#E8D5C4] bg-[#FAF6F0] flex items-center justify-between">
-            <span className="text-xs text-[#7E6B5A]">
+          <div className="p-4 border-t border-[#F1CCA6] bg-[#F7ECE1] flex items-center justify-between">
+            <span className="text-xs text-[#7A3E04]">
               Trang <strong>{safePage}</strong> / {totalPages}
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={safePage <= 1}
-                className="p-1.5 rounded-lg bg-white border border-[#E8D5C4] text-[#8C4905] disabled:opacity-40 hover:bg-[#FDF7F2] transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg bg-white border border-[#F1CCA6] text-[#8C4905] disabled:opacity-40 hover:bg-[#F7ECE1] transition-colors cursor-pointer"
               >
                 <ChevronLeft size={16} />
               </button>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={safePage >= totalPages}
-                className="p-1.5 rounded-lg bg-white border border-[#E8D5C4] text-[#8C4905] disabled:opacity-40 hover:bg-[#FDF7F2] transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg bg-white border border-[#F1CCA6] text-[#8C4905] disabled:opacity-40 hover:bg-[#F7ECE1] transition-colors cursor-pointer"
               >
                 <ChevronRight size={16} />
               </button>
@@ -868,13 +865,13 @@ function AdminLogsPageInner() {
                 <span className="text-xs font-bold text-[#C1762A] uppercase tracking-wider">
                   Chi Tiết Sự Kiện Log Hệ Thống
                 </span>
-                <h3 className="text-lg font-extrabold text-[#2A1C0E] mt-0.5 flex items-center gap-2">
+                <h3 className="text-lg font-extrabold text-[#1C1917] mt-0.5 flex items-center gap-2">
                   <span className="font-mono">{selectedLog.id}</span>
                 </h3>
               </div>
               <button
                 onClick={() => setSelectedLog(null)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
               >
                 <X size={18} />
               </button>
@@ -882,29 +879,29 @@ function AdminLogsPageInner() {
 
             {/* Modal Content Info */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="space-y-1 bg-[#FAF6F0] p-3 rounded-xl border border-[#E8D5C4]/60">
-                <span className="text-[#7E6B5A] font-semibold">Tài khoản Email:</span>
-                <p className="font-bold text-[#2A1C0E] text-sm break-all">
+              <div className="space-y-1 bg-[#F7ECE1] p-3 rounded-xl border border-[#F1CCA6]/60">
+                <span className="text-[#7A3E04] font-semibold">Tài khoản Email:</span>
+                <p className="font-bold text-[#1C1917] text-sm break-all">
                   {selectedLog.email || selectedLog.student_email}
                 </p>
               </div>
 
-              <div className="space-y-1 bg-[#FAF6F0] p-3 rounded-xl border border-[#E8D5C4]/60">
-                <span className="text-[#7E6B5A] font-semibold">User ID:</span>
-                <p className="font-bold text-[#2A1C0E] font-mono text-sm">
+              <div className="space-y-1 bg-[#F7ECE1] p-3 rounded-xl border border-[#F1CCA6]/60">
+                <span className="text-[#7A3E04] font-semibold">User ID:</span>
+                <p className="font-bold text-[#1C1917] font-mono text-sm">
                   {selectedLog.user_id || selectedLog.student_id}
                 </p>
               </div>
 
-              <div className="space-y-1 bg-[#FAF6F0] p-3 rounded-xl border border-[#E8D5C4]/60">
-                <span className="text-[#7E6B5A] font-semibold">Thời gian ghi nhận:</span>
-                <p className="font-bold text-[#2A1C0E]">
+              <div className="space-y-1 bg-[#F7ECE1] p-3 rounded-xl border border-[#F1CCA6]/60">
+                <span className="text-[#7A3E04] font-semibold">Thời gian ghi nhận:</span>
+                <p className="font-bold text-[#1C1917]">
                   {new Date(selectedLog.timestamp).toLocaleString("vi-VN")}
                 </p>
               </div>
 
-              <div className="space-y-1 bg-[#FAF6F0] p-3 rounded-xl border border-[#E8D5C4]/60">
-                <span className="text-[#7E6B5A] font-semibold">Tác nhân xử lý (Target Agent):</span>
+              <div className="space-y-1 bg-[#F7ECE1] p-3 rounded-xl border border-[#F1CCA6]/60">
+                <span className="text-[#7A3E04] font-semibold">Tác nhân xử lý (Target Agent):</span>
                 <p className="font-bold text-[#8C4905] font-mono">
                   {selectedLog.target_agent}
                 </p>
@@ -916,7 +913,7 @@ function AdminLogsPageInner() {
               <label className="text-xs font-bold text-[#8C4905] uppercase tracking-wider">
                 Nội dung câu hỏi / Câu lệnh học sinh:
               </label>
-              <div className="p-3.5 rounded-xl bg-[#FAF6F0] border border-[#E8D5C4] text-xs text-[#2A1C0E] font-medium leading-relaxed">
+              <div className="p-3.5 rounded-xl bg-[#F7ECE1] border border-[#F1CCA6] text-xs text-[#1C1917] font-medium leading-relaxed">
                 &quot;{selectedLog.user_query || selectedLog.message_snippet}&quot;
               </div>
             </div>
@@ -952,7 +949,7 @@ function AdminLogsPageInner() {
                 onClick={() => {
                   handleCopyText(JSON.stringify(selectedLog, null, 2), "Dữ liệu JSON Log");
                 }}
-                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#FAF6F0] transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1] transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
               >
                 <Copy size={13} />
                 <span>Sao chép JSON</span>
@@ -975,7 +972,7 @@ export default function AdminLogsPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-12 text-center text-[#7E6B5A] text-sm flex flex-col items-center justify-center gap-3">
+        <div className="p-12 text-center text-[#7A3E04] text-sm flex flex-col items-center justify-center gap-3">
           <div className="w-8 h-8 border-3 border-[#C1762A] border-t-transparent rounded-full animate-spin" />
           <span>Đang tải màn hình tra cứu nhật ký...</span>
         </div>

@@ -79,11 +79,11 @@ export function ChatSidebar({
         {/* Top Area (Logo & New Chat) */}
         <div className="p-4 flex flex-col gap-3">
           <div
-            className="flex items-center gap-3 mb-1 cursor-pointer"
+            className="flex items-center gap-3 mb-1 cursor-pointer group"
             onClick={() => router.push("/")}
           >
-            <div className="w-10 h-10 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold text-sm shadow-inner">
-              SK
+            <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-xs group-hover:opacity-85 transition-opacity">
+              <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
             </div>
             <h2 className="font-extrabold italic text-xl text-[#8C4905] tracking-tight">
               SocraticKid
@@ -125,7 +125,7 @@ export function ChatSidebar({
                       "group flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-all",
                       activeChatId === chat.id
                         ? "bg-white text-[#8C4905] shadow-sm font-semibold"
-                        : "text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#CB6600]"
+                        : "text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#8C4905]"
                     )}
                   >
                     <span className="truncate flex-1 text-sm">{chat.title}</span>

@@ -220,7 +220,7 @@ export function UnderstandingButtons({
                 "p-2 rounded-full flex items-center justify-center transition-all self-end mb-0.5 shadow-sm shrink-0",
                 inputValue.trim() && !isLoading
                   ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 active:scale-95"
-                  : "bg-[#D9D9D9] text-gray-400 cursor-not-allowed"
+                  : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed"
               )}
             >
               <Send size={16} className={cn(inputValue.trim() && "ml-0.5")} />

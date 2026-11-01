@@ -39,7 +39,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      newErrors.email = "Email/SDT không được bỏ trống";
+      newErrors.email = "Email/Username không được bỏ trống";
       hasError = true;
     } else if (!trimmedEmail.includes("@")) {
       newErrors.email = "Vui lòng nhập đúng định dạng email";
@@ -178,7 +178,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 text-[#8C4905] hover:text-[#CB6600] transition-colors cursor-pointer"
+            className="absolute top-4 right-4 p-2 text-[#8C4905] hover:text-[#8C4905] transition-colors cursor-pointer"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -186,9 +186,10 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           </button>
         )}
 
-        {/* Avatar Placeholder */}
+        {/* Logo Con Cú SocraticKid */}
         <div className="flex justify-center mb-6">
-          <div className="w-20 h-20 bg-[#D9D9D9] rounded-full flex items-center justify-center shadow-inner">
+          <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-md border-2 border-[#C1762A]/30">
+            <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
           </div>
         </div>
 
@@ -200,50 +201,50 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           {/* Email / Phone */}
           <div>
-            <label className="block text-[#8C4905] text-sm font-bold mb-1">Email/SDT</label>
+            <label className="block text-[#8C4905] text-sm font-bold mb-1">Email/Username</label>
             <input
               type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]' : 'focus:ring-[#F7AD62] border-transparent'
                 }`}
               disabled={isLoading}
             />
             {errors.email && (
-              <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.email}</p>
+              <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.email}</p>
             )}
           </div>
 
           {/* Password */}
           <div>
-            <label className="block text-[#8C4905] text-sm font-bold mb-1">Password</label>
+            <label className="block text-[#8C4905] text-sm font-bold mb-1">Mật Khẩu</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.password ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.password ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]' : 'focus:ring-[#F7AD62] border-transparent'
                 }`}
               disabled={isLoading}
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.password}</p>
+              <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.password}</p>
             )}
           </div>
 
           {/* Confirm Password (Only in Sign up) */}
           {!isLoginMode && (
             <div>
-              <label className="block text-[#8C4905] text-sm font-bold mb-1">Xác Nhận Password</label>
+              <label className="block text-[#8C4905] text-sm font-bold mb-1">Xác Nhận Mật Khẩu</label>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
+                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]' : 'focus:ring-[#F7AD62] border-transparent'
                   }`}
                 disabled={isLoading}
               />
               {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.confirmPassword}</p>
+                <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.confirmPassword}</p>
               )}
             </div>
           )}
@@ -257,7 +258,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                 <input type="checkbox" className="mr-2 rounded text-[#8C4905] focus:ring-[#F7AD62] cursor-pointer" disabled={isLoading} />
                 Nhớ tôi
               </label>
-              <a href="#" className="text-xs font-bold text-[#8C4905] hover:text-[#CB6600] transition-colors cursor-pointer">
+              <a href="#" className="text-xs font-bold text-[#8C4905] hover:text-[#8C4905] transition-colors cursor-pointer">
                 Quên mật khẩu?
               </a>
             </div>
@@ -266,7 +267,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           {/* Form Level Message (Error or Success) */}
           {errors.form && (
             <div className="mt-2 text-center">
-              <p className={`text-sm font-bold ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#CB6600]'
+              <p className={`text-sm font-bold ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#EF4444]'
                 }`}>
                 {errors.form}
               </p>
@@ -317,7 +318,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               type="button"
               onClick={toggleMode}
               disabled={isLoading}
-              className="text-[#CB6600] hover:underline focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed ml-1 cursor-pointer"
+              className="text-[#C1762A] hover:text-[#8C4905] hover:underline focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed ml-1 cursor-pointer"
             >
               {isLoginMode ? "Đăng ký" : "Đăng nhập"}
             </button>

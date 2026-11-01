@@ -172,7 +172,7 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
                       {item.badge && (
                         <div className="flex-shrink-0 ml-2">
                           {item.badge.variant === "danger" && (
-                            <span className="bg-[#D93829] text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                            <span className="bg-[#EF4444] text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-xs">
                               {item.badge.text}
                             </span>
                           )}
@@ -192,7 +192,7 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
                               className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
                                 active
                                   ? "bg-white text-[#C1762A]"
-                                  : "bg-[#2A8C4A] text-white"
+                                  : "bg-[#10B981] text-white"
                               }`}
                             >
                               {item.badge.text}

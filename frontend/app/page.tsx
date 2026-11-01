@@ -61,7 +61,7 @@ export default function Home() {
                   className="w-10 h-10 rounded-full border-2 border-[#C1762A]"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full border-2 border-[#C1762A] bg-[#D9D9D9]" />
+                <div className="w-10 h-10 rounded-full border-2 border-[#C1762A] bg-[#F7ECE1] overflow-hidden flex items-center justify-center"><img src="/logo.png" alt="Avatar" className="w-full h-full object-cover" /></div>
               )}
               <button
                 onClick={async () => {
@@ -155,7 +155,7 @@ export default function Home() {
           <div className="bg-white/80 backdrop-blur-xs p-8 rounded-2xl border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all flex flex-col text-center items-center">
             <img src="/star.svg" alt="Star Icon" className="w-12 h-12 mb-4" />
             <h3 className="text-xl font-bold text-[#8C4905] mb-3">Học Hiểu Sâu - Nhớ Lâu Dài</h3>
-            <p className="text-[#6B3704] text-sm md:text-[15px] font-normal leading-relaxed">
+            <p className="text-[#7A3E04] text-sm md:text-[15px] font-normal leading-relaxed">
               AI được huấn luyện đặc biệt để đóng vai trò người dẫn dắt. Thay vì cung cấp ngay đáp án, SocraticKid sẽ đặt các câu hỏi gợi ý, chia nhỏ bài toán phức tạp giúp các em tự suy luận và tìm ra cách giải.
             </p>
           </div>
@@ -163,7 +163,7 @@ export default function Home() {
           <div className="bg-white/80 backdrop-blur-xs p-8 rounded-2xl border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all flex flex-col text-center items-center">
             <img src="/shield.svg" alt="Shield Icon" className="w-12 h-12 mb-4" />
             <h3 className="text-xl font-bold text-[#8C4905] mb-3">An Toàn & Chuẩn Xác Tuyệt Đối</h3>
-            <p className="text-[#6B3704] text-sm md:text-[15px] font-normal leading-relaxed">
+            <p className="text-[#7A3E04] text-sm md:text-[15px] font-normal leading-relaxed">
               Mọi câu trả lời của AI đều được đi qua một hệ thống &ldquo;Giám thị&rdquo; (Reviewer Agent) nhằm đảm bảo nội dung phù hợp với học sinh, loại bỏ các từ ngữ độc hại và kiểm tra độ chính xác trước khi hiển thị.
             </p>
           </div>
@@ -171,7 +171,7 @@ export default function Home() {
           <div className="bg-white/80 backdrop-blur-xs p-8 rounded-2xl border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all flex flex-col text-center items-center">
             <img src="/target.svg" alt="Target Icon" className="w-12 h-12 mb-4" />
             <h3 className="text-xl font-bold text-[#8C4905] mb-3">Tối Ưu Cho Học Sinh Lớp 4 – 9</h3>
-            <p className="text-[#6B3704] text-sm md:text-[15px] font-normal leading-relaxed">
+            <p className="text-[#7A3E04] text-sm md:text-[15px] font-normal leading-relaxed">
               Hệ thống được thiết kế riêng biệt để tương thích với tư duy, ngôn ngữ và chương trình sách giáo khoa của học sinh Việt Nam, giúp các em ôn tập và làm bài tập bám sát kiến thức trên lớp.
             </p>
           </div>
