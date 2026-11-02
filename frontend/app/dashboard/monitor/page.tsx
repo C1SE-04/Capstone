@@ -347,7 +347,7 @@ export default function MonitorPage() {
             aria-label="Tuần tiếp theo"
             className={`p-1 rounded-lg transition-all ${
               isCurrentWeek
-                ? "text-gray-300 cursor-not-allowed"
+                ? "text-[#C1762A]/40 cursor-not-allowed"
                 : "text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 cursor-pointer"
             }`}
           >

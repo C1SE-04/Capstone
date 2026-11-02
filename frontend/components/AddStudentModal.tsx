@@ -72,7 +72,7 @@ export default function AddStudentModal({ isOpen, onClose, onSuccess }: AddStude
               className="w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-3xl tracking-[0.3em] font-black text-center text-[#C1762A] placeholder:text-[#F1CCA6] placeholder:tracking-normal placeholder:font-normal placeholder:text-base border border-transparent focus:outline-none focus:ring-2 focus:ring-[#F7AD62] disabled:opacity-60 transition-all"
             />
             {errorMsg && (
-              <p className="mt-2 text-sm font-bold text-[#CB6600] animate-in slide-in-from-top-1 text-center">
+              <p className="mt-2 text-sm font-bold text-[#EF4444] animate-in slide-in-from-top-1 text-center">
                 {errorMsg}
               </p>
             )}

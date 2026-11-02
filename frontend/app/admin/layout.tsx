@@ -58,7 +58,7 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="flex h-screen max-h-screen overflow-hidden bg-[#F7ECE1] text-[#2A1C0E]">
+    <div className="flex h-screen max-h-screen overflow-hidden bg-[#F7ECE1] text-[#1C1917]">
       {/* ── 1. Desktop Sidebar (Cố định màn hình lớn) ── */}
       <div className="hidden lg:block h-full flex-shrink-0">
         <AdminSidebar />

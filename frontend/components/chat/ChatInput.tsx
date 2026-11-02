@@ -363,7 +363,7 @@ export function ChatInput({
       <div
         className={cn(
           "relative flex items-end gap-2 bg-[#F1CCA6]/40 p-2 pl-4 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-all",
-          isOffline && "opacity-75 bg-gray-100 border-gray-300",
+          isOffline && "opacity-75 bg-[#F7ECE1] border-[#F1CCA6]",
         )}
       >
         {/* ── [T6.20/T6.21] Nút + và Bottom Sheet ── */}
@@ -409,7 +409,7 @@ export function ChatInput({
               >
                 {/* Handle bar kéo */}
                 <div className="flex justify-center pt-3 pb-1">
-                  <div className="w-10 h-1 bg-gray-300 rounded-full" />
+                  <div className="w-10 h-1 bg-[#F1CCA6] rounded-full" />
                 </div>
 
                 {/* Tiêu đề */}
@@ -511,7 +511,7 @@ export function ChatInput({
             "p-2.5 rounded-full flex items-center justify-center transition-all self-end mb-0.5 shadow-sm shrink-0",
             canSend
               ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 active:scale-95 cursor-pointer"
-              : "bg-[#D9D9D9] text-gray-400 cursor-not-allowed",
+              : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed",
           )}
           title={isOffline ? "Không thể gửi khi mất kết nối" : "Gửi tin nhắn"}
         >

@@ -346,7 +346,7 @@ export default function NotebookPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#FAFAF9] overflow-y-auto">
+    <div className="flex-1 flex flex-col h-full bg-[#F7ECE1] overflow-y-auto">
       {/* 1. Header trang Sổ tay: Typography cân bằng, màu sắc tinh tế, nền trắng sạch sẽ */}
       <header className="bg-white border-b border-stone-200/80 px-3.5 sm:px-6 py-3 sm:py-4 sticky top-0 z-20 shadow-2xs">
         {/* Hàng 1: Tiêu đề trang & Nút Đồng bộ thẳng hàng */}

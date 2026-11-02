@@ -31,7 +31,7 @@ export function FileTooLargeToast({
 
   return createPortal(
     <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[99999] w-[92vw] max-w-md animate-in slide-in-from-top-6 fade-in duration-300 ease-out">
-      <div className="bg-white rounded-2xl p-4 shadow-xl border border-[#F1CCA6] text-gray-800 flex items-start gap-3.5">
+      <div className="bg-white rounded-2xl p-4 shadow-xl border border-[#F1CCA6] text-[#1C1917] flex items-start gap-3.5">
         {/* Warning Icon Badge */}
         <div className="w-10 h-10 rounded-xl bg-[#F7ECE1] border border-[#F1CCA6] flex items-center justify-center text-[#8C4905] shrink-0">
           <AlertTriangle size={20} />

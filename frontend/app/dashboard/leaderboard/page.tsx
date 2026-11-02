@@ -314,7 +314,7 @@ export default function LeaderboardPage() {
                   "px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 select-none",
                   isActive
                     ? "bg-[#C1762A] text-white shadow-xs scale-102"
-                    : "text-[#8C4905] hover:bg-[#F7ECE1] hover:text-[#CB6600]"
+                    : "text-[#8C4905] hover:bg-[#F7ECE1] hover:text-[#8C4905]"
                 )}
               >
                 {opt.label}

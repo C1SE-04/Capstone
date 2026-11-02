@@ -218,10 +218,10 @@ export default function PromptCurriculumPage() {
             </span>
           </div>
 
-          <div className="p-3 rounded-lg bg-sky-50/70 border border-sky-200/60 flex flex-col justify-between">
-            <span className="text-sky-800 font-medium">4. Đang nạp vào Prompt:</span>
-            <span className="font-bold text-sky-900 text-base mt-1">
-              {stats.active}/{stats.filtered} <span className="text-xs font-normal text-sky-700">kích hoạt</span>
+          <div className="p-3 rounded-lg bg-[#F7ECE1] border border-[#F1CCA6] flex flex-col justify-between">
+            <span className="text-[#8C4905] font-medium">4. Đang nạp vào Prompt:</span>
+            <span className="font-bold text-[#8C4905] text-base mt-1">
+              {stats.active}/{stats.filtered} <span className="text-xs font-normal text-[#C1762A]">kích hoạt</span>
             </span>
           </div>
         </div>

@@ -506,10 +506,10 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto animate-in fade-in duration-500 space-y-6 pb-12 text-[#2A1C0E]">
+    <div className="max-w-6xl mx-auto animate-in fade-in duration-500 space-y-6 pb-12 text-[#1C1917]">
       {/* ── 1. Page Header (Đồng bộ chuẩn Parent Dashboard) ── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0 max-w-2xl">
           <div className="w-12 h-12 bg-[#C1762A] rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-md">
             <Users className="w-6 h-6" />
           </div>
@@ -518,7 +518,7 @@ export default function AdminUsersPage() {
               <h1 className="text-2xl md:text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
                 Quản Lý Người Dùng
               </h1>
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#FFF3E6] text-[#C1762A] border border-[#F1CCA6]">
+              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#F7ECE1] text-[#C1762A] border border-[#F1CCA6]">
                 {filteredUsers.length} Users
               </span>
             </div>
@@ -528,10 +528,10 @@ export default function AdminUsersPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 whitespace-nowrap self-start md:self-auto">
           <button
             onClick={handleExportCSV}
-            className="btn btn-secondary px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-white border border-[#F1CCA6] hover:border-[#C1762A] text-[#8C4905] transition-all duration-200 active:scale-[0.98] shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white border border-[#F1CCA6] hover:bg-[#F7ECE1] hover:border-[#C1762A] text-[#8C4905] transition-all duration-150 active:scale-95 shadow-xs whitespace-nowrap cursor-pointer"
           >
             <Download className="w-4 h-4 text-[#C1762A]" />
             <span>Xuất Excel</span>
@@ -539,7 +539,7 @@ export default function AdminUsersPage() {
 
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-gradient-to-r from-[#C1762A] to-[#8C4905] hover:brightness-105 active:scale-95 text-white shadow-md transition-all duration-200"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-gradient-to-r from-[#C1762A] to-[#8C4905] hover:brightness-105 active:scale-95 text-white shadow-sm transition-all duration-150 whitespace-nowrap cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Thêm Người Dùng</span>
@@ -565,9 +565,9 @@ export default function AdminUsersPage() {
           <div className="text-xs text-[#2B78C5]/70 mt-1">Người giám sát</div>
         </div>
         <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm hover:shadow-md transition-all duration-200">
-          <div className="text-xs font-bold uppercase tracking-wider text-[#D93829]">Tạm Khóa</div>
-          <div className="text-2xl font-black text-[#D93829] mt-1.5">{stats.suspended}</div>
-          <div className="text-xs text-[#D93829]/70 mt-1">Vi phạm tiêu chuẩn</div>
+          <div className="text-xs font-bold uppercase tracking-wider text-[#EF4444]">Tạm Khóa</div>
+          <div className="text-2xl font-black text-[#EF4444] mt-1.5">{stats.suspended}</div>
+          <div className="text-xs text-[#EF4444]/70 mt-1">Vi phạm tiêu chuẩn</div>
         </div>
       </div>
 
@@ -576,18 +576,18 @@ export default function AdminUsersPage() {
         <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
           {/* Input Search */}
           <div className="relative flex-1 min-w-[240px]">
-            <Search className="w-4 h-4 text-[#7E6B5A] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-[#7A3E04] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Tìm theo tên học sinh, email, phụ huynh..."
-              className="w-full bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl pl-9 pr-8 py-2 text-xs md:text-sm text-[#2A1C0E] placeholder-[#7E6B5A] focus:outline-hidden focus:border-[#C1762A] focus:bg-white transition-all"
+              className="w-full bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl pl-9 pr-8 py-2 text-xs md:text-sm text-[#1C1917] placeholder-[#7A3E04] focus:outline-hidden focus:border-[#C1762A] focus:bg-white transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7E6B5A] hover:text-[#2A1C0E]"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A3E04] hover:text-[#1C1917]"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -599,7 +599,7 @@ export default function AdminUsersPage() {
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl px-3 py-2 text-xs font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
+              className="bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl px-3 py-2 text-xs font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
             >
               <option value="ALL">Tất cả vai trò</option>
               <option value="STUDENT">Học sinh (STUDENT)</option>
@@ -610,7 +610,7 @@ export default function AdminUsersPage() {
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
-              className="bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl px-3 py-2 text-xs font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
+              className="bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl px-3 py-2 text-xs font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
             >
               <option value="ALL">Tất cả khối lớp</option>
               <option value="4">Lớp 4</option>
@@ -624,7 +624,7 @@ export default function AdminUsersPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl px-3 py-2 text-xs font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
+              className="bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl px-3 py-2 text-xs font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
             >
               <option value="ALL">Tất cả trạng thái</option>
               <option value="ACTIVE">Đang hoạt động</option>
@@ -644,7 +644,7 @@ export default function AdminUsersPage() {
 
         {/* ── 3.1 Bulk Action Bar (Hiện khi chọn ít nhất 1 dòng) ── */}
         {selectedUserIds.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-[#F1CCA6]/60 flex items-center justify-between flex-wrap gap-2 animate-fade-in bg-[#FFFDFB] p-2.5 rounded-xl">
+          <div className="mt-3 pt-3 border-t border-[#F1CCA6]/60 flex items-center justify-between flex-wrap gap-2 animate-fade-in bg-[#FFFFFF] p-2.5 rounded-xl">
             <div className="flex items-center gap-2 text-xs font-bold text-[#8C4905]">
               <span className="w-5 h-5 rounded-full bg-[#C1762A] text-white flex items-center justify-center text-[11px]">
                 {selectedUserIds.length}
@@ -655,19 +655,19 @@ export default function AdminUsersPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleBulkBan}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#FDF0ED] text-[#D93829] border border-[#F5BCB4] hover:bg-[#FBE4E1] transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#FEF2F2] text-[#EF4444] border border-[#FECACA] hover:bg-[#FEE2E2] transition-colors"
               >
                 Khóa hàng loạt
               </button>
               <button
                 onClick={handleBulkUnban}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#EAF7EE] text-[#2A8C4A] border border-[#B7E4C4] hover:bg-[#D9F3E1] transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#ECFDF5] text-[#10B981] border border-[#A7F3D0] hover:bg-[#D1FAE5] transition-colors"
               >
                 Mở khóa hàng loạt
               </button>
               <button
                 onClick={() => setSelectedUserIds([])}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#7E6B5A] hover:bg-[#F7ECE1] transition-colors"
+                className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#7A3E04] hover:bg-[#F7ECE1] transition-colors"
               >
                 Bỏ chọn
               </button>
@@ -681,13 +681,13 @@ export default function AdminUsersPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs md:text-sm">
             <thead>
-              <tr className="bg-[#FBF4ED] border-b border-[#F1CCA6] text-[#8C4905] font-bold text-xs uppercase tracking-wider">
+              <tr className="bg-[#F7ECE1] border-b border-[#F1CCA6] text-[#8C4905] font-bold text-xs uppercase tracking-wider">
                 <th className="py-3.5 px-4 w-10">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
                     onChange={handleSelectAll}
-                    className="rounded border-[#E8D5C4] text-[#C1762A] focus:ring-[#C1762A] cursor-pointer"
+                    className="rounded border-[#F1CCA6] text-[#C1762A] focus:ring-[#C1762A] cursor-pointer"
                   />
                 </th>
                 <th className="py-3.5 px-4">Người dùng</th>
@@ -731,12 +731,12 @@ export default function AdminUsersPage() {
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#7E6B5A]">
+                  <td colSpan={7} className="py-12 text-center text-[#7A3E04]">
                     <div className="w-12 h-12 rounded-2xl bg-[#F7ECE1] text-[#C1762A] flex items-center justify-center mx-auto mb-3">
                       <Search className="w-6 h-6" />
                     </div>
-                    <p className="font-bold text-[#2A1C0E]">Không tìm thấy người dùng phù hợp</p>
-                    <p className="text-xs text-[#7E6B5A] mt-1">
+                    <p className="font-bold text-[#1C1917]">Không tìm thấy người dùng phù hợp</p>
+                    <p className="text-xs text-[#7A3E04] mt-1">
                       Thử thay đổi từ khóa tìm kiếm hoặc bấm &quot;Đặt lại&quot; bộ lọc
                     </p>
                   </td>
@@ -754,8 +754,8 @@ export default function AdminUsersPage() {
                   return (
                     <tr
                       key={user.id}
-                      className={`hover:bg-[#FFFDFB] transition-colors ${
-                        isSelected ? "bg-[#FFF9F3]" : ""
+                      className={`hover:bg-[#FFFFFF] transition-colors ${
+                        isSelected ? "bg-[#FFFFFF]" : ""
                       }`}
                     >
                       {/* Checkbox */}
@@ -764,7 +764,7 @@ export default function AdminUsersPage() {
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => handleToggleSelect(user.id)}
-                          className="rounded border-[#E8D5C4] text-[#C1762A] focus:ring-[#C1762A] cursor-pointer"
+                          className="rounded border-[#F1CCA6] text-[#C1762A] focus:ring-[#C1762A] cursor-pointer"
                         />
                       </td>
 
@@ -774,19 +774,19 @@ export default function AdminUsersPage() {
                           <div
                             className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-2xs ${
                               user.role === "STUDENT"
-                                ? "bg-[#FFF3E6] text-[#C1762A] border border-[#F1CCA6]"
+                                ? "bg-[#F7ECE1] text-[#C1762A] border border-[#F1CCA6]"
                                 : user.role === "MONITOR"
                                 ? "bg-[#EBF4FC] text-[#2B78C5] border border-[#BADEF7]"
-                                : "bg-[#F3E8FF] text-[#7C3AED] border border-[#DDD6FE]"
+                                : "bg-[#FEF3C7] text-[#C1762A] border border-[#FDE68A]"
                             }`}
                           >
                             {initials}
                           </div>
                           <div className="min-w-0">
-                            <div className="font-bold text-[#2A1C0E] hover:text-[#C1762A] transition-colors truncate">
+                            <div className="font-bold text-[#1C1917] hover:text-[#C1762A] transition-colors truncate">
                               {user.name}
                             </div>
-                            <div className="text-xs text-[#7E6B5A] truncate">{user.email}</div>
+                            <div className="text-xs text-[#7A3E04] truncate">{user.email}</div>
                           </div>
                         </div>
                       </td>
@@ -794,7 +794,7 @@ export default function AdminUsersPage() {
                       {/* Role Badge */}
                       <td className="py-3 px-4">
                         {user.role === "STUDENT" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-[#FFF3E6] text-[#C1762A] border border-[#F1CCA6]">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-[#F7ECE1] text-[#C1762A] border border-[#F1CCA6]">
                             <GraduationCap className="w-3 h-3" />
                             Học sinh
                           </span>
@@ -806,7 +806,7 @@ export default function AdminUsersPage() {
                           </span>
                         )}
                         {user.role === "ADMIN" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-[#F3E8FF] text-[#7C3AED] border border-[#DDD6FE]">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-[#FEF3C7] text-[#C1762A] border border-[#FDE68A]">
                             <ShieldCheck className="w-3 h-3" />
                             Quản trị
                           </span>
@@ -817,14 +817,14 @@ export default function AdminUsersPage() {
                       <td className="py-3 px-4">
                         {user.role === "STUDENT" ? (
                           <div>
-                            <div className="font-semibold text-xs text-[#2A1C0E]">
+                            <div className="font-semibold text-xs text-[#1C1917]">
                               Khối Lớp {user.grade}
                             </div>
-                            <div className="text-[11px] text-[#7E6B5A] flex items-center gap-2 mt-0.5">
+                            <div className="text-[11px] text-[#7A3E04] flex items-center gap-2 mt-0.5">
                               {user.linked_parent ? (
                                 <span>PH: {user.linked_parent.name.split(" ")[0]}...</span>
                               ) : (
-                                <span className="text-[#A18E7F]">Chưa nối PH</span>
+                                <span className="text-[#7A3E04]">Chưa nối PH</span>
                               )}
                               {user.streak_days > 0 && (
                                 <span className="inline-flex items-center gap-0.5 text-[#C1762A] font-bold">
@@ -836,17 +836,17 @@ export default function AdminUsersPage() {
                           </div>
                         ) : user.role === "MONITOR" ? (
                           <div>
-                            <div className="font-semibold text-xs text-[#2A1C0E]">
+                            <div className="font-semibold text-xs text-[#1C1917]">
                               Đã liên kết {user.linked_students?.length || 0} con
                             </div>
-                            <div className="text-[11px] text-[#7E6B5A] truncate max-w-[180px]">
+                            <div className="text-[11px] text-[#7A3E04] truncate max-w-[180px]">
                               {user.linked_students && user.linked_students.length > 0
                                 ? user.linked_students.map((s) => s.name).join(", ")
                                 : "Chưa có học sinh"}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-[#7E6B5A]">Hệ thống</span>
+                          <span className="text-xs text-[#7A3E04]">Hệ thống</span>
                         )}
                       </td>
 
@@ -855,14 +855,14 @@ export default function AdminUsersPage() {
                         {user.avg_independence_score !== null &&
                         user.avg_independence_score !== undefined ? (
                           <div className="flex items-center gap-2">
-                            <div className="w-14 h-1.5 bg-[#E8D5C4] rounded-full overflow-hidden flex-shrink-0">
+                            <div className="w-14 h-1.5 bg-[#F1CCA6] rounded-full overflow-hidden flex-shrink-0">
                               <div
                                 className={`h-full rounded-full transition-all duration-300 ${
                                   user.avg_independence_score >= 80
                                     ? "bg-[#C1762A]"
                                     : user.avg_independence_score >= 60
                                     ? "bg-[#F59E0B]"
-                                    : "bg-[#D93829]"
+                                    : "bg-[#EF4444]"
                                 }`}
                                 style={{ width: `${user.avg_independence_score}%` }}
                               />
@@ -873,27 +873,27 @@ export default function AdminUsersPage() {
                                   ? "text-[#8C4905]"
                                   : user.avg_independence_score >= 60
                                   ? "text-[#F59E0B]"
-                                  : "text-[#D93829]"
+                                  : "text-[#EF4444]"
                               }`}
                             >
                               {user.avg_independence_score}/100
                             </span>
                           </div>
                         ) : (
-                          <span className="text-xs text-[#A18E7F]">N/A</span>
+                          <span className="text-xs text-[#7A3E04]">N/A</span>
                         )}
                       </td>
 
                       {/* Status Badge */}
                       <td className="py-3 px-4">
                         {user.status === "ACTIVE" ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#EAF7EE] text-[#2A8C4A] border border-[#B7E4C4]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#2A8C4A]" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#ECFDF5] text-[#10B981] border border-[#A7F3D0]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
                             Hoạt động
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#FDF0ED] text-[#D93829] border border-[#F5BCB4]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#D93829]" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#FEF2F2] text-[#EF4444] border border-[#FECACA]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444]" />
                             Tạm khóa
                           </span>
                         )}
@@ -920,13 +920,13 @@ export default function AdminUsersPage() {
                           </button>
 
                           {user.role === "ADMIN" ? (
-                            <span className="text-[11px] font-bold px-2 py-1 rounded-lg bg-[#F3E8FF] text-[#7C3AED] border border-[#DDD6FE]">
+                            <span className="text-[11px] font-bold px-2 py-1 rounded-lg bg-[#FEF3C7] text-[#C1762A] border border-[#FDE68A]">
                               Admin Root
                             </span>
                           ) : user.status === "ACTIVE" ? (
                             <button
                               onClick={() => setBanTargetUser(user)}
-                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#FFFDFB] text-[#D93829] border border-[#F5BCB4] hover:bg-[#FDF0ED] transition-colors"
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#FFFFFF] text-[#EF4444] border border-[#FECACA] hover:bg-[#FEF2F2] transition-colors"
                               title="Khóa tài khoản"
                             >
                               Khóa
@@ -951,16 +951,16 @@ export default function AdminUsersPage() {
         </div>
 
         {/* ── 5. Pagination Bar ── */}
-        <div className="bg-[#FBF4ED] border-t border-[#E8D5C4] px-4 py-3 flex items-center justify-between text-xs text-[#7E6B5A]">
+        <div className="bg-[#F7ECE1] border-t border-[#F1CCA6] px-4 py-3 flex items-center justify-between text-xs text-[#7A3E04]">
           <div>
-            Hiển thị <span className="font-bold text-[#2A1C0E]">{filteredUsers.length}</span> trên tổng số{" "}
-            <span className="font-bold text-[#2A1C0E]">{users.length}</span> người dùng
+            Hiển thị <span className="font-bold text-[#1C1917]">{filteredUsers.length}</span> trên tổng số{" "}
+            <span className="font-bold text-[#1C1917]">{users.length}</span> người dùng
           </div>
 
           <div className="flex items-center gap-1">
             <button
               disabled
-              className="w-7 h-7 rounded-lg border border-[#E8D5C4] flex items-center justify-center text-[#7E6B5A] opacity-50 cursor-not-allowed"
+              className="w-7 h-7 rounded-lg border border-[#F1CCA6] flex items-center justify-center text-[#7A3E04] opacity-50 cursor-not-allowed"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
@@ -969,19 +969,19 @@ export default function AdminUsersPage() {
             </button>
             <button
               onClick={() => showToast("Đã tải trang 2")}
-              className="w-7 h-7 rounded-lg border border-[#E8D5C4] hover:bg-[#F7ECE1] text-[#2A1C0E] flex items-center justify-center font-medium"
+              className="w-7 h-7 rounded-lg border border-[#F1CCA6] hover:bg-[#F7ECE1] text-[#1C1917] flex items-center justify-center font-medium"
             >
               2
             </button>
             <button
               onClick={() => showToast("Đã tải trang 3")}
-              className="w-7 h-7 rounded-lg border border-[#E8D5C4] hover:bg-[#F7ECE1] text-[#2A1C0E] flex items-center justify-center font-medium"
+              className="w-7 h-7 rounded-lg border border-[#F1CCA6] hover:bg-[#F7ECE1] text-[#1C1917] flex items-center justify-center font-medium"
             >
               3
             </button>
             <button
               onClick={() => showToast("Đã tải trang kế tiếp")}
-              className="w-7 h-7 rounded-lg border border-[#E8D5C4] hover:bg-[#F7ECE1] flex items-center justify-center text-[#2A1C0E]"
+              className="w-7 h-7 rounded-lg border border-[#F1CCA6] hover:bg-[#F7ECE1] flex items-center justify-center text-[#1C1917]"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -997,20 +997,20 @@ export default function AdminUsersPage() {
             className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in"
           />
 
-          <div className="relative bg-white rounded-2xl border border-[#E8D5C4] shadow-2xl max-w-lg w-full overflow-hidden animate-modal-in z-10">
+          <div className="relative bg-white rounded-2xl border border-[#F1CCA6] shadow-2xl max-w-lg w-full overflow-hidden animate-modal-in z-10">
             {/* Header Modal */}
-            <div className="bg-[#F7ECE1] border-b border-[#E8D5C4] px-5 py-4 flex items-center justify-between">
+            <div className="bg-[#F7ECE1] border-b border-[#F1CCA6] px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-base text-[#8C4905]">
                   Chi Tiết Hồ Sơ Người Dùng
                 </span>
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white text-[#7E6B5A] border border-[#E8D5C4]">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white text-[#7A3E04] border border-[#F1CCA6]">
                   {detailUser.id}
                 </span>
               </div>
               <button
                 onClick={() => setDetailUser(null)}
-                className="w-7 h-7 rounded-lg text-[#7E6B5A] hover:text-[#2A1C0E] hover:bg-black/5 flex items-center justify-center transition-colors"
+                className="w-7 h-7 rounded-lg text-[#7A3E04] hover:text-[#1C1917] hover:bg-black/5 flex items-center justify-center transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1019,8 +1019,8 @@ export default function AdminUsersPage() {
             {/* Body Modal */}
             <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
               {/* User Identity Banner */}
-              <div className="flex items-center gap-3.5 p-3.5 rounded-xl bg-[#FFFDFB] border border-[#F1CCA6]/60">
-                <div className="w-12 h-12 rounded-xl bg-[#FFF3E6] text-[#C1762A] border border-[#F1CCA6] flex items-center justify-center text-base font-extrabold shadow-2xs">
+              <div className="flex items-center gap-3.5 p-3.5 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6]/60">
+                <div className="w-12 h-12 rounded-xl bg-[#F7ECE1] text-[#C1762A] border border-[#F1CCA6] flex items-center justify-center text-base font-extrabold shadow-2xs">
                   {detailUser.name
                     .split(" ")
                     .map((w) => w[0])
@@ -1029,10 +1029,10 @@ export default function AdminUsersPage() {
                     .toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-[#2A1C0E] text-base">{detailUser.name}</h3>
-                  <p className="text-xs text-[#7E6B5A]">{detailUser.email}</p>
+                  <h3 className="font-extrabold text-[#1C1917] text-base">{detailUser.name}</h3>
+                  <p className="text-xs text-[#7A3E04]">{detailUser.email}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#FFF3E6] text-[#C1762A] border border-[#F1CCA6]">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#F7ECE1] text-[#C1762A] border border-[#F1CCA6]">
                       {detailUser.role === "STUDENT"
                         ? `Học sinh Lớp ${detailUser.grade}`
                         : detailUser.role === "MONITOR"
@@ -1042,8 +1042,8 @@ export default function AdminUsersPage() {
                     <span
                       className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
                         detailUser.status === "ACTIVE"
-                          ? "bg-[#EAF7EE] text-[#2A8C4A] border border-[#B7E4C4]"
-                          : "bg-[#FDF0ED] text-[#D93829] border border-[#F5BCB4]"
+                          ? "bg-[#ECFDF5] text-[#10B981] border border-[#A7F3D0]"
+                          : "bg-[#FEF2F2] text-[#EF4444] border border-[#FECACA]"
                       }`}
                     >
                       {detailUser.status === "ACTIVE" ? "Đang hoạt động" : "Bị tạm khóa"}
@@ -1054,37 +1054,37 @@ export default function AdminUsersPage() {
 
               {/* Learning Stats Grid */}
               <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="bg-[#FBF4ED] p-3 rounded-xl border border-[#E8D5C4]/70">
-                  <span className="text-[#7E6B5A] block mb-1">Điểm tự lập trung bình:</span>
+                <div className="bg-[#F7ECE1] p-3 rounded-xl border border-[#F1CCA6]/70">
+                  <span className="text-[#7A3E04] block mb-1">Điểm tự lập trung bình:</span>
                   <span className="text-base font-extrabold text-[#C1762A]">
                     {detailUser.avg_independence_score !== null
                       ? `${detailUser.avg_independence_score}/100`
                       : "Không áp dụng"}
                   </span>
                 </div>
-                <div className="bg-[#FBF4ED] p-3 rounded-xl border border-[#E8D5C4]/70">
-                  <span className="text-[#7E6B5A] block mb-1">Chuỗi ngày học liên tục:</span>
+                <div className="bg-[#F7ECE1] p-3 rounded-xl border border-[#F1CCA6]/70">
+                  <span className="text-[#7A3E04] block mb-1">Chuỗi ngày học liên tục:</span>
                   <span className="text-base font-extrabold text-[#8C4905] flex items-center gap-1">
                     <Flame className="w-4 h-4 fill-[#C1762A] text-[#C1762A]" />
                     {detailUser.streak_days} ngày
                   </span>
                 </div>
-                <div className="bg-[#FBF4ED] p-3 rounded-xl border border-[#E8D5C4]/70">
-                  <span className="text-[#7E6B5A] block mb-1">Tổng phiên đối thoại AI:</span>
-                  <span className="text-base font-extrabold text-[#2A1C0E]">
+                <div className="bg-[#F7ECE1] p-3 rounded-xl border border-[#F1CCA6]/70">
+                  <span className="text-[#7A3E04] block mb-1">Tổng phiên đối thoại AI:</span>
+                  <span className="text-base font-extrabold text-[#1C1917]">
                     {detailUser.total_sessions} phiên
                   </span>
                 </div>
-                <div className="bg-[#FBF4ED] p-3 rounded-xl border border-[#E8D5C4]/70">
-                  <span className="text-[#7E6B5A] block mb-1">Bài toán giải thành công:</span>
-                  <span className="text-base font-extrabold text-[#2A8C4A]">
+                <div className="bg-[#F7ECE1] p-3 rounded-xl border border-[#F1CCA6]/70">
+                  <span className="text-[#7A3E04] block mb-1">Bài toán giải thành công:</span>
+                  <span className="text-base font-extrabold text-[#10B981]">
                     {detailUser.total_problems_solved} bài
                   </span>
                 </div>
               </div>
 
               {/* Family Connections */}
-              <div className="border border-[#E8D5C4] rounded-xl p-3.5 bg-white">
+              <div className="border border-[#F1CCA6] rounded-xl p-3.5 bg-white">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-[#8C4905] mb-2">
                   Liên Kết Gia Đình
                 </h4>
@@ -1092,17 +1092,17 @@ export default function AdminUsersPage() {
                   detailUser.linked_parent ? (
                     <div className="flex items-center justify-between text-xs">
                       <div>
-                        <div className="font-bold text-[#2A1C0E]">
+                        <div className="font-bold text-[#1C1917]">
                           {detailUser.linked_parent.name}
                         </div>
-                        <div className="text-[#7E6B5A]">{detailUser.linked_parent.email}</div>
+                        <div className="text-[#7A3E04]">{detailUser.linked_parent.email}</div>
                       </div>
                       <span className="text-xs text-[#C1762A] font-semibold">
                         SĐT: {detailUser.linked_parent.phone || "Chưa cập nhật"}
                       </span>
                     </div>
                   ) : (
-                    <p className="text-xs text-[#7E6B5A]">Chưa có tài khoản phụ huynh liên kết.</p>
+                    <p className="text-xs text-[#7A3E04]">Chưa có tài khoản phụ huynh liên kết.</p>
                   )
                 ) : detailUser.role === "MONITOR" ? (
                   detailUser.linked_students && detailUser.linked_students.length > 0 ? (
@@ -1110,9 +1110,9 @@ export default function AdminUsersPage() {
                       {detailUser.linked_students.map((st) => (
                         <div
                           key={st.id}
-                          className="flex items-center justify-between text-xs p-2 rounded-lg bg-[#FBF4ED]"
+                          className="flex items-center justify-between text-xs p-2 rounded-lg bg-[#F7ECE1]"
                         >
-                          <span className="font-semibold text-[#2A1C0E]">{st.name}</span>
+                          <span className="font-semibold text-[#1C1917]">{st.name}</span>
                           <span className="text-[#C1762A] font-bold">
                             Lớp {st.grade} • {st.avg_independence_score}đ
                           </span>
@@ -1120,10 +1120,10 @@ export default function AdminUsersPage() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-[#7E6B5A]">Chưa liên kết học sinh nào.</p>
+                    <p className="text-xs text-[#7A3E04]">Chưa liên kết học sinh nào.</p>
                   )
                 ) : (
-                  <p className="text-xs text-[#7E6B5A]">Tài khoản quản trị viên hệ thống.</p>
+                  <p className="text-xs text-[#7A3E04]">Tài khoản quản trị viên hệ thống.</p>
                 )}
               </div>
 
@@ -1133,21 +1133,21 @@ export default function AdminUsersPage() {
                   Bài Toán Giải Gần Nhất
                 </h4>
                 <div className="space-y-2 text-xs">
-                  <div className="p-2.5 rounded-xl bg-[#FBF4ED] border border-[#E8D5C4] flex items-center justify-between">
+                  <div className="p-2.5 rounded-xl bg-[#F7ECE1] border border-[#F1CCA6] flex items-center justify-between">
                     <div>
-                      <div className="font-bold text-[#2A1C0E]">Toán 5: Phân số & Hỗn số</div>
-                      <div className="text-[11px] text-[#7E6B5A]">Hoàn thành hôm nay • 0 gợi ý</div>
+                      <div className="font-bold text-[#1C1917]">Toán 5: Phân số & Hỗn số</div>
+                      <div className="text-[11px] text-[#7A3E04]">Hoàn thành hôm nay • 0 gợi ý</div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full bg-[#EAF7EE] text-[#2A8C4A] font-extrabold text-[11px]">
+                    <span className="px-2 py-0.5 rounded-full bg-[#ECFDF5] text-[#10B981] font-extrabold text-[11px]">
                       100đ
                     </span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-[#FBF4ED] border border-[#E8D5C4] flex items-center justify-between">
+                  <div className="p-2.5 rounded-xl bg-[#F7ECE1] border border-[#F1CCA6] flex items-center justify-between">
                     <div>
-                      <div className="font-bold text-[#2A1C0E]">Toán 5: Diện tích hình thang</div>
-                      <div className="text-[11px] text-[#7E6B5A]">Hoàn thành hôm qua • 1 gợi ý</div>
+                      <div className="font-bold text-[#1C1917]">Toán 5: Diện tích hình thang</div>
+                      <div className="text-[11px] text-[#7A3E04]">Hoàn thành hôm qua • 1 gợi ý</div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full bg-[#FFF3E6] text-[#C1762A] font-extrabold text-[11px]">
+                    <span className="px-2 py-0.5 rounded-full bg-[#F7ECE1] text-[#C1762A] font-extrabold text-[11px]">
                       85đ
                     </span>
                   </div>
@@ -1156,10 +1156,10 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Footer Modal */}
-            <div className="bg-[#FBF4ED] border-t border-[#E8D5C4] px-5 py-3 flex items-center justify-between gap-3">
+            <div className="bg-[#F7ECE1] border-t border-[#F1CCA6] px-5 py-3 flex items-center justify-between gap-3">
               <button
                 onClick={() => setDetailUser(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E8D5C4] text-[#2A1C0E] hover:bg-[#F7ECE1] transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#F1CCA6] text-[#1C1917] hover:bg-[#F7ECE1] transition-colors"
               >
                 Đóng
               </button>
@@ -1179,13 +1179,13 @@ export default function AdminUsersPage() {
 
                 <button
                   onClick={() => showToast(`Đã gửi báo cáo học tập của ${detailUser.name} tới phụ huynh!`)}
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#FDF6EE] text-[#C1762A] border border-[#F1CCA6] hover:bg-[#FBECE0] transition-colors"
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#F7ECE1] text-[#C1762A] border border-[#F1CCA6] hover:bg-[#F7ECE1] transition-colors"
                 >
                   Gửi Báo Cáo Phụ Huynh
                 </button>
 
                 {detailUser.role === "ADMIN" ? (
-                  <span className="text-xs font-bold text-[#7C3AED] px-3.5 py-2 rounded-xl bg-[#F3E8FF] border border-[#DDD6FE]">
+                  <span className="text-xs font-bold text-[#C1762A] px-3.5 py-2 rounded-xl bg-[#FEF3C7] border border-[#FDE68A]">
                     Tài khoản Admin Duy Nhất
                   </span>
                 ) : detailUser.status === "ACTIVE" ? (
@@ -1193,14 +1193,14 @@ export default function AdminUsersPage() {
                     onClick={() => {
                       setBanTargetUser(detailUser);
                     }}
-                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#D93829] text-white hover:bg-[#B92314] transition-colors"
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#EF4444] text-white hover:bg-[#DC2626] transition-colors"
                   >
                     Khóa Tài Khoản
                   </button>
                 ) : (
                   <button
                     onClick={() => handleUnbanUser(detailUser)}
-                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#2A8C4A] text-white hover:bg-[#23773F] transition-colors"
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#10B981] text-white hover:bg-[#059669] transition-colors"
                   >
                     Mở Khóa Ngay
                   </button>
@@ -1219,16 +1219,16 @@ export default function AdminUsersPage() {
             className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in"
           />
 
-          <div className="relative bg-white rounded-2xl border border-[#F5BCB4] shadow-2xl max-w-md w-full overflow-hidden animate-modal-in z-10">
+          <div className="relative bg-white rounded-2xl border border-[#FECACA] shadow-2xl max-w-md w-full overflow-hidden animate-modal-in z-10">
             {/* Header */}
-            <div className="bg-[#FDF0ED] border-b border-[#F5BCB4] px-5 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[#D93829]">
+            <div className="bg-[#FEF2F2] border-b border-[#FECACA] px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#EF4444]">
                 <ShieldAlert className="w-5 h-5" />
                 <h3 className="font-extrabold text-base">Xác Nhận Tạm Khóa Tài Khoản</h3>
               </div>
               <button
                 onClick={() => setBanTargetUser(null)}
-                className="w-7 h-7 rounded-lg text-[#7E6B5A] hover:text-[#2A1C0E] hover:bg-black/5 flex items-center justify-center transition-colors"
+                className="w-7 h-7 rounded-lg text-[#7A3E04] hover:text-[#1C1917] hover:bg-black/5 flex items-center justify-center transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1236,20 +1236,20 @@ export default function AdminUsersPage() {
 
             {/* Body */}
             <div className="p-5 space-y-4 text-xs md:text-sm">
-              <p className="text-[#2A1C0E] leading-relaxed">
+              <p className="text-[#1C1917] leading-relaxed">
                 Bạn đang thực hiện thao tác tạm khóa tài khoản của{" "}
-                <strong className="text-[#D93829]">{banTargetUser.name}</strong> ({banTargetUser.email}).
+                <strong className="text-[#EF4444]">{banTargetUser.name}</strong> ({banTargetUser.email}).
                 Học sinh/Phụ huynh sẽ không thể đăng nhập hoặc tiếp tục chat với AI cho đến khi được mở khóa.
               </p>
 
               <div>
-                <label className="block text-xs font-bold text-[#2A1C0E] mb-1.5">
-                  Lý do khóa tài khoản <span className="text-[#D93829]">*</span>
+                <label className="block text-xs font-bold text-[#1C1917] mb-1.5">
+                  Lý do khóa tài khoản <span className="text-[#EF4444]">*</span>
                 </label>
                 <select
                   value={banReason}
                   onChange={(e) => setBanReason(e.target.value)}
-                  className="w-full bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl px-3 py-2 text-xs font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
+                  className="w-full bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl px-3 py-2 text-xs font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
                 >
                   <option>Vi phạm ngôn từ thiếu văn hóa (Toxic)</option>
                   <option>Cố tình spam câu hỏi đòi giải hộ</option>
@@ -1260,13 +1260,13 @@ export default function AdminUsersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#2A1C0E] mb-1.5">
+                <label className="block text-xs font-bold text-[#1C1917] mb-1.5">
                   Thời hạn khóa
                 </label>
                 <select
                   value={banDuration}
                   onChange={(e) => setBanDuration(e.target.value)}
-                  className="w-full bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl px-3 py-2 text-xs font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
+                  className="w-full bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl px-3 py-2 text-xs font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
                 >
                   <option>24 Giờ</option>
                   <option>3 Ngày</option>
@@ -1277,7 +1277,7 @@ export default function AdminUsersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#2A1C0E] mb-1.5">
+                <label className="block text-xs font-bold text-[#1C1917] mb-1.5">
                   Ghi chú nội bộ cho Ban Quản Trị
                 </label>
                 <textarea
@@ -1285,22 +1285,22 @@ export default function AdminUsersPage() {
                   value={banNote}
                   onChange={(e) => setBanNote(e.target.value)}
                   placeholder="Ghi chú thêm về bối cảnh vi phạm..."
-                  className="w-full bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl p-2.5 text-xs text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] focus:bg-white resize-none"
+                  className="w-full bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl p-2.5 text-xs text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] focus:bg-white resize-none"
                 />
               </div>
             </div>
 
             {/* Footer */}
-            <div className="bg-[#FDF0ED]/50 border-t border-[#F5BCB4] px-5 py-3 flex items-center justify-end gap-2.5">
+            <div className="bg-[#FEF2F2]/50 border-t border-[#FECACA] px-5 py-3 flex items-center justify-end gap-2.5">
               <button
                 onClick={() => setBanTargetUser(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E8D5C4] text-[#2A1C0E] hover:bg-[#F7ECE1] transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#F1CCA6] text-[#1C1917] hover:bg-[#F7ECE1] transition-colors"
               >
                 Hủy Bỏ
               </button>
               <button
                 onClick={handleConfirmBan}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#D93829] hover:bg-[#B92314] text-white shadow-xs transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#EF4444] hover:bg-[#DC2626] text-white shadow-xs transition-colors"
               >
                 Xác Nhận Khóa
               </button>
@@ -1317,15 +1317,15 @@ export default function AdminUsersPage() {
             className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in"
           />
 
-          <div className="relative bg-white rounded-2xl border border-[#E8D5C4] shadow-2xl max-w-md w-full overflow-hidden animate-modal-in z-10">
+          <div className="relative bg-white rounded-2xl border border-[#F1CCA6] shadow-2xl max-w-md w-full overflow-hidden animate-modal-in z-10">
             {/* Header */}
-            <div className="bg-[#F7ECE1] border-b border-[#E8D5C4] px-5 py-4 flex items-center justify-between">
+            <div className="bg-[#F7ECE1] border-b border-[#F1CCA6] px-5 py-4 flex items-center justify-between">
               <h3 className="font-extrabold text-base text-[#8C4905]">
                 + Thêm Tài Khoản Người Dùng Mới
               </h3>
               <button
                 onClick={() => setIsCreateModalOpen(false)}
-                className="w-7 h-7 rounded-lg text-[#7E6B5A] hover:text-[#2A1C0E] hover:bg-black/5 flex items-center justify-center transition-colors"
+                className="w-7 h-7 rounded-lg text-[#7A3E04] hover:text-[#1C1917] hover:bg-black/5 flex items-center justify-center transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1334,8 +1334,8 @@ export default function AdminUsersPage() {
             {/* Form */}
             <form onSubmit={handleCreateUser} className="p-5 space-y-3.5 text-xs md:text-sm">
               <div>
-                <label className="block text-xs font-bold text-[#2A1C0E] mb-1">
-                  Họ và tên <span className="text-[#D93829]">*</span>
+                <label className="block text-xs font-bold text-[#1C1917] mb-1">
+                  Họ và tên <span className="text-[#EF4444]">*</span>
                 </label>
                 <input
                   type="text"
@@ -1343,13 +1343,13 @@ export default function AdminUsersPage() {
                   value={newUserName}
                   onChange={(e) => setNewUserName(e.target.value)}
                   placeholder="VD: Trần Bảo An"
-                  className="w-full bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl px-3 py-2 text-xs md:text-sm text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] focus:bg-white"
+                  className="w-full bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl px-3 py-2 text-xs md:text-sm text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#2A1C0E] mb-1">
-                  Địa chỉ Email <span className="text-[#D93829]">*</span>
+                <label className="block text-xs font-bold text-[#1C1917] mb-1">
+                  Địa chỉ Email <span className="text-[#EF4444]">*</span>
                 </label>
                 <input
                   type="email"
@@ -1357,19 +1357,19 @@ export default function AdminUsersPage() {
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
                   placeholder="VD: baoan.tran@example.com"
-                  className="w-full bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl px-3 py-2 text-xs md:text-sm text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] focus:bg-white"
+                  className="w-full bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl px-3 py-2 text-xs md:text-sm text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] focus:bg-white"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-[#2A1C0E] mb-1">
-                    Vai trò <span className="text-[#D93829]">*</span>
+                  <label className="block text-xs font-bold text-[#1C1917] mb-1">
+                    Vai trò <span className="text-[#EF4444]">*</span>
                   </label>
                   <select
                     value={newUserRole}
                     onChange={(e) => setNewUserRole(e.target.value as UserRole)}
-                    className="w-full bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl px-3 py-2 text-xs font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
+                    className="w-full bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl px-3 py-2 text-xs font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
                   >
                     <option value="STUDENT">Học sinh</option>
                     <option value="MONITOR">Phụ huynh</option>
@@ -1379,11 +1379,11 @@ export default function AdminUsersPage() {
 
                 {newUserRole === "STUDENT" && (
                   <div>
-                    <label className="block text-xs font-bold text-[#2A1C0E] mb-1">Khối lớp</label>
+                    <label className="block text-xs font-bold text-[#1C1917] mb-1">Khối lớp</label>
                     <select
                       value={newUserGrade}
                       onChange={(e) => setNewUserGrade(Number(e.target.value))}
-                      className="w-full bg-[#FBF4ED] border border-[#E8D5C4] rounded-xl px-3 py-2 text-xs font-semibold text-[#2A1C0E] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
+                      className="w-full bg-[#F7ECE1] border border-[#F1CCA6] rounded-xl px-3 py-2 text-xs font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] cursor-pointer"
                     >
                       <option value={4}>Lớp 4</option>
                       <option value={5}>Lớp 5</option>
@@ -1400,7 +1400,7 @@ export default function AdminUsersPage() {
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E8D5C4] text-[#2A1C0E] hover:bg-[#F7ECE1] transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#F1CCA6] text-[#1C1917] hover:bg-[#F7ECE1] transition-colors"
                 >
                   Hủy
                 </button>
@@ -1419,7 +1419,7 @@ export default function AdminUsersPage() {
       {/* ── 9. Toast Notification Pill ── */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 animate-message-pop">
-          <div className="bg-[#2A1C0E] text-white px-4 py-3 rounded-xl border-l-4 border-[#C1762A] shadow-xl flex items-center gap-2.5 text-xs md:text-sm font-medium">
+          <div className="bg-[#1C1917] text-white px-4 py-3 rounded-xl border-l-4 border-[#C1762A] shadow-xl flex items-center gap-2.5 text-xs md:text-sm font-medium">
             <CheckCircle2 className="w-4 h-4 text-[#C1762A] flex-shrink-0" />
             <span>{toastMessage}</span>
           </div>

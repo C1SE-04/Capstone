@@ -141,8 +141,8 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
         return {
           label: "Tự lập tốt",
           subtitle: "Chủ động suy nghĩ và ít cần trợ giúp",
-          badgeClass: "bg-sky-50 text-sky-800 border-sky-300",
-          icon: <CheckCircle2 className="w-5 h-5 text-sky-600" />,
+          badgeClass: "bg-amber-50 text-amber-800 border-amber-300",
+          icon: <CheckCircle2 className="w-5 h-5 text-amber-600" />,
         };
       case "Cần thêm hỗ trợ sư phạm":
         return {
@@ -206,7 +206,7 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
         <p className="text-sm text-red-600 mb-4">{errorMessage}</p>
         <button
           onClick={fetchInsight}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#8C4905] text-white text-xs font-bold rounded-xl hover:bg-[#723B04] transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#8C4905] text-white text-xs font-bold rounded-xl hover:bg-[#C1762A] transition-colors"
         >
           <RefreshCw size={14} /> Thử lại
         </button>
@@ -291,7 +291,7 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
       </div>
 
       {/* KHỐI TÓM TẮT SƯ PHẠM TỔNG THỂ */}
-      <div className="bg-gradient-to-r from-[#FFFBF7] via-[#FFF9F3] to-[#F7ECE1]/60 border border-[#F1CCA6]/70 rounded-2xl p-4 md:p-5 mb-6 relative">
+      <div className="bg-gradient-to-r from-[#FFFBF7] via-white to-[#F7ECE1]/60 border border-[#F1CCA6]/70 rounded-2xl p-4 md:p-5 mb-6 relative">
         <div className="flex items-start gap-3">
           <div className="w-8 h-8 rounded-xl bg-[#8C4905]/10 text-[#8C4905] flex items-center justify-center shrink-0 mt-0.5">
             <Brain size={18} />
@@ -300,7 +300,7 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
             <h3 className="text-xs font-extrabold text-[#8C4905] uppercase tracking-wider">
               Đánh giá tổng quan từ Cố vấn AI
             </h3>
-            <p className="text-sm text-[#5C3203] leading-relaxed font-medium">
+            <p className="text-sm text-[#1C1917] leading-relaxed font-medium">
               {insight?.summary ||
                 "Học sinh đang có những bước tiến tích cực trong thói quen tư duy độc lập và giải toán kiên trì."}
             </p>
@@ -319,7 +319,7 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
               <h4 className="text-base font-extrabold text-[#8C4905]">
                 Chưa có dữ liệu bài tập trong đợt này
               </h4>
-              <p className="text-xs text-[#5C3203] font-medium mt-1 leading-relaxed">
+              <p className="text-xs text-[#1C1917] font-medium mt-1 leading-relaxed">
                 Học sinh chưa hoàn thành bài toán nào cùng gia sư Socratic. Khi con bắt đầu trao đổi bài tập và giải toán, hệ thống AI sẽ tự động phân tích năng lực tư duy, điểm mạnh và các dạng bài con còn lúng túng.
               </p>
             </div>
@@ -340,7 +340,7 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
                 {insight.recommendations.map((item, idx) => (
                   <li
                     key={idx}
-                    className="flex items-start gap-2.5 text-xs text-[#5C3203] font-medium leading-relaxed bg-white p-3 rounded-xl border border-[#F1CCA6]/60 shadow-2xs"
+                    className="flex items-start gap-2.5 text-xs text-[#1C1917] font-medium leading-relaxed bg-white p-3 rounded-xl border border-[#F1CCA6]/60 shadow-2xs"
                   >
                     <Compass size={15} className="text-[#C1762A] shrink-0 mt-0.5" />
                     <span>{item}</span>
@@ -453,7 +453,7 @@ export function AIInsightsCard({ studentId, studentName }: AIInsightsCardProps) 
                   {insight.recommendations.map((item, idx) => (
                     <li
                       key={idx}
-                      className="flex items-start gap-2 text-xs text-[#5C3203] font-medium leading-relaxed bg-white p-2.5 rounded-xl border border-[#F1CCA6]/60 shadow-2xs"
+                      className="flex items-start gap-2 text-xs text-[#1C1917] font-medium leading-relaxed bg-white p-2.5 rounded-xl border border-[#F1CCA6]/60 shadow-2xs"
                     >
                       <Compass size={14} className="text-[#C1762A] shrink-0 mt-0.5" />
                       <span>{item}</span>

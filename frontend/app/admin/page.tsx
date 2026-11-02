@@ -94,12 +94,12 @@ function TokenLatencyTooltip({ active, payload }: CustomTooltipProps) {
   if (!data) return null;
 
   return (
-    <div className="bg-[#2A1C0E] text-white p-3.5 rounded-xl shadow-xl border border-[#C1762A]/40 text-xs min-w-[230px] backdrop-blur-md">
+    <div className="bg-[#1C1917] text-white p-3.5 rounded-xl shadow-xl border border-[#C1762A]/40 text-xs min-w-[230px] backdrop-blur-md">
       <div className="flex items-center justify-between border-b border-[#F1CCA6]/20 pb-2 mb-2.5">
         <span className="font-extrabold text-sm text-[#F1CCA6]">
           {data.displayDate} ({data.date})
         </span>
-        <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#FFF3E6]/10 text-[#F1CCA6] font-semibold border border-[#F1CCA6]/20">
+        <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#F7ECE1]/10 text-[#F1CCA6] font-semibold border border-[#F1CCA6]/20">
           {data.sessions_count.toLocaleString("vi-VN")} phiên
         </span>
       </div>
@@ -242,8 +242,8 @@ export default function AdminPage() {
       icon: ShieldAlert,
       href: "/admin/safety",
       stats: "3 Cảnh báo mới",
-      color: "#D93829",
-      bgLight: "#FDF0ED",
+      color: "#EF4444",
+      bgLight: "#FEF2F2",
     },
     {
       title: "Cài Đặt Hệ Thống",
@@ -257,7 +257,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto animate-in fade-in duration-500 space-y-8 pb-10 text-[#2A1C0E]">
+    <div className="max-w-6xl mx-auto animate-in fade-in duration-500 space-y-8 pb-10 text-[#1C1917]">
       {/* ── 1. Header (Đồng bộ chuẩn Parent Dashboard) ── */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -276,8 +276,8 @@ export default function AdminPage() {
 
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#2A8C4A] animate-pulse" />
-            Hệ thống: <strong className="text-[#2A8C4A]">Hoạt động ổn định</strong>
+            <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+            Hệ thống: <strong className="text-[#10B981]">Hoạt động ổn định</strong>
           </span>
         </div>
       </div>
@@ -324,7 +324,7 @@ export default function AdminPage() {
               <span className="text-3xl font-black text-[#8C4905] leading-none">
                 18
               </span>
-              <span className="text-xs font-bold text-[#2A8C4A]">+8.6% hôm nay</span>
+              <span className="text-xs font-bold text-[#10B981]">+8.6% hôm nay</span>
             </div>
             <p className="text-xs text-[#8C4905]/80 font-medium mt-1.5">
               MAU: 32 học sinh gắn kết
@@ -389,12 +389,12 @@ export default function AdminPage() {
                 Hiệu Năng AI: Tổng Token Tiêu Thụ & Độ Trễ (Latency)
               </h2>
             </div>
-            <p className="text-xs text-[#7E6B5A] mt-1">
+            <p className="text-xs text-[#7A3E04] mt-1">
               Theo dõi số token Gemini tiêu thụ thực tế theo từng ngày kết hợp với độ trễ phản hồi trung bình (ms)
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-[#FBF4ED] p-1 rounded-xl border border-[#E8D5C4] self-start sm:self-auto">
+          <div className="flex items-center gap-1.5 bg-[#F7ECE1] p-1 rounded-xl border border-[#F1CCA6] self-start sm:self-auto">
             {([7, 14, 30] as const).map((days) => (
               <button
                 key={days}
@@ -402,7 +402,7 @@ export default function AdminPage() {
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   timeRange === days
                     ? "bg-[#C1762A] text-white shadow-xs"
-                    : "text-[#7E6B5A] hover:text-[#2A1C0E] hover:bg-[#F7ECE1]"
+                    : "text-[#7A3E04] hover:text-[#1C1917] hover:bg-[#F7ECE1]"
                 }`}
               >
                 {days} Ngày
@@ -413,8 +413,8 @@ export default function AdminPage() {
 
         {/* 3 Thẻ thống kê tóm tắt nhanh trên biểu đồ */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-[#FFFDFB] p-3.5 rounded-xl border border-[#F1CCA6]/70 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FFF3E6] text-[#C1762A] flex items-center justify-center shrink-0 border border-[#F1CCA6]">
+          <div className="bg-[#FFFFFF] p-3.5 rounded-xl border border-[#F1CCA6]/70 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#F7ECE1] text-[#C1762A] flex items-center justify-center shrink-0 border border-[#F1CCA6]">
               <Cpu className="w-5 h-5" />
             </div>
             <div>
@@ -427,7 +427,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="bg-[#FFFDFB] p-3.5 rounded-xl border border-[#BADEF7]/70 flex items-center gap-3">
+          <div className="bg-[#FFFFFF] p-3.5 rounded-xl border border-[#BADEF7]/70 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#EBF4FC] text-[#2B78C5] flex items-center justify-center shrink-0 border border-[#BADEF7]">
               <Clock className="w-5 h-5" />
             </div>
@@ -444,7 +444,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="bg-[#FFFDFB] p-3.5 rounded-xl border border-[#F1CCA6]/70 flex items-center gap-3">
+          <div className="bg-[#FFFFFF] p-3.5 rounded-xl border border-[#F1CCA6]/70 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#F7ECE1] text-[#8C4905] flex items-center justify-center shrink-0 border border-[#F1CCA6]">
               <Zap className="w-5 h-5" />
             </div>
@@ -452,7 +452,7 @@ export default function AdminPage() {
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#8C4905]">
                 Chi Phí Quy Đổi Ước Tính
               </div>
-              <div className="text-lg font-black text-[#2A8C4A] leading-snug">
+              <div className="text-lg font-black text-[#10B981] leading-snug">
                 ${chartSummary.totalCost.toFixed(2)} USD
               </div>
             </div>
@@ -476,7 +476,7 @@ export default function AdminPage() {
                   />
                   <XAxis
                     dataKey="displayDate"
-                    stroke="#7E6B5A"
+                    stroke="#7A3E04"
                     fontSize={11}
                     tickLine={false}
                     axisLine={{ stroke: "#F1CCA6" }}
@@ -509,7 +509,7 @@ export default function AdminPage() {
                     iconType="circle"
                     wrapperStyle={{ paddingBottom: "12px", fontSize: "12px" }}
                     formatter={(value) => (
-                      <span className="font-semibold text-xs text-[#2A1C0E]">
+                      <span className="font-semibold text-xs text-[#1C1917]">
                         {value === "total_tokens"
                           ? "Tổng Token Tiêu Thụ"
                           : value === "latency_ms"
@@ -539,7 +539,7 @@ export default function AdminPage() {
                 </ComposedChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center gap-2 text-xs text-[#7E6B5A]">
+              <div className="h-full flex flex-col items-center justify-center gap-2 text-xs text-[#7A3E04]">
                 <RefreshCw className="w-5 h-5 animate-spin text-[#C1762A]" />
                 <span>Đang khởi tạo biểu đồ tài nguyên AI...</span>
               </div>
@@ -548,7 +548,7 @@ export default function AdminPage() {
         </div>
 
         {/* Chú thích & Ghi chú nghiệp vụ phía dưới */}
-        <div className="pt-2 border-t border-[#F1CCA6]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-[#7E6B5A]">
+        <div className="pt-2 border-t border-[#F1CCA6]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-[#7A3E04]">
           <div className="flex items-center gap-4 flex-wrap">
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-xs bg-[#C1762A] inline-block" />
@@ -579,7 +579,7 @@ export default function AdminPage() {
               <Link
                 key={c.href}
                 href={c.href}
-                className="group bg-[#FFFDFB] rounded-2xl p-5 border border-[#F1CCA6] hover:border-[#C1762A] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                className="group bg-[#FFFFFF] rounded-2xl p-5 border border-[#F1CCA6] hover:border-[#C1762A] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
@@ -597,7 +597,7 @@ export default function AdminPage() {
                   <h3 className="font-extrabold text-[#8C4905] text-base group-hover:text-[#C1762A] transition-colors">
                     {c.title}
                   </h3>
-                  <p className="text-xs md:text-sm text-[#7E6B5A] mt-1.5 leading-relaxed">
+                  <p className="text-xs md:text-sm text-[#7A3E04] mt-1.5 leading-relaxed">
                     {c.description}
                   </p>
                 </div>

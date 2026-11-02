@@ -378,10 +378,10 @@ export default function TryPage() {
       <header className="w-full px-6 py-4 flex items-center justify-between border-b border-[#C1762A]/10 bg-[#F7ECE1]/80 backdrop-blur-sm sticky top-0 z-10">
         {/* Logo */}
         <div
-          className="w-10 h-10 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold text-sm cursor-pointer hover:bg-[#F1CCA6] transition-colors shadow-inner"
+          className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-xs cursor-pointer hover:opacity-85 transition-opacity"
           onClick={() => router.push("/")}
         >
-          SK
+          <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
         </div>
 
         {/* Status label */}
@@ -418,11 +418,11 @@ export default function TryPage() {
 
             {/* Bubble */}
             <div
-              className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
+              className={`max-w-[80%] px-5 py-3.5 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
                 msg.role === "user"
                   ? "bg-[#C1762A] text-white rounded-tr-sm whitespace-pre-wrap"
-                  : "bg-white text-[#1a1a1a] rounded-tl-sm border border-[#C1762A]/10"
-              } ${msg.content === "" ? "animate-pulse bg-gray-100 text-gray-400 italic" : ""}`}
+                  : "bg-white text-[#1C1917] rounded-tl-sm border border-[#C1762A]/10"
+              } ${msg.content === "" ? "animate-pulse bg-[#F1CCA6]/30 text-[#8C4905]/40 italic" : ""}`}
             >
               {msg.content === "" ? (
                 "Đang soạn..."
@@ -431,8 +431,8 @@ export default function TryPage() {
               ) : (
                 <div className="markdown-prose prose-sm max-w-none min-w-0 break-words overflow-visible
                   prose-p:leading-relaxed prose-p:mb-2
-                  prose-pre:bg-gray-100 prose-pre:p-3 prose-pre:rounded-lg
-                  prose-code:text-[#CB6600] prose-code:bg-[#F1CCA6]/40 prose-code:px-1 prose-code:rounded
+                  prose-pre:bg-[#F1CCA6]/30 prose-pre:p-3 prose-pre:rounded-lg
+                  prose-code:text-[#8C4905] prose-code:bg-[#F1CCA6]/40 prose-code:px-1 prose-code:rounded
                   prose-ul:list-disc prose-ul:ml-4 prose-ul:mb-2
                   prose-ol:list-decimal prose-ol:ml-4 prose-ol:mb-2
                   prose-strong:text-[#8C4905]"
@@ -508,7 +508,7 @@ export default function TryPage() {
           }}
           className={`flex items-center bg-white border rounded-full px-5 py-3 shadow-sm transition-all gap-3 ${
             isTrialExpired
-              ? "bg-gray-100/90 border-gray-300 opacity-70 cursor-not-allowed"
+              ? "bg-[#F7ECE1] border-[#F1CCA6] opacity-70 cursor-not-allowed"
               : "border-[#C1762A]/20 focus-within:border-[#C1762A] focus-within:shadow-md"
           }`}
         >
@@ -543,7 +543,7 @@ export default function TryPage() {
             disabled={(!inputValue.trim() && !isTrialExpired) || isTyping}
             className={`p-2 rounded-full transition-all ${
               isTrialExpired
-                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                ? "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed"
                 : inputValue.trim() && !isTyping
                 ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 cursor-pointer"
                 : "text-[#C1762A]/30 cursor-not-allowed"

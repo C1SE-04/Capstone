@@ -232,8 +232,8 @@ export function SavePlaylistModal({
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
-            <div className="text-[#A05215]">
-              <Bookmark size={22} className="stroke-[2.2] fill-[#A05215]/10" />
+            <div className="text-[#C1762A]">
+              <Bookmark size={22} className="stroke-[2.2] fill-[#C1762A]/10" />
             </div>
             <h3 className="text-xl font-bold text-[#8C4905]">
               Lưu vào Sổ tay
@@ -305,7 +305,7 @@ export function SavePlaylistModal({
                         className={cn(
                           "w-5 h-5 rounded-md flex items-center justify-center transition-[background-color,border-color,transform] duration-150 ease-out shrink-0 group-active:scale-90",
                           isSelected
-                            ? "bg-[#A05215] text-white shadow-xs"
+                            ? "bg-[#C1762A] text-white shadow-xs"
                             : "border-2 border-stone-300 bg-white group-hover:border-stone-400"
                         )}
                       >
@@ -336,7 +336,7 @@ export function SavePlaylistModal({
             <button
               type="button"
               onClick={() => setShowCreateBox((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 text-sm font-bold text-[#A05215] hover:text-[#8C4905] active:scale-[0.98] transition-[transform,color] duration-150 cursor-pointer mb-2 touch-manipulation"
+              className="inline-flex items-center gap-1.5 text-sm font-bold text-[#C1762A] hover:text-[#8C4905] active:scale-[0.98] transition-[transform,color] duration-150 cursor-pointer mb-2 touch-manipulation"
             >
               <Plus size={16} strokeWidth={2.5} />
               Tạo ngăn lưu trữ mới
@@ -362,7 +362,7 @@ export function SavePlaylistModal({
                   type="button"
                   onClick={handleCreateAndSavePlaylist}
                   disabled={isCreatingPlaylist || !newPlaylistName.trim()}
-                  className="px-4 py-2 bg-[#A05215] hover:bg-[#8C4905] active:scale-[0.96] disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-[transform,background-color] duration-150 shadow-xs cursor-pointer whitespace-nowrap flex items-center gap-1 touch-manipulation"
+                  className="px-4 py-2 bg-[#C1762A] hover:bg-[#8C4905] active:scale-[0.96] disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-[transform,background-color] duration-150 shadow-xs cursor-pointer whitespace-nowrap flex items-center gap-1 touch-manipulation"
                 >
                   {isCreatingPlaylist ? (
                     <Loader2 size={13} className="animate-spin" />
@@ -388,7 +388,7 @@ export function SavePlaylistModal({
             type="button"
             onClick={handleSaveBookmark}
             disabled={isSaving}
-            className="px-6 py-2.5 bg-[#A05215] hover:bg-[#8C4905] active:scale-[0.97] text-white text-sm font-bold rounded-2xl shadow-md shadow-amber-900/10 cursor-pointer transition-[transform,background-color,box-shadow] duration-150 flex items-center gap-2 touch-manipulation"
+            className="px-6 py-2.5 bg-[#C1762A] hover:bg-[#8C4905] active:scale-[0.97] text-white text-sm font-bold rounded-2xl shadow-md shadow-amber-900/10 cursor-pointer transition-[transform,background-color,box-shadow] duration-150 flex items-center gap-2 touch-manipulation"
           >
             {isSaving && <Loader2 size={15} className="animate-spin" />}
             Lưu bài

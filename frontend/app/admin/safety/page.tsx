@@ -345,7 +345,7 @@ const INITIAL_DIFFICULT_TOPICS: AdminDifficultTopicStat[] = [
 const VIOLATION_PIE_DATA = [
   { name: "Đòi giải hộ (Off-topic)", value: 42, color: "#D97706" },
   { name: "Ngôn từ thô tục (Toxic)", value: 28, color: "#DC2626" },
-  { name: "Bẻ khóa Prompt (Jailbreak)", value: 16, color: "#7C3AED" },
+  { name: "Bẻ khóa Prompt (Jailbreak)", value: 16, color: "#C1762A" },
   { name: "Thông tin nhạy cảm (PII)", value: 14, color: "#0284C7" },
 ];
 
@@ -703,7 +703,7 @@ function AdminSafetyContent() {
     switch (type) {
       case "JAILBREAK":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300">
             <Lock size={12} /> Bẻ khóa (Jailbreak)
           </span>
         );
@@ -721,7 +721,7 @@ function AdminSafetyContent() {
         );
       case "SENSITIVE":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-orange-50 text-orange-800 border border-orange-200">
             <Shield size={12} /> Thông tin nhạy cảm
           </span>
         );
@@ -750,7 +750,7 @@ function AdminSafetyContent() {
         );
       case "LOW":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-800 border border-blue-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-800 border border-stone-200">
             LOW
           </span>
         );
@@ -773,7 +773,7 @@ function AdminSafetyContent() {
         );
       case "REDIRECTED":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-stone-100 text-stone-700 border border-stone-200">
             <RotateCcw size={11} /> Chuyển hướng
           </span>
         );
@@ -790,7 +790,7 @@ function AdminSafetyContent() {
         );
       case "DISMISSED":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600 border border-stone-200">
             <X size={12} /> Đã bỏ qua
           </span>
         );
@@ -827,7 +827,7 @@ function AdminSafetyContent() {
             <span>{toastMessage.text}</span>
             <button
               onClick={() => setToastMessage(null)}
-              className="text-gray-400 hover:text-gray-600 transition-colors ml-2"
+              className="text-stone-400 hover:text-stone-600 transition-colors ml-2"
               title="Đóng thông báo"
             >
               <X size={16} />
@@ -836,54 +836,52 @@ function AdminSafetyContent() {
         </div>
       )}
 
-      {/* ── 2. Top Header Bar with Breadcrumb and Actions ── */}
+      {/* ── 2. Top Header Bar and Actions (Đồng bộ cùng hàng & chuẩn nhận diện) ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#C1762A] mb-1">
-            <Link href="/admin" className="hover:underline flex items-center gap-1">
-              Admin Portal
-            </Link>
-            <span>/</span>
-            <span className="text-[#8C4905]">Giám sát An toàn & Chất lượng AI</span>
+        <div className="flex items-center gap-3.5 min-w-0 max-w-2xl">
+          <div className="w-12 h-12 bg-[#C1762A] rounded-2xl flex items-center justify-center text-white shadow-md shrink-0">
+            <ShieldAlert className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-[#2A1C0E] tracking-tight">
-            Giám Sát An Toàn & Chất Lượng AI
-          </h1>
-          <p className="text-sm text-[#7E6B5A] mt-1">
-            Kiểm toán nhật ký vi phạm an toàn Safety Agent và trực quan hóa tỷ lệ học sinh bấm &quot;Chưa hiểu&quot; theo dạng bài
-          </p>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
+              Giám Sát An Toàn & Chất Lượng AI
+            </h1>
+            <p className="text-sm text-[#7A3E04] mt-1 font-medium">
+              Kiểm toán nhật ký vi phạm an toàn Safety Agent và trực quan hóa tỷ lệ học sinh bấm &quot;Chưa hiểu&quot; theo dạng bài
+            </p>
+          </div>
         </div>
 
-        {/* Action Buttons: 100% functional */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Action Buttons: 100% functional, cùng 1 hàng ngang đồng bộ */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap self-start md:self-auto">
           {/* Nút Làm mới */}
           <button
             onClick={() => fetchSafetyData()}
             disabled={isRefreshing}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#FDF7F2] active:scale-95 transition-all duration-150 cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#F7ECE1] hover:border-[#C1762A] active:scale-95 transition-all duration-150 cursor-pointer disabled:opacity-50 whitespace-nowrap"
             title="Làm mới dữ liệu từ server"
           >
-            <RotateCcw size={16} className={isRefreshing ? "animate-spin text-[#C1762A]" : ""} />
+            <RotateCcw size={15} className={isRefreshing ? "animate-spin text-[#C1762A]" : "text-[#C1762A]"} />
             <span>{isRefreshing ? "Đang tải..." : "Làm mới"}</span>
           </button>
 
           {/* Nút Xuất CSV */}
           <button
             onClick={handleExportCSV}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#FDF7F2] active:scale-95 transition-all duration-150 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#F7ECE1] hover:border-[#C1762A] active:scale-95 transition-all duration-150 cursor-pointer whitespace-nowrap"
             title="Tải toàn bộ Audit Log dưới định dạng CSV"
           >
-            <Download size={16} className="text-[#C1762A]" />
+            <Download size={15} className="text-[#C1762A]" />
             <span>Xuất Audit Log (CSV)</span>
           </button>
 
           {/* Nút Cài đặt Guardrail */}
           <Link
             href="/admin/settings"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs md:text-sm font-bold bg-[#C1762A] text-white shadow-sm hover:bg-[#8C4905] active:scale-95 transition-all duration-150 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white shadow-sm hover:brightness-105 active:scale-95 transition-all duration-150 cursor-pointer whitespace-nowrap"
             title="Điều chỉnh ngưỡng an toàn và cấu hình AI tại Trang Cài đặt"
           >
-            <Settings size={16} />
+            <Settings size={15} />
             <span>Cấu hình Guardrail</span>
           </Link>
         </div>
@@ -902,13 +900,13 @@ function AdminSafetyContent() {
             </span>
           </div>
           <div className="mt-4">
-            <p className="text-xs font-bold text-[#7E6B5A] uppercase tracking-wider mb-1">
+            <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
               Tổng Vi Phạm Safety
             </p>
             <p className="text-2xl font-black text-[#8C4905] leading-none">
               {stats.total_alerts}
             </p>
-            <p className="text-xs text-[#7E6B5A] mt-2 flex items-center gap-1">
+            <p className="text-xs text-[#7A3E04] mt-2 flex items-center gap-1">
               <span>Đã chặn triệt để:</span>
               <strong className="text-red-600 font-bold">{stats.blocked_queries_count} câu chat</strong>
             </p>
@@ -918,21 +916,21 @@ function AdminSafetyContent() {
         {/* Thẻ 2: Jailbreak Attempts */}
         <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-start justify-between">
-            <div className="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 shadow-inner">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-700 shadow-inner">
               <Lock size={22} className="stroke-[2.2]" />
             </div>
-            <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-purple-100">
+            <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
               100% Chặn thành công
             </span>
           </div>
           <div className="mt-4">
-            <p className="text-xs font-bold text-[#7E6B5A] uppercase tracking-wider mb-1">
+            <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
               Cố Tình Bẻ Khóa (Jailbreak)
             </p>
-            <p className="text-2xl font-black text-purple-900 leading-none">
+            <p className="text-2xl font-black text-amber-900 leading-none">
               {stats.jailbreak_attempts}
             </p>
-            <p className="text-xs text-[#7E6B5A] mt-2">
+            <p className="text-xs text-[#7A3E04] mt-2">
               Prompt Injection & cố ý đòi đáp án
             </p>
           </div>
@@ -949,13 +947,13 @@ function AdminSafetyContent() {
             </span>
           </div>
           <div className="mt-4">
-            <p className="text-xs font-bold text-[#7E6B5A] uppercase tracking-wider mb-1">
+            <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
               Ngôn Từ Thô Tục / Toxic
             </p>
             <p className="text-2xl font-black text-amber-900 leading-none">
               {stats.toxic_language_count}
             </p>
-            <p className="text-xs text-[#7E6B5A] mt-2">
+            <p className="text-xs text-[#7A3E04] mt-2">
               Cảnh báo & hướng dẫn giao tiếp lịch sự
             </p>
           </div>
@@ -972,13 +970,13 @@ function AdminSafetyContent() {
             </span>
           </div>
           <div className="mt-4">
-            <p className="text-xs font-bold text-[#7E6B5A] uppercase tracking-wider mb-1">
+            <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
               Tỷ Lệ Bấm &quot;Chưa Hiểu&quot;
             </p>
             <p className="text-2xl font-black text-[#8C4905] leading-none">
               {stats.not_understood_rate_percent}%
             </p>
-            <p className="text-xs text-[#7E6B5A] mt-2 flex items-center gap-1">
+            <p className="text-xs text-[#7A3E04] mt-2 flex items-center gap-1">
               <span>Độ khó gợi ý TB:</span>
               <strong className="text-emerald-700 font-bold">3.1 gợi ý/bài</strong>
             </p>
@@ -994,11 +992,11 @@ function AdminSafetyContent() {
               <div className="w-8 h-8 rounded-xl bg-[#F7ECE1] text-[#C1762A] flex items-center justify-center font-bold">
                 <BarChart3 size={18} />
               </div>
-              <h2 className="text-lg md:text-xl font-bold text-[#2A1C0E]">
+              <h2 className="text-lg md:text-xl font-bold text-[#1C1917]">
                 Đánh Giá Chất Lượng Gợi Ý Socratic
               </h2>
             </div>
-            <p className="text-xs md:text-sm text-[#7E6B5A] mt-1">
+            <p className="text-xs md:text-sm text-[#7A3E04] mt-1">
               Trực quan hóa tỷ lệ học sinh bấm nút &quot;Chưa hiểu&quot; theo từng dạng bài để đánh giá độ khó và tính dễ hiểu của các câu hỏi gợi mở từ AI
             </p>
           </div>
@@ -1011,7 +1009,7 @@ function AdminSafetyContent() {
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   chartMetric === "rate"
                     ? "bg-[#C1762A] text-white shadow-xs"
-                    : "text-[#8C4905] hover:text-[#2A1C0E]"
+                    : "text-[#8C4905] hover:text-[#1C1917]"
                 }`}
               >
                 Tỷ lệ Chưa hiểu (%)
@@ -1021,7 +1019,7 @@ function AdminSafetyContent() {
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   chartMetric === "count"
                     ? "bg-[#C1762A] text-white shadow-xs"
-                    : "text-[#8C4905] hover:text-[#2A1C0E]"
+                    : "text-[#8C4905] hover:text-[#1C1917]"
                 }`}
               >
                 Số lượt Chưa hiểu (Lượt)
@@ -1048,7 +1046,7 @@ function AdminSafetyContent() {
         {/* Charts Grid: Bar Chart + Pie Chart */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Bar Chart: Dạng bài vs Chưa hiểu */}
-          <div className="lg:col-span-2 bg-[#FAF6F0] rounded-2xl p-4 border border-[#F1CCA6]/60">
+          <div className="lg:col-span-2 bg-[#F7ECE1] rounded-2xl p-4 border border-[#F1CCA6]/60">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold text-[#8C4905] uppercase tracking-wider flex items-center gap-1.5">
                 <Brain size={14} className="text-[#C1762A]" />
@@ -1056,7 +1054,7 @@ function AdminSafetyContent() {
                   ? "Tỷ lệ bấm Chưa hiểu theo Dạng bài (%)"
                   : "Tổng số lượt bấm Chưa hiểu theo Dạng bài"}
               </span>
-              <span className="text-[11px] text-[#7E6B5A]">
+              <span className="text-[11px] text-[#7A3E04]">
                 (Click vào cột để xem nhận xét sư phạm chi tiết)
               </span>
             </div>
@@ -1076,18 +1074,18 @@ function AdminSafetyContent() {
                       }
                     }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E8D5C4" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1CCA6" vertical={false} />
                     <XAxis
                       dataKey="topic"
                       angle={-20}
                       textAnchor="end"
                       interval={0}
-                      tick={{ fill: "#7E6B5A", fontSize: 11, fontWeight: 500 }}
+                      tick={{ fill: "#7A3E04", fontSize: 11, fontWeight: 500 }}
                       height={60}
                     />
                     <YAxis
                       domain={[0, chartMetric === "rate" ? 40 : "auto"]}
-                      tick={{ fill: "#7E6B5A", fontSize: 11 }}
+                      tick={{ fill: "#7A3E04", fontSize: 11 }}
                       unit={chartMetric === "rate" ? "%" : ""}
                     />
                     <Tooltip
@@ -1096,26 +1094,26 @@ function AdminSafetyContent() {
                         const data = payload[0].payload as AdminDifficultTopicStat;
                         return (
                           <div className="bg-white p-3 rounded-xl shadow-lg border border-[#F1CCA6] text-xs space-y-1.5 max-w-xs">
-                            <p className="font-bold text-[#2A1C0E]">{data.topic}</p>
+                            <p className="font-bold text-[#1C1917]">{data.topic}</p>
                             <div className="flex items-center justify-between gap-4 pt-1 border-t border-[#F1CCA6]/50">
-                              <span className="text-[#7E6B5A]">Tỷ lệ Chưa hiểu:</span>
+                              <span className="text-[#7A3E04]">Tỷ lệ Chưa hiểu:</span>
                               <strong className="text-amber-700 font-extrabold">
                                 {(100 - (data.comprehension_rate || 80)).toFixed(1)}%
                               </strong>
                             </div>
                             <div className="flex items-center justify-between gap-4">
-                              <span className="text-[#7E6B5A]">Số lượt Chưa hiểu:</span>
+                              <span className="text-[#7A3E04]">Số lượt Chưa hiểu:</span>
                               <strong className="text-[#8C4905] font-extrabold">
                                 {data.not_understood_count} lượt
                               </strong>
                             </div>
                             <div className="flex items-center justify-between gap-4">
-                              <span className="text-[#7E6B5A]">Số gợi ý trung bình:</span>
+                              <span className="text-[#7A3E04]">Số gợi ý trung bình:</span>
                               <strong className="text-emerald-700 font-extrabold">
                                 {data.average_hints} gợi ý/bài
                               </strong>
                             </div>
-                            <p className="text-[11px] text-gray-500 italic mt-1 pt-1 border-t border-gray-100">
+                            <p className="text-[11px] text-stone-500 italic mt-1 pt-1 border-t border-stone-100">
                               💡 {data.pedagogical_feedback}
                             </p>
                           </div>
@@ -1135,43 +1133,43 @@ function AdminSafetyContent() {
                         const notUnderstoodRate = 100 - (entry.comprehension_rate || 80);
                         const fillColor =
                           notUnderstoodRate > 25
-                            ? "#D93829" // Đỏ: Tỷ lệ chưa hiểu cao
+                            ? "#EF4444" // Đỏ: Tỷ lệ chưa hiểu cao
                             : notUnderstoodRate > 18
                             ? "#C1762A" // Cam: Trung bình
-                            : "#2A8C4A"; // Xanh: Thấp
+                            : "#10B981"; // Xanh: Thấp
                         return <Cell key={`cell-${index}`} fill={fillColor} />;
                       })}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-full flex items-center justify-center text-sm text-[#7E6B5A]">
+                <div className="h-full flex items-center justify-center text-sm text-[#7A3E04]">
                   Đang tải biểu đồ...
                 </div>
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-semibold mt-2 text-[#7E6B5A]">
+            <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-semibold mt-2 text-[#7A3E04]">
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-[#D93829]" /> Cần tối ưu prompt (&gt; 25% Chưa hiểu)
+                <span className="w-3 h-3 rounded-sm bg-[#EF4444]" /> Cần tối ưu prompt (&gt; 25% Chưa hiểu)
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-sm bg-[#C1762A]" /> Mức độ tiếp thu vừa phải (18 - 25%)
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-[#2A8C4A]" /> Hiểu bài tốt (&lt; 18%)
+                <span className="w-3 h-3 rounded-sm bg-[#10B981]" /> Hiểu bài tốt (&lt; 18%)
               </span>
             </div>
           </div>
 
           {/* Right Pie Chart: Breakdown Safety Incidents */}
-          <div className="bg-[#FAF6F0] rounded-2xl p-4 border border-[#F1CCA6]/60 flex flex-col justify-between">
+          <div className="bg-[#F7ECE1] rounded-2xl p-4 border border-[#F1CCA6]/60 flex flex-col justify-between">
             <div>
               <span className="text-xs font-bold text-[#8C4905] uppercase tracking-wider flex items-center gap-1.5 mb-2">
                 <PieChartIcon size={14} className="text-[#C1762A]" />
                 Phân Loại Vi Phạm Safety Agent
               </span>
-              <p className="text-[11px] text-[#7E6B5A]">
+              <p className="text-[11px] text-[#7A3E04]">
                 Tỷ trọng 4 nhóm hành vi vi phạm được Safety Agent can thiệp và bảo vệ
               </p>
             </div>
@@ -1199,7 +1197,7 @@ function AdminSafetyContent() {
                         const data = payload[0].payload;
                         return (
                           <div className="bg-white p-2 rounded-xl shadow border border-[#F1CCA6] text-xs">
-                            <p className="font-bold text-[#2A1C0E]">{data.name}</p>
+                            <p className="font-bold text-[#1C1917]">{data.name}</p>
                             <p className="text-[#C1762A] font-bold">
                               {data.value} vụ ({((data.value / 100) * 100).toFixed(0)}%)
                             </p>
@@ -1214,12 +1212,12 @@ function AdminSafetyContent() {
 
             <div className="space-y-1.5 text-xs">
               {VIOLATION_PIE_DATA.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between text-[#7E6B5A]">
+                <div key={idx} className="flex items-center justify-between text-[#7A3E04]">
                   <span className="flex items-center gap-1.5 font-medium">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                     {item.name}
                   </span>
-                  <span className="font-bold text-[#2A1C0E]">{item.value}%</span>
+                  <span className="font-bold text-[#1C1917]">{item.value}%</span>
                 </div>
               ))}
             </div>
@@ -1227,7 +1225,7 @@ function AdminSafetyContent() {
         </div>
 
         {/* AI Pedagogical Recommendations Block */}
-        <div className="bg-[#FDF7F2] rounded-2xl p-5 border border-[#F1CCA6] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="bg-[#F7ECE1] rounded-2xl p-5 border border-[#F1CCA6] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#F7ECE1] text-[#C1762A] flex items-center justify-center flex-shrink-0 mt-0.5">
               <Sparkles size={20} />
@@ -1236,9 +1234,9 @@ function AdminSafetyContent() {
               <h4 className="text-sm font-bold text-[#8C4905]">
                 Đề Xuất Tối Ưu Socratic Từ Hệ Thống Phân Tích AI
               </h4>
-              <p className="text-xs text-[#7E6B5A] mt-1 leading-relaxed">
-                Dạng bài <strong className="text-[#2A1C0E] font-bold">Giải toán Chuyển động đều</strong> và{" "}
-                <strong className="text-[#2A1C0E] font-bold">Phân số & Hỗn số (Lớp 5)</strong> có tỷ lệ học sinh bấm &quot;Chưa hiểu&quot; trên 24%.
+              <p className="text-xs text-[#7A3E04] mt-1 leading-relaxed">
+                Dạng bài <strong className="text-[#1C1917] font-bold">Giải toán Chuyển động đều</strong> và{" "}
+                <strong className="text-[#1C1917] font-bold">Phân số & Hỗn số (Lớp 5)</strong> có tỷ lệ học sinh bấm &quot;Chưa hiểu&quot; trên 24%.
                 Khuyến nghị: Tách nhỏ gợi ý Mức 2 thành 2 bước phụ và bổ sung câu hỏi dẫn dắt trực quan sơ đồ chuyển động.
               </p>
             </div>
@@ -1249,7 +1247,7 @@ function AdminSafetyContent() {
               onClick={() => {
                 showToast("Đã lưu ghi chú đề xuất tối ưu Socratic vào phiên bản Prompt kế tiếp!", "success");
               }}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#FAF6F0] active:scale-95 transition-all shadow-xs cursor-pointer"
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1] active:scale-95 transition-all shadow-xs cursor-pointer"
             >
               Áp dụng cấu hình prompt
             </button>
@@ -1271,9 +1269,9 @@ function AdminSafetyContent() {
                 <span className="text-xs font-extrabold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
                   Lớp {selectedTopicDetail.grade}
                 </span>
-                <span className="text-sm font-bold text-[#2A1C0E]">{selectedTopicDetail.topic}</span>
+                <span className="text-sm font-bold text-[#1C1917]">{selectedTopicDetail.topic}</span>
               </div>
-              <p className="text-xs text-[#7E6B5A]">
+              <p className="text-xs text-[#7A3E04]">
                 💡 <strong>Nhận xét sư phạm:</strong> {selectedTopicDetail.pedagogical_feedback}
               </p>
             </div>
@@ -1286,7 +1284,7 @@ function AdminSafetyContent() {
               </Link>
               <button
                 onClick={() => setSelectedTopicDetail(null)}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 transition-colors"
               >
                 Đóng
               </button>
@@ -1304,16 +1302,16 @@ function AdminSafetyContent() {
               <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
                 <ShieldAlert size={18} />
               </div>
-              <h2 className="text-lg md:text-xl font-bold text-[#2A1C0E]">
+              <h2 className="text-lg md:text-xl font-bold text-[#1C1917]">
                 Nhật Ký Kiểm Toán Vi Phạm An Toàn (Safety Audit Log)
               </h2>
             </div>
-            <p className="text-xs md:text-sm text-[#7E6B5A] mt-1">
+            <p className="text-xs md:text-sm text-[#7A3E04] mt-1">
               Danh sách lưu vết các câu chat bị chặn bởi Safety Agent (toxic, ngôn từ không phù hợp hoặc jailbreak cố tình đòi đáp án thẳng)
             </p>
           </div>
 
-          <div className="text-xs text-[#7E6B5A] font-semibold bg-[#F7ECE1] px-3 py-1.5 rounded-xl border border-[#F1CCA6]">
+          <div className="text-xs text-[#7A3E04] font-semibold bg-[#F7ECE1] px-3 py-1.5 rounded-xl border border-[#F1CCA6]">
             Hiển thị <strong className="text-[#8C4905]">{filteredLogs.length}</strong> / {logs.length} bản ghi
           </div>
         </div>
@@ -1325,7 +1323,7 @@ function AdminSafetyContent() {
             <div className="flex-1 relative">
               <Search
                 size={16}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E6B5A]"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7A3E04]"
               />
               <input
                 type="text"
@@ -1340,7 +1338,7 @@ function AdminSafetyContent() {
                   }
                 }}
                 placeholder="Tra cứu theo Email (vd: an.dinh@example.com), User ID (vd: std_1009), nội dung..."
-                className="w-full pl-10 pr-24 py-2.5 rounded-xl bg-[#FAF6F0] border border-[#E8D5C4] text-xs md:text-sm text-[#2A1C0E] placeholder:text-[#7E6B5A] focus:outline-none focus:ring-2 focus:ring-[#C1762A]/30 focus:border-[#C1762A] transition-all"
+                className="w-full pl-10 pr-24 py-2.5 rounded-xl bg-[#F7ECE1] border border-[#F1CCA6] text-xs md:text-sm text-[#1C1917] placeholder:text-[#7A3E04] focus:outline-none focus:ring-2 focus:ring-[#C1762A]/30 focus:border-[#C1762A] transition-all"
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                 {searchQuery && (
@@ -1349,7 +1347,7 @@ function AdminSafetyContent() {
                       setSearchQuery("");
                       fetchSafetyData("");
                     }}
-                    className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+                    className="p-1 text-stone-400 hover:text-stone-600 cursor-pointer"
                     title="Xóa tìm kiếm"
                   >
                     <X size={15} />
@@ -1373,7 +1371,7 @@ function AdminSafetyContent() {
                   setViolationFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#FAF6F0] text-[#2A1C0E] border border-[#E8D5C4] outline-none cursor-pointer hover:bg-white transition-colors"
+                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer hover:bg-white transition-colors"
                 title="Lọc theo loại vi phạm"
               >
                 <option value="ALL">Tất cả loại vi phạm</option>
@@ -1390,7 +1388,7 @@ function AdminSafetyContent() {
                   setSeverityFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#FAF6F0] text-[#2A1C0E] border border-[#E8D5C4] outline-none cursor-pointer hover:bg-white transition-colors"
+                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer hover:bg-white transition-colors"
                 title="Lọc theo mức độ nghiêm trọng"
               >
                 <option value="ALL">Tất cả mức độ</option>
@@ -1407,7 +1405,7 @@ function AdminSafetyContent() {
                   setStatusFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#FAF6F0] text-[#2A1C0E] border border-[#E8D5C4] outline-none cursor-pointer hover:bg-white transition-colors"
+                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer hover:bg-white transition-colors"
                 title="Lọc theo trạng thái xử lý"
               >
                 <option value="ALL">Tất cả trạng thái</option>
@@ -1423,7 +1421,7 @@ function AdminSafetyContent() {
                   setGradeFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#FAF6F0] text-[#2A1C0E] border border-[#E8D5C4] outline-none cursor-pointer hover:bg-white transition-colors"
+                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer hover:bg-white transition-colors"
                 title="Lọc theo khối lớp"
               >
                 <option value="ALL">Tất cả các lớp</option>
@@ -1443,7 +1441,7 @@ function AdminSafetyContent() {
                 gradeFilter !== "ALL") && (
                 <button
                   onClick={handleResetFilters}
-                  className="px-3 py-2.5 rounded-xl text-xs font-bold bg-[#FDF0ED] text-[#D93829] border border-[#F5BCB4] hover:bg-[#FBE3DE] transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="px-3 py-2.5 rounded-xl text-xs font-bold bg-[#FEF2F2] text-[#EF4444] border border-[#FECACA] hover:bg-[#FEE2E2] transition-colors cursor-pointer flex items-center gap-1.5"
                   title="Đặt lại các bộ lọc"
                 >
                   <RotateCcw size={13} />
@@ -1455,10 +1453,10 @@ function AdminSafetyContent() {
         </div>
 
         {/* Audit Log Data Table */}
-        <div className="overflow-x-auto rounded-xl border border-[#E8D5C4]">
+        <div className="overflow-x-auto rounded-xl border border-[#F1CCA6]">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-[#FAF6F0] border-b border-[#E8D5C4] text-[#8C4905] font-extrabold uppercase tracking-wider text-[11px]">
+              <tr className="bg-[#F7ECE1] border-b border-[#F1CCA6] text-[#8C4905] font-extrabold uppercase tracking-wider text-[11px]">
                 <th className="py-3.5 px-4">Thời gian / Mã Log</th>
                 <th className="py-3.5 px-4">Học sinh & Lớp</th>
                 <th className="py-3.5 px-4 max-w-xs">Nội dung chat vi phạm</th>
@@ -1468,12 +1466,12 @@ function AdminSafetyContent() {
                 <th className="py-3.5 px-4 text-right">Thao tác</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E8D5C4] bg-white">
+            <tbody className="divide-y divide-[#F1CCA6] bg-white">
               {paginatedLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#7E6B5A]">
+                  <td colSpan={7} className="py-12 text-center text-[#7A3E04]">
                     <ShieldCheck className="w-10 h-10 mx-auto text-emerald-500 mb-2" />
-                    <p className="font-bold text-sm text-[#2A1C0E]">Không tìm thấy bản ghi vi phạm nào</p>
+                    <p className="font-bold text-sm text-[#1C1917]">Không tìm thấy bản ghi vi phạm nào</p>
                     <p className="text-xs mt-1">Thử thay đổi từ khóa tìm kiếm hoặc điều chỉnh lại bộ lọc</p>
                     <button
                       onClick={handleResetFilters}
@@ -1499,24 +1497,24 @@ function AdminSafetyContent() {
                   return (
                     <tr
                       key={log.id}
-                      className="hover:bg-[#FFFDF9] transition-colors cursor-pointer group"
+                      className="hover:bg-[#FFFFFF] transition-colors cursor-pointer group"
                       onClick={() => handleOpenDetailModal(log)}
                     >
                       {/* Cột 1: Thời gian & Mã log */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 text-[#2A1C0E] font-semibold">
+                        <div className="flex items-center gap-1.5 text-[#1C1917] font-semibold">
                           <Clock size={13} className="text-[#C1762A]" />
                           <span>{formattedTime}</span>
-                          <span className="text-gray-400 font-normal">({formattedDate})</span>
+                          <span className="text-stone-400 font-normal">({formattedDate})</span>
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] text-[#7E6B5A] mt-0.5">
+                        <div className="flex items-center gap-1 text-[11px] text-[#7A3E04] mt-0.5">
                           <span className="font-mono">{log.id}</span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleCopyId(log.id);
                             }}
-                            className="text-gray-400 hover:text-[#C1762A] transition-colors"
+                            className="text-stone-400 hover:text-[#C1762A] transition-colors"
                             title="Sao chép mã sự cố"
                           >
                             <Copy size={11} />
@@ -1526,7 +1524,7 @@ function AdminSafetyContent() {
 
                       {/* Cột 2: Học sinh */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="font-bold text-[#2A1C0E] flex items-center gap-1.5">
+                        <div className="font-bold text-[#1C1917] flex items-center gap-1.5">
                           <span>{log.student_name || "Học sinh"}</span>
                           {log.student_grade && (
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6]">
@@ -1539,20 +1537,20 @@ function AdminSafetyContent() {
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-[#7E6B5A]">
+                        <div className="text-[11px] text-[#7A3E04]">
                           {log.student_email || log.email}
                         </div>
-                        <div className="text-[10px] text-gray-400 font-mono">
+                        <div className="text-[10px] text-stone-400 font-mono">
                           ID: {log.student_id || log.user_id}
                         </div>
                       </td>
 
                       {/* Cột 3: Nội dung câu chat */}
                       <td className="py-3.5 px-4 max-w-xs">
-                        <div className="font-medium text-[#2A1C0E] line-clamp-2 bg-[#FAF6F0] p-2 rounded-lg border border-[#E8D5C4]/60 text-xs">
+                        <div className="font-medium text-[#1C1917] line-clamp-2 bg-[#F7ECE1] p-2 rounded-lg border border-[#F1CCA6]/60 text-xs">
                           &quot;{log.message_snippet}&quot;
                         </div>
-                        <div className="text-[11px] text-[#7E6B5A] mt-1 line-clamp-1 italic">
+                        <div className="text-[11px] text-[#7A3E04] mt-1 line-clamp-1 italic">
                           Lý do: {log.flagged_reason}
                         </div>
                       </td>
@@ -1569,7 +1567,7 @@ function AdminSafetyContent() {
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex flex-col gap-1 items-start">
                           {getActionBadge(log.action_taken)}
-                          <span className="text-[11px] text-gray-500 font-mono">
+                          <span className="text-[11px] text-stone-500 font-mono">
                             {log.target_agent}
                           </span>
                         </div>
@@ -1623,7 +1621,7 @@ function AdminSafetyContent() {
 
         {/* Pagination & Page Size */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-          <div className="flex items-center gap-2 text-xs text-[#7E6B5A]">
+          <div className="flex items-center gap-2 text-xs text-[#7A3E04]">
             <span>Hiển thị</span>
             <select
               value={pageSize}
@@ -1631,7 +1629,7 @@ function AdminSafetyContent() {
                 setPageSize(Number(e.target.value));
                 setCurrentPage(1);
               }}
-              className="px-2 py-1 rounded-lg bg-[#FAF6F0] text-[#2A1C0E] border border-[#E8D5C4] outline-none cursor-pointer"
+              className="px-2 py-1 rounded-lg bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer"
             >
               <option value={5}>5 bản ghi</option>
               <option value={6}>6 bản ghi</option>
@@ -1645,7 +1643,7 @@ function AdminSafetyContent() {
             <button
               onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
               disabled={safeCurrentPage <= 1}
-              className="p-2 rounded-xl border border-[#E8D5C4] text-[#8C4905] bg-white hover:bg-[#FAF6F0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="p-2 rounded-xl border border-[#F1CCA6] text-[#8C4905] bg-white hover:bg-[#F7ECE1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               title="Trang trước"
             >
               <ChevronLeft size={16} />
@@ -1658,7 +1656,7 @@ function AdminSafetyContent() {
                 className={`w-8 h-8 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   safeCurrentPage === pageNum
                     ? "bg-[#C1762A] text-white shadow-xs"
-                    : "bg-white text-[#7E6B5A] border border-[#E8D5C4] hover:bg-[#FAF6F0]"
+                    : "bg-white text-[#7A3E04] border border-[#F1CCA6] hover:bg-[#F7ECE1]"
                 }`}
               >
                 {pageNum}
@@ -1668,7 +1666,7 @@ function AdminSafetyContent() {
             <button
               onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
               disabled={safeCurrentPage >= totalPages}
-              className="p-2 rounded-xl border border-[#E8D5C4] text-[#8C4905] bg-white hover:bg-[#FAF6F0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="p-2 rounded-xl border border-[#F1CCA6] text-[#8C4905] bg-white hover:bg-[#F7ECE1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               title="Trang sau"
             >
               <ChevronRight size={16} />
@@ -1689,19 +1687,19 @@ function AdminSafetyContent() {
           {/* Modal Panel */}
           <div className="relative bg-white rounded-3xl shadow-2xl border border-[#F1CCA6] w-full max-w-2xl max-h-[90vh] overflow-y-auto z-10 animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-[#E8D5C4] flex items-center justify-between z-10">
+            <div className="sticky top-0 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-[#F1CCA6] flex items-center justify-between z-10">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center font-bold flex-shrink-0">
                   <ShieldAlert size={22} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base md:text-lg font-extrabold text-[#2A1C0E]">
+                    <h3 className="text-base md:text-lg font-extrabold text-[#1C1917]">
                       Chi Tiết Ngữ Cảnh Vi Phạm An Toàn
                     </h3>
                     {getSeverityBadge(selectedLog.severity)}
                   </div>
-                  <p className="text-xs text-[#7E6B5A] flex items-center gap-1.5 mt-0.5">
+                  <p className="text-xs text-[#7A3E04] flex items-center gap-1.5 mt-0.5">
                     Mã sự cố: <span className="font-mono text-[#8C4905] font-bold">{selectedLog.id}</span>
                     <span>•</span>
                     <span>{new Date(selectedLog.timestamp).toLocaleString("vi-VN")}</span>
@@ -1711,7 +1709,7 @@ function AdminSafetyContent() {
 
               <button
                 onClick={() => setInspectModalOpen(false)}
-                className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-500 flex items-center justify-center transition-colors cursor-pointer"
                 title="Đóng modal"
               >
                 <X size={18} />
@@ -1721,14 +1719,14 @@ function AdminSafetyContent() {
             {/* Modal Body */}
             <div className="p-6 space-y-6 text-xs md:text-sm">
               {/* Student Profile Card */}
-              <div className="bg-[#FAF6F0] rounded-2xl p-4 border border-[#E8D5C4] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="bg-[#F7ECE1] rounded-2xl p-4 border border-[#F1CCA6] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-2xl bg-[#C1762A] text-white flex items-center justify-center font-black text-sm">
                     {selectedLog.student_name ? selectedLog.student_name.slice(0, 2).toUpperCase() : "HS"}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-[#2A1C0E] text-sm">
+                      <span className="font-bold text-[#1C1917] text-sm">
                         {selectedLog.student_name || "Học sinh"}
                       </span>
                       {selectedLog.student_grade && (
@@ -1737,14 +1735,14 @@ function AdminSafetyContent() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-[#7E6B5A] mt-0.5">{selectedLog.student_email}</div>
+                    <div className="text-xs text-[#7A3E04] mt-0.5">{selectedLog.student_email}</div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleCopyId(selectedLog.id)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-[#E8D5C4] text-[#8C4905] hover:bg-gray-50 transition-colors flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-[#F1CCA6] text-[#8C4905] hover:bg-stone-50 transition-colors flex items-center gap-1 cursor-pointer"
                   >
                     <Copy size={13} />
                     <span>Sao chép ID</span>
@@ -1765,7 +1763,7 @@ function AdminSafetyContent() {
                   <span className="text-xs font-bold text-[#8C4905] uppercase tracking-wider">
                     Bài toán đang giải trong phiên học:
                   </span>
-                  <div className="p-3 rounded-xl bg-white border border-[#F1CCA6] font-semibold text-[#2A1C0E]">
+                  <div className="p-3 rounded-xl bg-white border border-[#F1CCA6] font-semibold text-[#1C1917]">
                     📌 {selectedLog.conversation_context.problem_title}
                   </div>
                 </div>
@@ -1778,13 +1776,13 @@ function AdminSafetyContent() {
                   Đoạn Hội Thoại Kích Hoạt Guardrail:
                 </span>
 
-                <div className="space-y-3 bg-[#FAF6F0] p-4 rounded-2xl border border-[#E8D5C4]">
+                <div className="space-y-3 bg-[#F7ECE1] p-4 rounded-2xl border border-[#F1CCA6]">
                   {/* 1. Lời AI gợi ý trước đó */}
                   <div className="flex items-start gap-2.5">
                     <div className="w-7 h-7 rounded-lg bg-[#C1762A] text-white flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
                       AI
                     </div>
-                    <div className="bg-white p-3 rounded-2xl rounded-tl-sm border border-[#E8D5C4] max-w-[85%] text-xs text-[#2A1C0E] shadow-2xs leading-relaxed">
+                    <div className="bg-white p-3 rounded-2xl rounded-tl-sm border border-[#F1CCA6] max-w-[85%] text-xs text-[#1C1917] shadow-2xs leading-relaxed">
                       {selectedLog.conversation_context?.ai_prompt_before}
                     </div>
                   </div>
@@ -1810,7 +1808,7 @@ function AdminSafetyContent() {
                     <p className="font-mono text-[11px] text-amber-950 font-semibold">
                       {selectedLog.conversation_context?.guardrail_triggered_rule}
                     </p>
-                    <p className="text-[11px] text-[#7E6B5A] italic">
+                    <p className="text-[11px] text-[#7A3E04] italic">
                       Chi tiết phân tích: {selectedLog.flagged_reason}
                     </p>
                   </div>
@@ -1831,9 +1829,9 @@ function AdminSafetyContent() {
               </div>
 
               {/* Status and Action Buttons in Modal */}
-              <div className="pt-4 border-t border-[#E8D5C4] flex flex-wrap items-center justify-between gap-3">
+              <div className="pt-4 border-t border-[#F1CCA6] flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[#7E6B5A]">Trạng thái:</span>
+                  <span className="text-xs font-semibold text-[#7A3E04]">Trạng thái:</span>
                   {getStatusBadge(selectedLog.status)}
                 </div>
 
@@ -1856,7 +1854,7 @@ function AdminSafetyContent() {
                       handleUpdateLogStatus(selectedLog.id, "DISMISSED");
                       setInspectModalOpen(false);
                     }}
-                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <X size={15} />
                     <span>Bỏ qua (Báo sai)</span>
@@ -1884,7 +1882,7 @@ export default function AdminSafetyPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-12 text-center text-[#7E6B5A] text-sm flex flex-col items-center justify-center gap-3">
+        <div className="p-12 text-center text-[#7A3E04] text-sm flex flex-col items-center justify-center gap-3">
           <div className="w-8 h-8 border-3 border-[#C1762A] border-t-transparent rounded-full animate-spin" />
           <span>Đang tải màn hình giám sát an toàn...</span>
         </div>
