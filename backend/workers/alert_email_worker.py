@@ -174,7 +174,7 @@ def process_safety_alerts(db: Session) -> int:
                 text_body = (
                     f"Thông báo nhắc nhở ngôn từ SocraticKid\n\n"
                     f"Học sinh: {student_name} (Lớp {grade})\n"
-                    f"Trích đoạn kiểm duyệt: {email_result.censored_snippet}\n"
+                    f"Trích đoạn phát ngôn thực tế: {email_result.censored_snippet}\n"
                     f"Phân tích: {email_result.context_analysis}\n"
                     f"Định hướng: {email_result.tone_guidance_for_parent}\n"
                 )
