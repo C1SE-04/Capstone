@@ -3,20 +3,74 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
 
-# Dữ liệu gửi lên khi Đăng ký & Đăng nhập
+# Dữ liệu gửi lên khi Đăng ký & Đăng nhập (schema cũ — giữ để không phá các endpoint cũ)
 class AuthInput(BaseModel):
-    email: EmailStr
+    email: Optional[EmailStr] = None  # US 9.1: email không còn bắt buộc (học sinh đăng ký bằng username)
     password: str
     grade: Optional[int] = None  # Lớp học (4-9), chỉ bắt buộc cho STUDENT
+
+
+# ─── US 9.1 (T9.1): Schema đăng ký mới (username + password) ──────────────────
+class RegisterInput(BaseModel):
+    """
+    Schema đăng ký tài khoản mới cho US 9.1:
+    - Học sinh: Chỉ cần username + password. Không bắt buộc email.
+    - Phụ huynh: Đăng ký xong → nhập email ở bước Onboarding → xác thực OTP.
+    """
+    username: str                         # Tên tài khoản (3-30 ký tự, chữ/số/gạch dưới)
+    password: str                         # Mật khẩu
+
+
+class OtpRequestInput(BaseModel):
+    """
+    Payload yêu cầu gửi OTP qua email (US 9.1 - T9.2).
+    Dùng cho cả đăng ký Phụ huynh và đổi email trong Cài đặt.
+    """
+    email: EmailStr                       # Email sẽ nhận mã OTP
+    purpose: str = "PARENT_REGISTER"     # "PARENT_REGISTER" | "PARENT_CHANGE_EMAIL"
+
+
+class OtpVerifyInput(BaseModel):
+    """
+    Payload xác thực mã OTP (US 9.1 - T9.2).
+    """
+    email: EmailStr                       # Email đã nhận OTP
+    otp_code: str                         # Mã OTP 6 chữ số người dùng nhập
+    purpose: str = "PARENT_REGISTER"     # Phải khớp với purpose lúc request
+
+
+class OtpVerifyResponse(BaseModel):
+    """Phản hồi sau khi xác thực OTP thành công."""
+    success: bool
+    message: str
+
+
+class ParentChangeEmailRequest(BaseModel):
+    """
+    Payload đổi email nhận thông báo của Phụ huynh (Cài đặt - US 9.1 - T9.5).
+    Bước 1: Gửi OTP tới email mới.
+    """
+    new_email: EmailStr                   # Email mới muốn đổi sang
+
+
+class ParentChangeEmailVerify(BaseModel):
+    """
+    Payload xác nhận đổi email Phụ huynh bằng OTP (Cài đặt - US 9.1 - T9.5).
+    Bước 2: Nhập OTP nhận được ở email mới để xác nhận đổi.
+    """
+    new_email: EmailStr                   # Email mới (phải khớp với bước 1)
+    otp_code: str                         # Mã OTP 6 chữ số
 
 # Dữ liệu trả về khi Đăng ký thành công
 class UserResponse(BaseModel):
     id: str
-    email: EmailStr
+    email: Optional[str] = None           # US 9.1: email có thể null (học sinh không có email)
+    username: Optional[str] = None        # US 9.1: tên tài khoản
+    email_verified: Optional[bool] = False  # US 9.1: True sau khi Phụ huynh xác thực OTP
     role: str
-    grade: Optional[int] = None  # Trả về lớp học nếu có
-    session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
-    google_id: Optional[str] = None  # US 8.3: Google ID nếu liên kết
+    grade: Optional[int] = None           # Trả về lớp học nếu có
+    session_version: Optional[int] = 1    # US 6.2: phiên bản session của user
+    google_id: Optional[str] = None       # US 8.3: Google ID nếu liên kết
     oauth_provider: Optional[str] = None  # US 8.3: 'google' hoặc None
 
     class Config:
