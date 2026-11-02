@@ -11,52 +11,61 @@ interface AuthFormProps {
 export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const router = useRouter();
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState(""); // Dùng cho đăng nhập: Tên tài khoản hoặc Email
+  const [username, setUsername] = useState("");     // Dùng cho đăng ký: Tên tài khoản
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
   const [errors, setErrors] = useState<{
-    email?: string;
+    identifier?: string;
+    username?: string;
     password?: string;
-    confirmPassword?: string;
     form?: string;
   }>({});
 
   const toggleMode = () => {
     setIsLoginMode((prev) => !prev);
     setErrors({});
-    setEmail("");
+    setIdentifier("");
+    setUsername("");
     setPassword("");
-    setConfirmPassword("");
   };
 
   const validateForm = () => {
     let hasError = false;
     const newErrors: typeof errors = {};
 
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      newErrors.email = "Email/Username không được bỏ trống";
-      hasError = true;
-    } else if (!trimmedEmail.includes("@")) {
-      newErrors.email = "Vui lòng nhập đúng định dạng email";
-      hasError = true;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(trimmedEmail)) {
-      newErrors.email = "Vui lòng nhập đúng định dạng email";
-      hasError = true;
-    }
+    if (isLoginMode) {
+      const trimmedIdentifier = identifier.trim();
+      if (!trimmedIdentifier) {
+        newErrors.identifier = "Tên tài khoản hoặc Email không được bỏ trống";
+        hasError = true;
+      }
 
-    if (!password) {
-      newErrors.password = "Mật khẩu không được bỏ trống";
-      hasError = true;
-    }
+      if (!password) {
+        newErrors.password = "Mật khẩu không được bỏ trống";
+        hasError = true;
+      }
+    } else {
+      // Validate đăng ký: chỉ gồm Tên tài khoản và Mật khẩu (3-20 ký tự chữ, số, dấu gạch dưới)
+      const trimmedUsername = username.trim();
+      if (!trimmedUsername) {
+        newErrors.username = "Tên tài khoản không được bỏ trống";
+        hasError = true;
+      } else if (!/^[a-zA-Z0-9_]{3,20}$/.test(trimmedUsername)) {
+        newErrors.username = "Tên tài khoản phải từ 3-20 ký tự, chỉ gồm chữ, số và dấu gạch dưới";
+        hasError = true;
+      }
 
-    if (!isLoginMode && password !== confirmPassword) {
-      newErrors.confirmPassword = "Mật khẩu xác nhận không khớp";
-      hasError = true;
+      if (!password) {
+        newErrors.password = "Mật khẩu không được bỏ trống";
+        hasError = true;
+      } else if (password.length < 6) {
+        newErrors.password = "Mật khẩu phải có ít nhất 6 ký tự";
+        hasError = true;
+      }
     }
 
     if (hasError) {
@@ -78,15 +87,15 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
     try {
       if (isLoginMode) {
-        // Dùng NextAuth Credentials để tạo session
+        // Dùng NextAuth Credentials để tạo session với username hoặc email
         const result = await signIn("credentials", {
           redirect: false,
-          email,
+          email: identifier.trim(),
           password,
         });
 
         if (result?.error) {
-          throw new Error("Sai email hoặc mật khẩu");
+          throw new Error("Tên tài khoản/Email hoặc mật khẩu không chính xác");
         }
 
         setToastMessage("Đăng nhập thành công!");
@@ -110,41 +119,51 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           }
         }, 1200);
       } else {
-        // Đăng ký mới đồng bộ với luồng Google OAuth:
-        // 1. Gửi email & password sang backend POST /register (tạo user với role='PENDING')
+        // US 9.1 (T9.3): Đăng ký tài khoản mới bằng username + password (role='PENDING')
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
         const response = await fetch(`${backendUrl}/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.toLowerCase().trim(), password })
+          body: JSON.stringify({
+            username: username.trim(),
+            password,
+          }),
         });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || "Đã có lỗi xảy ra khi đăng ký");
+          const detail = errorData.detail || "Đã có lỗi xảy ra khi đăng ký";
+          
+          // AC 9.1.2: Báo lỗi trùng Username màu đỏ
+          if (typeof detail === "string" && (detail.toLowerCase().includes("tồn tại") || detail.toLowerCase().includes("sử dụng"))) {
+            setErrors({
+              username: "Tên tài khoản đã được sử dụng, vui lòng chọn tên khác",
+            });
+            setIsLoading(false);
+            return;
+          }
+          throw new Error(detail);
         }
 
         setToastMessage("Đăng ký thành công! Đang chuyển đến bước thiết lập hồ sơ...");
         setShowSuccessToast(true);
 
-        // 2. Tự động đăng nhập vào NextAuth phiên làm việc
+        // Tự động đăng nhập vào NextAuth phiên làm việc
         const signInResult = await signIn("credentials", {
           redirect: false,
-          email: email.toLowerCase().trim(),
+          email: username.trim(),
           password,
         });
 
         if (signInResult?.error) {
-          // Fallback nếu vì lý do nào đó tự động đăng nhập lỗi: quay lại tab Đăng Nhập
           setIsLoginMode(true);
+          setIdentifier(username.trim());
           setPassword("");
-          setConfirmPassword("");
           setToastMessage("Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.");
           setIsLoading(false);
           return;
         }
 
-        // 3. Đóng modal và chuyển hướng sang trang Onboarding đồng bộ như Google Login
         setTimeout(() => {
           if (onClose) onClose();
           router.push("/onboarding");
@@ -170,9 +189,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         </div>
       )}
 
-      {/* Background form nhạt hơn F1CCA6 để lỗi dễ đọc hơn */}
       <div className="relative w-full max-w-md bg-[#F1CCA6] rounded-3xl overflow-hidden p-8 shadow-xl">
-
         {/* Close Button */}
         {onClose && (
           <button
@@ -186,7 +203,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           </button>
         )}
 
-        {/* Logo Con Cú SocraticKid */}
+        {/* Logo SocraticKid */}
         <div className="flex justify-center mb-6">
           <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-md border-2 border-[#C1762A]/30">
             <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
@@ -199,31 +216,75 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          {/* Email / Phone */}
-          <div>
-            <label className="block text-[#8C4905] text-sm font-bold mb-1">Email/Username</label>
-            <input
-              type="text"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]' : 'focus:ring-[#F7AD62] border-transparent'
+          {/* Ô nhập thông tin định danh */}
+          {isLoginMode ? (
+            /* Đăng nhập: Tên tài khoản hoặc Email */
+            <div>
+              <label className="block text-[#8C4905] text-sm font-bold mb-1">
+                Tên tài khoản hoặc Email
+              </label>
+              <input
+                type="text"
+                value={identifier}
+                onChange={(e) => {
+                  setIdentifier(e.target.value);
+                  if (errors.identifier) setErrors((prev) => ({ ...prev, identifier: undefined }));
+                }}
+                placeholder="Nhập tên tài khoản hoặc email..."
+                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${
+                  errors.identifier
+                    ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                    : 'focus:ring-[#F7AD62] border-transparent'
                 }`}
-              disabled={isLoading}
-            />
-            {errors.email && (
-              <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.email}</p>
-            )}
-          </div>
+                disabled={isLoading}
+              />
+              {errors.identifier && (
+                <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.identifier}</p>
+              )}
+            </div>
+          ) : (
+            /* Đăng ký: Chỉ gồm Tên tài khoản */
+            <div>
+              <label className="block text-[#8C4905] text-sm font-bold mb-1">
+                Tên tài khoản
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (errors.username) setErrors((prev) => ({ ...prev, username: undefined }));
+                }}
+                placeholder="VD: socratic_kid (3-20 ký tự, chữ, số, _)"
+                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${
+                  errors.username
+                    ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                    : 'focus:ring-[#F7AD62] border-transparent'
+                }`}
+                disabled={isLoading}
+              />
+              {errors.username && (
+                <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.username}</p>
+              )}
+            </div>
+          )}
 
-          {/* Password */}
+          {/* Mật khẩu */}
           <div>
-            <label className="block text-[#8C4905] text-sm font-bold mb-1">Mật Khẩu</label>
+            <label className="block text-[#8C4905] text-sm font-bold mb-1">Mật khẩu</label>
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.password ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]' : 'focus:ring-[#F7AD62] border-transparent'
-                }`}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+              }}
+              placeholder="Nhập mật khẩu..."
+              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${
+                errors.password
+                  ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                  : 'focus:ring-[#F7AD62] border-transparent'
+              }`}
               disabled={isLoading}
             />
             {errors.password && (
@@ -231,27 +292,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             )}
           </div>
 
-          {/* Confirm Password (Only in Sign up) */}
-          {!isLoginMode && (
-            <div>
-              <label className="block text-[#8C4905] text-sm font-bold mb-1">Xác Nhận Mật Khẩu</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]' : 'focus:ring-[#F7AD62] border-transparent'
-                  }`}
-                disabled={isLoading}
-              />
-              {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.confirmPassword}</p>
-              )}
-            </div>
-          )}
-
-
-
-          {/* Login Options */}
+          {/* Login Options (Chỉ khi đăng nhập) */}
           {isLoginMode && (
             <div className="flex items-center justify-between mt-2 px-1">
               <label className="flex items-center text-xs font-bold text-[#8C4905] cursor-pointer">
@@ -264,11 +305,12 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             </div>
           )}
 
-          {/* Form Level Message (Error or Success) */}
+          {/* Lỗi chung Form */}
           {errors.form && (
             <div className="mt-2 text-center">
-              <p className={`text-sm font-bold ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#EF4444]'
-                }`}>
+              <p className={`text-sm font-bold ${
+                errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#EF4444]'
+              }`}>
                 {errors.form}
               </p>
             </div>
@@ -324,7 +366,6 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             </button>
           </p>
         </div>
-
       </div>
     </div>
   );
