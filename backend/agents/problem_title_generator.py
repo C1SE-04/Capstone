@@ -174,7 +174,13 @@ def _heuristic_title_fallback(problem_text: str, grade: Optional[int] = None) ->
             g_int = int(g_str)
         except ValueError:
             continue
-        topics = _CURRICULUM_DATA.get(g_str, [])
+        grade_info = _CURRICULUM_DATA.get(g_str, {})
+        if isinstance(grade_info, dict):
+            topics = grade_info.get("1", []) + grade_info.get("2", [])
+        elif isinstance(grade_info, list):
+            topics = grade_info
+        else:
+            topics = []
         for item in topics:
             norm_item = _strip_accents(item)
             item_words = set(re.findall(r"\b\w+\b", norm_item))
@@ -249,7 +255,9 @@ def generate_friendly_problem_title(
     curriculum_hint = ""
     target_grade_str = str(grade) if (grade and str(grade) in _CURRICULUM_DATA) else "5"
     if target_grade_str in _CURRICULUM_DATA:
-        sample_topics = _CURRICULUM_DATA[target_grade_str][:15]
+        grade_info = _CURRICULUM_DATA[target_grade_str]
+        all_topics = (grade_info.get("1", []) + grade_info.get("2", [])) if isinstance(grade_info, dict) else grade_info
+        sample_topics = all_topics[:15]
         curriculum_hint = f"Các chuyên đề SGK Lớp {target_grade_str} tham chiếu:\n" + "\n".join([f"- {t}" for t in sample_topics])
 
     prompt = f"""
