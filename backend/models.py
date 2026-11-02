@@ -1,6 +1,6 @@
 # models.py
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index, Integer
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index, Integer, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -9,20 +9,31 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
-    email = Column(String, unique=True, index=True, nullable=False)
+
+    # US 9.1 (T9.0): username – định danh đăng nhập chính. Unique, index.
+    # Được sinh tự động từ email cho user cũ; bắt buộc với user mới đăng ký bằng mật khẩu.
+    # Google OAuth user nhận username auto-gen (prefix email + 4 số ngẫu nhiên).
+    username = Column(String, unique=True, index=True, nullable=True)  # nullable để migration an toàn, sau đó NOT NULL
+
+    # US 9.1 (T9.0): email trở thành nullable — học sinh nhỏ tuổi không bắt buộc có email
+    email = Column(String, unique=True, index=True, nullable=True)
+
     hashed_password = Column(String, nullable=True)  # US 8.3 (T8.18): Nullable cho tài khoản Google OAuth
     role = Column(String, nullable=False, default="STUDENT")
     grade = Column(Integer, nullable=True)  # Chỉ dùng cho STUDENT (lớp 4-9)
     session_version = Column(Integer, default=1, nullable=False, server_default="1")  # US 6.2 (T6.10): version để đồng bộ session giữa các tab
-    
+
     # US 8.3 (T8.18): Google OAuth fields
     google_id = Column(String, unique=True, index=True, nullable=True)  # ID người dùng từ Google (sub)
     oauth_provider = Column(String, nullable=True)  # 'google' hoặc None nếu đăng ký bằng mật khẩu
 
+    # US 9.1 (T9.1): email_verified – True sau khi Phụ huynh xác thực OTP thành công
+    email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
+
     # Email riêng để nhận thông báo/cảnh báo (chủ yếu dùng cho MONITOR/phụ huynh)
     # Nếu NULL → dùng email tài khoản chính. Nếu OAuth Google → không cho sửa (email = tài khoản Google).
     notification_email = Column(String, nullable=True)
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Quan hệ Phụ huynh - Học sinh
@@ -534,3 +545,54 @@ class ParentAlertLog(Base):
     )
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# US 9.1 (T9.1): Bảng OTP xác thực Email cho Phụ huynh
+# ────────────────────────────────────────────────────────────────────────────
+
+class EmailOtp(Base):
+    """
+    US 9.1 - Task T9.1:
+    Lưu mã OTP 6 chữ số gửi qua email để xác thực tài khoản Phụ huynh.
+
+    Luồng sử dụng:
+      1. POST /auth/request-otp  → Sinh OTP, lưu vào bảng này, gửi email.
+      2. POST /auth/verify-otp   → Kiểm tra OTP, tăng attempts nếu sai,
+                                   đánh dấu is_used = True nếu đúng.
+
+    Bảo mật:
+      - Rate-limit: last_sent_at → chặn gửi lại trong vòng 60s.
+      - Max attempts: attempts >= 5 → mã bị vô hiệu hóa tự động.
+      - TTL: expires_at → mã tự động hết hạn sau 5 phút.
+      - Tạo mã mới → các mã cũ cùng email+purpose bị đánh dấu is_used = True.
+    """
+    __tablename__ = "email_otps"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+
+    # Email gửi OTP đến (dùng cho cả tạo tài khoản lẫn đổi email phụ huynh)
+    email = Column(String, nullable=False, index=True)
+
+    # Mã OTP 6 chữ số (lưu dạng plain string — OTP ngắn hạn, không cần hash)
+    otp_code = Column(String(6), nullable=False)
+
+    # Mục đích của OTP: "PARENT_REGISTER" | "PARENT_CHANGE_EMAIL"
+    purpose = Column(String, nullable=False, default="PARENT_REGISTER")
+
+    # Số lần nhập sai mã (>= 5 → mã bị vô hiệu hóa)
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
+
+    # Thời điểm hết hạn (5 phút kể từ khi tạo)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+    # Đánh dấu mã đã dùng hoặc bị hủy
+    is_used = Column(Boolean, nullable=False, default=False, server_default="false")
+
+    # Thời điểm gửi lần cuối (phục vụ rate-limit 60s)
+    last_sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Index tra cứu OTP theo email + purpose để invalidate mã cũ nhanh
+        Index("ix_email_otps_email_purpose", "email", "purpose"),
+    )
