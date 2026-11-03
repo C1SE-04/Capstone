@@ -18,7 +18,7 @@
         "description": "Ngâm bài từ 15 đến 30 phút"
       }
     ],
-    "floor_score": 10,
+    "floor_score": 30,
     "ceiling_score": 100
   },
   "mastery_levels": [

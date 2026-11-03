@@ -113,7 +113,9 @@ def classify_problem(
     curriculum_hint = ""
     target_grade_str = str(grade) if (grade and str(grade) in _CURRICULUM_DATA) else "5"
     if target_grade_str in _CURRICULUM_DATA:
-        sample_topics = _CURRICULUM_DATA[target_grade_str][:15]
+        grade_info = _CURRICULUM_DATA[target_grade_str]
+        all_topics = (grade_info.get("1", []) + grade_info.get("2", [])) if isinstance(grade_info, dict) else grade_info
+        sample_topics = all_topics[:15]
         curriculum_hint = f"Các chuyên đề SGK Lớp {target_grade_str} tham chiếu:\n" + "\n".join([f"- {t}" for t in sample_topics])
 
     student_grade_text = f"Lớp {grade}" if grade else "Tiểu học/THCS (tự suy luận từ 4 đến 9)"
