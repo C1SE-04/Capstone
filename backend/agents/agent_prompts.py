@@ -14,49 +14,60 @@ _LAST_FETCH_TIME: float = 0.0
 _CACHE_TTL_SECONDS: int = 300  # Thời gian sống của cache: 5 phút (300 giây)
 
 
-def _load_curriculum_from_file() -> dict[str, list[str]]:
+def _load_curriculum_from_file() -> dict[str, dict[str, list[str]]]:
     """
-    Cơ chế nạp danh mục chuyên đề đã lọc từ grade_curriculum.json.
-    File này đã được tự động loại bỏ các bài luyện tập chung, bài tập cuối chương, thực hành.
+    US 9.3 (Task T9.12):
+    Nạp danh mục chuyên đề từ grade_curriculum.json theo cấu trúc nhóm học kỳ:
+    {
+        "4": {"1": [...], "2": [...]},
+        ...
+    }
     """
     json_path = os.path.join(os.path.dirname(__file__), "grade_curriculum.json")
     try:
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict):
-                return {str(k): list(v) for k, v in data.items()}
+                normalized = {}
+                for k, v in data.items():
+                    if isinstance(v, dict):
+                        normalized[str(k)] = {
+                            "1": [str(t).strip() for t in v.get("1", [])],
+                            "2": [str(t).strip() for t in v.get("2", [])],
+                        }
+                    elif isinstance(v, list):
+                        # Hỗ trợ backward compatibility nếu dữ liệu cũ còn dạng list
+                        half = max(1, len(v) // 2)
+                        normalized[str(k)] = {
+                            "1": [str(t).strip() for t in v[:half]],
+                            "2": [str(t).strip() for t in v[half:]],
+                        }
+                return normalized
             return {}
     except Exception as e:
         logger.warning(f"[_load_curriculum_from_file] Không đọc được file {json_path}: {e}")
         return {}
 
 
-def _load_curriculum(force_refresh: bool = False) -> dict[str, list[str]]:
+def _load_curriculum(force_refresh: bool = False) -> dict[str, dict[str, list[str]]]:
     """
-    US 8.4 (Task T8.26):
-    Tải danh mục chuyên đề tinh gọn phục vụ Prompt AI:
-    - Nguồn dữ liệu cốt lõi: Đọc từ grade_curriculum.json (đã loại bỏ bài ôn tập, thực hành, luyện tập chung).
-    - Đồng bộ trạng thái Giảm tải (Admin Toggle): Kiểm tra Neon DB để loại trừ những bài mà Admin đã tắt (is_active == False).
-    - Cache RAM 5 phút (300s) giúp tin nhắn chat phản hồi tức thì (<0.01ms).
-    - Hỗ trợ force_refresh=True để xóa cache và ép nạp mới ngay lập tức.
+    Tải danh mục chuyên đề tinh gọn phục vụ Prompt AI (Cache RAM 5 phút).
+    Đồng bộ trạng thái Giảm tải (Admin Toggle) từ Neon DB.
     """
     global _CURRICULUM_CACHE, _LAST_FETCH_TIME
 
     current_time = time.time()
-
-    # 1. Kiểm tra cache còn hạn (dưới 5 phút) và không bị ép làm mới
     if not force_refresh and _CURRICULUM_CACHE and (current_time - _LAST_FETCH_TIME < _CACHE_TTL_SECONDS):
         return _CURRICULUM_CACHE
 
-    # 2. Đọc danh mục bài học đã được lọc sạch từ file JSON
     curriculum = _load_curriculum_from_file()
 
-    # 3. Đồng bộ trạng thái giảm tải từ Neon DB (loại trừ các bài is_active == False do Admin cấu hình)
     if curriculum:
         try:
             from database import SessionLocal
             import models
             import re
+            import unicodedata
 
             db = SessionLocal()
             try:
@@ -66,24 +77,28 @@ def _load_curriculum(force_refresh: bool = False) -> dict[str, list[str]]:
                     .all()
                 )
                 if inactive_topics:
-                    # Tạo tập hợp các bài bị tắt (đã chuẩn hóa tên)
                     disabled_set = set()
                     for grade, topic_name in inactive_topics:
-                        clean_name = re.sub(r"^(?:Giáo án\s+Toán\s+\d+\s+)?(?:Bài\s*\d+:\s*)?", "", topic_name, flags=re.IGNORECASE).strip().lower()
-                        disabled_set.add((str(grade), clean_name))
+                        clean_name = re.sub(
+                            r"^(?:Giáo án\s+Toán\s+\d+\s+)?(?:Bài\s*\d+:\s*)?",
+                            "",
+                            topic_name,
+                            flags=re.IGNORECASE
+                        ).strip()
+                        disabled_set.add((str(grade), unicodedata.normalize('NFC', clean_name.lower())))
 
-                    # Loại bỏ các bài bị tắt khỏi curriculum đưa vào prompt
+                    # Lọc bài tắt trên cả học kỳ 1 và 2
                     for g_str in curriculum:
-                        curriculum[g_str] = [
-                            t for t in curriculum[g_str]
-                            if (g_str, t.lower().strip()) not in disabled_set
-                        ]
+                        for sem_key in ("1", "2"):
+                            curriculum[g_str][sem_key] = [
+                                t for t in curriculum[g_str][sem_key]
+                                if (g_str, unicodedata.normalize('NFC', t.lower())) not in disabled_set
+                            ]
             finally:
                 db.close()
         except Exception as e:
-            logger.warning(f"[_load_curriculum] Không truy vấn được bài tắt từ DB: {e}. Giữ nguyên danh mục file JSON.")
+            logger.warning(f"[_load_curriculum] Không truy vấn được bài tắt từ DB: {e}. Giữ nguyên file JSON.")
 
-    # 4. Cập nhật cache nếu lấy được dữ liệu hợp lệ
     if curriculum:
         _CURRICULUM_CACHE = curriculum
         _LAST_FETCH_TIME = current_time
@@ -95,17 +110,27 @@ def _load_curriculum(force_refresh: bool = False) -> dict[str, list[str]]:
 _CURRICULUM = _load_curriculum()
 
 
+def get_curriculum_by_grade_and_semester(grade: int, semester: Optional[int] = None) -> list[str]:
+    """
+    US 9.3 (Phục vụ trực tiếp T9.11 & T9.13):
+    Lấy danh sách các chuyên đề của một khối lớp theo học kỳ chỉ định (1 hoặc 2).
+    Nếu semester=None -> Trả về toàn bộ chuyên đề của lớp đó (HK1 + HK2).
+    """
+    curriculum = _load_curriculum()
+    grade_data = curriculum.get(str(grade), {})
+    if semester in (1, 2):
+        return grade_data.get(str(semester), [])
+    return grade_data.get("1", []) + grade_data.get("2", [])
+
+
 def _get_grade_context(grade_level: Optional[int]) -> str:
     """
     Xây dựng đoạn text ngữ cảnh kiến thức tích lũy theo lớp.
-
-    Nguyên tắc tích lũy: Lớp 7 biết hết kiến thức lớp 4 + 5 + 6 + 7.
-    Nếu grade_level=None → trả về chuỗi rỗng (không ảnh hưởng prompt).
+    Gộp toàn bộ bài học (HK1 + HK2) của các lớp từ 4 đến grade_level.
     """
     if not grade_level:
         return ""
 
-    # Tải curriculum động từ cache 5 phút / DB Neon thay vì biến tĩnh
     curriculum = _load_curriculum()
     if not curriculum:
         return ""
@@ -113,7 +138,9 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
     grade = int(grade_level)
     all_topics = []
     for lvl in range(4, grade + 1):
-        for topic in curriculum.get(str(lvl), []):
+        g_data = curriculum.get(str(lvl), {})
+        topics_lvl = g_data.get("1", []) + g_data.get("2", [])
+        for topic in topics_lvl:
             all_topics.append(f"  - [Lớp {lvl}] {topic}")
 
     if not all_topics:

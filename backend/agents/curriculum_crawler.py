@@ -14,6 +14,7 @@ import os
 import logging
 import re
 import time
+import unicodedata
 from typing import Optional
 
 import requests
@@ -312,11 +313,12 @@ def transform_for_db_sync(
         #    - Tiểu học (lớp 4-5): Lớp 4 (CĐ 1-7 là HK1, CĐ 8-13 là HK2); Lớp 5 (CĐ 1-6 là HK1, CĐ 7-12 là HK2).
         #    - THCS (lớp 6-9): Chương 1-5 là HK1, Chương 6-10 là HK2.
         sem = 1
-        ch_lower = clean_chapter.lower()
+        clean_chapter_nfc = unicodedata.normalize('NFC', clean_chapter)
+        ch_lower = clean_chapter_nfc.lower()
         if "cuối năm" in ch_lower or "học kì 2" in ch_lower or "học kỳ 2" in ch_lower:
             sem = 2
         else:
-            match = re.search(r"(?:Chương|Chủ đề)\s*(\d+)", clean_chapter, re.IGNORECASE)
+            match = re.search(r"(?:Chương|Chủ đề)\s*(\d+)", clean_chapter_nfc, re.IGNORECASE)
             if match:
                 num = int(match.group(1))
                 if grade == 4 and num >= 8:
@@ -354,43 +356,41 @@ def transform_for_db_sync(
 def export_to_curriculum_json(
     raw_topics: list[dict],
     save_path: Optional[str] = None,
-) -> dict[str, list[str]]:
+) -> dict[str, dict[str, list[str]]]:
     """
-    Biến đổi danh sách bài học thô thành cấu trúc phân tầng {'4': [...], '5': [...]}
-    tương thích chuẩn với file 'grade_curriculum.json' (phục vụ Task T8.26 cho AI Prompts).
-
-    Tự động tối ưu theo chuẩn sư phạm Socratic:
-      - Cắt bỏ tiền tố 'Giáo án Toán X' và 'Bài X: ' để chỉ giữ lại khái niệm / tên dạng toán cốt lõi.
-      - Lọc bỏ các chương ôn tập tổng kết:
-          + Ôn tập học kì 1 (Chủ đề 7 lớp 4, Chủ đề 6 lớp 5)
-          + Ôn tập cuối năm (Chủ đề 13 lớp 4, Chủ đề 12 lớp 5, hoặc có chữ 'cuối năm')
-          + Toàn bộ chương Hoạt động thực hành trải nghiệm
-      - Lọc bỏ các bài chung chung không mang ngữ nghĩa toán học:
-          + Luyện tập chung, Luyện tập (trang X)
-          + Bài tập cuối chương, bài tập ôn cuối
-          + Các hoạt động thực hành, phần mềm GeoGebra, máy tính cầm tay
-      - Lọc bỏ các bài ôn tập đầu năm nhắc lại lớp dưới (Bài 1, 2 lớp 4; Bài 1, 2, 3, 5, 8 lớp 5).
-      - Tùy chọn lưu thẳng ra file JSON nếu truyền 'save_path'.
+    US 9.3 (Task T9.12):
+    Biến đổi danh sách bài học thô thành cấu trúc phân tầng theo Học kỳ:
+    {
+        "4": {
+            "1": ["Số chẵn, số lẻ", "Biểu thức chứa chữ", ...],
+            "2": ["Khái niệm phân số", "Rút gọn phân số", ...]
+        },
+        ...
+    }
     """
-    result: dict[str, list[str]] = {str(g): [] for g in range(4, 10)}
+    result: dict[str, dict[str, list[str]]] = {
+        str(g): {"1": [], "2": []} for g in range(4, 10)
+    }
 
-    # Giữ lại dữ liệu các lớp khác nếu file cũ đã tồn tại (tránh ghi đè mất dữ liệu khi sync lẻ từng lớp)
+    # Giữ lại dữ liệu cũ nếu file đã tồn tại và hợp lệ
     if save_path and os.path.exists(save_path):
         try:
             with open(save_path, "r", encoding="utf-8") as f_old:
                 old_data = json.load(f_old)
                 if isinstance(old_data, dict):
                     for k in [str(g) for g in range(4, 10)]:
-                        if k in old_data and isinstance(old_data[k], list) and len(old_data[k]) > 0:
-                            result[k] = list(old_data[k])
+                        if k in old_data and isinstance(old_data[k], dict):
+                            result[k]["1"] = list(old_data[k].get("1", []))
+                            result[k]["2"] = list(old_data[k].get("2", []))
         except Exception:
             pass
 
-    # Reset danh sách các lớp có mặt trong raw_topics để cập nhật mới
+    # Reset danh sách các lớp có mặt trong raw_topics để nạp mới
     present_grades = {str(item.get("grade")) for item in raw_topics if item.get("grade")}
     for k in present_grades:
         if k in result:
-            result[k] = []
+            result[k] = {"1": [], "2": []}
+
     ignore_keywords = (
         "luyện tập chung",
         "ôn tập chung",
@@ -412,28 +412,28 @@ def export_to_curriculum_json(
             continue
         g_str = str(grade)
 
-        # Lấy tên chương (hỗ trợ cả schema raw crawl 'chapter' và DB record 'chapter_name')
-        ch = (item.get("chapter") or item.get("chapter_name") or "").strip().lower()
+        raw_ch = (item.get("chapter") or item.get("chapter_name") or "").strip()
+        norm_ch = unicodedata.normalize('NFC', raw_ch)
+        ch_lower = norm_ch.lower()
+
         topic = (item.get("topic_name") or "").strip()
-        topic_lower = topic.lower()
+        norm_topic = unicodedata.normalize('NFC', topic)
+        topic_lower = norm_topic.lower()
 
-        # 1. Bỏ qua các chương/chủ đề ôn tập tổng kết học kì, cuối năm & hoạt động trải nghiệm
-        if "cuối năm" in ch or "cuối năm" in topic_lower:
+        # 1. Bỏ qua các chương ôn tập tổng kết & thực hành
+        if "cuối năm" in ch_lower or "cuối năm" in topic_lower:
             continue
-        if "ôn tập học kì" in ch or "ôn tập học kỳ" in ch:
+        if "ôn tập học kì" in ch_lower or "ôn tập học kỳ" in ch_lower:
             continue
-        if "trải nghiệm" in ch or "hoạt động thực hành" in ch:
+        if "trải nghiệm" in ch_lower or "hoạt động thực hành" in ch_lower:
             continue
 
-        # 2. Bỏ qua bài luyện tập chung / thực hành / ôn tập chung / bài tập cuối chương
+        # 2. Bỏ qua bài luyện tập chung / thực hành / ôn tập chung
         if any(ign in topic_lower for ign in ignore_keywords) or topic_lower.startswith("luyện tập"):
             continue
 
-        # 3. Bỏ qua các bài ôn tập đầu năm nhắc lại lớp dưới của Tiểu học (Lớp 4 & 5)
-        if grade == 4 and (
-            topic_lower.startswith("bài 1: ôn tập") or
-            topic_lower.startswith("bài 2: ôn tập")
-        ):
+        # 3. Bỏ qua các bài ôn tập đầu năm nhắc lại lớp dưới của Tiểu học
+        if grade == 4 and (topic_lower.startswith("bài 1: ôn tập") or topic_lower.startswith("bài 2: ôn tập")):
             continue
         if grade == 5 and (
             topic_lower.startswith("bài 1: ôn tập") or
@@ -444,17 +444,36 @@ def export_to_curriculum_json(
         ):
             continue
 
-        # 4. Cắt bỏ tiền tố 'Giáo án Toán X' và 'Bài X: ' (ví dụ: 'Bài 10: Số nguyên tố' -> 'Số nguyên tố')
-        clean_topic = re.sub(r"^(?:Giáo án\s+Toán\s+\d+\s+)?(?:Bài\s*\d+:\s*)?", "", topic, flags=re.IGNORECASE).strip()
+        # 4. Xác định học kì chuẩn (1 hoặc 2)
+        sem = item.get("semester")
+        if sem not in (1, 2):
+            sem = 1
+            if "cuối năm" in ch_lower or "học kì 2" in ch_lower or "học kỳ 2" in ch_lower:
+                sem = 2
+            else:
+                m = re.search(r"(?:Chương|Chủ đề)\s*(\d+)", norm_ch, re.IGNORECASE)
+                if m:
+                    num = int(m.group(1))
+                    if grade == 4 and num >= 8:
+                        sem = 2
+                    elif grade == 5 and num >= 7:
+                        sem = 2
+                    elif grade >= 6 and num >= 6:
+                        sem = 2
 
-        if clean_topic and clean_topic not in result[g_str]:
-            result[g_str].append(clean_topic)
+        sem_key = str(sem)
 
-    # Nếu có đường dẫn file lưu, xuất ra file JSON UTF-8
+        # 5. Cắt bỏ tiền tố "Giáo án Toán X" và "Bài X: "
+        clean_topic = re.sub(r"^(?:Giáo án\s+Toán\s+\d+\s+)?(?:Bài\s*\d+:\s*)?", "", norm_topic, flags=re.IGNORECASE).strip()
+
+        # Thêm vào danh sách học kỳ tương ứng nếu chưa có
+        if clean_topic and clean_topic not in result[g_str][sem_key]:
+            result[g_str][sem_key].append(clean_topic)
+
     if save_path:
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
-        logger.info(f"[Crawler] Đã xuất thành công dữ liệu vào: {save_path}")
+        logger.info(f"[Crawler] Đã xuất thành công dataset học kỳ vào: {save_path}")
 
     return result
 

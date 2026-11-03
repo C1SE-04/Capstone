@@ -1098,22 +1098,38 @@ def sync_curriculum_from_vietjack(
                 data = json.load(f)
 
             for g in target_grades:
-                topics_list = data.get(str(g), [])
-                half_len = max(1, len(topics_list) // 2)
-                for idx, t_name in enumerate(topics_list, start=1):
-                    sem = 1 if idx <= half_len else 2
-                    ch_num = 1 if sem == 1 else 2
-                    crawled_topics.append({
-                        "grade": g,
-                        "book_series": "Kết nối tri thức",
-                        "semester": sem,
-                        "chapter_name": f"Chương {ch_num}: Trọng tâm môn Toán Lớp {g}",
-                        "topic_name": t_name,
-                        "order_index": idx,
-                        "school_year": school_year,
-                        "is_active": True,
-                        "source_url": f"https://vietjack.com/toan-lop-{g}",
-                    })
+                grade_data = data.get(str(g), {})
+                # US 9.3: Đọc trực tiếp từ cấu trúc nhóm {"1": [...], "2": [...]}
+                if isinstance(grade_data, dict):
+                    for sem_str in ("1", "2"):
+                        sem = int(sem_str)
+                        for idx, t_name in enumerate(grade_data.get(sem_str, []), start=1):
+                            crawled_topics.append({
+                                "grade": g,
+                                "book_series": "Kết nối tri thức",
+                                "semester": sem,
+                                "chapter_name": f"Chương {sem}: Trọng tâm môn Toán Lớp {g} - Học kỳ {sem}",
+                                "topic_name": t_name,
+                                "order_index": idx,
+                                "school_year": school_year,
+                                "is_active": True,
+                                "source_url": f"https://vietjack.com/toan-lop-{g}",
+                            })
+                elif isinstance(grade_data, list):
+                    half_len = max(1, len(grade_data) // 2)
+                    for idx, t_name in enumerate(grade_data, start=1):
+                        sem = 1 if idx <= half_len else 2
+                        crawled_topics.append({
+                            "grade": g,
+                            "book_series": "Kết nối tri thức",
+                            "semester": sem,
+                            "chapter_name": f"Chương {sem}: Trọng tâm môn Toán Lớp {g}",
+                            "topic_name": str(t_name),
+                            "order_index": idx,
+                            "school_year": school_year,
+                            "is_active": True,
+                            "source_url": f"https://vietjack.com/toan-lop-{g}",
+                        })
 
     # 3. Tối ưu Bulk Upsert vào Neon DB (1 query lấy toàn bộ existing topics thay vì N query)
     # Nếu cào trực tiếp thành công (LIVE_CRAWL), tự động dọn dẹp các bản ghi fallback cũ dạng 'Trọng tâm'
