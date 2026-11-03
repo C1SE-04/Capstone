@@ -79,6 +79,12 @@ body {
   }
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
 /* Các lớp tiện ích animation chuyển động tự nhiên theo chuẩn Emil Kowalski */
 .animate-message-pop {
   animation: message-pop-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -101,6 +107,10 @@ body {
 
 .animate-fade-in-down {
   animation: fade-in-down 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
 }
 
 /* Đảm bảo tất cả các thành phần có thể bấm được đều hiện dấu tay (cursor pointer) */

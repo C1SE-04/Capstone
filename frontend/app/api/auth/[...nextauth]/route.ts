@@ -13,7 +13,7 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        email: { label: "Email", type: "email" },
+        email: { label: "Email/Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
       // Hàm authorize chạy khi người dùng ấn nút Đăng Nhập ở FE
@@ -31,7 +31,7 @@ export const authOptions: NextAuthOptions = {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
-              username: credentials.email.toLowerCase(),
+              username: credentials.email.toLowerCase().trim(),
               password: credentials.password,
             }),
           });
@@ -49,11 +49,15 @@ export const authOptions: NextAuthOptions = {
             payload.role === "PENDING" ||
             (payload.role === "STUDENT" && !payload.grade_level);
 
+          const displayName = payload.email
+            ? payload.email.split("@")[0]
+            : (payload.username || (payload.sub ? `user_${String(payload.sub).slice(0, 6)}` : "User"));
+
           // Trả về object user để NextAuth lưu vào phiên đăng nhập (Session)
           return {
             id: payload.sub,
-            email: payload.email,
-            name: payload.email.split("@")[0], // Dùng phần trước @ làm display name
+            email: payload.email || null,
+            name: displayName,
             role: payload.role,
             grade_level: payload.grade_level,
             access_token: data.access_token,
@@ -117,7 +121,7 @@ export const authOptions: NextAuthOptions = {
           // Gắn dữ liệu định danh và JWT Backend vào user để jwt callback lưu vào token
           user.id = data.user_id;
           user.email = data.email;
-          user.name = data.name || user.name || data.email.split("@")[0];
+          user.name = data.name || user.name || (data.email ? data.email.split("@")[0] : "User");
           user.role = data.role;
           user.grade_level = data.grade ?? undefined;
           user.access_token = data.access_token;

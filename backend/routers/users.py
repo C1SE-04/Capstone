@@ -23,6 +23,7 @@ def get_current_user_profile(
         raise HTTPException(status_code=404, detail="Người dùng không tồn tại.")
     return {
         "id": user_db.id,
+        "username": getattr(user_db, "username", None),
         "email": user_db.email,
         "role": user_db.role,
         "grade": user_db.grade,
@@ -30,6 +31,7 @@ def get_current_user_profile(
         "google_id": user_db.google_id,
         "oauth_provider": user_db.oauth_provider,
         "notification_email": user_db.notification_email,
+        "email_verified": getattr(user_db, "email_verified", False),
     }
 
 @router.get("/monitor/dashboard")

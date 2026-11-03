@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Users, CheckCircle2, ArrowRight, Loader2, Sparkles, BookOpen, Mail, KeyRound } from "lucide-react";
+import { GraduationCap, Users, CheckCircle2, ArrowRight, Loader2, Sparkles, BookOpen, Mail } from "lucide-react";
+import OtpModal from "@/components/OtpModal";
 
 export default function OnboardingPage() {
   const { data: session, status, update } = useSession();
@@ -14,12 +15,10 @@ export default function OnboardingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // OTP flow for MONITOR
+  // Email state cho Phụ huynh
   const [parentEmail, setParentEmail] = useState("");
-  const [otpValue, setOtpValue] = useState("");
-  const [otpStage, setOtpStage] = useState<"email" | "otp">("email");
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [otpError, setOtpError] = useState("");
+  const [parentEmailError, setParentEmailError] = useState("");
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
 
   // Hàm hủy đăng nhập, dọn dẹp tài khoản PENDING trong DB và đăng xuất sạch NextAuth
   const handleCancel = useCallback(async () => {
@@ -54,6 +53,13 @@ export default function OnboardingPage() {
     };
   }, [handleCancel]);
 
+  // Điền email sẵn nếu đã có từ Google OAuth
+  useEffect(() => {
+    if (session?.user?.email && !parentEmail) {
+      setParentEmail(session.user.email);
+    }
+  }, [session?.user?.email, parentEmail]);
+
   // Điều hướng nếu chưa đăng nhập hoặc đã hoàn tất onboarding
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -78,98 +84,193 @@ export default function OnboardingPage() {
     }
   }, [status, session, router]);
 
-  const handleSendOtp = async () => {
-    if (!parentEmail.trim()) {
-      setOtpError("Vui lòng nhập email của bạn");
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
-    if (!emailRegex.test(parentEmail.trim())) {
-      setOtpError("Vui lòng nhập đúng định dạng email");
-      return;
-    }
-    setOtpError("");
-    setIsSendingOtp(true);
-    // Simulate sending OTP — replace with real API call when ready
-    await new Promise((r) => setTimeout(r, 1000));
-    setOtpStage("otp");
-    setIsSendingOtp(false);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-
-    if (role === "STUDENT" && (!selectedGrade || selectedGrade < 4 || selectedGrade > 9)) {
-      setErrorMessage("Vui lòng chọn khối lớp từ lớp 4 đến lớp 9.");
-      return;
-    }
-
-    if (role === "MONITOR") {
-      if (!parentEmail.trim()) {
-        setErrorMessage("Vui lòng nhập email phụ huynh để nhận mã OTP.");
-        return;
-      }
-      if (otpStage === "email") {
-        setErrorMessage("Vui lòng bấm \"Gửi mã OTP\" để nhận mã xác thực trước khi tiếp tục.");
-        return;
-      }
-      if (!otpValue.trim()) {
-        setErrorMessage("Vui lòng nhập mã OTP đã được gửi đến email của bạn.");
-        return;
-      }
-    }
-
+  // Hoàn tất lưu onboarding vào backend
+  const finalizeOnboarding = async (targetRole: "STUDENT" | "MONITOR", gradeVal: number | null) => {
     const token = session?.access_token;
     if (!token) {
-      setErrorMessage("Không tìm thấy phiên đăng nhập. Vui lòng thử đăng nhập lại.");
+      throw new Error("Không tìm thấy phiên đăng nhập. Vui lòng đăng nhập lại.");
+    }
+
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    const res = await fetch(`${backendUrl}/auth/onboarding`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        role: targetRole,
+        grade: targetRole === "STUDENT" ? gradeVal : null,
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || "Không thể lưu thông tin. Vui lòng thử lại.");
+    }
+
+    const data = await res.json();
+
+    // Đồng bộ thông tin mới vào session của NextAuth
+    await update({
+      role: data.role,
+      grade_level: data.grade,
+      is_new_user: false,
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+    });
+
+    // Điều hướng người dùng tới Dashboard tương ứng
+    if (data.role === "MONITOR") {
+      router.replace("/dashboard/monitor");
+    } else {
+      router.replace("/dashboard/chat");
+    }
+  };
+
+  // Xử lý gửi OTP cho Phụ huynh
+  const handleRequestParentOtp = async () => {
+    const trimmedEmail = parentEmail.trim();
+    if (!trimmedEmail) {
+      setParentEmailError("Vui lòng nhập email nhận thông báo của phụ huynh");
       return;
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+    if (!emailRegex.test(trimmedEmail)) {
+      setParentEmailError("Vui lòng nhập đúng định dạng email");
+      return;
+    }
+
+    setParentEmailError("");
+    setErrorMessage(null);
     setIsSubmitting(true);
 
     try {
-      const backendUrl =
-        process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+      }
 
-      const res = await fetch(`${backendUrl}/auth/onboarding`, {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/auth/request-otp`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          role: role,
-          grade: role === "STUDENT" ? selectedGrade : null,
+          email: trimmedEmail,
+          purpose: "PARENT_REGISTER",
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Không thể gửi mã OTP. Vui lòng thử lại.");
+      }
+
+      // Mở Modal OTP Digit Input UX
+      setIsOtpModalOpen(true);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Đã xảy ra lỗi khi gửi mã OTP.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handler khi submit form
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+
+    if (role === "STUDENT") {
+      if (!selectedGrade || selectedGrade < 4 || selectedGrade > 9) {
+        setErrorMessage("Vui lòng chọn khối lớp từ lớp 4 đến lớp 9.");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await finalizeOnboarding("STUDENT", selectedGrade);
+      } catch (err: any) {
+        setErrorMessage(err.message || "Đã xảy ra lỗi khi hoàn tất thiết lập.");
+        setIsSubmitting(false);
+      }
+    } else {
+      // Vai trò MONITOR: Bấm tiếp tục mở Modal OTP 6 ô rời
+      await handleRequestParentOtp();
+    }
+  };
+
+  // Callback xác thực OTP từ Modal
+  const handleVerifyOtp = async (otpCode: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = session?.access_token;
+      if (!token) {
+        return { success: false, error: "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại." };
+      }
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/auth/verify-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: parentEmail.trim(),
+          otp_code: otpCode.trim(),
+          purpose: "PARENT_REGISTER",
         }),
       });
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || "Không thể lưu thông tin. Vui lòng thử lại.");
+        const detail = errData.detail || "Mã xác thực không chính xác";
+        if (typeof detail === "string" && (detail.includes("hết hạn") || detail.includes("không hợp lệ"))) {
+          return { success: false, error: "Mã OTP đã hết hạn, vui lòng bấm Gửi lại mã" };
+        }
+        return { success: false, error: detail };
       }
 
-      const data = await res.json();
+      // Xác thực OTP thành công -> Hoàn tất Onboarding với role MONITOR
+      await finalizeOnboarding("MONITOR", null);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Mã xác thực không chính xác" };
+    }
+  };
 
-      // Đồng bộ thông tin mới vào session của NextAuth
-      await update({
-        role: data.role,
-        grade_level: data.grade,
-        is_new_user: false,
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
+  // Callback gửi lại mã OTP từ Modal
+  const handleResendOtp = async (): Promise<{ success: boolean; error?: string; rateLimitSeconds?: number }> => {
+    try {
+      const token = session?.access_token;
+      if (!token) {
+        return { success: false, error: "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại." };
+      }
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/auth/request-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: parentEmail.trim(),
+          purpose: "PARENT_REGISTER",
+        }),
       });
 
-      // Điều hướng người dùng tới Dashboard tương ứng
-      if (data.role === "MONITOR") {
-        router.replace("/dashboard/monitor");
-      } else {
-        router.replace("/dashboard/chat");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, error: errData.detail || "Không thể gửi lại mã OTP." };
       }
+
+      const data = await res.json().catch(() => ({}));
+      return { success: true, rateLimitSeconds: data.rate_limit_seconds || 60 };
     } catch (err: any) {
-      console.error("[Onboarding] Lỗi hoàn tất thiết lập:", err);
-      setErrorMessage(err.message || "Đã xảy ra lỗi khi hoàn tất thiết lập.");
-      setIsSubmitting(false);
+      return { success: false, error: err.message || "Lỗi khi gửi lại mã." };
     }
   };
 
@@ -267,11 +368,15 @@ export default function OnboardingPage() {
               {/* Card Học sinh */}
               <button
                 type="button"
-                onClick={() => setRole("STUDENT")}
-                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${role === "STUDENT"
-                  ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
-                  : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
-                  }`}
+                onClick={() => {
+                  setRole("STUDENT");
+                  setErrorMessage(null);
+                }}
+                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                  role === "STUDENT"
+                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
+                    : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
+                }`}
               >
                 {role === "STUDENT" && (
                   <div className="absolute top-4 right-4 text-[#C1762A]">
@@ -298,11 +403,15 @@ export default function OnboardingPage() {
               {/* Card Phụ huynh */}
               <button
                 type="button"
-                onClick={() => setRole("MONITOR")}
-                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${role === "MONITOR"
-                  ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
-                  : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
-                  }`}
+                onClick={() => {
+                  setRole("MONITOR");
+                  setErrorMessage(null);
+                }}
+                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                  role === "MONITOR"
+                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
+                    : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
+                }`}
               >
                 {role === "MONITOR" && (
                   <div className="absolute top-4 right-4 text-[#C1762A]">
@@ -322,13 +431,13 @@ export default function OnboardingPage() {
                 </div>
                 <div className="mt-4 pt-3 border-t border-[#F1CCA6]/40 flex items-center gap-1.5 text-xs font-bold text-[#C1762A]">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Báo cáo & Giám sát
+                  Báo cáo & Giám sát (Xác thực OTP)
                 </div>
               </button>
             </div>
           </div>
 
-          {/* Section 2: Khối lớp (Chỉ hiện khi là Học sinh) */}
+          {/* Section 2: Khối lớp (Khi là Học sinh) */}
           {role === "STUDENT" ? (
             <div>
               <label className="block text-sm font-bold text-[#8C4905] mb-1.5">
@@ -345,17 +454,19 @@ export default function OnboardingPage() {
                       key={item.grade}
                       type="button"
                       onClick={() => setSelectedGrade(item.grade)}
-                      className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${isSelected
-                        ? "border-[#C1762A] bg-[#C1762A] text-white shadow-sm scale-102"
-                        : "border-stone-200 bg-white text-[#8C4905] hover:border-[#F1CCA6] hover:bg-stone-50"
-                        }`}
+                      className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-[#C1762A] bg-[#C1762A] text-white shadow-sm scale-102"
+                          : "border-stone-200 bg-white text-[#8C4905] hover:border-[#F1CCA6] hover:bg-stone-50"
+                      }`}
                     >
                       <span className="font-extrabold text-base">
                         {item.label}
                       </span>
                       <span
-                        className={`text-[10px] font-semibold ${isSelected ? "text-[#F7ECE1]" : "text-[#8C4905]/60"
-                          }`}
+                        className={`text-[10px] font-semibold ${
+                          isSelected ? "text-[#F7ECE1]" : "text-[#8C4905]/60"
+                        }`}
                       >
                         {item.level}
                       </span>
@@ -365,105 +476,35 @@ export default function OnboardingPage() {
               </div>
             </div>
           ) : (
-            /* OTP Email Flow cho Phụ huynh */
-            <div className="bg-[#F7ECE1]/60 rounded-2xl border border-[#F1CCA6] p-5 space-y-4">
-              {otpStage === "email" ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center">
-                      <Mail className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-[#8C4905]">Xác thực Email Phụ huynh</p>
-                      <p className="text-xs text-[#8C4905]/70">Nhập email để nhận mã OTP liên kết tài khoản giám sát</p>
-                    </div>
-                  </div>
-                  <div>
-                    <input
-                      type="email"
-                      value={parentEmail}
-                      onChange={(e) => {
-                        setParentEmail(e.target.value);
-                        setOtpError("");
-                      }}
-                      placeholder="vidu: phuhuynh@gmail.com"
-                      className="w-full px-4 py-3 rounded-xl bg-white border border-[#F1CCA6] focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 focus:outline-none text-[#1C1917] text-sm font-medium transition-all"
-                    />
-                    {otpError && (
-                      <p className="mt-1.5 text-xs text-[#EF4444] font-bold">{otpError}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleSendOtp}
-                    disabled={isSendingOtp}
-                    className="w-full py-3 rounded-xl bg-[#C1762A] text-white font-bold text-sm hover:bg-[#8C4905] transition-all active:scale-[0.99] disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                  >
-                    {isSendingOtp ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Đang gửi mã OTP...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Gửi mã OTP</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center">
-                      <KeyRound className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-[#8C4905]">Nhập mã xác nhận OTP</p>
-                      <p className="text-xs text-[#8C4905]/70">
-                        Mã gồm 6 chữ số đã được gửi tới <strong className="text-[#C1762A]">{parentEmail}</strong>
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      value={otpValue}
-                      onChange={(e) => {
-                        setOtpValue(e.target.value);
-                        setOtpError("");
-                      }}
-                      placeholder="••••••"
-                      maxLength={6}
-                      className="w-full px-4 py-3 rounded-xl bg-white border border-[#F1CCA6] focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 focus:outline-none text-[#1C1917] tracking-[0.5em] text-center font-mono text-xl font-bold transition-all"
-                    />
-                    {otpError && (
-                      <p className="mt-1.5 text-xs text-[#EF4444] font-bold text-center">{otpError}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOtpStage("email");
-                        setOtpValue("");
-                        setOtpError("");
-                      }}
-                      className="text-xs text-[#8C4905]/70 hover:text-[#C1762A] hover:underline cursor-pointer font-medium"
-                    >
-                      ← Đổi email khác
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSendOtp}
-                      disabled={isSendingOtp}
-                      className="text-xs font-bold text-[#C1762A] hover:text-[#8C4905] hover:underline cursor-pointer disabled:opacity-50"
-                    >
-                      {isSendingOtp ? "Đang gửi lại..." : "Gửi lại mã"}
-                    </button>
-                  </div>
-                </>
-              )}
+            /* Ô nhập Email khi là Phụ huynh */
+            <div className="bg-[#F7ECE1]/60 rounded-2xl border border-[#F1CCA6] p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-[#8C4905]">Email nhận thông báo Phụ huynh</p>
+                  <p className="text-xs text-[#8C4905]/70">
+                    Hệ thống sẽ gửi mã OTP xác nhận tới email này trước khi hoàn tất kích hoạt.
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="email"
+                  value={parentEmail}
+                  onChange={(e) => {
+                    setParentEmail(e.target.value);
+                    setParentEmailError("");
+                  }}
+                  placeholder="vidu: phuhuynh@gmail.com"
+                  className="w-full px-4 py-3 rounded-xl bg-white border border-[#F1CCA6] focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 focus:outline-none text-[#1C1917] text-sm font-medium transition-all"
+                />
+                {parentEmailError && (
+                  <p className="mt-1.5 text-xs text-[#EF4444] font-bold">{parentEmailError}</p>
+                )}
+              </div>
             </div>
           )}
 
@@ -476,14 +517,14 @@ export default function OnboardingPage() {
             {isSubmitting ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Đang thiết lập thông tin...</span>
+                <span>Đang xử lý...</span>
               </>
             ) : (
               <>
                 <span>
                   {role === "STUDENT"
                     ? "Bắt đầu học ngay với SocraticKid"
-                    : "Truy cập Bảng điều khiển Phụ huynh"}
+                    : "Tiếp tục xác thực OTP Email"}
                 </span>
                 <ArrowRight className="w-5 h-5" />
               </>
@@ -502,6 +543,17 @@ export default function OnboardingPage() {
           </div>
         </form>
       </main>
+
+      {/* Modal OTP 6 ô rời (Digit Input UX) */}
+      <OtpModal
+        isOpen={isOtpModalOpen}
+        email={parentEmail}
+        title="Xác thực OTP Email Phụ huynh"
+        onClose={() => setIsOtpModalOpen(false)}
+        onVerify={handleVerifyOtp}
+        onResend={handleResendOtp}
+        initialCountdown={60}
+      />
 
       {/* Footer */}
       <footer className="text-center text-xs text-[#8C4905]/60 font-medium py-3">

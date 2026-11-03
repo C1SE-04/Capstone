@@ -3,20 +3,25 @@
 /**
  * File: app/dashboard/monitor/settings/page.tsx
  * Mô tả: Trang Cài đặt dành cho Phụ huynh (role=MONITOR).
- * - Hiển thị thông tin tài khoản (email đăng nhập, vai trò).
- * - Cho phép chỉnh sửa email nhận thông báo cảnh báo học tập & ngôn từ.
- * - Nếu đăng nhập bằng Google OAuth → email nhận thông báo = email Google, KHÔNG cho phép chỉnh sửa.
+ * US 9.1 (T9.5):
+ * - Hiển thị thông tin tài khoản (Tên tài khoản, Email, Trạng thái xác thực, Vai trò).
+ * - Form đổi email nhận thông báo: kích hoạt popup Modal OTP xác nhận trước khi lưu email mới vào hệ thống.
+ * - Nếu đăng nhập bằng Google OAuth -> email nhận thông báo = email Google, cố định không cho sửa.
  */
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, Mail, Lock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, Mail, Lock, CheckCircle2, AlertCircle, Loader2, ShieldCheck, Clock } from "lucide-react";
+import OtpModal from "@/components/OtpModal";
 
 interface UserProfile {
-  email: string;
+  id?: number;
+  username?: string | null;
+  email: string | null;
   oauth_provider: string | null;
   notification_email: string | null;
+  email_verified?: boolean;
   role: string;
 }
 
@@ -29,9 +34,13 @@ export default function MonitorSettingsPage() {
 
   // Email nhận thông báo — field có thể chỉnh sửa
   const [notifEmail, setNotifEmail] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Modal OTP state
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
@@ -49,7 +58,8 @@ export default function MonitorSettingsPage() {
         const data: UserProfile = await res.json();
         setProfile(data);
         // Điền vào input: notification_email nếu đã lưu, ngược lại dùng email chính
-        setNotifEmail(data.notification_email || data.email || "");
+        const initialEmail = data.notification_email || data.email || "";
+        setNotifEmail(initialEmail);
       } catch (err) {
         console.error(err);
         setErrorMsg("Không thể tải thông tin tài khoản. Vui lòng thử lại.");
@@ -59,49 +69,126 @@ export default function MonitorSettingsPage() {
     };
 
     fetchProfile();
-  }, [session?.access_token]);
+  }, [session?.access_token, backendUrl]);
 
   const isGoogleOAuth = profile?.oauth_provider === "google";
+  const currentSavedEmail = profile?.notification_email || profile?.email || "";
 
-  const handleSave = async () => {
-    if (!notifEmail.trim()) {
-      setErrorMsg("Email không được để trống.");
-      return;
-    }
-    // Validate email format cơ bản
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(notifEmail.trim())) {
-      setErrorMsg("Địa chỉ email không hợp lệ.");
-      return;
-    }
-
-    setIsSaving(true);
+  // Bước 1: Bấm nút Lưu -> Gọi API request OTP và mở Modal OTP
+  const handleInitiateChangeEmail = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
 
+    const targetEmail = notifEmail.trim();
+    if (!targetEmail) {
+      setErrorMsg("Địa chỉ email không được để trống.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(targetEmail)) {
+      setErrorMsg("Địa chỉ email không hợp lệ. Vui lòng kiểm tra lại.");
+      return;
+    }
+
+    if (targetEmail.toLowerCase() === currentSavedEmail.toLowerCase() && profile?.email_verified) {
+      setErrorMsg("Email này đã được lưu và xác thực trước đó.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
     try {
-      const res = await fetch(`${backendUrl}/users/me/notification-email`, {
-        method: "PATCH",
+      const res = await fetch(`${backendUrl}/parent/settings/request-email-otp`, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({ notification_email: notifEmail.trim() }),
+        body: JSON.stringify({ new_email: targetEmail }),
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Không thể cập nhật email thông báo");
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Không thể gửi mã xác thực tới email này.");
       }
 
-      // Cập nhật lại profile local
-      setProfile((prev) => prev ? { ...prev, notification_email: notifEmail.trim() } : prev);
-      setSuccessMsg("✓ Đã lưu email nhận thông báo thành công!");
-      setTimeout(() => setSuccessMsg(""), 4000);
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Đã xảy ra lỗi hệ thống");
+      // Lưu email đang chờ xác thực và bật Modal OTP
+      setPendingEmail(targetEmail);
+      setIsOtpModalOpen(true);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Đã xảy ra lỗi hệ thống khi yêu cầu mã OTP.");
     } finally {
-      setIsSaving(false);
+      setIsSubmitting(false);
+    }
+  };
+
+  // Bước 2: Xác thực mã OTP trong Modal
+  const handleVerifyOtp = async (otpCode: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch(`${backendUrl}/parent/settings/verify-email-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          new_email: pendingEmail,
+          otp_code: otpCode.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const detail = errData.detail || "Mã xác thực không chính xác";
+        if (typeof detail === "string" && (detail.includes("hết hạn") || detail.includes("không hợp lệ"))) {
+          return { success: false, error: "Mã OTP đã hết hạn, vui lòng bấm Gửi lại mã" };
+        }
+        return { success: false, error: detail };
+      }
+
+      // Thành công: cập nhật profile state trên giao diện
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              email: pendingEmail,
+              notification_email: pendingEmail,
+              email_verified: true,
+            }
+          : prev
+      );
+      setNotifEmail(pendingEmail);
+      setSuccessMsg(`✓ Đổi email nhận thông báo thành ${pendingEmail} thành công! Email đã được xác thực qua OTP.`);
+      setTimeout(() => setIsOtpModalOpen(false), 800);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Mã xác thực không chính xác" };
+    }
+  };
+
+  // Gửi lại mã OTP trong Modal
+  const handleResendOtp = async (): Promise<{ success: boolean; error?: string; rateLimitSeconds?: number }> => {
+    try {
+      const res = await fetch(`${backendUrl}/parent/settings/request-email-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ new_email: pendingEmail }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, error: errData.detail || "Không thể gửi lại mã OTP." };
+      }
+
+      const data = await res.json().catch(() => ({}));
+      return { success: true, rateLimitSeconds: data.rate_limit_seconds || 60 };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Lỗi khi gửi lại mã OTP." };
     }
   };
 
@@ -133,7 +220,7 @@ export default function MonitorSettingsPage() {
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-3xl font-extrabold text-[#8C4905] tracking-tight">
-          Cài đặt tài khoản
+          Cài đặt tài khoản Phụ huynh
         </h1>
       </div>
 
@@ -144,11 +231,30 @@ export default function MonitorSettingsPage() {
           Thông tin tài khoản
         </h2>
         <div className="space-y-3 text-sm text-[#8C4905]">
-          <div className="flex justify-between items-center py-2 border-b border-[#F1CCA6]">
-            <span className="font-medium text-[#C1762A]">Email đăng nhập</span>
-            <span className="font-bold">{profile?.email || "—"}</span>
+          {profile?.username && (
+            <div className="flex justify-between items-center py-2 border-b border-[#F1CCA6]/60">
+              <span className="font-medium text-[#C1762A]">Tên tài khoản</span>
+              <span className="font-bold text-[#8C4905]">{profile.username}</span>
+            </div>
+          )}
+          <div className="flex justify-between items-center py-2 border-b border-[#F1CCA6]/60">
+            <span className="font-medium text-[#C1762A]">Email tài khoản</span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold">{profile?.email || "—"}</span>
+              {profile?.email && (
+                profile.email_verified ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <ShieldCheck size={12} /> Đã xác thực
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    <Clock size={12} /> Chưa xác thực
+                  </span>
+                )
+              )}
+            </div>
           </div>
-          <div className="flex justify-between items-center py-2 border-b border-[#F1CCA6]">
+          <div className="flex justify-between items-center py-2 border-b border-[#F1CCA6]/60">
             <span className="font-medium text-[#C1762A]">Vai trò</span>
             <span className="inline-flex items-center px-3 py-0.5 rounded-full text-xs font-bold bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6]">
               Phụ huynh
@@ -168,22 +274,22 @@ export default function MonitorSettingsPage() {
                   Google
                 </span>
               ) : (
-                "Email & Mật khẩu"
+                "Tên tài khoản & Mật khẩu"
               )}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Email nhận thông báo cảnh báo */}
+      {/* Form Đổi Email nhận thông báo cảnh báo (US 9.1 - T9.5) */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#F1CCA6] p-6">
         <h2 className="text-lg font-bold text-[#8C4905] mb-1 flex items-center gap-2">
           <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />
           Email nhận thông báo cảnh báo
         </h2>
         <p className="text-sm text-[#C1762A] mb-5 leading-relaxed">
-          Hệ thống sẽ gửi <strong>cảnh báo học tập</strong> (điểm tự lập thấp, tỷ lệ "Chưa hiểu" tăng đột biến) và{" "}
-          <strong>cảnh báo ngôn từ</strong> (phát hiện ngôn ngữ không phù hợp) đến địa chỉ email này.
+          Hệ thống sẽ gửi <strong>cảnh báo học tập</strong> (điểm tự lập thấp, bài tập khó) và{" "}
+          <strong>cảnh báo ngôn từ</strong> (phát hiện ngôn ngữ tiêu cực) đến địa chỉ email này.
         </p>
 
         {isGoogleOAuth ? (
@@ -201,14 +307,14 @@ export default function MonitorSettingsPage() {
             </div>
           </div>
         ) : (
-          /* Email & Password — cho phép chỉnh sửa */
-          <div className="space-y-4">
+          /* Cho phép thay đổi email với xác nhận OTP 2 bước (AC 9.1.6) */
+          <form onSubmit={handleInitiateChangeEmail} className="space-y-4">
             <div>
               <label className="block text-sm font-bold text-[#8C4905] mb-2">
-                Địa chỉ email nhận thông báo
+                Địa chỉ email nhận thông báo mới
               </label>
               <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#C1762A]" />
+                <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#C1762A]" />
                 <input
                   type="email"
                   value={notifEmail}
@@ -217,13 +323,13 @@ export default function MonitorSettingsPage() {
                     setErrorMsg("");
                     setSuccessMsg("");
                   }}
-                  placeholder="vidu@gmail.com"
-                  disabled={isSaving}
-                  className="w-full pl-9 pr-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 border border-transparent focus:outline-none focus:ring-2 focus:ring-[#F7AD62] placeholder:text-[#C1762A]/50 disabled:opacity-60 transition-shadow"
+                  placeholder="vidu: phuhuynh@gmail.com"
+                  disabled={isSubmitting}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-[#F7ECE1]/60 text-stone-900 border border-[#F1CCA6] focus:border-[#C1762A] focus:outline-none focus:ring-2 focus:ring-[#C1762A]/20 placeholder:text-[#C1762A]/50 disabled:opacity-60 transition-all font-medium"
                 />
               </div>
-              <p className="text-xs text-[#C1762A]/70 mt-1.5">
-                Nếu để trống hoặc chưa đặt, hệ thống sẽ gửi về email đăng nhập: <strong>{profile?.email}</strong>
+              <p className="text-xs text-[#C1762A]/80 mt-2">
+                ⚠️ <strong>Lưu ý bảo mật:</strong> Khi bấm lưu, hệ thống sẽ gửi một mã OTP gồm 6 chữ số đến email mới để bạn xác thực trước khi cập nhật.
               </p>
             </div>
 
@@ -242,23 +348,40 @@ export default function MonitorSettingsPage() {
             )}
 
             <button
-              onClick={handleSave}
-              disabled={isSaving || notifEmail === (profile?.notification_email || profile?.email || "")}
-              className="w-full py-3 rounded-xl bg-[#C1762A] text-white font-bold hover:bg-[#8C4905] shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
+              type="submit"
+              disabled={isSubmitting || !notifEmail.trim()}
+              className="w-full py-3.5 rounded-xl bg-[#C1762A] text-white font-bold hover:bg-[#8C4905] shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
             >
-              {isSaving ? (
+              {isSubmitting ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  Đang lưu...
+                  Đang gửi mã OTP xác nhận...
                 </>
               ) : (
-                "Lưu email thông báo"
+                "Lưu email nhận thông báo (Gửi mã OTP)"
               )}
             </button>
-          </div>
+          </form>
         )}
       </div>
+
+      {/* Popup Modal OTP Xác nhận Đổi Email (AC 9.1.6) */}
+      <OtpModal
+        isOpen={isOtpModalOpen}
+        email={pendingEmail}
+        title="Xác nhận đổi email thông báo"
+        description={
+          <>
+            Vui lòng nhập mã OTP 6 chữ số được gửi tới email mới:
+            <br />
+            <strong className="text-[#C1762A] break-all">{pendingEmail}</strong>
+          </>
+        }
+        onClose={() => setIsOtpModalOpen(false)}
+        onVerify={handleVerifyOtp}
+        onResend={handleResendOtp}
+        initialCountdown={60}
+      />
     </div>
   );
 }
-
