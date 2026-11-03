@@ -969,6 +969,7 @@ class AdminSystemSettings(BaseModel):
     rate_limit_per_minute: int = 30
     enable_vision_support: bool = True
     system_version: str = "v1.4.0"
+    mock_curriculum_month: Optional[int] = None  # US 9.3 (T9.11/T9.11b): Mock tháng học kỳ
     last_updated_at: str
     last_updated_by: str
 

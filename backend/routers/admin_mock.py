@@ -47,6 +47,7 @@ MOCK_SETTINGS = {
     "rate_limit_per_minute": 30,
     "enable_vision_support": True,
     "system_version": "v1.4.0",
+    "mock_curriculum_month": None,  # US 9.3 (T9.11/T9.11b): None = dùng datetime máy chủ, 1-12 = mock tháng
     "last_updated_at": "2026-10-21T16:45:00Z",
     "last_updated_by": "admin@socratickid.edu.vn",
 }
