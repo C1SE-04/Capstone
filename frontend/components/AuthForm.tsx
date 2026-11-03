@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { migrateLocalStorageBadgesToDB } from "@/lib/badgeStorage";
 
 interface AuthFormProps {
   onClose?: () => void;
@@ -108,6 +109,14 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           const userRole = (currentSession?.user as any)?.role;
           const isNewUser = (currentSession as any)?.is_new_user || (currentSession?.user as any)?.is_new_user;
           
+          const loggedUserId = (currentSession?.user as any)?.id || (currentSession?.user as any)?.email;
+          if (loggedUserId) {
+            // US 9.2 (T9.8b): Migrate badge cũ trong localStorage lên DB sau khi đăng nhập
+            migrateLocalStorageBadgesToDB(loggedUserId).catch((err) => {
+              console.warn("[AuthForm] Lỗi migrate badge sau đăng nhập:", err);
+            });
+          }
+
           if (userRole === "PENDING" || isNewUser) {
             router.push("/onboarding");
           } else if (userRole === "ADMIN") {
