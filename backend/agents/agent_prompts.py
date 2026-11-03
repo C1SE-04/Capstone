@@ -1,6 +1,7 @@
 from typing import Optional
 import json
 import os
+import re
 import time
 import logging
 
@@ -125,8 +126,10 @@ def get_curriculum_by_grade_and_semester(grade: int, semester: Optional[int] = N
 
 def _get_grade_context(grade_level: Optional[int]) -> str:
     """
+    US 9.3 (Task T9.11) - Phiên bản nâng cấp:
     Xây dựng đoạn text ngữ cảnh kiến thức tích lũy theo lớp.
-    Gộp toàn bộ bài học (HK1 + HK2) của các lớp từ 4 đến grade_level.
+    Nhúng timeline học kỳ thực tế (tháng máy chủ hoặc mock) để Gemini
+    tự đối chiếu bài học sinh hỏi với danh sách HK1/HK2 và chọn đúng kịch bản sư phạm.
     """
     if not grade_level:
         return ""
@@ -136,31 +139,90 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
         return ""
 
     grade = int(grade_level)
-    all_topics = []
-    for lvl in range(4, grade + 1):
-        g_data = curriculum.get(str(lvl), {})
-        topics_lvl = g_data.get("1", []) + g_data.get("2", [])
-        for topic in topics_lvl:
-            all_topics.append(f"  - [Lớp {lvl}] {topic}")
 
-    if not all_topics:
-        return ""
+    # === Lấy timeline học kỳ hiện tại ===
+    curr_month = get_effective_curriculum_month()
+    server_sem = get_semester_from_month(curr_month)
+    is_summer = server_sem is None
 
-    topics_text = "\n".join(all_topics)
+    # === Xây dựng danh sách bài của lớp hiện tại chia theo học kỳ ===
+    g_data = curriculum.get(str(grade), {})
+    topics_hk1 = g_data.get("1", [])
+    topics_hk2 = g_data.get("2", [])
+
+    hk1_text = "\n".join(f"  - {t}" for t in topics_hk1) if topics_hk1 else "  (không có dữ liệu)"
+    hk2_text = "\n".join(f"  - {t}" for t in topics_hk2) if topics_hk2 else "  (không có dữ liệu)"
+
+    # === Xây dựng danh sách kiến thức tích lũy (lớp 4 → lớp grade-1) ===
+    prev_topics = []
+    for lvl in range(4, grade):
+        lv_data = curriculum.get(str(lvl), {})
+        for t in lv_data.get("1", []) + lv_data.get("2", []):
+            prev_topics.append(f"  - [Lớp {lvl}] {t}")
+    prev_text = "\n".join(prev_topics) if prev_topics else "  (lớp 4 - không có dữ liệu)"
+
+    # === Xác định nhãn kỳ hiện tại và kỳ kia ===
+    if is_summer:
+        timeline_info = f"\ud83d\udcc5 Tháng {curr_month} — Kỳ nghỉ hè (Tháng 6–8)"
+        hk1_label = "HỌC KỲ 1"
+        hk2_label = "HỌC KỲ 2"
+        uncovered_guide = (
+            f"Đây là kỳ nghỉ hè. Khi học sinh than chưa học, hỏi thăm tự nhiên: "
+            f"\'Kỳ nghỉ hè này em đang học trước kiến thức mới, hay ôn lại bài năm vừa rồi?\' "
+            f"Nếu học trước → Kịch bản B (hướng dẫn từ căn bản, khen ngợi tinh thần). "
+            f"Nếu ôn bài cũ → Kịch bản A (từ khóa gợi nhớ, đồng cảm). "
+            f"Nếu không rõ → Hướng dẫn từ gốc, tuyệt đối không phán xét."
+        )
+    elif server_sem == 1:
+        timeline_info = f"\ud83d\udcc5 Tháng {curr_month} — Đang Học kỳ 1 (Tháng 9–1)"
+        hk1_label = "HỌC KỲ 1 (học sinh ĐANG học)"
+        hk2_label = "HỌC KỲ 2 (học sinh CHƯA học — chưa đến kỳ)"
+        uncovered_guide = (
+            f"Khi học sinh than chưa học: TỰ ĐỐI CHIẾU bài học sinh hỏi với DANH SÁCH HK1 và HK2 bên trên. "
+            f"▶ Nếu bài khớp DANH SÁCH HK2 → Học sinh CHẮC CHẮN CHƯA HỌC THẬT (đang HK1). "
+            f"  KỊCH BẢN B: \'Bài này thuộc Học kỳ 2 nên em chưa quen là bình thường! "
+            f"  Thầy sẽ hướng dẫn em từ nền tảng dễ hiểu nhất nhé.\' "
+            f"  Hướng dẫn từ khái niệm căn bản nhất, không quở trách. "
+            f"▶ Nếu bài khớp DANH SÁCH HK1 → Có thể trường chưa học tới hoặc học sinh quên. "
+            f"  Hỏi thăm tiến độ: \'Ở trường thầy/cô đã dạy đến bài này chưa?\' "
+            f"  → Chưa học tới: KỊCH BẢN B (hướng dẫn từ đầu). "
+            f"  → Đã học mà quên: KỊCH BẢN A (từ khóa gợi nhớ nhẹ nhàng)."
+        )
+    else:
+        timeline_info = f"\ud83d\udcc5 Tháng {curr_month} — Đang Học kỳ 2 (Tháng 2–5)"
+        hk1_label = "HỌC KỲ 1 (học sinh ĐÃ học — kỳ trước)"
+        hk2_label = "HỌC KỲ 2 (học sinh ĐANG học)"
+        uncovered_guide = (
+            f"Khi học sinh than chưa học: TỰ ĐỐI CHIẾU bài học sinh hỏi với DANH SÁCH HK1 và HK2 bên trên. "
+            f"▶ Nếu bài khớp DANH SÁCH HK1 → Bài kỳ trước, học sinh đã học. "
+            f"  KỊCH BẢN A: \'Theo chương trình, đây là kiến thức HK1 em đã học. "
+            f"  Thầy tin em có thể nhớ lại...\' Cung cấp từ khóa gợi nhớ. "
+            f"▶ Nếu bài khớp DANH SÁCH HK2 → Học sinh đang học HK2 mà chưa biết. "
+            f"  Hỏi thăm tiến độ: \'Ở trường thầy/cô đã dạy đến bài này chưa?\' "
+            f"  → Chưa học tới: KỊCH BẢN B (hướng dẫn từ đầu). "
+            f"  → Đã học mà quên: KỊCH BẢN A (từ khóa gợi nhớ nhẹ nhàng)."
+        )
 
     return f"""
 ─── THÔNG TIN LỚP HỌC SINH (QUAN TRỌNG) ───
 Học sinh đang học: Lớp {grade}
-Các kiến thức đã được học (tích lũy từ lớp 4 đến lớp {grade}):
-{topics_text}
+{timeline_info}
+
+📚 CHƯƠNG TRÌNH LỚP {grade} — {hk1_label}:
+{hk1_text}
+
+📚 CHƯƠNG TRÌNH LỚP {grade} — {hk2_label}:
+{hk2_text}
+
+📚 KIẾN THỨC CÁC LỚP TRƯỚC (Lớp 4 → Lớp {grade - 1}) — học sinh đã học:
+{prev_text}
 
 BẮT BUỘC xử lý các tình huống liên quan đến THÔNG TIN LỚP HỌC SINH:
 1. Khi học sinh hỏi "em đang lớp mấy", "em học lớp mấy": BẮT BUỘC trả lời rõ ràng "Em đang học lớp {grade}".
-2. KHI VÀ CHỈ KHI học sinh CHỦ ĐỘNG than phiền "em chưa học", "em không hiểu", "lạ quá": Phải CẨN THẬN đối chiếu khái niệm đang học với DANH SÁCH kiến thức ở trên rồi phản hồi theo đúng 2 kịch bản:
-   - KỊCH BẢN A (CÓ TÊN trong danh sách liệt kê bên trên): Học sinh đã học rồi. Nhẹ nhàng nhắc: "Theo chương trình, đây là kiến thức mà em đã học. Thầy tin em có thể nhớ lại...".
-   - KỊCH BẢN B (KHÔNG CÓ TÊN trong danh sách liệt kê bên trên): TUYỆT ĐỐI KHÔNG được tự suy ra từ kiến thức của bản thân rằng học sinh "đã học" hay "sắp học". DANH SÁCH TRÊN LÀ NGUỒN SỰ THẬT DUY NHẤT về những gì học sinh biết. Nếu tên chủ đề không xuất hiện trong danh sách → BẮT BUỘC phản hồi: "Vì em đang học lớp {grade} nên chưa quen với kiến thức này là chuyện bình thường, đừng lo nhé. Thầy sẽ giải thích thật đơn giản...".
-3. NẾU học sinh CHỈ HỎI BÀI BÌNH THƯỜNG (cho dù bài đó là vượt cấp): TUYỆT ĐỐI KHÔNG được tự ý đề cập đến lớp học hay nói "đây là kiến thức lớp lớn". Hãy cứ hướng dẫn Socratic bình thường như mọi bài khác!
+2. {uncovered_guide}
+3. NẾU học sinh CHỈ HỎI BÀI BÌNH THƯỜNG (không than chưa học): TUYỆT ĐỐI KHÔNG tự ý đề cập lớp học hay nói "đây là kiến thức lớp lớn". Hãy cứ hướng dẫn Socratic bình thường!
 """
+
 
 _JSON_RULE = (
     "QUAN TRỌNG: Chỉ trả về JSON thuần túy. "
@@ -394,5 +456,143 @@ Vai trò của bạn: {role_description}
   "knowledge_level_estimate": "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
 }}"""
 
+# =========================================================================
+# US 9.3 - Task T9.11: Module Đối Chiếu Dòng Thời Gian Học Kỳ (Curriculum Timeline)
+# Thiết kế Hybrid:
+#   Python  → Xác định tháng thực tế / mock → HK1 / HK2 / Hè (Deterministic, 0ms).
+#   Gemini  → Tự đối chiếu câu hỏi học sinh với danh sách HK trong prompt → Chọn kịch bản.
+# =========================================================================
+
+def get_effective_curriculum_month(override_month: Optional[int] = None) -> int:
+    """
+    Lấy tháng hiệu lực để đối chiếu dòng thời gian học kỳ:
+    1. Ưu tiên override_month truyền trực tiếp (phục vụ test / mock).
+    2. Kiểm tra MOCK_SETTINGS trong routers.admin_mock nếu có mock_curriculum_month.
+    3. Kiểm tra biến môi trường MOCK_CURRICULUM_MONTH.
+    4. Mặc định lấy tháng thực tế của hệ thống máy chủ (datetime.now().month).
+    """
+    if override_month is not None and 1 <= override_month <= 12:
+        return override_month
+
+    try:
+        from routers.admin_mock import MOCK_SETTINGS
+        mock_val = MOCK_SETTINGS.get("mock_curriculum_month")
+        if mock_val is not None:
+            try:
+                m_int = int(mock_val)
+                if 1 <= m_int <= 12:
+                    return m_int
+            except (ValueError, TypeError):
+                pass
+    except Exception:
+        pass
+
+    env_val = os.getenv("MOCK_CURRICULUM_MONTH")
+    if env_val:
+        try:
+            m_int = int(env_val)
+            if 1 <= m_int <= 12:
+                return m_int
+        except (ValueError, TypeError):
+            pass
+
+    from datetime import datetime
+    return datetime.now().month
 
 
+def get_semester_from_month(month: int) -> Optional[int]:
+    """
+    Xác định học kỳ theo phân phối năm học chuẩn Bộ GD&ĐT:
+    - Tháng 9, 10, 11, 12, 1 -> Học kỳ 1 (semester = 1).
+    - Tháng 2, 3, 4, 5       -> Học kỳ 2 (semester = 2).
+    - Tháng 6, 7, 8          -> Nghỉ hè  (trả về None).
+    """
+    if month in (9, 10, 11, 12, 1):
+        return 1
+    elif month in (2, 3, 4, 5):
+        return 2
+    return None
+
+
+def build_timeline_context_for_prompt(
+    student_grade: Optional[int] = None,
+    override_month: Optional[int] = None,
+) -> dict:
+    """
+    US 9.3 (Task T9.11):
+    Xây dựng context dòng thời gian học kỳ để Orchestrator nhúng vào task_description.
+
+    Nguyên tắc thiết kế:
+    - Python chỉ làm 2 việc tất định: (1) xác định tháng → HK1/HK2/Hè,
+      (2) cung cấp danh sách bài HK1 / HK2 của lớp.
+    - Gemini tự đọc danh sách đó, tự đối chiếu bài học sinh hỏi, tự chọn kịch bản.
+
+    Trả về dict:
+    {
+        "current_month": int,
+        "server_semester": 1 | 2 | None,   # None = hè
+        "is_summer": bool,
+        "grade": int,
+        "topics_hk1": list[str],
+        "topics_hk2": list[str],
+        "timeline_label": str,
+        "scenario_guide": str,             # Hướng dẫn kịch bản để chèn vào task_description
+    }
+    """
+    grade = int(student_grade) if student_grade else 8
+    curr_month = get_effective_curriculum_month(override_month)
+    server_sem = get_semester_from_month(curr_month)
+    is_summer = server_sem is None
+
+    curriculum = _load_curriculum()
+    g_data = curriculum.get(str(grade), {})
+    topics_hk1 = g_data.get("1", [])
+    topics_hk2 = g_data.get("2", [])
+
+    hk1_list_str = "; ".join(topics_hk1[:6]) + ("..." if len(topics_hk1) > 6 else "")
+    hk2_list_str = "; ".join(topics_hk2[:6]) + ("..." if len(topics_hk2) > 6 else "")
+
+    if is_summer:
+        timeline_label = f"Tháng {curr_month} — Kỳ nghỉ hè"
+        scenario_guide = (
+            f"Đây là kỳ nghỉ hè. Khi học sinh than chưa học, hỏi thăm tự nhiên: "
+            f"'Kỳ nghỉ hè này em đang học trước kiến thức mới, hay ôn lại bài năm vừa rồi?' "
+            f"Nếu học trước → Kịch bản B (hướng dẫn từ căn bản, khen ngợi tinh thần). "
+            f"Nếu ôn bài cũ → Kịch bản A (từ khóa gợi nhớ, đồng cảm). "
+            f"Nếu không rõ → Hướng dẫn từ gốc, tuyệt đối không phán xét."
+        )
+    elif server_sem == 1:
+        timeline_label = f"Tháng {curr_month} — Đang Học kỳ 1"
+        scenario_guide = (
+            f"Tháng {curr_month} — đang HK1. "
+            f"HK1 Lớp {grade}: [{hk1_list_str}]. "
+            f"HK2 Lớp {grade} (CHƯA HỌC): [{hk2_list_str}]. "
+            f"Khi học sinh than chưa học: TỰ ĐỐI CHIẾU bài với danh sách trên. "
+            f"Nếu bài thuộc HK2 → CHẮC CHẮN CHƯA HỌC → KỊCH BẢN B: "
+            f"'Bài này thuộc HK2 nên em chưa quen là bình thường! Thầy hướng dẫn từ nền tảng nhé.' "
+            f"Nếu bài thuộc HK1 → Hỏi tiến độ trường: 'Ở trường đã dạy đến bài này chưa?' "
+            f"→ Chưa dạy: Kịch bản B. → Đã dạy mà quên: Kịch bản A (gợi nhớ nhẹ nhàng)."
+        )
+    else:
+        timeline_label = f"Tháng {curr_month} — Đang Học kỳ 2"
+        scenario_guide = (
+            f"Tháng {curr_month} — đang HK2. "
+            f"HK1 Lớp {grade} (ĐÃ HỌC): [{hk1_list_str}]. "
+            f"HK2 Lớp {grade}: [{hk2_list_str}]. "
+            f"Khi học sinh than chưa học: TỰ ĐỐI CHIẾU bài với danh sách trên. "
+            f"Nếu bài thuộc HK1 → Bài kỳ trước đã học → KỊCH BẢN A: "
+            f"'Theo chương trình, đây là kiến thức HK1 em đã học. Thầy tin em có thể nhớ lại...' "
+            f"Nếu bài thuộc HK2 → Hỏi tiến độ: 'Ở trường đã dạy đến bài này chưa?' "
+            f"→ Chưa dạy: Kịch bản B. → Đã dạy mà quên: Kịch bản A (gợi nhớ nhẹ nhàng)."
+        )
+
+    return {
+        "current_month": curr_month,
+        "server_semester": server_sem,
+        "is_summer": is_summer,
+        "grade": grade,
+        "topics_hk1": topics_hk1,
+        "topics_hk2": topics_hk2,
+        "timeline_label": timeline_label,
+        "scenario_guide": scenario_guide,
+    }
