@@ -141,6 +141,10 @@ def submit_comprehension_feedback(
             "is_duplicate": record.is_duplicate,
             "category": record.category,
             "friendly_parent_title": record.friendly_parent_title,
+            # US 9.2: Metadata cảnh báo và điểm trần cho bài giải trùng
+            "repeat_count": getattr(record, "repeat_count", 1),
+            "max_score": getattr(record, "max_score", 100),
+            "repeat_warning": getattr(record, "repeat_warning", None),
         }
         deduplication_data = {
             "category": record.category,

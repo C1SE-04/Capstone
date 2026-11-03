@@ -19,7 +19,7 @@ class TestIndependenceJsonExport(unittest.TestCase):
         self.assertIn("mastery_levels", rubric)
         self.assertEqual(rubric["scoring_rules"]["hint_penalty"], 5)
         self.assertEqual(rubric["scoring_rules"]["struggle_penalty"], 10)
-        self.assertEqual(rubric["scoring_rules"]["floor_score"], 10)
+        self.assertEqual(rubric["scoring_rules"]["floor_score"], 30)  # US 9.2: Sàn 30đ
 
     def test_export_json_validity(self):
         """Kiểm tra export_independence_json xuất chuỗi JSON hợp lệ, parse lại được."""

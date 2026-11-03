@@ -248,6 +248,10 @@ class IndependenceRecordResponse(BaseModel):
     custom_title: Optional[str] = None
     friendly_parent_title: Optional[str] = None
     created_at: datetime
+    repeat_count: Optional[int] = 1
+    max_score: Optional[int] = 100
+    is_duplicate: Optional[bool] = False
+    repeat_warning: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -1129,3 +1133,35 @@ class SafetyAlertEmailResult(BaseModel):
 
     class Config:
         from_attributes = True
+
+# ==============================================================================
+# US 9.2 (T9.7): Đồng Bộ Thành Tựu & Huy Hiệu Đã Mở Khóa (User Badges)
+# ==============================================================================
+
+class UserBadgeItem(BaseModel):
+    id: str
+    user_id: str
+    badge_id: str
+    unlocked_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserBadgesListResponse(BaseModel):
+    success: bool = True
+    badge_ids: list[str] = []
+    badges: list[UserBadgeItem] = []
+
+
+class BadgeUnlockRequest(BaseModel):
+    badge_id: Optional[str] = None
+    badge_ids: Optional[list[str]] = None  # Đồng bộ hàng loạt từ localStorage
+
+
+class BadgeUnlockResponse(BaseModel):
+    success: bool = True
+    message: str = "Thành công"
+    unlocked_badge_ids: list[str] = []
+    newly_unlocked_ids: list[str] = []
+    is_first_time: bool = False

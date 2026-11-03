@@ -247,6 +247,13 @@ class IndependenceScore(Base):
     custom_title = Column(String, nullable=True)
     # Tên bài toán chuẩn sư phạm do AI sinh ra ([Lớp X] [Chủ đề] – [Dạng toán])
     friendly_parent_title = Column(String, nullable=True)
+    # US 9.2 (T9.6): Cơ chế phạt bài giải trùng (Anti-Spam Mastery)
+    # repeat_count: Số lần đã giải bài toán này (1 = lần đầu, 2 = trùng lần 1, 3 = trùng lần 2, ...)
+    repeat_count = Column(Integer, default=1, nullable=False, server_default="1")
+    # max_score: Điểm trần tối đa cho phép đạt được = max(30, 100 - (repeat_count - 1) * 10)
+    max_score = Column(Integer, default=100, nullable=False, server_default="100")
+    # repeat_warning: Thông điệp cảnh báo bài giải trùng hiển thị cho học sinh
+    repeat_warning = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -596,3 +603,34 @@ class EmailOtp(Base):
         # Index tra cứu OTP theo email + purpose để invalidate mã cũ nhanh
         Index("ix_email_otps_email_purpose", "email", "purpose"),
     )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 9.2 (T9.7): Bảng Đồng Bộ Thành Tựu & Huy Hiệu Đã Mở Khóa (User Badges)
+# ────────────────────────────────────────────────────────────────────────────
+
+class UserUnlockedBadge(Base):
+    """
+    US 9.2 - Task T9.7:
+    Lưu trữ danh sách huy hiệu / thành tựu đã mở khóa của từng người dùng trong Database.
+    Thay thế cơ chế lưu localStorage cục bộ, đồng bộ trạng thái xuyên suốt các thiết bị
+    và ngăn chặn việc bắn lại popup chúc mừng khi đăng nhập ở máy mới / tab ẩn danh.
+    """
+    __tablename__ = "user_unlocked_badges"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    user_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    badge_id = Column(String, nullable=False, index=True)
+    unlocked_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        # Đảm bảo mỗi user chỉ mở khóa 1 badge_id một lần duy nhất (idempotent)
+        Index("ix_user_unlocked_badges_user_badge", "user_id", "badge_id", unique=True),
+    )
+
+    user = relationship("User", backref="unlocked_badges")

@@ -16,19 +16,33 @@ from deduplication import (
 router = APIRouter(tags=["Independence"])
 
 
-def calculate_independence_score(hints_used: int, not_understood_count: int) -> dict:
+def calculate_independence_score(
+    hints_used: int,
+    not_understood_count: int,
+    repeat_count: int = 1,
+) -> dict:
     """
-    Thuật toán barem tính điểm tự lực (Independence Score) - Thang điểm 10 đến 100:
+    Thuật toán barem tính điểm tự lực (Independence Score) - Thang điểm 30 đến 100 (US 9.2 - T9.6):
     - 0 gợi ý: 100đ
     - 1 gợi ý: 90đ
     - 2 gợi ý: 80đ
     - Mỗi hint dùng thêm: -10đ
     - Mỗi lần bấm 'Chưa hiểu': -15đ
-    - Điểm sàn: 10đ, điểm trần: 100đ
+    - Điểm sàn tối thiểu: 30đ
+    - Cơ chế phạt bài giải trùng (Anti-Spam Mastery):
+      max_score = max(30, 100 - (repeat_count - 1) * 10)
+      Lần 1: tối đa 100đ
+      Lần 2: tối đa 90đ
+      Lần 3: tối đa 80đ
+      Lần >= 8: tối đa 30đ (điểm sàn)
     """
     deduction = (hints_used * 10) + (not_understood_count * 15)
     raw_score = 100 - deduction
-    score = max(10, min(100, raw_score))
+
+    safe_repeat_count = max(1, repeat_count)
+    # Hệ số phạt trần bài giải trùng: max_score = max(30, 100 - (repeat_count - 1) * 10)
+    max_score = max(30, 100 - (safe_repeat_count - 1) * 10)
+    score = max(30, min(max_score, raw_score))
 
     if score >= 80:
         level = "Tự lập xuất sắc (ít dùng gợi ý)"
@@ -39,11 +53,19 @@ def calculate_independence_score(hints_used: int, not_understood_count: int) -> 
     else:
         level = "Cần thêm hỗ trợ sư phạm"
 
+    is_repeat = safe_repeat_count > 1
+    repeat_warning = f"Bài giải lại, điểm tối đa là {max_score}đ" if is_repeat else None
+
     return {
         "score": score,
+        "raw_score": raw_score,
         "hints_used": hints_used,
         "not_understood_count": not_understood_count,
         "level": level,
+        "repeat_count": safe_repeat_count,
+        "max_score": max_score,
+        "is_repeat": is_repeat,
+        "repeat_warning": repeat_warning,
     }
 
 
@@ -87,19 +109,7 @@ def save_independence_score(
         else (stats.not_understood_count if stats else 0)
     )
 
-    # 3. Tính điểm theo barem nếu chưa có điểm tuỳ chỉnh
-    if custom_score is not None:
-        score = max(0, min(100, custom_score))
-        evaluation = (
-            custom_evaluation
-            or calculate_independence_score(hints_used, not_understood)["level"]
-        )
-    else:
-        calc_result = calculate_independence_score(hints_used, not_understood)
-        score = calc_result["score"]
-        evaluation = custom_evaluation or calc_result["level"]
-
-    # ── 4. US 8.1 (T8.2): KIỂM TRA DEDUPLICATION VÀ BĂM HASH ĐỀ BÀI (GỘP T8.1 + T8.3) ─────
+    # ── 3. US 8.1 (T8.2): KIỂM TRA DEDUPLICATION VÀ BĂM HASH ĐỀ BÀI (GỘP T8.1 + T8.3) ─────
     resolved_problem_text = problem_text_input or extract_session_problem_text(db, session_id)
     problem_hash = compute_problem_hash(resolved_problem_text)
 
@@ -116,8 +126,40 @@ def save_independence_score(
 
     is_duplicate_flag = (dedup_result.category == "EXACT_DUPLICATE")
 
+    # ── 4. US 9.2 (T9.6): TÍNH SỐ LẦN LẶP (repeat_count) & ĐIỂM TRẦN (max_score) ───────────
+    # Đếm số lần học sinh đã giải đề bài này trong DB
+    existing_count = (
+        db.query(models.IndependenceScore)
+        .filter(
+            models.IndependenceScore.student_id == resolved_student_id,
+            models.IndependenceScore.problem_hash == problem_hash,
+        )
+        .count()
+    ) if problem_hash else 0
+
+    if is_duplicate_flag:
+        repeat_count = max(existing_count + 1, getattr(dedup_result, "repeat_count", 2) or 2)
+    else:
+        repeat_count = 1
+
+    # Hệ số phạt trần: max_score = max(30, 100 - (repeat_count - 1) * 10)
+    max_score = max(30, 100 - (repeat_count - 1) * 10)
+    is_repeat = repeat_count > 1
+    repeat_warning = f"Bài giải lại, điểm tối đa là {max_score}đ" if is_repeat else None
+
+    # Tính điểm theo barem (kèm trần max_score và sàn 30đ)
+    if custom_score is not None:
+        score = max(30, min(max_score, custom_score))
+        evaluation = (
+            custom_evaluation
+            or calculate_independence_score(hints_used, not_understood, repeat_count)["level"]
+        )
+    else:
+        calc_result = calculate_independence_score(hints_used, not_understood, repeat_count)
+        score = calc_result["score"]
+        evaluation = custom_evaluation or calc_result["level"]
+
     # ── 4.5. US 8.1 (T8.3 & T8.4): TIÊU ĐỀ CHUẨN SƯ PHẠM (friendly_parent_title) ─────
-    # Lấy tiêu đề đã được Gemini sinh đồng thời trong dedup_result (tiết kiệm 1 lần gọi Gemini)
     resolved_friendly_title = (
         friendly_parent_title
         or getattr(dedup_result, "friendly_parent_title", None)
@@ -144,6 +186,9 @@ def save_independence_score(
         gentle_reminder=dedup_result.gentle_reminder,
         custom_title=custom_title,
         friendly_parent_title=resolved_friendly_title,
+        repeat_count=repeat_count,
+        max_score=max_score,
+        repeat_warning=repeat_warning,
     )
     db.add(record)
 
@@ -194,6 +239,10 @@ def record_independence_score(
             "custom_title": record.custom_title,
             "friendly_parent_title": record.friendly_parent_title,
             "created_at": record.created_at.isoformat() if record.created_at else None,
+            "repeat_count": getattr(record, "repeat_count", 1),
+            "max_score": getattr(record, "max_score", 100),
+            "is_duplicate": record.is_duplicate,
+            "repeat_warning": getattr(record, "repeat_warning", None),
         },
     }
 
@@ -244,7 +293,7 @@ def get_independence_summary(
     if end_date:
         query = query.filter(cast(models.IndependenceScore.created_at, Date) <= end_date)
 
-    # 1. Tính điểm trung bình và tổng số bài hoàn thành thực chất (CHẶN BÀI LẶP)
+    # 1. Tính điểm trung bình và tổng số bài hoàn thành (US 9.2: Vẫn ghi nhận số bài giải lại)
     stats_query = (
         db.query(
             func.count(models.IndependenceScore.id).label("total_completed"),
@@ -252,7 +301,7 @@ def get_independence_summary(
         )
         .filter(
             models.IndependenceScore.student_id == target_id,
-            models.IndependenceScore.is_duplicate == False  # US 8.1: AC 8.1.1 KHÔNG CỘNG DỒN BÀI LẶP
+            # US 9.2 (AC 9.2.3): Ghi nhận cả bài giải lại vào tổng số bài hoàn thành
         )
     )
     if start_date:
