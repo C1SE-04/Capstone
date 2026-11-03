@@ -209,7 +209,7 @@ def render_safety_alert_html(result_data: dict) -> str:
             <p>Trong phiên trao đổi học tập vừa qua, hệ thống an toàn ghi nhận em đã sử dụng từ ngữ chưa phù hợp:</p>
             
             <div style="background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 12px; margin: 16px 0; border-radius: 4px;">
-                <strong style="color: #991b1b;">⚠️ Trích đoạn phát ngôn đã được kiểm duyệt:</strong>
+                <strong style="color: #991b1b;">⚠️ Trích đoạn phát ngôn thực tế của con:</strong>
                 <p style="margin: 6px 0 0 0; font-family: monospace; font-size: 15px; color: #7f1d1d;">"{censored_snippet}"</p>
             </div>
 

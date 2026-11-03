@@ -17,7 +17,6 @@ from schemas import (
     SafetyAlertEmailResult,
 )
 from agents.email_alert_generator import (
-    censor_sensitive_words,
     generate_academic_alert_email,
     generate_safety_alert_email,
     _fallback_academic_alert,
@@ -26,18 +25,6 @@ from agents.email_alert_generator import (
 
 
 class TestEmailAlertGenerator(unittest.TestCase):
-
-    def test_censor_sensitive_words_masks_profanity(self):
-        """Kiểm tra bộ lọc che mờ chính xác các từ tục tĩu từ PROFANITY_LIST."""
-        sample_text = "Bài này khó vcl, làm mãi đệt ra bực vãi lồn mẹ mày"
-        censored = censor_sensitive_words(sample_text)
-        
-        self.assertNotIn("vcl", censored)
-        self.assertNotIn("vãi lồn", censored)
-        self.assertNotIn("đệt", censored)
-        self.assertNotIn("mẹ mày", censored)
-        self.assertIn("v**", censored)
-        self.assertIn("đ**", censored)
 
     def test_academic_alert_fallback_structure(self):
         """Kiểm tra cấu trúc và tính hợp lệ của email cảnh báo học tập fallback."""
@@ -60,7 +47,7 @@ class TestEmailAlertGenerator(unittest.TestCase):
         self.assertTrue(bool(res.suggested_conversation_opener))
 
     def test_safety_alert_fallback_structure(self):
-        """Kiểm tra email cảnh báo ngôn từ fallback tự động che mờ từ thô."""
+        """[T9.10] Kiểm tra email cảnh báo ngôn từ fallback giữ nguyên văn phát ngôn của con."""
         req = SafetyAlertGenerateRequest(
             student_id="std_123",
             student_name="Bảo Trâm",
@@ -71,8 +58,10 @@ class TestEmailAlertGenerator(unittest.TestCase):
         
         self.assertTrue(res.is_fallback)
         self.assertEqual(res.alert_type, "SAFETY_ALERT")
-        self.assertNotIn("Đm", res.censored_snippet)
-        self.assertNotIn("vcl", res.censored_snippet)
+        # Khẳng định trích đoạn hiển thị nguyên văn, không còn dấu *
+        self.assertIn("Đm", res.censored_snippet)
+        self.assertIn("vcl", res.censored_snippet)
+        self.assertNotIn("*", res.censored_snippet)
         self.assertIn("Bảo Trâm", res.email_subject)
         self.assertGreater(len(res.actionable_parent_advice), 0)
 
@@ -114,7 +103,7 @@ class TestEmailAlertGenerator(unittest.TestCase):
 
     @patch("google.generativeai.GenerativeModel")
     def test_mock_gemini_safety_alert_success(self, mock_model_class):
-        """Giả lập phản hồi thành công từ Gemini API cho email cảnh báo ngôn từ."""
+        """[T9.10] Giả lập phản hồi thành công từ Gemini API giữ nguyên văn phát ngôn."""
         mock_instance = MagicMock()
         mock_response = MagicMock()
         mock_response.text = '''{
@@ -123,7 +112,7 @@ class TestEmailAlertGenerator(unittest.TestCase):
             "student_name": "Tuấn Kiệt",
             "grade": 6,
             "violation_category": "Ngôn từ chưa phù hợp trong giờ học",
-            "censored_snippet": "đ** hiểu bài này",
+            "censored_snippet": "địt hiểu bài này",
             "context_analysis": "Con đang cảm thấy bế tắc trước bài toán phân số nâng cao.",
             "tone_guidance_for_parent": "Cha mẹ hãy lắng nghe con với sự thấu cảm, không quát mắng.",
             "actionable_parent_advice": [
@@ -145,7 +134,9 @@ class TestEmailAlertGenerator(unittest.TestCase):
 
         self.assertFalse(res.is_fallback)
         self.assertEqual(res.alert_type, "SAFETY_ALERT")
-        self.assertNotIn("địt", res.censored_snippet)
+        # Khẳng định trích đoạn nguyên văn có từ 'địt', không bị che thành 'đ**'
+        self.assertEqual(res.censored_snippet, "địt hiểu bài này")
+        self.assertNotIn("*", res.censored_snippet)
 
     def test_missing_api_key_returns_fallback_safely(self):
         """Kiểm tra khi không có API key, hệ thống không bị crash mà trả về fallback an toàn."""

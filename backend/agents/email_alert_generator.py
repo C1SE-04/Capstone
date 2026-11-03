@@ -9,69 +9,9 @@ from schemas import (
     SafetyAlertGenerateRequest,
     SafetyAlertEmailResult,
 )
-from agents.orchestrator import OrchestratorAgent
-# =====================================================================
-# 1. BỘ LỌC KIỂM DUYỆT TỪ NGỮ THÔ TỤC (TÁI SỬ DỤNG TỪ ORCHESTRATOR)
-# =====================================================================
-
-# Danh sách đại từ xưng hô thiếu tôn trọng / vô lễ (giữ nguyên không che mờ bằng dấu *
-# để phụ huynh đọc hiểu rõ ngữ cảnh con xưng hô cộc lốc như thế nào)
-_DISRESPECT_WORDS = {
-    "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "m", "mi"
-    "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này"
-}
-
-# Lọc riêng tập hợp các từ ngữ thô tục / tục tĩu thực sự từ OrchestratorAgent.PROFANITY_LIST
-# Bỏ qua các đại từ xưng hô để tránh che mờ nhầm 'mày' thành 'm**' làm phụ huynh hiểu lầm
-_PURE_PROFANITY_LIST = [
-    w.strip().lower() for w in OrchestratorAgent.PROFANITY_LIST 
-    if w.strip().lower() not in _DISRESPECT_WORDS
-]
-
-# Sắp xếp từ dài nhất lên trước để ưu tiên match cụm từ dài trước (VD: 'địt con mẹ' trước 'địt')
-_PURE_PROFANITY_SORTED = sorted(list(set(_PURE_PROFANITY_LIST)), key=len, reverse=True)
-
-
-def _collapse_repeated_chars(text: str) -> str:
-    """Rút gọn các ký tự lặp kéo dài do học sinh gõ khi ức chế (VD: 'vclllll' -> 'vcl', 'đmmmmm' -> 'đm')."""
-    return re.sub(r"(.)\1{2,}", r"\1\1", text)
-
-
-def censor_sensitive_words(text: str) -> str:
-    """
-    Che mờ các từ ngữ thô tục, chửi thề trong văn bản dựa trên kho PROFANITY_LIST chuẩn của hệ thống.
-    Ví dụ: 'địt' -> 'đ**', 'vcl' -> 'v**', 'mẹ kiếp' -> 'm** k***'.
-    Đảm bảo nội dung gửi qua email phụ huynh luôn sạch sẽ, nhân văn và đồng bộ với Orchestrator.
-    """
-    if not text:
-        return ""
-    
-    censored = text
-    
-    # 1. Duyệt qua kho từ thô tục chuẩn của Orchestrator (đã sort dài trước ngắn)
-    for word in _PURE_PROFANITY_SORTED:
-        # Match nguyên từ hoặc cụm từ (hỗ trợ cả trường hợp kéo dài ký tự cuối)
-        escaped_word = re.escape(word)
-        pattern = rf"\b{escaped_word}+\b"
-        
-        def _mask_match(match):
-            m = match.group(0)
-            parts = m.split()
-            masked_parts = []
-            for p in parts:
-                if len(p) <= 2:
-                    masked_parts.append(p[0] + "*")
-                else:
-                    masked_parts.append(p[0] + "*" * (len(p) - 1))
-            return " ".join(masked_parts)
-            
-        censored = re.sub(pattern, _mask_match, censored, flags=re.IGNORECASE | re.UNICODE)
-        
-    return censored
-
 
 # =====================================================================
-# 2. SYSTEM INSTRUCTIONS SƯ PHẠM CHO 2 LOẠI EMAIL ALERT
+# 1. SYSTEM INSTRUCTIONS SƯ PHẠM CHO 2 LOẠI EMAIL ALERT
 # =====================================================================
 
 ACADEMIC_ALERT_SYSTEM_INSTRUCTION = """
@@ -99,10 +39,11 @@ BẠN BẮT BUỘC PHẢI TUÂN THỦ CÁC NGUYÊN TẮC VÀNG SAU ĐÂY:
 1. THẤU HIỂU TÂM LÝ LỨA TUỔI:
    - Lứa tuổi học sinh Lớp 4 đến Lớp 9 (tiền dậy thì và dậy thì) có diễn biến tâm lý nhạy cảm. Việc con bộc phát lời nói thô tục thường xuất phát từ sự bực bội/ức chế khi gặp bài toán quá khó không làm được, hoặc do bắt chước bạn bè/mạng xã hội mà chưa nhận thức hết tính nghiêm trọng.
    - TUYỆT ĐỐI KHÔNG quy kết bản chất đạo đức của con. Không dùng từ ngữ lên án gay gắt.
-2. NGUYÊN TẮC BẢO VỆ & CHE MỜ TỪ THÔ (CENSORSHIP):
-   - Mọi từ ngữ nhạy cảm trong trích đoạn vi phạm PHẢI ĐƯỢC CHE MỜ bằng ký tự sao (ví dụ: 'đ**', 'v**', 'c**').
+2. NGUYÊN TẮC MINH BẠCH & GIỮ NGUYÊN VĂN PHÁT NGÔN (KHÔNG CHE MỜ DẤU *):
+   - Trong trường 'censored_snippet', BẮT BUỘC trích dẫn NGUYÊN VĂN chính xác 100% câu từ học sinh đã dùng (ví dụ: "vcl bài khó thế", "địt hiểu bài này", "mẹ kiếp").
+   - TUYỆT ĐỐI KHÔNG tự ý thay thế bằng ký tự sao (như 'đ**', 'v**') hay cắt bỏ từ ngữ của học sinh. Phụ huynh cần biết chính xác lời nói thực tế của con để có mức độ can thiệp và định hướng phù hợp.
 3. ĐỊNH HƯỚNG THÁI ĐỘ CHO PHỤ HUYNH:
-   - Nhắc nhở cha mẹ giữ bình tĩnh, lắng nghe nguyên nhân cảm xúc phía sau của con trước, không dùng đòn roi hay mắng mỏ nặng lời gây phản tác dụng tâm lý.
+   - Đi cùng với việc trích dẫn nguyên văn, bạn PHẢI định hướng cha mẹ giữ bình tĩnh, lắng nghe nguyên nhân cảm xúc phía sau của con trước, không dùng đòn roi hay mắng mỏ nặng lời gây phản tác dụng tâm lý.
 4. LỜI KHUYÊN HÀNH ĐỘNG & CÂU MỞ LỜI:
    - 2-3 lời khuyên cụ thể giúp con rèn luyện thói quen kiềm chế cảm xúc tiêu cực và văn hóa ứng xử văn minh.
    - Một câu gợi ý trò chuyện mẫu để cha mẹ dễ dàng khơi chuyện tâm sự với con như một người bạn lớn.
@@ -112,7 +53,7 @@ BẠN BẮT BUỘC PHẢI TUÂN THỦ CÁC NGUYÊN TẮC VÀNG SAU ĐÂY:
 
 
 # =====================================================================
-# 3. HÀM FALLBACK AN TOÀN (RULE-BASED)
+# 2. HÀM FALLBACK AN TOÀN (RULE-BASED)
 # =====================================================================
 
 def _fallback_academic_alert(req: AcademicAlertGenerateRequest, reason: str = "") -> AcademicAlertEmailResult:
@@ -120,17 +61,17 @@ def _fallback_academic_alert(req: AcademicAlertGenerateRequest, reason: str = ""
     topics_text = ", ".join(req.difficult_topics) if req.difficult_topics else "các bài toán tư duy có lời văn"
     return AcademicAlertEmailResult(
         alert_type="ACADEMIC_ALERT",
-        email_subject=f"[SocraticKid] Đồng hành cùng bé {req.student_name}: Củng cố bài học môn Toán Lớp {req.grade}",
+        email_subject=f"[SocraticKid] Báo cáo tình hình học tập môn Toán gần đây của bé {req.student_name}",
         student_name=req.student_name,
         grade=req.grade,
-        trigger_reason=req.trigger_reason,
-        summary=f"Trong các buổi học vừa qua, bé {req.student_name} đã rất kiên trì rèn luyện nhưng đang gặp chút khó khăn ở {topics_text}, với điểm tự lập trung bình đạt {req.average_recent_score:.0f}/100.",
-        strengths_observed=f"Bé {req.student_name} có tinh thần tự giác cao, không bỏ cuộc khi gặp bài toán mới và rất tích cực tương tác cùng trợ lý Socratic.",
-        learning_gap_analysis=f"Con đang lúng túng ở bước phân tích mối quan hệ giữa các đại lượng trong đề bài và chưa quen với cách biểu diễn dữ kiện bài toán ra nháp.",
+        trigger_reason=req.trigger_reason or f"Bé gặp khó khăn trong các bài toán gần đây ({req.average_recent_score:.0f} điểm)",
+        summary=f"Gần đây bé {req.student_name} đang nỗ lực học tập nhưng gặp một số vướng mắc tư duy ở {topics_text}. Con đã cố gắng thử sức nhiều lần trước khi cần sự trợ giúp.",
+        strengths_observed="Con có tinh thần tự giác cao, kiên trì ngồi vào bàn học và không ngần ngại hỏi khi chưa hiểu.",
+        learning_gap_analysis=f"Con cần thêm thời gian để củng cố các bước chuyển hóa đề bài thành phép tính, đặc biệt trong {topics_text}.",
         actionable_parent_advice=[
-            "Gợi ý con đọc to đề bài 2 lần và dùng bút chì gạch chân dưới các con số quan trọng trước khi giải.",
-            "Khuyến khích con vẽ sơ đồ đoạn thẳng hoặc hình minh họa ra giấy nháp để dễ hình dung bài toán.",
-            "Dành lời khen ngợi cho sự nỗ lực của con thay vì đặt nặng điểm số, giúp con giữ vững niềm yêu thích môn Toán."
+            "Dành 15 phút cùng con xem lại các bài tập đã làm trong Sổ tay của bé.",
+            "Khích lệ tinh thần con bằng cách khen ngợi quá trình suy nghĩ thay vì chỉ tập trung vào kết quả đúng/sai.",
+            "Nhắc con đọc to đề bài 2 lần và gạch chân dưới các từ khóa quan trọng trước khi đặt bút tính."
         ],
         suggested_conversation_opener=f"Tối nay bố/mẹ thấy con ngồi học rất tập trung. Có bài toán nào làm con thấy hơi khúc mắc không, kể cho bố/mẹ nghe với nhé!",
         is_fallback=True,
@@ -140,15 +81,16 @@ def _fallback_academic_alert(req: AcademicAlertGenerateRequest, reason: str = ""
 
 def _fallback_safety_alert(req: SafetyAlertGenerateRequest, reason: str = "") -> SafetyAlertEmailResult:
     """Tạo email cảnh báo ngôn từ mẫu chuẩn mực khi Gemini API gặp sự cố hoặc thiếu API key."""
-    censored = censor_sensitive_words(req.original_message)
+    # Sprint 9 (T9.10): Giữ nguyên văn phát ngôn của con (không che mờ dấu *)
+    raw_snippet = req.original_message.strip() if req.original_message else ""
     return SafetyAlertEmailResult(
         alert_type="SAFETY_ALERT",
         email_subject=f"[SocraticKid] Phối hợp rèn luyện thói quen giao tiếp tích cực cho bé {req.student_name}",
         student_name=req.student_name,
         grade=req.grade,
         violation_category="Ngôn từ chưa phù hợp trong giờ học",
-        censored_snippet=censored,
-        context_analysis=f"Khi gặp thử thách trong buổi học, bé {req.student_name} có biểu hiện bộc phát cảm xúc nhất thời qua lời nói chưa chuẩn mực. Đây là phản ứng tâm lý thường gặp khi trẻ cảm thấy bế tắc hoặc áp lực trước bài toán khó.",
+        censored_snippet=raw_snippet,
+        context_analysis=f"Khi gặp thử thách trong buổi học, bé {req.student_name} có biểu hiện bộc phát cảm xúc nhất thời qua lời nói: \"{raw_snippet}\". Đây là phản ứng tâm lý thường gặp khi trẻ cảm thấy bế tắc hoặc áp lực trước bài toán khó.",
         tone_guidance_for_parent="Cha mẹ nên tiếp cận bằng sự thấu hiểu và điềm tĩnh, tránh la mắng gay gắt khiến con thu mình hoặc nảy sinh tâm lý chống đối.",
         actionable_parent_advice=[
             "Hỏi thăm xem con có đang cảm thấy mệt mỏi hoặc bực bội với bài toán nào gần đây không.",
@@ -162,7 +104,7 @@ def _fallback_safety_alert(req: SafetyAlertGenerateRequest, reason: str = "") ->
 
 
 # =====================================================================
-# 4. HÀM GỌI GEMINI SINH EMAIL ALERT
+# 3. HÀM GỌI GEMINI SINH EMAIL ALERT
 # =====================================================================
 
 def generate_academic_alert_email(
@@ -248,7 +190,8 @@ def generate_safety_alert_email(
 ) -> SafetyAlertEmailResult:
     """
     Gọi Gemini API để sinh nội dung Email Cảnh Báo Ngôn Từ Không Phù Hợp.
-    Đảm bảo snippet vi phạm được kiểm duyệt che mờ từ thô (Censored / Masked).
+    [CẬP NHẬT T9.10]: Giữ nguyên văn trích đoạn phát ngôn của học sinh (không che mờ dấu *)
+    để phụ huynh nắm bắt trung thực mức độ cảm xúc của con.
     """
     key = api_key or os.getenv("GEMINI_API_KEY")
     if not key:
@@ -257,8 +200,8 @@ def generate_safety_alert_email(
     genai.configure(api_key=key)
     model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
-    # Che mờ từ ngữ thô trước khi đưa vào prompt và schema
-    masked_message = censor_sensitive_words(request_data.original_message)
+    # Giữ nguyên văn tin nhắn của học sinh (không che mờ bằng dấu *)
+    raw_message = request_data.original_message.strip() if request_data.original_message else ""
 
     prompt = f"""
 Hãy phân tích sự cố phát ngôn sau đây của học sinh và xuất ra nội dung Email Cảnh Báo Ngôn Từ gửi Phụ huynh:
@@ -267,7 +210,7 @@ Hãy phân tích sự cố phát ngôn sau đây của học sinh và xuất ra 
 • Tên học sinh: {request_data.student_name}
 • Khối lớp: Lớp {request_data.grade}
 • Loại vi phạm: {request_data.violation_type}
-• Trích đoạn phát ngôn của con (đã che mờ): "{masked_message}"
+• Trích đoạn phát ngôn của con (nguyên văn thực tế): "{raw_message}"
 • Ngữ cảnh bài học/hội thoại trước đó: {request_data.conversation_context or 'Trong lúc đang giải bài tập toán'}
 • Thời điểm xảy ra: {request_data.incident_time or 'Hôm nay'}
 
@@ -279,7 +222,7 @@ Chỉ xuất ra đúng định dạng JSON thuần túy theo cấu trúc:
   "student_name": "{request_data.student_name}",
   "grade": {request_data.grade},
   "violation_category": "Ngôn từ chưa phù hợp trong giờ học",
-  "censored_snippet": "{masked_message}",
+  "censored_snippet": "{raw_message}",
   "context_analysis": "Phân tích nguyên nhân tâm lý dẫn đến bộc phát cảm xúc của con",
   "tone_guidance_for_parent": "Định hướng thái độ bình tĩnh, lắng nghe, không la mắng cho cha mẹ",
   "actionable_parent_advice": [
@@ -306,8 +249,8 @@ Chỉ xuất ra đúng định dạng JSON thuần túy theo cấu trúc:
             }
         )
         data = json.loads(response.text.strip())
-        # Đảm bảo snippet trong output luôn được áp dụng bộ lọc che mờ
-        data["censored_snippet"] = censor_sensitive_words(data.get("censored_snippet", masked_message))
+        # Đảm bảo trường censored_snippet giữ nguyên văn phát ngôn gốc của con
+        data["censored_snippet"] = data.get("censored_snippet") or raw_message
         data["is_fallback"] = False
         return SafetyAlertEmailResult.model_validate(data)
     except Exception as e:
