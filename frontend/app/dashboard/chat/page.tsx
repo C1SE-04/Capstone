@@ -10,7 +10,7 @@ import { FileTooLargeToast } from "@/components/chat/FileTooLargeToast";
 // T7.18 (US 7.2): Streak Flame & Badge Modal
 import { StreakBadge } from "@/components/chat/StreakBadge";
 import { BadgeModal, BadgeItem, DEFAULT_BADGES } from "@/components/chat/BadgeModal";
-import { getMergedBadges, saveStoredBadge, resetStoredBadge } from "@/lib/badgeStorage";
+import { getMergedBadges, saveStoredBadge, resetStoredBadge, initBadgeSession, BADGE_SYNC_EVENT } from "@/lib/badgeStorage";
 import { Conversation, Message } from "@/types/chat";
 import { Menu, PanelRight, Trophy } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -79,16 +79,35 @@ export default function ChatPage() {
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
   const [unlockedBadge, setUnlockedBadge] = useState<Partial<BadgeItem> | undefined>(undefined);
 
-  // Đồng bộ trạng thái huy hiệu từ LocalStorage theo User
+  // US 9.2 (T9.8 & T9.8b): Đồng bộ trạng thái huy hiệu từ Backend DB & LocalStorage theo User
   useEffect(() => {
     if (typeof window !== "undefined") {
       setAllBadges(getMergedBadges(userId));
+
+      let isMounted = true;
+      initBadgeSession(userId).then((merged) => {
+        if (isMounted) {
+          setAllBadges(merged);
+        }
+      });
+
+      const handleBadgesSynced = () => {
+        if (isMounted) {
+          setAllBadges(getMergedBadges(userId));
+        }
+      };
+      window.addEventListener(BADGE_SYNC_EVENT, handleBadgesSynced);
 
       // Hỗ trợ kiểm thử: cho phép Dev/QA reset huy hiệu qua Console
       (window as any).resetSocraticBadges = (badgeId?: string) => {
         resetStoredBadge(badgeId, userId);
         setAllBadges(getMergedBadges(userId));
         console.log(`[Badge] Đã reset huy hiệu ${badgeId || "tất cả"} cho user ${userId}`);
+      };
+
+      return () => {
+        isMounted = false;
+        window.removeEventListener(BADGE_SYNC_EVENT, handleBadgesSynced);
       };
     }
   }, [userId]);
