@@ -634,3 +634,55 @@ class UserUnlockedBadge(Base):
     )
 
     user = relationship("User", backref="unlocked_badges")
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 9.5 (Task T9.16): Trung Tâm Quản Trị Báo Lỗi & Sự Cố Hệ Thống (System Errors)
+# ────────────────────────────────────────────────────────────────────────────
+
+class SystemError(Base):
+    """
+    US 9.5 - Task T9.16:
+    Lưu trữ sự cố hệ thống và phản ánh báo lỗi từ người dùng:
+      - id: Khóa chính UUID hex
+      - error_code: Mã định danh lỗi (VD: ERR_500_..., ERR_TIMEOUT_..., UR_...)
+      - error_type: Phân loại sự cố (CRASH_500 | AI_TIMEOUT | USER_REPORT | SMTP_ERROR | DB_ERROR)
+      - severity: Mức độ nghiêm trọng (CRITICAL | WARNING | INFO)
+      - message: Tóm tắt thông điệp lỗi hoặc nội dung phản ánh
+      - stack_trace: Toàn bộ stack trace (File, Line, Exception type)
+      - endpoint: API endpoint gặp sự cố (VD: POST /chat/message)
+      - request_payload: Dữ liệu gửi lên (đã được lọc mask mật khẩu nhạy cảm)
+      - user_id: ID người dùng gặp lỗi (hoặc người gửi báo cáo), nullable nếu là anonymous
+      - user_email: Email snapshot của người dùng để search nhanh
+      - status: Trạng thái xử lý (OPEN | RESOLVED)
+      - resolved_at: Thời điểm đánh dấu đã xử lý
+      - resolved_by: ID Admin đã xử lý
+      - resolved_note: Ghi chú xử lý kỹ thuật của Admin
+      - created_at: Thời điểm phát sinh lỗi
+    """
+    __tablename__ = "system_errors"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    error_code = Column(String(64), nullable=False, index=True)
+    error_type = Column(String(32), nullable=False, index=True)  # CRASH_500 | AI_TIMEOUT | USER_REPORT | SMTP_ERROR
+    severity = Column(String(16), nullable=False, index=True)    # CRITICAL | WARNING | INFO
+    message = Column(Text, nullable=False)
+    stack_trace = Column(Text, nullable=True)
+    endpoint = Column(String(255), nullable=True, index=True)
+    request_payload = Column(Text, nullable=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_email = Column(String(255), nullable=True, index=True)
+    status = Column(String(16), nullable=False, default="OPEN", server_default="OPEN", index=True)  # OPEN | RESOLVED
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    resolved_note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_system_errors_status_created", "status", "created_at"),
+        Index("ix_system_errors_type_created", "error_type", "created_at"),
+        Index("ix_system_errors_severity_created", "severity", "created_at"),
+    )
+
+    user = relationship("User", foreign_keys=[user_id], backref="system_errors")
+    resolver = relationship("User", foreign_keys=[resolved_by])

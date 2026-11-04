@@ -25,6 +25,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
             "role": role,
             "grade_level": grade_level,
             "session_version": session_version,
+            "email": payload.get("email"),
         }
 
     except JWTError:
@@ -40,3 +41,24 @@ def require_role(allowed_roles: list[str]):
             )
         return current_user
     return role_checker
+
+oauth2_optional_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
+
+def get_optional_current_user(token: str = Depends(oauth2_optional_scheme)):
+    """Lấy thông tin user nếu có token hợp lệ, không chặn 401 nếu chưa đăng nhập."""
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        return {
+            "id": user_id,
+            "role": payload.get("role"),
+            "grade_level": payload.get("grade_level"),
+            "session_version": payload.get("session_version"),
+            "email": payload.get("email"),
+        }
+    except JWTError:
+        return None
