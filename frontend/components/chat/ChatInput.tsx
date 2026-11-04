@@ -8,6 +8,7 @@
  * - [T6.20] Hỗ trợ paste ảnh từ clipboard (onPaste handler).
  * - [T6.20] Đính kèm ảnh qua nút +, hiển thị thumbnail preview + nút X xóa ảnh.
  * - [T6.21] Mobile Bottom Sheet khi bấm +: Chọn Camera hoặc Thư viện ảnh.
+ * - [T9.13 & T9.13b] MathSymbolToolbar: Thanh ký hiệu toán học lớp 4-9 chèn đúng vị trí con trỏ.
  */
 "use client";
 
@@ -32,6 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 import { FileTooLargeToast } from "./FileTooLargeToast";
 import { ImageZoomModal } from "./ImageZoomModal";
+import { MathSymbolToolbar } from "./MathSymbolToolbar";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -131,6 +133,31 @@ export function ChatInput({
   useEffect(() => {
     adjustHeight();
   }, [content]);
+
+  // ── [US 9.4 - T9.13] Chèn ký hiệu toán học chính xác tại con trỏ ──
+
+  const handleInsertMathSymbol = useCallback(
+    (template: string, cursorOffset: number) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const start = textarea.selectionStart ?? content.length;
+      const end = textarea.selectionEnd ?? content.length;
+
+      const newContent =
+        content.substring(0, start) + template + content.substring(end);
+      setContent(newContent);
+
+      const targetCursorPos = start + cursorOffset;
+
+      // Giữ focus và đưa con trỏ vào giữa cặp ngoặc
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(targetCursorPos, targetCursorPos);
+      });
+    },
+    [content]
+  );
 
   // ── [T6.20/AC5] Image Attachment Helpers ──
 
@@ -359,6 +386,14 @@ export function ChatInput({
         onClose={() => setIsPreviewOpen(false)}
       />
 
+      {/* ── [US 9.4 - T9.13 & T9.13b] MathSymbolToolbar đặt ngay trên textarea ── */}
+      <div className="mb-2 px-1">
+        <MathSymbolToolbar
+          onInsertSymbol={handleInsertMathSymbol}
+          disabled={isLoading || isOffline}
+        />
+      </div>
+
       {/* ── Vùng background bo góc chứa các nút và ô nhập liệu ── */}
       <div
         className={cn(
@@ -379,7 +414,7 @@ export function ChatInput({
             aria-label="Đính kèm ảnh"
             aria-expanded={isSheetOpen}
             className={cn(
-              "p-2.5 text-[#8C4905] hover:bg-[#F1CCA6] rounded-full transition-all duration-150",
+              "p-2.5 text-[#8C4905] hover:bg-[#F1CCA6] rounded-full transition-all duration-150 cursor-pointer",
               "disabled:opacity-40 disabled:cursor-not-allowed",
               isSheetOpen && "bg-[#F1CCA6] rotate-45",
             )}
@@ -426,7 +461,7 @@ export function ChatInput({
                     className={[
                       "flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl",
                       "border-2 border-[#C1762A]/20 hover:border-[#C1762A]/60",
-                      "hover:bg-[#F1CCA6]/30 transition-all active:scale-95",
+                      "hover:bg-[#F1CCA6]/30 transition-all active:scale-95 cursor-pointer",
                     ].join(" ")}
                   >
                     <div className="w-12 h-12 rounded-full bg-[#F1CCA6] flex items-center justify-center">
@@ -444,7 +479,7 @@ export function ChatInput({
                     className={[
                       "flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl",
                       "border-2 border-[#C1762A]/20 hover:border-[#C1762A]/60",
-                      "hover:bg-[#F1CCA6]/30 transition-all active:scale-95",
+                      "hover:bg-[#F1CCA6]/30 transition-all active:scale-95 cursor-pointer",
                     ].join(" ")}
                   >
                     <div className="w-12 h-12 rounded-full bg-[#F1CCA6] flex items-center justify-center">

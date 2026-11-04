@@ -1,9 +1,10 @@
 /**
  * File: components/dashboard/LeaderboardTable.tsx
- * Mô tả: Bảng danh sách xếp hạng chuỗi ngày học chi tiết - US 8.2 & Task 8.15.
+ * Mô tả: Bảng danh sách xếp hạng chuỗi ngày học chi tiết - US 8.2 & US 9.4 (T9.14).
  * - Danh sách học sinh với thứ hạng, avatar, display_name (ẩn danh an toàn), khối lớp,
  *   cấp độ ngọn lửa 7 mốc, kỷ lục chuỗi ngày, và chuỗi hiện tại.
  * - Hàng của học sinh hiện tại được đánh dấu nổi bật với nhãn "Bạn".
+ * - Hiển thị empty state thân thiện khi tìm kiếm không có kết quả: "Không tìm thấy học sinh nào phù hợp".
  */
 
 "use client";
@@ -11,15 +12,30 @@
 import React from "react";
 import { StreakLeaderboardItem } from "@/types/leaderboard";
 import { getStreakMilestone } from "@/lib/streakMilestones";
-import { Flame, Trophy, Crown, Award, Medal, ShieldCheck } from "lucide-react";
+import { Flame, Trophy, Crown, Award, Medal, ShieldCheck, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LeaderboardTableProps {
   items: StreakLeaderboardItem[];
+  searchQuery?: string;
 }
 
-export function LeaderboardTable({ items }: LeaderboardTableProps) {
+export function LeaderboardTable({ items, searchQuery }: LeaderboardTableProps) {
   if (!items || items.length === 0) {
+    if (searchQuery && searchQuery.trim()) {
+      return (
+        <div className="bg-white rounded-2xl p-8 border border-[#F1CCA6] text-center shadow-xs animate-in fade-in duration-200">
+          <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-[#F7ECE1] flex items-center justify-center text-[#C1762A]">
+            <Search size={32} />
+          </div>
+          <h4 className="text-base font-bold text-[#8C4905]">Không tìm thấy học sinh nào phù hợp</h4>
+          <p className="text-sm text-stone-500 mt-1">
+            Không có học sinh nào khớp với từ khóa &ldquo;{searchQuery}&rdquo;. Hãy thử tìm với tên khác nhé!
+          </p>
+        </div>
+      );
+    }
+
     return (
       <div className="bg-white rounded-2xl p-8 border border-[#F1CCA6] text-center shadow-xs">
         <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-[#F7ECE1] flex items-center justify-center text-[#C1762A]">

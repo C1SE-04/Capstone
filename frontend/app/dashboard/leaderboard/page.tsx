@@ -1,7 +1,9 @@
 /**
  * File: app/dashboard/leaderboard/page.tsx
- * Mô tả: Trang Bảng Xếp Hạng Chuỗi Ngày Học (Streak Leaderboard) - US 8.2 & Task 8.15.
+ * Mô tả: Trang Bảng Xếp Hạng Chuỗi Ngày Học (Streak Leaderboard) - US 8.2 & US 9.4 (T9.14).
  * - Hiển thị Top học sinh có chuỗi ngày học liên tục cao nhất.
+ * - Tiêu đề động hiển thị số lượng học sinh thực tế: "Bảng Vinh Danh ([N] Học Sinh Tham Gia)" - AC 9.4.4.
+ * - Tích hợp ô tìm kiếm bạn bè với cơ chế debounce 300ms - AC 9.4.5.
  * - Bộ lọc tối giản & chuẩn xác: Lọc theo Khối lớp (Lớp 4 -> 9) hoặc xem Toàn Server.
  * - Bục vinh danh Top 3 (Gold, Silver, Bronze Podium).
  * - Thẻ vị trí xếp hạng của học sinh hiện tại (YourRankCard).
@@ -24,6 +26,7 @@ import {
   Info,
   Lock,
   X,
+  Search,
 } from "lucide-react";
 import {
   StreakLeaderboardResponse,
@@ -57,6 +60,17 @@ export default function LeaderboardPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showMilestonesGuide, setShowMilestonesGuide] = useState<boolean>(false);
 
+  // State ô tìm kiếm bạn bè kèm debounce 300ms (US 9.4 - T9.14)
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
   // Khởi tạo bộ lọc theo khối lớp của học sinh nếu có
   useEffect(() => {
     const studentGrade = (session?.user as any)?.grade_level;
@@ -67,7 +81,7 @@ export default function LeaderboardPage() {
 
   // Fetch API bảng xếp hạng
   const fetchLeaderboard = useCallback(
-    async (grade: GradeFilter, isManualRefresh = false) => {
+    async (grade: GradeFilter, isManualRefresh = false, searchKeyword = "") => {
       if (isManualRefresh) {
         setIsRefreshing(true);
       } else {
@@ -81,6 +95,9 @@ export default function LeaderboardPage() {
           queryParams.set("grade", grade.toString());
         }
         queryParams.set("limit", "50");
+        if (searchKeyword) {
+          queryParams.set("search", searchKeyword);
+        }
 
         // Gọi qua BFF proxy /api/metrics/streak-leaderboard
         const res = await fetch(`/api/metrics/streak-leaderboard?${queryParams.toString()}`);
@@ -119,19 +136,19 @@ export default function LeaderboardPage() {
   );
 
   useEffect(() => {
-    fetchLeaderboard(selectedGrade);
-  }, [selectedGrade, fetchLeaderboard]);
+    fetchLeaderboard(selectedGrade, false, debouncedSearch);
+  }, [selectedGrade, debouncedSearch, fetchLeaderboard]);
 
   const handleGradeChange = (grade: GradeFilter) => {
     setSelectedGrade(grade);
   };
 
   const handleRefresh = () => {
-    fetchLeaderboard(selectedGrade, true);
+    fetchLeaderboard(selectedGrade, true, debouncedSearch);
   };
 
   const leaderboardItems = data?.leaderboard || [];
-  const topThree = leaderboardItems.slice(0, 3);
+  const topThree = debouncedSearch ? [] : leaderboardItems.slice(0, 3);
   const totalParticipants = data?.total_participants || 0;
   const currentUserEntry = data?.current_user_entry;
 
@@ -146,7 +163,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col min-h-full pb-12 animate-in fade-in duration-500">
-      {/* Header Banner */}
+      {/* Header Banner - AC 9.4.4: Bảng Vinh Danh ([N] Học Sinh Tham Gia) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
@@ -154,7 +171,7 @@ export default function LeaderboardPage() {
               <Trophy size={26} className="text-[#C1762A]" />
             </span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-[#8C4905] tracking-tight">
-              Bảng Xếp Hạng Chuỗi Học Tập
+              Bảng Vinh Danh ({totalParticipants} Học Sinh Tham Gia)
             </h1>
           </div>
           <p className="text-sm md:text-base text-[#C1762A] font-medium">
@@ -166,7 +183,7 @@ export default function LeaderboardPage() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setShowMilestonesGuide(!showMilestonesGuide)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1]/60 transition-colors shadow-2xs"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1]/60 transition-colors shadow-2xs cursor-pointer"
           >
             <Info size={16} className="text-[#C1762A]" />
             <span>7 Mốc Lửa</span>
@@ -175,7 +192,7 @@ export default function LeaderboardPage() {
           <button
             onClick={handleRefresh}
             disabled={isLoading || isRefreshing}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#C1762A] text-white hover:bg-[#8C4905] disabled:opacity-50 transition-all shadow-xs active:scale-95"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#C1762A] text-white hover:bg-[#8C4905] disabled:opacity-50 transition-all shadow-xs active:scale-95 cursor-pointer"
             title="Làm mới dữ liệu"
           >
             <RefreshCw
@@ -187,7 +204,7 @@ export default function LeaderboardPage() {
         </div>
       </div>
 
-      {/* Guide 7 Mốc Lửa Tiến Hóa (Collapsible Showcase - Gọn gàng, trải dài 1 hàng không xuống dòng) */}
+      {/* Guide 7 Mốc Lửa Tiến Hóa (Collapsible Showcase) */}
       {showMilestonesGuide && (
         <div className="bg-white rounded-2xl p-3.5 sm:p-4.5 border border-[#F1CCA6] shadow-sm mb-6 animate-in slide-in-from-top-3 duration-200">
           <div className="flex items-center justify-between gap-2 mb-2">
@@ -202,7 +219,7 @@ export default function LeaderboardPage() {
             </div>
             <button
               onClick={() => setShowMilestonesGuide(false)}
-              className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-xl transition-colors shrink-0"
+              className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-xl transition-colors shrink-0 cursor-pointer"
               title="Đóng"
             >
               <X size={16} />
@@ -212,7 +229,7 @@ export default function LeaderboardPage() {
             Học bài và giải toán kiên trì mỗi ngày cùng Thầy Socratic để thắp sáng và mở khóa các mốc ngọn lửa:
           </p>
 
-          {/* Dải 7 mốc lửa trải dài trên 1 hàng không xuống dòng */}
+          {/* Dải 7 mốc lửa trải dài trên 1 hàng */}
           <div className="overflow-x-auto pb-1.5 pt-0.5 -mx-1 px-1 scrollbar-none">
             <div className="grid grid-cols-7 gap-2 min-w-[560px] sm:min-w-0">
               {STREAK_MILESTONES.slice(1).map((m) => {
@@ -230,7 +247,6 @@ export default function LeaderboardPage() {
                       )}
                       title={`${m.name}: ${m.description} (Đã mở khóa!)`}
                     >
-                      {/* Icon lửa SVG ở trên */}
                       <div className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center relative">
                         {tierConfig && (
                           <FigmaStreakFlame
@@ -240,7 +256,6 @@ export default function LeaderboardPage() {
                         )}
                       </div>
 
-                      {/* Số ngày & tên mốc ở dưới */}
                       <div className="flex flex-col items-center w-full mt-1">
                         <span className="font-black text-xs sm:text-sm text-stone-800 tracking-tight leading-tight">
                           {m.minDays} ngày
@@ -267,7 +282,6 @@ export default function LeaderboardPage() {
                     className="relative p-2.5 rounded-xl border border-stone-200/90 bg-stone-100/90 flex flex-col items-center justify-between min-h-[114px] text-center select-none overflow-hidden"
                     title={`Cần đạt chuỗi ${m.minDays} ngày để mở khóa (Hiện tại: ${userStreak}/${m.minDays} ngày)`}
                   >
-                    {/* Khung skeleton xám với icon cái khóa ở phía trước */}
                     <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-stone-200/80 border border-stone-300/60 flex items-center justify-center relative shadow-2xs">
                       {tierConfig && (
                         <div className="w-6 h-6 sm:w-7 sm:h-7 opacity-15 grayscale blur-[1.5px] pointer-events-none">
@@ -281,7 +295,6 @@ export default function LeaderboardPage() {
                       </div>
                     </div>
 
-                    {/* Số ngày & tên mốc ở dưới */}
                     <div className="flex flex-col items-center w-full mt-1">
                       <span className="font-extrabold text-xs sm:text-sm text-stone-400 tracking-tight leading-tight">
                         {m.minDays} ngày
@@ -301,9 +314,10 @@ export default function LeaderboardPage() {
         </div>
       )}
 
-      {/* Grade Filter Bar */}
-      <div className="bg-white rounded-2xl p-2.5 border border-[#F1CCA6] shadow-xs mb-6 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 px-1 max-w-full">
+      {/* Grade Filter Bar & Search Bar (AC 9.4.5) */}
+      <div className="bg-white rounded-2xl p-2.5 border border-[#F1CCA6] shadow-xs mb-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        {/* Nút lọc khối lớp */}
+        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 px-1 max-w-full scrollbar-none">
           {GRADE_OPTIONS.map((opt) => {
             const isActive = selectedGrade === opt.value;
             return (
@@ -311,7 +325,7 @@ export default function LeaderboardPage() {
                 key={opt.label}
                 onClick={() => handleGradeChange(opt.value)}
                 className={cn(
-                  "px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 select-none",
+                  "px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 select-none cursor-pointer",
                   isActive
                     ? "bg-[#C1762A] text-white shadow-xs scale-102"
                     : "text-[#8C4905] hover:bg-[#F7ECE1] hover:text-[#8C4905]"
@@ -323,12 +337,38 @@ export default function LeaderboardPage() {
           })}
         </div>
 
-        {/* Tổng số người tham gia */}
-        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#F7ECE1]/60 rounded-xl text-xs font-semibold text-[#8C4905]">
-          <Users size={14} className="text-[#C1762A]" />
-          <span>
-            <strong>{totalParticipants}</strong> học sinh
-          </span>
+        {/* Ô Tìm Kiếm Bạn Bè - AC 9.4.5 */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 sm:w-64">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8C4905]/50 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Tìm bạn theo tên..."
+              className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#F7ECE1]/40 border border-[#F1CCA6] text-xs sm:text-sm text-[#8C4905] placeholder-[#8C4905]/50 font-medium focus:outline-none focus:border-[#C1762A] focus:bg-white transition-all shadow-2xs"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-0.5 rounded-full transition-colors cursor-pointer"
+                title="Xóa tìm kiếm"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Tổng số người tham gia */}
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-2 bg-[#F7ECE1]/60 rounded-xl text-xs font-semibold text-[#8C4905] shrink-0 border border-[#F1CCA6]/40">
+            <Users size={14} className="text-[#C1762A]" />
+            <span>
+              <strong>{totalParticipants}</strong> học sinh
+            </span>
+          </div>
         </div>
       </div>
 
@@ -347,8 +387,8 @@ export default function LeaderboardPage() {
           <p className="font-bold mb-2">Đã xảy ra sự cố</p>
           <p className="text-sm text-rose-600 mb-4">{errorMessage}</p>
           <button
-            onClick={() => fetchLeaderboard(selectedGrade)}
-            className="px-4 py-2 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors"
+            onClick={() => fetchLeaderboard(selectedGrade, false, debouncedSearch)}
+            className="px-4 py-2 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer"
           >
             Thử lại
           </button>
@@ -358,8 +398,10 @@ export default function LeaderboardPage() {
       {/* Content when loaded */}
       {!isLoading && !errorMessage && (
         <>
-          {/* Top 3 Podium */}
-          {topThree.length > 0 && <LeaderboardPodium topThree={topThree} />}
+          {/* Top 3 Podium (Chỉ hiển thị khi không tìm kiếm) */}
+          {topThree.length > 0 && !debouncedSearch && (
+            <LeaderboardPodium topThree={topThree} />
+          )}
 
           {/* Current User Standing Card */}
           <YourRankCard
@@ -374,19 +416,24 @@ export default function LeaderboardPage() {
                 <span className="bg-[#C1762A] w-2 h-6 rounded-full inline-block" />
                 Danh sách chi tiết
                 <span className="text-xs font-semibold text-stone-500">
-                  (Top {leaderboardItems.length})
+                  {debouncedSearch
+                    ? `(Tìm thấy ${leaderboardItems.length} kết quả)`
+                    : `(Top ${leaderboardItems.length})`}
                 </span>
               </h3>
             </div>
 
-            <LeaderboardTable items={leaderboardItems} />
+            <LeaderboardTable
+              items={leaderboardItems}
+              searchQuery={debouncedSearch}
+            />
           </div>
 
           {/* Privacy Footnote */}
           <div className="flex items-center justify-center gap-2 text-xs text-[#8C4905]/70 bg-white/50 backdrop-blur-xs p-3 rounded-xl border border-[#F1CCA6]/50">
             <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
             <span>
-              <strong>Bảo mật thông tin:</strong> Tên hiển thị được viết tắt và ảnh đại diện ngẫu nhiên
+              <strong>Bảo mật thông tin:</strong> Tên hiển thị được ẩn danh và ảnh đại diện ngẫu nhiên
               nhằm bảo vệ quyền riêng tư của học sinh theo tiêu chuẩn Sprint 8.
             </span>
           </div>

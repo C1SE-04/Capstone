@@ -534,7 +534,8 @@ def _compute_streak_from_dates(all_dates: set[date]) -> tuple[int, int]:
 @router.get("/metrics/streak-leaderboard", response_model=schemas.StreakLeaderboardResponse)
 def get_streak_leaderboard(
     grade: Optional[int] = Query(None, ge=4, le=9, description="Lọc theo khối lớp (Lớp 4 - 9). Bỏ trống để xem Toàn Server"),
-    limit: int = Query(20, ge=1, le=100, description="Số lượng học sinh trong top (mặc định 20, tối đa 100)"),
+    limit: int = Query(50, ge=1, le=100, description="Số lượng học sinh trong top (mặc định 50, tối đa 100)"),
+    search: Optional[str] = Query(None, description="Tìm kiếm học sinh theo tên hiển thị hoặc username"),
     current_user: dict = Depends(dependencies.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -637,9 +638,9 @@ def get_streak_leaderboard(
     )
 
     total_participants = len(ranked_list)
-    leaderboard_items: list[schemas.StreakLeaderboardItem] = []
     current_user_entry: Optional[schemas.StreakLeaderboardItem] = None
 
+    all_ranked_items: list[schemas.StreakLeaderboardItem] = []
     for idx, item in enumerate(ranked_list, start=1):
         is_cur = (item["student_id"] == current_uid)
         entry = schemas.StreakLeaderboardItem(
@@ -654,8 +655,18 @@ def get_streak_leaderboard(
         )
         if is_cur:
             current_user_entry = entry
-        if len(leaderboard_items) < limit:
-            leaderboard_items.append(entry)
+        all_ranked_items.append(entry)
+
+    # Lọc tìm kiếm nếu có query param search (US 9.4 - T9.15)
+    if search and search.strip():
+        search_kw = search.strip().lower()
+        filtered = [
+            it for it in all_ranked_items
+            if search_kw in it.display_name.lower()
+        ]
+        leaderboard_items = filtered[:limit]
+    else:
+        leaderboard_items = all_ranked_items[:limit]
 
     scope_name = f"GRADE_{grade}" if grade is not None else "ALL"
 
