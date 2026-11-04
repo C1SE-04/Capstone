@@ -2,15 +2,14 @@
  * File: components/chat/MathSymbolToolbar.tsx
  * Mô tả: Thanh công cụ ký hiệu toán học chuẩn Google Math Calculator (US 9.4 - Tasks T9.13 & T9.13b).
  * - Biểu tượng trực quan nét đứt giống máy tính Google (phân số, căn, số mũ, trị tuyệt đối, log).
- * - Popup 2 ô nhập phân số trực quan (Tử số / Mẫu số) chèn chuẩn \frac{a}{b}.
+ * - Bấm nút phân số sẽ chèn thẳng khối 2 ô nhập (tử số / mẫu số) vào bên trong khung chat.
  * - Nút bấm lớn 44px công thái học, dễ chạm và phản hồi xúc giác mượt mà trên mobile.
- * - Nhấn nút không làm mất focus ô textarea.
+ * - Nhấn nút không làm mất focus ô nhập liệu.
  */
 
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import { X, Check, CornerDownLeft } from "lucide-react";
+import React from "react";
 import { cn } from "@/lib/utils";
 
 export interface MathSymbolItem {
@@ -20,71 +19,31 @@ export interface MathSymbolItem {
   template: string;
   cursorOffset: number;
   title?: string;
-  isCustomAction?: boolean;
+  isFraction?: boolean;
 }
 
 interface MathSymbolToolbarProps {
   onInsertSymbol: (template: string, cursorOffset: number) => void;
+  onInsertFraction?: () => void;
   disabled?: boolean;
   className?: string;
 }
 
 export function MathSymbolToolbar({
   onInsertSymbol,
+  onInsertFraction,
   disabled = false,
   className,
 }: MathSymbolToolbarProps) {
-  // State điều khiển popover 2 ô nhập phân số phong cách Google Math Calculator
-  const [isFractionOpen, setIsFractionOpen] = useState(false);
-  const [numerator, setNumerator] = useState("");
-  const [denominator, setDenominator] = useState("");
-  const numInputRef = useRef<HTMLInputElement>(null);
-  const denInputRef = useRef<HTMLInputElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  // Tự động focus vào ô tử số khi mở popover
-  useEffect(() => {
-    if (isFractionOpen) {
-      setTimeout(() => {
-        numInputRef.current?.focus();
-      }, 50);
-    } else {
-      setNumerator("");
-      setDenominator("");
-    }
-  }, [isFractionOpen]);
-
-  // Đóng popover khi click ra ngoài
-  useEffect(() => {
-    if (!isFractionOpen) return;
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setIsFractionOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [isFractionOpen]);
-
-  // Xử lý xác nhận chèn phân số
-  const handleConfirmFraction = () => {
-    const num = numerator.trim() || "1";
-    const den = denominator.trim() || "2";
-    // Định dạng \frac{a}{b} chuẩn xác cho máy tính và AI
-    const fractionCode = `\\frac{${num}}{${den}}`;
-    onInsertSymbol(fractionCode, fractionCode.length);
-    setIsFractionOpen(false);
-  };
-
   // Danh sách các ký hiệu phong cách máy tính toán học Google
   const MATH_SYMBOLS: MathSymbolItem[] = [
     {
       id: "fraction",
       ariaLabel: "Phân số",
-      title: "Phân số: 2 ô nhập tử số và mẫu số",
-      isCustomAction: true,
-      template: "()/()",
-      cursorOffset: 1,
+      title: "Chèn phân số 2 tầng (tử số / mẫu số)",
+      isFraction: true,
+      template: "__FRACTION__",
+      cursorOffset: 0,
       // Icon 2 ô nét đứt xếp chồng có vạch ngang y hệt Google Calculator
       label: (
         <div className="flex flex-col items-center justify-center gap-[3px] py-0.5">
@@ -260,8 +219,12 @@ export function MathSymbolToolbar({
     e.preventDefault();
     if (disabled) return;
 
-    if (item.isCustomAction && item.id === "fraction") {
-      setIsFractionOpen((prev) => !prev);
+    if (item.isFraction) {
+      if (onInsertFraction) {
+        onInsertFraction();
+      } else {
+        onInsertSymbol("__FRACTION__", 0);
+      }
       return;
     }
 
@@ -270,85 +233,6 @@ export function MathSymbolToolbar({
 
   return (
     <div className={cn("relative w-full", className)}>
-      {/* ── Popover 2 ô nhập phân số phong cách Google Math Calculator ── */}
-      {isFractionOpen && (
-        <div
-          ref={popoverRef}
-          className="absolute bottom-full left-0 mb-3 z-30 bg-white/95 backdrop-blur-md rounded-2xl p-3 border-2 border-[#C1762A] shadow-xl animate-in zoom-in-95 duration-150 flex flex-col gap-2 min-w-[210px]"
-        >
-          <div className="flex items-center justify-between border-b border-[#F1CCA6] pb-1.5">
-            <span className="text-xs font-extrabold text-[#8C4905] flex items-center gap-1.5">
-              <span>Nhập phân số</span>
-              <span className="text-[10px] font-semibold text-[#C1762A] bg-[#F7ECE1] px-1.5 py-0.2 rounded font-mono">
-                a/b
-              </span>
-            </span>
-            <button
-              onClick={() => setIsFractionOpen(false)}
-              className="text-stone-400 hover:text-stone-700 p-0.5 rounded-lg transition-colors cursor-pointer"
-            >
-              <X size={14} />
-            </button>
-          </div>
-
-          {/* Khung 2 ô nhập mô phỏng trực quan phân số */}
-          <div className="flex items-center justify-center gap-3 py-1.5">
-            <div className="flex flex-col items-center gap-1.5">
-              {/* Ô Tử Số */}
-              <input
-                ref={numInputRef}
-                type="text"
-                value={numerator}
-                onChange={(e) => setNumerator(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === "ArrowDown") {
-                    e.preventDefault();
-                    denInputRef.current?.focus();
-                  }
-                }}
-                placeholder="Tử số"
-                className="w-20 h-9 text-center font-bold text-sm bg-[#F7ECE1]/60 text-[#8C4905] border-2 border-dashed border-[#C1762A] rounded-xl focus:outline-none focus:bg-white focus:border-solid transition-all placeholder:text-[#8C4905]/40"
-              />
-
-              {/* Đường kẻ ngang phân số */}
-              <div className="w-24 h-[2.5px] bg-[#8C4905] rounded-full" />
-
-              {/* Ô Mẫu Số */}
-              <input
-                ref={denInputRef}
-                type="text"
-                value={denominator}
-                onChange={(e) => setDenominator(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleConfirmFraction();
-                  } else if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    numInputRef.current?.focus();
-                  }
-                }}
-                placeholder="Mẫu số"
-                className="w-20 h-9 text-center font-bold text-sm bg-[#F7ECE1]/60 text-[#8C4905] border-2 border-dashed border-[#C1762A] rounded-xl focus:outline-none focus:bg-white focus:border-solid transition-all placeholder:text-[#8C4905]/40"
-              />
-            </div>
-
-            {/* Nút Chèn nhanh */}
-            <button
-              onClick={handleConfirmFraction}
-              className="h-20 px-3 rounded-xl bg-gradient-to-b from-[#C1762A] to-[#8C4905] text-white flex flex-col items-center justify-center gap-1 font-bold text-xs shadow-md hover:brightness-105 active:scale-95 transition-all cursor-pointer"
-              title="Chèn phân số vào ô chat (Enter)"
-            >
-              <Check size={18} strokeWidth={3} />
-              <span>Chèn</span>
-            </button>
-          </div>
-          <p className="text-[10px] text-stone-500 text-center">
-            Mẹo: Nhấn <strong>Enter</strong> để chuyển giữa tử và mẫu số
-          </p>
-        </div>
-      )}
-
       {/* ── Dải thanh công cụ cuộn ngang trên mobile ── */}
       <div
         className={cn(
@@ -376,8 +260,7 @@ export function MathSymbolToolbar({
                 "bg-[#F7ECE1]/90 hover:bg-[#F1CCA6] text-[#8C4905] border border-[#F1CCA6] shadow-2xs",
                 "transition-all duration-150 active:scale-95 cursor-pointer font-semibold",
                 "hover:shadow-xs hover:border-[#C1762A]/50",
-                "disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100",
-                item.id === "fraction" && isFractionOpen && "bg-[#F1CCA6] border-[#C1762A] ring-2 ring-[#C1762A]/30"
+                "disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
               )}
             >
               {item.label}
