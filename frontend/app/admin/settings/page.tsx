@@ -20,6 +20,7 @@ import {
   X,
   Eye,
   AlertTriangle,
+  Calendar,
 } from "lucide-react";
 
 interface SystemSettings {
@@ -34,6 +35,7 @@ interface SystemSettings {
   enableParentAlert: boolean;
   systemVersion: string;
   environment: string;
+  mockCurriculumMonth: number | null;
   lastUpdated: string;
   updatedBy: string;
 }
@@ -59,6 +61,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   enableParentAlert: true,
   systemVersion: "v1.7.0 (Sprint 7 Release)",
   environment: "Production (Vercel + Neon)",
+  mockCurriculumMonth: null,
   lastUpdated: "Hôm nay, 13:45",
   updatedBy: "admin@socratickid.vn",
 };
@@ -98,16 +101,49 @@ export default function AdminSettingsPage() {
     },
   ]);
 
-  // Load saved settings từ localStorage hoặc Mock API nếu có
+  // Load saved settings từ API Backend (ưu tiên) hoặc localStorage
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem("socratickid_admin_settings");
-      if (cached) {
-        setSettings((prev) => ({ ...prev, ...JSON.parse(cached) }));
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/admin/mock/settings");
+        if (res.ok) {
+          const data = await res.json();
+          setSettings((prev) => ({
+            ...prev,
+            modelName: data.model_name ?? prev.modelName,
+            backupModel: data.backup_model ?? prev.backupModel,
+            temperature: data.temperature ?? prev.temperature,
+            maxTokens: data.max_output_tokens ?? prev.maxTokens,
+            safetyThreshold: data.safety_threshold ?? prev.safetyThreshold,
+            studentRateLimit: data.rate_limit_per_minute ?? prev.studentRateLimit,
+            enableVisionSupport: data.enable_vision_support ?? prev.enableVisionSupport,
+            mockCurriculumMonth:
+              data.mock_curriculum_month !== undefined
+                ? data.mock_curriculum_month
+                : prev.mockCurriculumMonth,
+          }));
+          return;
+        }
+      } catch {
+        // Fallback localStorage nếu backend chưa bật
       }
-    } catch {
-      // Fallback về default an toàn
-    }
+
+      try {
+        const cached = localStorage.getItem("socratickid_admin_settings");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setSettings((prev) => ({
+            ...prev,
+            ...parsed,
+            mockCurriculumMonth: parsed.mockCurriculumMonth ?? null,
+          }));
+        }
+      } catch {
+        // Fallback về default an toàn
+      }
+    };
+
+    fetchSettings();
   }, []);
 
   const triggerToast = (msg: string, type: "success" | "info" = "success") => {
@@ -144,6 +180,7 @@ export default function AdminSettingsPage() {
           rate_limit_per_minute: updated.studentRateLimit,
           enable_vision_support: updated.enableVisionSupport,
           system_version: updated.systemVersion,
+          mock_curriculum_month: updated.mockCurriculumMonth,
           last_updated_at: new Date().toISOString(),
           last_updated_by: updated.updatedBy,
         }),
@@ -546,6 +583,105 @@ export default function AdminSettingsPage() {
                   />
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* ── CARD 2B: Mô Phỏng Thời Gian Học Kỳ Phục Vụ Nghiệm Thu (US 9.3 - Task T9.11b) ── */}
+          <div className="bg-white rounded-2xl border border-[#F1CCA6] p-6 shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-[#F1CCA6]/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#F7ECE1] text-[#C1762A] flex items-center justify-center border border-[#F1CCA6]">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-extrabold text-[#1C1917]">
+                      Mô Phỏng Thời Gian Học Kỳ (Testing & Nghiệm Thu)
+                    </h2>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]">
+                      US 9.3 • AC 9.3.6
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#7A3E04] mt-0.5">
+                    Giả lập tháng trong năm học để Hội đồng nghiệm thu các kịch bản SGK thích ứng mà không cần chỉnh giờ máy tính
+                  </p>
+                </div>
+              </div>
+
+              {/* Badge trạng thái thời gian hiện tại */}
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border border-[#F1CCA6]/60 bg-[#F7ECE1]/60 text-[#8C4905]">
+                <Clock className="w-3.5 h-3.5 text-[#C1762A]" />
+                <span>
+                  {!settings.mockCurriculumMonth
+                    ? "Thời gian thực"
+                    : settings.mockCurriculumMonth === 10
+                    ? "Mô phỏng: HK1 (Tháng 10)"
+                    : settings.mockCurriculumMonth === 3
+                    ? "Mô phỏng: HK2 (Tháng 3)"
+                    : settings.mockCurriculumMonth === 7
+                    ? "Mô phỏng: Nghỉ hè (Tháng 7)"
+                    : `Mô phỏng: Tháng ${settings.mockCurriculumMonth}`}
+                </span>
+              </div>
+            </div>
+
+            {/* Dropdown chọn mốc thời gian */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-[#1C1917] uppercase tracking-wider">
+                Chọn Chế Độ Thời Gian Kiểm Thử Nghiệm Thu
+              </label>
+              <select
+                value={!settings.mockCurriculumMonth ? "auto" : String(settings.mockCurriculumMonth)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSettings({
+                    ...settings,
+                    mockCurriculumMonth: val === "auto" ? null : parseInt(val, 10),
+                  });
+                }}
+                className="w-full bg-[#FFFFFF] border border-[#F1CCA6] rounded-xl px-3.5 py-3 text-sm font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-all cursor-pointer"
+              >
+                <option value="auto">
+                  🟢 Thời gian thực hệ thống (Tự động theo ngày giờ thực tế của máy chủ)
+                </option>
+                <option value="10">
+                  🍂 Học kỳ 1 — Tháng 10 (Nghiệm thu: Bài HK2 chưa học [AC 9.3.2] & Thăm dò HK1 [AC 9.3.3])
+                </option>
+                <option value="3">
+                  🌸 Học kỳ 2 — Tháng 3 (Nghiệm thu: Bài cùng kỳ HK2 & Bài kỳ trước HK1 đã học)
+                </option>
+                <option value="7">
+                  🏖️ Kỳ nghỉ hè — Tháng 7 (Nghiệm thu: Thăm dò mùa hè & Ôn tập hè [AC 9.3.6])
+                </option>
+              </select>
+            </div>
+
+            {/* Khung giải thích bối cảnh sư phạm tương ứng */}
+            <div className="rounded-xl bg-[#F7ECE1]/50 border border-[#F1CCA6] p-4 text-xs space-y-2">
+              <div className="font-bold text-[#8C4905] flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#C1762A]" />
+                <span>Ý nghĩa sư phạm của mốc thời gian đang chọn:</span>
+              </div>
+              {!settings.mockCurriculumMonth && (
+                <p className="text-[#7A3E04] leading-relaxed">
+                  Hệ thống tự động đọc tháng máy tính của máy chủ. Thích hợp khi vận hành thật trong môi trường Production.
+                </p>
+              )}
+              {settings.mockCurriculumMonth === 10 && (
+                <p className="text-[#7A3E04] leading-relaxed">
+                  <strong className="text-[#8C4905]">Tháng 10 (HK1):</strong> Khi học sinh Lớp 8 hỏi bài HK2 (ví dụ: <em>Giải phương trình bậc nhất</em>) và than thở <em>"em chưa học"</em>, AI sẽ khẳng định chuẩn xác: <em>"Bài này thuộc học kỳ 2 nên em chưa quen là bình thường..."</em> <strong>[Đạt chuẩn AC 9.3.2]</strong>.
+                </p>
+              )}
+              {settings.mockCurriculumMonth === 3 && (
+                <p className="text-[#7A3E04] leading-relaxed">
+                  <strong className="text-[#8C4905]">Tháng 3 (HK2):</strong> Cả nước đang trong Học kỳ 2. Nếu hỏi bài HK1 thì là bài kỳ trước đã học; nếu hỏi bài HK2 thì là bài cùng kỳ đang học trên lớp.
+                </p>
+              )}
+              {settings.mockCurriculumMonth === 7 && (
+                <p className="text-[#7A3E04] leading-relaxed">
+                  <strong className="text-[#8C4905]">Tháng 7 (Kỳ nghỉ hè):</strong> Khi học sinh hỏi bài và kêu chưa học, AI sẽ kích hoạt câu hỏi thăm dò mùa hè: <em>"Kỳ nghỉ hè này em đang chuẩn bị học trước kiến thức mới, hay đang ôn lại bài năm vừa rồi vậy em?"</em> <strong>[Đạt chuẩn AC 9.3.6]</strong>.
+                </p>
+              )}
             </div>
           </div>
         </div>
