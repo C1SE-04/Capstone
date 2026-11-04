@@ -1,10 +1,12 @@
 /**
  * File: components/chat/MathSymbolToolbar.tsx
  * Mô tả: Thanh công cụ ký hiệu toán học chuẩn Google Math Calculator (US 9.4 - Tasks T9.13 & T9.13b).
- * - Biểu tượng trực quan nét đứt giống máy tính Google (phân số, căn, số mũ, trị tuyệt đối, log).
- * - Bấm nút phân số sẽ chèn ()/() với con trỏ nằm ngay giữa cặp ngoặc đầu tiên (|)/().
- * - Nút bấm lớn 44px công thái học, dễ chạm và phản hồi xúc giác mượt mà trên mobile.
- * - Nhấn nút không làm mất focus ô nhập liệu.
+ * - Được tinh chỉnh phù hợp 100% với chương trình Toán học Lớp 4 - 9 (GDPT 2018):
+ *   + Phân số ()/(), Căn bậc hai √(), Lũy thừa ^(), Giá trị tuyệt đối |()|
+ *   + Dấu so sánh (≤, ≥, ≠), Ký hiệu hình học (độ °, delta Δ)
+ *   + Bộ 4 tỉ số lượng giác lớp 9 (sin, cos, tan, cot)
+ *   + Hằng số & Phép tính phổ biến (π, %, ±, ×, ÷, biến số x, y)
+ *   + Giữ log() ở cuối để phục vụ kịch bản nghiệm thu Sprint [AC 9.4.2].
  */
 
 "use client";
@@ -32,15 +34,14 @@ export function MathSymbolToolbar({
   disabled = false,
   className,
 }: MathSymbolToolbarProps) {
-  // Danh sách các ký hiệu phong cách máy tính toán học Google
+  // Danh sách các ký hiệu toán học chuẩn hóa cho học sinh Lớp 4 - 9
   const MATH_SYMBOLS: MathSymbolItem[] = [
     {
       id: "fraction",
       ariaLabel: "Phân số",
-      title: "Phân số: ()/()",
+      title: "Phân số: ()/() (Lớp 4 - 9)",
       template: "()/()",
       cursorOffset: 1, // Con trỏ nằm giữa cặp ngoặc đầu tiên: (|)/()
-      // Icon 2 ô nét đứt xếp chồng có vạch ngang y hệt Google Calculator
       label: (
         <div className="flex flex-col items-center justify-center gap-[3px] py-0.5">
           <div className="w-[14px] h-[10px] rounded-[3px] border-[1.8px] border-dashed border-[#8C4905]" />
@@ -52,10 +53,9 @@ export function MathSymbolToolbar({
     {
       id: "sqrt",
       ariaLabel: "Căn bậc hai",
-      title: "Căn bậc hai: √(x)",
+      title: "Căn bậc hai: √(x) (Lớp 7, 9)",
       template: "√()",
       cursorOffset: 2, // Con trỏ nằm giữa √(|)
-      // Icon căn bậc hai với ô nét đứt bên trong
       label: (
         <div className="flex items-center text-[#8C4905]">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -68,10 +68,9 @@ export function MathSymbolToolbar({
     {
       id: "pow",
       ariaLabel: "Lũy thừa / Số mũ",
-      title: "Lũy thừa: x^(y)",
+      title: "Lũy thừa: x^(y) (Lớp 6 - 9)",
       template: "^()",
       cursorOffset: 2, // Con trỏ nằm giữa ^(|)
-      // Icon cơ số với ô số mũ nhỏ nét đứt phía trên bên phải
       label: (
         <div className="flex items-start text-[#8C4905]">
           <div className="w-[15px] h-[15px] rounded-[3px] border-[1.8px] border-dashed border-[#8C4905] mt-1.5" />
@@ -82,10 +81,9 @@ export function MathSymbolToolbar({
     {
       id: "abs",
       ariaLabel: "Giá trị tuyệt đối",
-      title: "Giá trị tuyệt đối: |x|",
+      title: "Giá trị tuyệt đối: |x| (Lớp 7 - 9)",
       template: "|()|",
       cursorOffset: 2, // Con trỏ nằm giữa |(|)|
-      // Icon trị tuyệt đối hai vạch thẳng bọc ô nét đứt
       label: (
         <div className="flex items-center gap-[3px] text-[#8C4905] font-black">
           <span className="text-base leading-none">|</span>
@@ -93,6 +91,22 @@ export function MathSymbolToolbar({
           <span className="text-base leading-none">|</span>
         </div>
       ),
+    },
+    {
+      id: "degree",
+      label: <span className="text-lg font-bold">°</span>,
+      ariaLabel: "Độ góc",
+      template: "°",
+      cursorOffset: 1,
+      title: "Độ góc: ° (Ví dụ 30°, 60° - Lớp 6 - 9)",
+    },
+    {
+      id: "percent",
+      label: <span className="text-base font-bold">%</span>,
+      ariaLabel: "Phần trăm",
+      template: "%",
+      cursorOffset: 1,
+      title: "Tỉ số phần trăm: % (Lớp 5 - 9)",
     },
     {
       id: "le",
@@ -124,7 +138,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Số Pi",
       template: "π",
       cursorOffset: 1,
-      title: "Số Pi: π",
+      title: "Số Pi: π (Hình tròn Lớp 5, Lớp 9)",
     },
     {
       id: "pm",
@@ -132,7 +146,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Cộng trừ",
       template: "±",
       cursorOffset: 1,
-      title: "Cộng trừ: ± (hoặc gõ +-)",
+      title: "Cộng trừ: ± (Nghiệm x = ±3 - Lớp 7, 9)",
     },
     {
       id: "times",
@@ -156,7 +170,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Delta",
       template: "Δ",
       cursorOffset: 1,
-      title: "Delta: Δ",
+      title: "Delta / Tam giác: Δ (Lớp 8, 9)",
     },
     {
       id: "var_x",
@@ -164,7 +178,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Biến x",
       template: "x",
       cursorOffset: 1,
-      title: "Biến số: x",
+      title: "Biến số: x (Tìm x)",
     },
     {
       id: "var_y",
@@ -172,15 +186,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Biến y",
       template: "y",
       cursorOffset: 1,
-      title: "Biến số: y",
-    },
-    {
-      id: "log",
-      label: <span className="text-xs font-black font-mono tracking-tight">log</span>,
-      ariaLabel: "Logarit",
-      template: "log()",
-      cursorOffset: 4, // Con trỏ nằm giữa log(|)
-      title: "Logarit: log(x)",
+      title: "Biến số: y (Hệ phương trình Lớp 9)",
     },
     {
       id: "sin",
@@ -188,7 +194,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Hàm Sin",
       template: "sin()",
       cursorOffset: 4,
-      title: "Lượng giác: sin(x)",
+      title: "Lượng giác: sin(x) (Toán 9)",
     },
     {
       id: "cos",
@@ -196,7 +202,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Hàm Cos",
       template: "cos()",
       cursorOffset: 4,
-      title: "Lượng giác: cos(x)",
+      title: "Lượng giác: cos(x) (Toán 9)",
     },
     {
       id: "tan",
@@ -204,7 +210,23 @@ export function MathSymbolToolbar({
       ariaLabel: "Hàm Tan",
       template: "tan()",
       cursorOffset: 4,
-      title: "Lượng giác: tan(x)",
+      title: "Lượng giác: tan(x) (Toán 9)",
+    },
+    {
+      id: "cot",
+      label: <span className="text-xs font-black font-mono tracking-tight">cot</span>,
+      ariaLabel: "Hàm Cotang",
+      template: "cot()",
+      cursorOffset: 4,
+      title: "Lượng giác: cot(x) (Toán 9)",
+    },
+    {
+      id: "log",
+      label: <span className="text-xs font-black font-mono tracking-tight">log</span>,
+      ariaLabel: "Logarit",
+      template: "log()",
+      cursorOffset: 4, // Con trỏ nằm giữa log(|)
+      title: "Logarit: log(x) (Phục vụ AC 9.4.2)",
     },
   ];
 
