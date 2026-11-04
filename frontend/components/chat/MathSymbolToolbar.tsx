@@ -2,7 +2,7 @@
  * File: components/chat/MathSymbolToolbar.tsx
  * Mô tả: Thanh công cụ ký hiệu toán học chuẩn Google Math Calculator (US 9.4 - Tasks T9.13 & T9.13b).
  * - Biểu tượng trực quan nét đứt giống máy tính Google (phân số, căn, số mũ, trị tuyệt đối, log).
- * - Bấm nút phân số sẽ chèn thẳng khối 2 ô nhập (tử số / mẫu số) vào bên trong khung chat.
+ * - Bấm nút phân số sẽ chèn ()/() với con trỏ nằm ngay giữa cặp ngoặc đầu tiên (|)/().
  * - Nút bấm lớn 44px công thái học, dễ chạm và phản hồi xúc giác mượt mà trên mobile.
  * - Nhấn nút không làm mất focus ô nhập liệu.
  */
@@ -19,19 +19,16 @@ export interface MathSymbolItem {
   template: string;
   cursorOffset: number;
   title?: string;
-  isFraction?: boolean;
 }
 
 interface MathSymbolToolbarProps {
   onInsertSymbol: (template: string, cursorOffset: number) => void;
-  onInsertFraction?: () => void;
   disabled?: boolean;
   className?: string;
 }
 
 export function MathSymbolToolbar({
   onInsertSymbol,
-  onInsertFraction,
   disabled = false,
   className,
 }: MathSymbolToolbarProps) {
@@ -40,10 +37,9 @@ export function MathSymbolToolbar({
     {
       id: "fraction",
       ariaLabel: "Phân số",
-      title: "Chèn phân số 2 tầng (tử số / mẫu số)",
-      isFraction: true,
-      template: "__FRACTION__",
-      cursorOffset: 0,
+      title: "Phân số: ()/()",
+      template: "()/()",
+      cursorOffset: 1, // Con trỏ nằm giữa cặp ngoặc đầu tiên: (|)/()
       // Icon 2 ô nét đứt xếp chồng có vạch ngang y hệt Google Calculator
       label: (
         <div className="flex flex-col items-center justify-center gap-[3px] py-0.5">
@@ -58,7 +54,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Căn bậc hai",
       title: "Căn bậc hai: √(x)",
       template: "√()",
-      cursorOffset: 2,
+      cursorOffset: 2, // Con trỏ nằm giữa √(|)
       // Icon căn bậc hai với ô nét đứt bên trong
       label: (
         <div className="flex items-center text-[#8C4905]">
@@ -74,7 +70,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Lũy thừa / Số mũ",
       title: "Lũy thừa: x^(y)",
       template: "^()",
-      cursorOffset: 2,
+      cursorOffset: 2, // Con trỏ nằm giữa ^(|)
       // Icon cơ số với ô số mũ nhỏ nét đứt phía trên bên phải
       label: (
         <div className="flex items-start text-[#8C4905]">
@@ -88,7 +84,7 @@ export function MathSymbolToolbar({
       ariaLabel: "Giá trị tuyệt đối",
       title: "Giá trị tuyệt đối: |x|",
       template: "|()|",
-      cursorOffset: 2,
+      cursorOffset: 2, // Con trỏ nằm giữa |(|)|
       // Icon trị tuyệt đối hai vạch thẳng bọc ô nét đứt
       label: (
         <div className="flex items-center gap-[3px] text-[#8C4905] font-black">
@@ -183,7 +179,7 @@ export function MathSymbolToolbar({
       label: <span className="text-xs font-black font-mono tracking-tight">log</span>,
       ariaLabel: "Logarit",
       template: "log()",
-      cursorOffset: 4,
+      cursorOffset: 4, // Con trỏ nằm giữa log(|)
       title: "Logarit: log(x)",
     },
     {
@@ -218,16 +214,6 @@ export function MathSymbolToolbar({
   ) => {
     e.preventDefault();
     if (disabled) return;
-
-    if (item.isFraction) {
-      if (onInsertFraction) {
-        onInsertFraction();
-      } else {
-        onInsertSymbol("__FRACTION__", 0);
-      }
-      return;
-    }
-
     onInsertSymbol(item.template, item.cursorOffset);
   };
 
