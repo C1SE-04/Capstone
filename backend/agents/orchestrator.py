@@ -109,24 +109,34 @@ def _build_task_description(
         )
 
     if _detect_uncovered_claim(message):
+        # US 9.3 (Task T9.11): Dùng timeline context thay vì so khớp từ khóa cứng.
+        # Python xác định tháng → HK1/HK2/Hè + danh sách bài; Gemini tự đối chiếu và chọn kịch bản.
         curr_grade = student_grade or 9
-        is_active = _is_topic_in_active_curriculum(message, grade=curr_grade)
-        if is_active:
+        try:
+            from agents.agent_prompts import build_timeline_context_for_prompt
+            tl = build_timeline_context_for_prompt(student_grade=curr_grade)
+            timeline_label = tl.get("timeline_label", "")
+            scenario_guide = tl.get("scenario_guide", "")
+            hk1_topics = tl.get("topics_hk1", [])
+            hk2_topics = tl.get("topics_hk2", [])
+            hk1_str = "; ".join(hk1_topics[:8]) + ("..." if len(hk1_topics) > 8 else "")
+            hk2_str = "; ".join(hk2_topics[:8]) + ("..." if len(hk2_topics) > 8 else "")
             return (
                 f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
-                "HỆ THỐNG ĐÃ XÁC NHẬN: Chủ đề này CÓ trong danh sách kiến thức đã học của học sinh. "
-                "BẮT BUỘC THỰC HIỆN KỊCH BẢN A (HỌC SINH ĐÃ HỌC RỒI): "
-                "Nhẹ nhàng nhắc: 'Theo chương trình, đây là kiến thức mà em đã học. Thầy tin em có thể nhớ lại...' "
-                "rồi tiếp tục hướng dẫn gợi mở, tuyệt đối không xin lỗi hay nói học sinh chưa học."
+                f"[{timeline_label}] "
+                f"CHƯƠNG TRÌNH LỚP {curr_grade} — "
+                f"HK1: [{hk1_str}] | HK2: [{hk2_str}]. "
+                f"HƯỚNG DẪN XỬ LÝ: {scenario_guide} "
+                "TUYỆT ĐỐI KHÔNG tự ý phán đoán học sinh đã học hay chưa học mà không dựa vào danh sách trên. "
+                "Kết thúc phản hồi bằng một câu hỏi gợi mở nhẹ nhàng."
             )
-        else:
+        except Exception:
+            # Fallback an toàn nếu không lấy được timeline
             return (
                 f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
-                "HỆ THỐNG ĐÃ XÁC NHẬN: Chủ đề này KHÔNG CÓ trong danh sách kiến thức đã học của học sinh (đã bị giảm tải/ẩn hoặc chưa học tới). "
-                "BẮT BUỘC THỰC HIỆN KỊCH BẢN B (HỌC SINH CHƯA HỌC): "
-                "TUYỆT ĐỐI KHÔNG nói 'em đã học rồi' hay 'theo chương trình lớp em đã học'. "
-                f"BẮT BUỘC an ủi: 'Vì em đang học lớp {curr_grade} nên chưa quen với kiến thức này là chuyện bình thường, đừng lo nhé. Thầy sẽ giải thích thật đơn giản...' "
-                "rồi giải thích ngắn gọn, dễ hiểu và kết thúc bằng một câu hỏi gợi mở nhẹ nhàng."
+                f"BẮT BUỘC KỊCH BẢN B: 'Vì em đang học lớp {curr_grade} nên chưa quen với kiến thức này là bình thường. "
+                "Thầy sẽ giải thích từ nền tảng đơn giản nhất nhé!' "
+                "Rồi hướng dẫn từng bước theo Socratic, kết thúc bằng câu hỏi gợi mở."
             )
     
     if agent == "KNOWLEDGE_TRACING":
