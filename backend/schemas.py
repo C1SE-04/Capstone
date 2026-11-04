@@ -1166,3 +1166,63 @@ class BadgeUnlockResponse(BaseModel):
     unlocked_badge_ids: list[str] = []
     newly_unlocked_ids: list[str] = []
     is_first_time: bool = False
+
+
+# ==============================================================================
+# US 9.5 (Task T9.16 & T9.18): Trung Tâm Quản Trị Báo Lỗi & Sự Cố Hệ Thống
+# ==============================================================================
+
+class ReportUserIssueRequest(BaseModel):
+    """Payload học sinh gửi báo lỗi bài giải / sự cố AI từ nút cờ (US 9.5 - AC 9.5.1)."""
+    message_id: Optional[str] = None
+    session_id: Optional[str] = None
+    reason: str                                  # "AI giải sai kiến thức" | "AI bị đơ lag / timeout" | "Nội dung không phù hợp" | "Khác"
+    detail: Optional[str] = None                 # Mô tả bổ sung
+    endpoint: Optional[str] = "/chat/message"
+    client_context: Optional[dict] = None        # Thông tin trình duyệt, thiết bị
+
+
+class ReportUserIssueResponse(BaseModel):
+    """Phản hồi sau khi tiếp nhận báo lỗi của học sinh."""
+    success: bool = True
+    message: str = "Cảm ơn em đã gửi phản hồi!"
+    error_id: str
+    error_code: str
+
+
+class ResolveErrorRequest(BaseModel):
+    """Payload Admin đánh dấu xử lý sự cố."""
+    resolved_note: Optional[str] = None
+
+
+class SystemErrorItemResponse(BaseModel):
+    """Thông tin chi tiết 1 sự cố hệ thống hoặc báo lỗi người dùng."""
+    id: str
+    error_code: str
+    error_type: str                              # CRASH_500 | AI_TIMEOUT | USER_REPORT | SMTP_ERROR
+    severity: str                                # CRITICAL | WARNING | INFO
+    message: str
+    stack_trace: Optional[str] = None
+    endpoint: Optional[str] = None
+    request_payload: Optional[str] = None
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    username: Optional[str] = None
+    status: str                                  # OPEN | RESOLVED
+    resolved_at: Optional[datetime] = None
+    resolved_by: Optional[str] = None
+    resolved_note: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SystemErrorsListResponse(BaseModel):
+    """Phản hồi danh sách sự cố phân trang cho Admin (US 9.5 - AC 9.5.2 & AC 9.5.3)."""
+    success: bool = True
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+    items: list[SystemErrorItemResponse]

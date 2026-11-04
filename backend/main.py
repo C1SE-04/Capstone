@@ -30,8 +30,10 @@ app = FastAPI(
 )
 
 # Task T6.11 (US 6.2): Middleware kiểm tra session_version cho API /chat
-from middleware import ChatSessionVersionMiddleware
+from middleware import ChatSessionVersionMiddleware, SystemErrorMiddleware
 app.add_middleware(ChatSessionVersionMiddleware)
+# US 9.5 (Task T9.17): Middleware tu dong bat unhandled exceptions & ghi system_errors
+app.add_middleware(SystemErrorMiddleware)
 
 # Cấu hình CORS của team FE (bọc ngoài cùng để response từ middleware cũng có CORS headers)
 app.add_middleware(
@@ -67,6 +69,8 @@ app.include_router(bookmarks.router)
 from routers import admin_mock  # US 7.3 (Task T7.31): Mock Data Router cho Admin Portal
 app.include_router(admin_mock.router)
 app.include_router(admin_mock.admin_router)  # US 8.5 (Task T8.29B): API Admin Logs GET /admin/logs
+from routers import admin_errors  # US 9.5 (Tasks T9.16-T9.18): Quan tri su co & bao loi Incident Hub
+app.include_router(admin_errors.router)
 
 
 
