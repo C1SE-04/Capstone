@@ -60,6 +60,7 @@ export const authOptions: NextAuthOptions = {
             name: displayName,
             role: payload.role,
             grade_level: payload.grade_level,
+            oauth_provider: payload.oauth_provider || null,
             access_token: data.access_token,
             refresh_token: data.refresh_token, // US 6.2 (T6.13): lưu refresh_token của Backend
             is_new_user: isPending,
@@ -124,6 +125,7 @@ export const authOptions: NextAuthOptions = {
           user.name = data.name || user.name || (data.email ? data.email.split("@")[0] : "User");
           user.role = data.role;
           user.grade_level = data.grade ?? undefined;
+          (user as any).oauth_provider = "google";
           user.access_token = data.access_token;
           user.refresh_token = data.refresh_token;
           user.is_new_user = data.is_new_user;
@@ -147,6 +149,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.role = user.role;
         token.grade_level = user.grade_level;
+        token.oauth_provider = (user as any).oauth_provider || (account?.provider === "google" ? "google" : null);
         token.access_token = user.access_token;
         token.refresh_token = user.refresh_token; // US 6.2 (T6.13): lưu refresh_token
         token.is_new_user = user.is_new_user;
@@ -177,6 +180,7 @@ export const authOptions: NextAuthOptions = {
             token.id = data.user_id;
             token.role = data.role;
             token.grade_level = data.grade ?? undefined;
+            token.oauth_provider = "google";
             token.access_token = data.access_token;
             token.refresh_token = data.refresh_token;
             token.is_new_user = data.is_new_user;
@@ -218,6 +222,7 @@ export const authOptions: NextAuthOptions = {
           | number
           | undefined;
         session.user.is_new_user = token.is_new_user as boolean | undefined;
+        (session.user as any).oauth_provider = token.oauth_provider as string | undefined;
       }
       session.access_token = token.access_token as string | undefined;
       session.refresh_token = token.refresh_token as string | undefined; // US 6.2 (T6.13): expose refresh_token cho authFetch
