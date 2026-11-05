@@ -49,15 +49,15 @@ export const authOptions: NextAuthOptions = {
             payload.role === "PENDING" ||
             (payload.role === "STUDENT" && !payload.grade_level);
 
-          const displayName = payload.email
-            ? payload.email.split("@")[0]
-            : (payload.username || (payload.sub ? `user_${String(payload.sub).slice(0, 6)}` : "User"));
+          const displayName = payload.username
+            || (payload.email ? payload.email.split("@")[0] : (payload.sub ? `user_${String(payload.sub).slice(0, 6)}` : "User"));
 
           // Trả về object user để NextAuth lưu vào phiên đăng nhập (Session)
           return {
             id: payload.sub,
             email: payload.email || null,
             name: displayName,
+            username: payload.username || null,
             role: payload.role,
             grade_level: payload.grade_level,
             oauth_provider: payload.oauth_provider || null,
@@ -122,7 +122,10 @@ export const authOptions: NextAuthOptions = {
           // Gắn dữ liệu định danh và JWT Backend vào user để jwt callback lưu vào token
           user.id = data.user_id;
           user.email = data.email;
-          user.name = data.name || user.name || (data.email ? data.email.split("@")[0] : "User");
+          // Ưu tiên username trong DB để tên hiển thị đồng nhất giữa các máy đăng nhập
+          const resolvedGoogleName = data.username || data.name || (data.email ? data.email.split("@")[0] : (user.name || "User"));
+          user.name = resolvedGoogleName;
+          (user as any).username = data.username || null;
           user.role = data.role;
           user.grade_level = data.grade ?? undefined;
           (user as any).oauth_provider = "google";
@@ -147,6 +150,8 @@ export const authOptions: NextAuthOptions = {
       // Lần đăng nhập đầu tiên: map thông tin từ user (từ authorize() hoặc signIn() Google)
       if (user) {
         token.id = user.id;
+        token.name = user.name;
+        (token as any).username = (user as any).username || null;
         token.role = user.role;
         token.grade_level = user.grade_level;
         token.oauth_provider = (user as any).oauth_provider || (account?.provider === "google" ? "google" : null);
@@ -216,6 +221,10 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
+        if (token.name) {
+          session.user.name = token.name as string;
+        }
+        (session.user as any).username = (token as any).username as string | undefined;
         session.user.role = token.role as string | undefined;
         session.user.grade_level = token.grade_level as
           | string

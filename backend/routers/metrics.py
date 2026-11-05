@@ -614,13 +614,14 @@ def get_streak_leaderboard(
         cur_streak, m_streak = _compute_streak_from_dates(user_dates[sid])
         s_obj = student_map[sid]
 
-        # Tên hiển thị bảo vệ riêng tư: lấy phần trước @ của email (VD: hoangnam hoặc student1)
-        email_prefix = s_obj.email.split("@")[0] if s_obj.email else "Học sinh"
+        # Tên hiển thị bảo vệ riêng tư: Ưu tiên username của học sinh, fallback về phần trước @ của email
+        resolved_name = s_obj.username or (s_obj.email.split("@")[0] if s_obj.email else "Học sinh")
         avatar_url = f"https://api.dicebear.com/7.x/bottts/svg?seed={sid}"
 
         ranked_list.append({
             "student_id": sid,
-            "display_name": email_prefix,
+            "username": s_obj.username or "",
+            "display_name": resolved_name,
             "avatar": avatar_url,
             "grade": s_obj.grade,
             "streak_days": cur_streak,
@@ -646,6 +647,7 @@ def get_streak_leaderboard(
         entry = schemas.StreakLeaderboardItem(
             rank=idx,
             student_id=item["student_id"],
+            username=item.get("username"),
             display_name=item["display_name"],
             avatar=item["avatar"],
             grade=item["grade"],
@@ -658,11 +660,16 @@ def get_streak_leaderboard(
         all_ranked_items.append(entry)
 
     # Lọc tìm kiếm nếu có query param search (US 9.4 - T9.15)
+    # Lọc không phân biệt hoa thường (ilike) theo cả display_name và username của bảng dữ liệu users
+    # Bảo toàn thứ hạng gốc (rank) của học sinh trên bảng tổng sắp toàn server
     if search and search.strip():
         search_kw = search.strip().lower()
         filtered = [
-            it for it in all_ranked_items
-            if search_kw in it.display_name.lower()
+            it for it, raw in zip(all_ranked_items, ranked_list)
+            if (
+                search_kw in it.display_name.lower()
+                or search_kw in raw.get("username", "").lower()
+            )
         ]
         leaderboard_items = filtered[:limit]
     else:
