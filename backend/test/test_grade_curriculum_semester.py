@@ -91,6 +91,10 @@ def test_03_helper_get_curriculum_by_semester():
 
 def test_04_backward_compatibility_grade_context():
     """Kiểm tra hàm _get_grade_context không quăng lỗi và trả về văn bản chứa tên bài học chuẩn."""
+    for grade in range(4, 10):
+        ctx = _get_grade_context(grade)
+        assert isinstance(ctx, str)
+        assert len(ctx.encode("utf-8")) > 0
     context_text = _get_grade_context(8)
     assert isinstance(context_text, str)
     assert "Lớp 8" in context_text

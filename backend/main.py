@@ -1,3 +1,10 @@
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -20,7 +27,6 @@ from redis_client import get_redis, close_redis
 try:
     models.Base.metadata.create_all(bind=engine)
 except Exception as _db_err:
-    import warnings
     warnings.warn(f"[WARN] Không thể kết nối DB khi startup: {_db_err}", RuntimeWarning)
 
 app = FastAPI(

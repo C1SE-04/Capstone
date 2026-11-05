@@ -64,16 +64,6 @@ def save_orchestrator_log(
 ):
     """Lưu lịch sử quyết định của Orchestrator vào DB (chạy background)."""
     try:
-        if not notify_parent:
-            is_safety = (
-                target_agent in ("SAFETY_AGENT", "SAFETY")
-                or "safety" in (reason or "").lower()
-                or "violation" in (reason or "").lower()
-                or "profan" in (reason or "").lower()
-            )
-            if is_safety:
-                notify_parent = True
-
         new_log = models.OrchestratorLog(
             user_query=user_query,
             target_agent=target_agent,
@@ -264,9 +254,18 @@ def process_query_with_orchestrator(
     print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0} | emotion={emotion_flag} | session_images={len(session_image_urls)}")
 
     # Lưu log ngầm (US 8.1 - T8.7: kèm session_id, user_id, notify_parent)
+    # Chỉ cảnh báo phụ huynh khi thực sự có vi phạm thô tục, xúc phạm hoặc vô lễ (emotion_flag == WARNING hoặc lý do có profan/toxic/disrespect)
+    # Tuyệt đối KHÔNG báo phụ huynh khi chỉ là chào hỏi (greeting) hay trò chuyện ngoài lề (off-topic)
+    is_greeting_or_offtopic = (
+        emotion_flag == "GUIDING"
+        or (reason and any(k in reason.lower() for k in ("greeting", "off-topic", "ngoài lề", "chào hỏi")))
+    )
     is_safety_violation = (
-        target_agent in ("SAFETY_AGENT", "SAFETY")
-        or (reason and any(k in reason.lower() for k in ("profan", "toxic", "violation", "disrespect")))
+        not is_greeting_or_offtopic
+        and (
+            emotion_flag == "WARNING"
+            or (reason and any(k in reason.lower() for k in ("profan", "toxic", "violation", "disrespect", "vô lễ", "chửi", "hú", "shouting")))
+        )
     )
     background_tasks.add_task(
         save_orchestrator_log,

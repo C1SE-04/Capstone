@@ -52,6 +52,39 @@ BẠN BẮT BUỘC PHẢI TUÂN THỦ CÁC NGUYÊN TẮC VÀNG SAU ĐÂY:
 """
 
 
+
+# =====================================================================
+# BỘ LỌC CENSOR SENSITIVE WORDS (DÙNG CHO TEST & BACKWARD COMPATIBILITY)
+# =====================================================================
+_DISRESPECT_WORDS = {
+    "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "m", "mi",
+    "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này"
+}
+
+def censor_sensitive_words(text: str) -> str:
+    """Che mờ các từ ngữ thô tục, chửi thề trong văn bản dựa trên kho PROFANITY_LIST."""
+    if not text:
+        return ""
+    from agents.orchestrator import OrchestratorAgent
+    pure_list = [w.strip().lower() for w in OrchestratorAgent.PROFANITY_LIST if w.strip().lower() not in _DISRESPECT_WORDS]
+    sorted_words = sorted(list(set(pure_list)), key=len, reverse=True)
+    censored = text
+    for word in sorted_words:
+        escaped_word = re.escape(word)
+        pattern = rf"\b{escaped_word}+\b"
+        def _mask_match(match):
+            m = match.group(0)
+            parts = m.split()
+            masked_parts = []
+            for p in parts:
+                if len(p) <= 2:
+                    masked_parts.append(p[0] + "*")
+                else:
+                    masked_parts.append(p[0] + "*" * (len(p) - 1))
+            return " ".join(masked_parts)
+        censored = re.sub(pattern, _mask_match, censored, flags=re.IGNORECASE | re.UNICODE)
+    return censored
+
 # =====================================================================
 # 2. HÀM FALLBACK AN TOÀN (RULE-BASED)
 # =====================================================================
