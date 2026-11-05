@@ -388,8 +388,8 @@ export default function ChatPage() {
           const reminderMsg = resData.deduplication?.gentle_reminder
             ? `**${resData.deduplication.gentle_reminder}**
 
-*(Thầy ghi nhận em đã ôn tập lại bài này. Vì bài đã được hoàn thành trước đó nên hệ thống sẽ không cộng dồn thêm vào tổng số bài nhé!)*`
-            : "Thầy thấy em đã giải rất tốt bài này rồi. Em có muốn thử sức bài nâng cao hơn không?";
+*(Thầy ghi nhận em đã ôn tập lại bài này! Do giải lại bài đã làm nên điểm cộng sẽ giảm bớt (mỗi lần giảm 10đ, lần này em được +${resData?.independence?.score ?? 90}đ). Em hãy thử sức thêm bài mới nhé!)*`
+            : `**Thầy thấy em đã giải rất tốt bài này rồi!**\n\n*(Thầy ghi nhận em đã ôn tập lại bài này! Do giải lại bài đã làm nên điểm cộng sẽ giảm bớt (mỗi lần giảm 10đ, lần này em được +${resData?.independence?.score ?? 90}đ). Em hãy thử sức thêm bài mới nhé!)*`;
 
           setConversations((prev) =>
             prev.map((c) =>

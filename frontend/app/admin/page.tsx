@@ -218,15 +218,16 @@ export default function AdminPage() {
   }, [tokenData]);
 
   const quickCards = [
-    {
-      title: "Quản Lý Người Dùng",
-      description: "Xem danh sách 48 tài khoản học sinh, phụ huynh, liên kết gia đình và kiểm soát trạng thái khóa/mở.",
-      icon: Users,
-      href: "/admin/users",
-      stats: "48 Users",
-      color: "#C1762A",
-      bgLight: "#F7ECE1",
-    },
+    // Tạm thời ẩn quản lý người dùng theo yêu cầu UI
+    // {
+    //   title: "Quản Lý Người Dùng",
+    //   description: "Xem danh sách 48 tài khoản học sinh, phụ huynh, liên kết gia đình và kiểm soát trạng thái khóa/mở.",
+    //   icon: Users,
+    //   href: "/admin/users",
+    //   stats: "48 Users",
+    //   color: "#C1762A",
+    //   bgLight: "#F7ECE1",
+    // },
     {
       title: "Học Liệu Toán 4 - 9",
       description: "Quản lý 64 chủ đề toán học theo chương trình mới, 3 cấp độ gợi ý Socratic và bài học mẫu cho AI.",
@@ -572,7 +573,7 @@ export default function AdminPage() {
           Danh Mục Quản Trị & Điều Hướng Nhanh
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {quickCards.map((c) => {
             const Icon = c.icon;
             return (
