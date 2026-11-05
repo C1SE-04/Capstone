@@ -12,7 +12,7 @@ import {
   LogOut,
   X,
   ShieldCheck,
-  FileText,
+  AlertTriangle,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -64,9 +64,9 @@ const NAV_GROUPS: NavGroup[] = [
         icon: ShieldAlert,
       },
       {
-        name: "Tra Cứu Logs",
-        href: "/admin/logs",
-        icon: FileText,
+        name: "Quản trị Báo Lỗi",
+        href: "/admin/errors",
+        icon: AlertTriangle,
       },
     ],
   },
