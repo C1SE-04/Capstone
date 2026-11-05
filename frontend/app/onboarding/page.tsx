@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Users, CheckCircle2, ArrowRight, Loader2, Sparkles, BookOpen, Mail } from "lucide-react";
+import { GraduationCap, Users, CheckCircle2, ArrowRight, Loader2, Sparkles, BookOpen, Mail, Lock } from "lucide-react";
 import OtpModal from "@/components/OtpModal";
 
 export default function OnboardingPage() {
@@ -13,12 +13,13 @@ export default function OnboardingPage() {
   const [role, setRole] = useState<"STUDENT" | "MONITOR">("STUDENT");
   const [selectedGrade, setSelectedGrade] = useState<number>(6);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<string | null>(null);
 
-  // Email state cho Phụ huynh
+  // Email state & Lỗi riêng của trường Email Phụ huynh (hiển thị trực tiếp tại ô input)
   const [parentEmail, setParentEmail] = useState("");
-  const [parentEmailError, setParentEmailError] = useState("");
+  const [parentEmailError, setParentEmailError] = useState<string | null>(null);
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [isGoogleOAuth, setIsGoogleOAuth] = useState(false);
 
   // Hàm hủy đăng nhập, dọn dẹp tài khoản PENDING trong DB và đăng xuất sạch NextAuth
   const handleCancel = useCallback(async () => {
@@ -53,12 +54,32 @@ export default function OnboardingPage() {
     };
   }, [handleCancel]);
 
-  // Điền email sẵn nếu đã có từ Google OAuth
+  // Nhận biết tài khoản Google OAuth & điền email cố định
   useEffect(() => {
-    if (session?.user?.email && !parentEmail) {
-      setParentEmail(session.user.email);
+    if ((session?.user as any)?.oauth_provider === "google") {
+      setIsGoogleOAuth(true);
+      if (session?.user?.email) {
+        setParentEmail(session.user.email);
+      }
     }
-  }, [session?.user?.email, parentEmail]);
+
+    if (session?.access_token) {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      fetch(`${backendUrl}/users/me`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.oauth_provider === "google") {
+            setIsGoogleOAuth(true);
+            if (data.email) {
+              setParentEmail(data.email);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [session]);
 
   // Điều hướng nếu chưa đăng nhập hoặc đã hoàn tất onboarding
   useEffect(() => {
@@ -128,7 +149,7 @@ export default function OnboardingPage() {
     }
   };
 
-  // Xử lý gửi OTP cho Phụ huynh
+  // Xử lý gửi OTP cho Phụ huynh — Toàn bộ lỗi được bắt và hiển thị ngay tại khung nhập email
   const handleRequestParentOtp = async () => {
     const trimmedEmail = parentEmail.trim();
     if (!trimmedEmail) {
@@ -138,18 +159,19 @@ export default function OnboardingPage() {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
     if (!emailRegex.test(trimmedEmail)) {
-      setParentEmailError("Vui lòng nhập đúng định dạng email");
+      setParentEmailError("Địa chỉ email không hợp lệ. Vui lòng kiểm tra lại định dạng.");
       return;
     }
 
-    setParentEmailError("");
-    setErrorMessage(null);
+    setParentEmailError(null);
+    setGeneralError(null);
     setIsSubmitting(true);
 
     try {
       const token = session?.access_token;
       if (!token) {
-        throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        setParentEmailError("Phiên đăng nhập đã hết hạn. Vui lòng tải lại trang.");
+        return;
       }
 
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -167,13 +189,15 @@ export default function OnboardingPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "Không thể gửi mã OTP. Vui lòng thử lại.");
+        // Hiển thị trực tiếp lỗi ngay tại khung email (VD: Email này đã được sử dụng bởi tài khoản khác)
+        setParentEmailError(data.detail || "Không thể gửi mã OTP tới email này. Vui lòng thử lại.");
+        return;
       }
 
       // Mở Modal OTP Digit Input UX
       setIsOtpModalOpen(true);
     } catch (err: any) {
-      setErrorMessage(err.message || "Đã xảy ra lỗi khi gửi mã OTP.");
+      setParentEmailError(err.message || "Đã xảy ra lỗi khi gửi mã OTP. Vui lòng thử lại.");
     } finally {
       setIsSubmitting(false);
     }
@@ -182,18 +206,18 @@ export default function OnboardingPage() {
   // Handler khi submit form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
+    setGeneralError(null);
 
     if (role === "STUDENT") {
       if (!selectedGrade || selectedGrade < 4 || selectedGrade > 9) {
-        setErrorMessage("Vui lòng chọn khối lớp từ lớp 4 đến lớp 9.");
+        setGeneralError("Vui lòng chọn khối lớp từ lớp 4 đến lớp 9.");
         return;
       }
       setIsSubmitting(true);
       try {
         await finalizeOnboarding("STUDENT", selectedGrade);
       } catch (err: any) {
-        setErrorMessage(err.message || "Đã xảy ra lỗi khi hoàn tất thiết lập.");
+        setGeneralError(err.message || "Đã xảy ra lỗi khi hoàn tất thiết lập.");
         setIsSubmitting(false);
       }
     } else {
@@ -351,13 +375,6 @@ export default function OnboardingPage() {
           </p>
         </div>
 
-        {errorMessage && (
-          <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold flex items-center gap-3">
-            <span className="text-lg">⚠️</span>
-            <span>{errorMessage}</span>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Section 1: Chọn Vai trò */}
           <div>
@@ -370,7 +387,8 @@ export default function OnboardingPage() {
                 type="button"
                 onClick={() => {
                   setRole("STUDENT");
-                  setErrorMessage(null);
+                  setParentEmailError(null);
+                  setGeneralError(null);
                 }}
                 className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
                   role === "STUDENT"
@@ -405,7 +423,7 @@ export default function OnboardingPage() {
                 type="button"
                 onClick={() => {
                   setRole("MONITOR");
-                  setErrorMessage(null);
+                  setGeneralError(null);
                 }}
                 className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
                   role === "MONITOR"
@@ -453,7 +471,10 @@ export default function OnboardingPage() {
                     <button
                       key={item.grade}
                       type="button"
-                      onClick={() => setSelectedGrade(item.grade)}
+                      onClick={() => {
+                        setSelectedGrade(item.grade);
+                        setGeneralError(null);
+                      }}
                       className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                         isSelected
                           ? "border-[#C1762A] bg-[#C1762A] text-white shadow-sm scale-102"
@@ -476,35 +497,84 @@ export default function OnboardingPage() {
               </div>
             </div>
           ) : (
-            /* Ô nhập Email khi là Phụ huynh */
-            <div className="bg-[#F7ECE1]/60 rounded-2xl border border-[#F1CCA6] p-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center">
-                  <Mail className="w-4 h-4" />
+            /* Luồng Email Phụ huynh: Toàn bộ lỗi hiển thị ngay tại khung này */
+            isGoogleOAuth ? (
+              /* Google OAuth — Không cho chỉnh sửa, hiển thị Card cố định y hệt trang Cài đặt */
+              <div className="space-y-2">
+                <div className="flex items-start gap-3.5 p-5 bg-[#F7ECE1]/80 rounded-2xl border border-[#F1CCA6] shadow-xs">
+                  <div className="w-9 h-9 rounded-xl bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center shrink-0 mt-0.5">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-[#8C4905]">
+                        Tài khoản Google — Email nhận thông báo cố định
+                      </p>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#F1CCA6] text-[#8C4905] border border-[#C1762A]/30">
+                        Google OAuth
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#8C4905]/80 leading-relaxed">
+                      Email <span className="font-extrabold text-[#C1762A] break-all">{parentEmail || session?.user?.email}</span> sẽ được dùng để nhận thông báo và cảnh báo học tập của con. Vì bạn đăng nhập bằng Google, email này không thể thay đổi.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-[#8C4905]">Email nhận thông báo Phụ huynh</p>
-                  <p className="text-xs text-[#8C4905]/70">
-                    Hệ thống sẽ gửi mã OTP xác nhận tới email này trước khi hoàn tất kích hoạt.
-                  </p>
-                </div>
-              </div>
 
-              <div>
-                <input
-                  type="email"
-                  value={parentEmail}
-                  onChange={(e) => {
-                    setParentEmail(e.target.value);
-                    setParentEmailError("");
-                  }}
-                  placeholder="vidu: phuhuynh@gmail.com"
-                  className="w-full px-4 py-3 rounded-xl bg-white border border-[#F1CCA6] focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 focus:outline-none text-[#1C1917] text-sm font-medium transition-all"
-                />
+                {/* Lỗi riêng của Google Email nếu có */}
                 {parentEmailError && (
-                  <p className="mt-1.5 text-xs text-[#EF4444] font-bold">{parentEmailError}</p>
+                  <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-[#EF4444] text-xs font-bold flex items-center gap-2 animate-shake">
+                    <span className="text-base">⚠️</span>
+                    <span>{parentEmailError}</span>
+                  </div>
                 )}
               </div>
+            ) : (
+              /* Tài khoản thường (Username / Password) — Nhập email để nhận mã OTP */
+              <div className="bg-[#F7ECE1]/60 rounded-2xl border border-[#F1CCA6] p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-[#8C4905]">Email nhận thông báo Phụ huynh</p>
+                    <p className="text-xs text-[#8C4905]/70">
+                      Hệ thống sẽ gửi mã OTP xác nhận tới email này trước khi hoàn tất kích hoạt.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <input
+                    type="email"
+                    value={parentEmail}
+                    onChange={(e) => {
+                      setParentEmail(e.target.value);
+                      if (parentEmailError) setParentEmailError(null);
+                    }}
+                    placeholder="vidu: phuhuynh@gmail.com"
+                    className={`w-full px-4 py-3 rounded-xl bg-white text-[#1C1917] text-sm font-medium transition-all ${
+                      parentEmailError
+                        ? "border-2 border-[#EF4444] focus:ring-2 focus:ring-[#EF4444]/30 focus:outline-none animate-shake"
+                        : "border border-[#F1CCA6] focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 focus:outline-none"
+                    }`}
+                  />
+                  {/* Báo lỗi ngay bên dưới khung nhập Email */}
+                  {parentEmailError && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-red-50 border border-red-200 text-[#EF4444] text-xs font-bold flex items-center gap-2 animate-fade-in">
+                      <span className="text-base shrink-0">⚠️</span>
+                      <span className="leading-snug">{parentEmailError}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          )}
+
+          {/* Lỗi chung ngay trên nút bấm nếu có (không bao giờ đẩy lên đỉnh trang) */}
+          {generalError && (
+            <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-[#EF4444] text-xs font-bold flex items-center gap-2 animate-fade-in">
+              <span className="text-base shrink-0">⚠️</span>
+              <span>{generalError}</span>
             </div>
           )}
 
@@ -524,6 +594,8 @@ export default function OnboardingPage() {
                 <span>
                   {role === "STUDENT"
                     ? "Bắt đầu học ngay với SocraticKid"
+                    : isGoogleOAuth
+                    ? "Xác thực OTP Email Google"
                     : "Tiếp tục xác thực OTP Email"}
                 </span>
                 <ArrowRight className="w-5 h-5" />

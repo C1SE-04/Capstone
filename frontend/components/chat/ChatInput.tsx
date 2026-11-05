@@ -8,6 +8,9 @@
  * - [T6.20] Hỗ trợ paste ảnh từ clipboard (onPaste handler).
  * - [T6.20] Đính kèm ảnh qua nút +, hiển thị thumbnail preview + nút X xóa ảnh.
  * - [T6.21] Mobile Bottom Sheet khi bấm +: Chọn Camera hoặc Thư viện ảnh.
+ * - [US 9.4] MathSymbolToolbar: Chuẩn Google Math Calculator, chèn ký hiệu tại con trỏ.
+ * - [US 9.4] Bấm nút phân số chèn ()/() với con trỏ nằm giữa cặp ngoặc đầu tiên (|)/().
+ * - [US 9.4] Tự động chuyển đổi ký tự khi gõ: >= thành ≥, <= thành ≤, != thành ≠, +- thành ±.
  */
 "use client";
 
@@ -18,8 +21,8 @@ import {
   KeyboardEvent,
   ClipboardEvent,
   useCallback,
+  ChangeEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   Send,
   Plus,
@@ -32,31 +35,21 @@ import {
 import { cn } from "@/lib/utils";
 import { FileTooLargeToast } from "./FileTooLargeToast";
 import { ImageZoomModal } from "./ImageZoomModal";
+import { MathSymbolToolbar } from "./MathSymbolToolbar";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-/** Đại diện cho một ảnh đính kèm đang chờ gửi */
 interface ImageAttachment {
-  /** URL tạm để render thumbnail (từ URL.createObjectURL) */
   previewUrl: string;
-  /** File gốc để gửi lên server */
   file: File;
 }
 
 export interface ChatInputProps {
-  /**
-   * Callback khi gửi tin nhắn.
-   * @param message - Nội dung text (có thể rỗng nếu chỉ gửi ảnh)
-   * @param image   - [T6.20] File ảnh đính kèm (tùy chọn)
-   */
   onSendMessage: (message: string, image?: File) => void;
-  isLoading?: boolean; // Cờ kiểm tra AI đang xử lý
-  isOffline?: boolean; // Cờ kiểm tra trạng thái mất mạng
+  isLoading?: boolean;
+  isOffline?: boolean;
 }
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-/** [T6.20/AC5] Kích thước file ảnh tối đa cho phép: 5MB */
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -68,16 +61,11 @@ export function ChatInput({
 }: ChatInputProps) {
   // ── State ──
   const [content, setContent] = useState("");
-  /** [T6.20] Ảnh đính kèm hiện tại (tối đa 1 ảnh) */
   const [attachment, setAttachment] = useState<ImageAttachment | null>(null);
-  /** [T6.21] Kiểm soát Bottom Sheet trên mobile */
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  /** [T6.20/AC5] Thông báo lỗi validation ảnh (VD: vượt quá 5MB hoặc sai định dạng) */
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  /** Trạng thái mở modal xem trước ảnh to ở giữa màn hình */
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  /** Cảnh báo nổi khi dung lượng file > 5MB */
   const [fileTooLargeInfo, setFileTooLargeInfo] = useState<{
     isOpen: boolean;
     sizeMb: number;
@@ -111,11 +99,8 @@ export function ChatInput({
 
   // ── Refs ──
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  /** [T6.21] Hidden input dành cho Camera (capture="environment") */
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  /** [T6.20] Hidden input dành cho Thư viện ảnh */
   const libraryInputRef = useRef<HTMLInputElement>(null);
-  /** Container của nút + và bottom sheet để xử lý click outside */
   const sheetContainerRef = useRef<HTMLDivElement>(null);
 
   // ── Auto-resize textarea ──
@@ -132,13 +117,70 @@ export function ChatInput({
     adjustHeight();
   }, [content]);
 
-  // ── [T6.20/AC5] Image Attachment Helpers ──
+  // ── [US 9.4] Tự động chuyển đổi ký tự khi gõ (>= thành ≥, <= thành ≤, != thành ≠, +- thành ±) ──
 
-  /**
-   * Gán ảnh từ File object vào state attachment.
-   * [AC5] Kiểm tra định dạng ảnh và kích thước tối đa 5MB.
-   * Revoke URL cũ trước khi tạo URL mới để tránh memory leak.
-   */
+  const handleContentChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    const rawVal = e.target.value;
+    const cursor = e.target.selectionStart;
+
+    const replacements: [string, string][] = [
+      [">=", "≥"],
+      ["<=", "≤"],
+      ["!=", "≠"],
+      ["+-", "±"],
+    ];
+
+    let updatedVal = rawVal;
+    let offsetChange = 0;
+
+    for (const [asciiSym, unicodeSym] of replacements) {
+      if (updatedVal.includes(asciiSym)) {
+        const index = updatedVal.indexOf(asciiSym);
+        updatedVal = updatedVal.replaceAll(asciiSym, unicodeSym);
+        if (cursor !== null && cursor > index) {
+          offsetChange += asciiSym.length - unicodeSym.length;
+        }
+      }
+    }
+
+    setContent(updatedVal);
+
+    if (offsetChange > 0 && cursor !== null) {
+      const newCursor = Math.max(0, cursor - offsetChange);
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(newCursor, newCursor);
+        }
+      });
+    }
+  };
+
+  // ── [US 9.4 - T9.13] Chèn ký hiệu toán học chính xác tại vị trí con trỏ ──
+
+  const handleInsertMathSymbol = useCallback(
+    (template: string, cursorOffset: number) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const start = textarea.selectionStart ?? content.length;
+      const end = textarea.selectionEnd ?? content.length;
+
+      const newContent =
+        content.substring(0, start) + template + content.substring(end);
+      setContent(newContent);
+
+      const targetCursorPos = start + cursorOffset;
+
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(targetCursorPos, targetCursorPos);
+      });
+    },
+    [content]
+  );
+
+  // ── Image Attachment Helpers ──
+
   const attachImage = useCallback((file: File) => {
     setErrorMessage(null);
     if (!file.type.startsWith("image/")) {
@@ -161,7 +203,6 @@ export function ChatInput({
     });
   }, []);
 
-  /** Xóa ảnh đính kèm và revoke object URL để tránh memory leak */
   const removeAttachment = useCallback(() => {
     setErrorMessage(null);
     setIsPreviewOpen(false);
@@ -171,14 +212,12 @@ export function ChatInput({
     });
   }, []);
 
-  /** Tự động ẩn thông báo lỗi sau 4 giây */
   useEffect(() => {
     if (!errorMessage) return;
     const timer = setTimeout(() => setErrorMessage(null), 4000);
     return () => clearTimeout(timer);
   }, [errorMessage]);
 
-  /** Cleanup object URL khi component unmount */
   useEffect(() => {
     return () => {
       setAttachment((prev) => {
@@ -188,7 +227,7 @@ export function ChatInput({
     };
   }, []);
 
-  // ── [T6.21] Đóng Bottom Sheet khi click bên ngoài ──
+  // ── Đóng Bottom Sheet khi click bên ngoài ──
 
   useEffect(() => {
     if (!isSheetOpen) return;
@@ -204,45 +243,33 @@ export function ChatInput({
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [isSheetOpen]);
 
-  // ── [T6.20] Paste Handler: nhận ảnh từ clipboard ──
-
   const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const items = Array.from(e.clipboardData?.items ?? []);
     const imageItem = items.find((item) => item.type.startsWith("image/"));
     if (!imageItem) return;
     const file = imageItem.getAsFile();
     if (!file) return;
-    // Ngăn paste text/html không mong muốn khi có ảnh trong clipboard
     e.preventDefault();
     attachImage(file);
   };
 
-  // ── [T6.20/T6.21] Xử lý thay đổi file input ──
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) attachImage(file);
-    // Reset value để người dùng có thể chọn lại cùng file
     e.target.value = "";
     setIsSheetOpen(false);
   };
-
-  // ── [T6.21] Xử lý nhấn nút + ──
 
   const handlePlusClick = () => {
     const isMobile =
       typeof window !== "undefined" &&
       window.matchMedia("(max-width: 767px)").matches;
     if (isMobile) {
-      // Mobile: bật/tắt bottom sheet để chọn Camera hoặc Thư viện
       setIsSheetOpen((prev) => !prev);
     } else {
-      // Desktop: mở thư viện ảnh trực tiếp (không cần bottom sheet)
       libraryInputRef.current?.click();
     }
   };
-
-  // ── Xử lý bắt phím ──
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -251,15 +278,10 @@ export function ChatInput({
     }
   };
 
-  // ── Derived state ──
-
-  /** Có thể gửi khi: có text HOẶC có ảnh, VÀ không loading, VÀ không offline */
   const canSend =
     (content.trim().length > 0 || attachment !== null) &&
     !isLoading &&
     !isOffline;
-
-  // ── Xử lý gửi tin nhắn ──
 
   const handleSend = () => {
     if (!canSend) return;
@@ -271,18 +293,16 @@ export function ChatInput({
     }
   };
 
-  // ── Render ──
-
   return (
     <div className="p-2 sm:p-4 bg-transparent mt-auto relative z-10 w-full">
-      {/* ── [T6.20/AC5] Cảnh báo lỗi tải ảnh (>5MB hoặc định dạng không hợp lệ) ── */}
+      {/* Cảnh báo lỗi tải ảnh */}
       {errorMessage && (
         <div className="mb-2 ml-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
           <AlertCircle size={14} className="shrink-0 text-red-500" />
           <span className="font-medium">{errorMessage}</span>
           <button
             onClick={() => setErrorMessage(null)}
-            className="ml-1 text-red-400 hover:text-red-700 transition-colors"
+            className="ml-1 text-red-400 hover:text-red-700 transition-colors cursor-pointer"
             aria-label="Đóng thông báo lỗi"
           >
             <X size={12} />
@@ -290,11 +310,10 @@ export function ChatInput({
         </div>
       )}
 
-      {/* ── [T6.20] Thumbnail Preview khi có ảnh đính kèm ── */}
+      {/* Thumbnail Preview khi có ảnh đính kèm */}
       {attachment && (
         <div className="mb-2 ml-1 flex items-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div className="relative group inline-block">
-            {/* Thumbnail ảnh — có thể bấm vào để xem to ở giữa màn hình */}
             <div
               onClick={() => setIsPreviewOpen(true)}
               className="relative cursor-pointer overflow-hidden rounded-xl group/thumb"
@@ -311,7 +330,6 @@ export function ChatInput({
               </div>
             </div>
 
-            {/* Nút X xóa ảnh — hiện khi hover/focus */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -329,7 +347,6 @@ export function ChatInput({
               <X size={11} strokeWidth={3} />
             </button>
           </div>
-          {/* Tên file và dung lượng */}
           <div className="flex flex-col mt-1 min-w-0">
             <span className="text-xs text-[#8C4905] font-medium truncate max-w-[180px]">
               {attachment.file.name}
@@ -343,7 +360,7 @@ export function ChatInput({
         </div>
       )}
 
-      {/* ── [T6.20/Feature] Thông báo nổi khi dung lượng ảnh vượt quá 5MB ── */}
+      {/* Thông báo nổi khi dung lượng ảnh vượt quá 5MB */}
       <FileTooLargeToast
         isOpen={fileTooLargeInfo.isOpen}
         fileSizeMb={fileTooLargeInfo.sizeMb}
@@ -351,7 +368,7 @@ export function ChatInput({
         onClose={() => setFileTooLargeInfo((prev) => ({ ...prev, isOpen: false }))}
       />
 
-      {/* ── Modal xem ảnh phóng to ở giữa màn hình khi đính kèm trong ô chat ── */}
+      {/* Modal xem ảnh phóng to */}
       <ImageZoomModal
         isOpen={isPreviewOpen}
         imageUrl={attachment?.previewUrl || null}
@@ -359,19 +376,26 @@ export function ChatInput({
         onClose={() => setIsPreviewOpen(false)}
       />
 
-      {/* ── Vùng background bo góc chứa các nút và ô nhập liệu ── */}
+      {/* ── [US 9.4] MathSymbolToolbar: Chuẩn Google Math Calculator ── */}
+      <div className="mb-2 px-0.5">
+        <MathSymbolToolbar
+          onInsertSymbol={handleInsertMathSymbol}
+          disabled={isLoading || isOffline}
+        />
+      </div>
+
+      {/* ── Vùng background bo góc chứa các nút và ô nhập liệu Textarea ── */}
       <div
         className={cn(
           "relative flex items-end gap-2 bg-[#F1CCA6]/40 p-2 pl-4 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-all",
           isOffline && "opacity-75 bg-[#F7ECE1] border-[#F1CCA6]",
         )}
       >
-        {/* ── [T6.20/T6.21] Nút + và Bottom Sheet ── */}
+        {/* Nút + và Bottom Sheet */}
         <div
           className="relative self-end mb-0.5 shrink-0"
           ref={sheetContainerRef}
         >
-          {/* Nút + */}
           <button
             id="chat-attach-btn"
             onClick={handlePlusClick}
@@ -379,7 +403,7 @@ export function ChatInput({
             aria-label="Đính kèm ảnh"
             aria-expanded={isSheetOpen}
             className={cn(
-              "p-2.5 text-[#8C4905] hover:bg-[#F1CCA6] rounded-full transition-all duration-150",
+              "p-2.5 text-[#8C4905] hover:bg-[#F1CCA6] rounded-full transition-all duration-150 cursor-pointer",
               "disabled:opacity-40 disabled:cursor-not-allowed",
               isSheetOpen && "bg-[#F1CCA6] rotate-45",
             )}
@@ -387,17 +411,15 @@ export function ChatInput({
             <Plus size={20} />
           </button>
 
-          {/* ── [T6.21] Mobile Bottom Sheet ── */}
+          {/* Mobile Bottom Sheet */}
           {isSheetOpen && (
             <>
-              {/* Backdrop — chỉ hiện trên mobile, đóng sheet khi tap bên ngoài */}
               <div
                 className="fixed inset-0 bg-black/20 z-30 md:hidden"
                 onClick={() => setIsSheetOpen(false)}
                 aria-hidden="true"
               />
 
-              {/* Sheet Panel — trượt lên từ dưới màn hình */}
               <div
                 role="dialog"
                 aria-label="Chọn nguồn ảnh"
@@ -407,27 +429,17 @@ export function ChatInput({
                   "animate-in slide-in-from-bottom duration-250 ease-out",
                 )}
               >
-                {/* Handle bar kéo */}
                 <div className="flex justify-center pt-3 pb-1">
                   <div className="w-10 h-1 bg-[#F1CCA6] rounded-full" />
                 </div>
-
-                {/* Tiêu đề */}
                 <p className="text-center text-sm font-semibold text-[#8C4905] pb-3">
                   Thêm ảnh
                 </p>
-
-                {/* Hai lựa chọn */}
                 <div className="flex gap-3 px-6 pb-8 pt-1">
-                  {/* [T6.21] Camera — capture="environment" mở camera sau trên mobile */}
                   <button
                     id="chat-attach-camera-btn"
                     onClick={() => cameraInputRef.current?.click()}
-                    className={[
-                      "flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl",
-                      "border-2 border-[#C1762A]/20 hover:border-[#C1762A]/60",
-                      "hover:bg-[#F1CCA6]/30 transition-all active:scale-95",
-                    ].join(" ")}
+                    className="flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl border-2 border-[#C1762A]/20 hover:border-[#C1762A]/60 hover:bg-[#F1CCA6]/30 transition-all active:scale-95 cursor-pointer"
                   >
                     <div className="w-12 h-12 rounded-full bg-[#F1CCA6] flex items-center justify-center">
                       <Camera size={22} className="text-[#8C4905]" />
@@ -437,15 +449,10 @@ export function ChatInput({
                     </span>
                   </button>
 
-                  {/* [T6.21] Thư viện — không có capture, mở thư viện ảnh hệ thống */}
                   <button
                     id="chat-attach-library-btn"
                     onClick={() => libraryInputRef.current?.click()}
-                    className={[
-                      "flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl",
-                      "border-2 border-[#C1762A]/20 hover:border-[#C1762A]/60",
-                      "hover:bg-[#F1CCA6]/30 transition-all active:scale-95",
-                    ].join(" ")}
+                    className="flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl border-2 border-[#C1762A]/20 hover:border-[#C1762A]/60 hover:bg-[#F1CCA6]/30 transition-all active:scale-95 cursor-pointer"
                   >
                     <div className="w-12 h-12 rounded-full bg-[#F1CCA6] flex items-center justify-center">
                       <ImageIcon size={22} className="text-[#8C4905]" />
@@ -460,9 +467,7 @@ export function ChatInput({
           )}
         </div>
 
-        {/* ── [T6.20] Hidden File Inputs ── */}
-
-        {/* Camera: capture="environment" → mở camera sau trên thiết bị di động */}
+        {/* Hidden File Inputs */}
         <input
           ref={cameraInputRef}
           type="file"
@@ -473,8 +478,6 @@ export function ChatInput({
           aria-hidden="true"
           tabIndex={-1}
         />
-
-        {/* Thư viện: không có capture → mở file picker hoặc thư viện ảnh */}
         <input
           ref={libraryInputRef}
           type="file"
@@ -485,24 +488,24 @@ export function ChatInput({
           tabIndex={-1}
         />
 
-        {/* ── Ô nhập liệu Textarea ── */}
+        {/* Ô nhập liệu Textarea duy nhất */}
         <textarea
           ref={textareaRef}
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={handleContentChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={
             isOffline
               ? "Mất kết nối. Đang chờ kết nối lại..."
-              : "Hỏi SocraticKid..."
+              : "Hỏi SocraticKid (nhập toán: >=, <=, hoặc chọn thanh công cụ trên)..."
           }
           className="flex-1 max-h-[150px] min-h-[44px] py-3 bg-transparent text-stone-900 placeholder:text-[#8C4905]/60 outline-none resize-none overflow-y-auto font-medium disabled:cursor-not-allowed"
           rows={1}
           disabled={isLoading || isOffline}
         />
 
-        {/* ── Nút Gửi ── */}
+        {/* Nút Gửi */}
         <button
           id="chat-send-btn"
           onClick={handleSend}
@@ -519,7 +522,7 @@ export function ChatInput({
         </button>
       </div>
 
-      {/* ── Cảnh báo nhẹ dưới ô nhập liệu ── */}
+      {/* Cảnh báo nhẹ dưới ô nhập liệu */}
       <div className="text-center mt-2">
         <p className="text-xs text-[#8C4905]/60">
           AI có thể mắc lỗi. Vui lòng kiểm tra lại thông tin quan trọng.

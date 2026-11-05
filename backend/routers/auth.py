@@ -292,6 +292,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         data={
             "sub": str(user.id),
             "email": user.email,
+            "username": user.username,
             "role": user.role,
             "grade_level": user.grade,
             "session_version": user_version,
@@ -301,6 +302,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         "access_token": access_token,
         "refresh_token": raw_refresh_token,
         "token_type": "bearer",
+        "username": user.username,
         "grade": user.grade,  # Task #132: trả về FE để hiển thị và lưu local
         "session_version": user_version,  # US 6.2: phiên bản session của user
     }
@@ -372,6 +374,7 @@ def refresh_access_token(
         data={
             "sub": str(user.id),
             "email": user.email,
+            "username": user.username,
             "role": user.role,
             "grade_level": user.grade,  # Task #132: cấp lại grade khi refresh token
             "session_version": user_version,  # US 6.2: cấp lại session_version mới nhất từ DB
@@ -384,6 +387,7 @@ def refresh_access_token(
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
         "token_type": "bearer",
+        "username": user.username,
         "grade": user.grade,  # Task #132: trả về grade mới nhất
         "session_version": user_version,  # US 6.2: trả về session_version mới nhất
     }
@@ -488,6 +492,7 @@ def google_callback(
         data={
             "sub": str(user.id),
             "email": user.email,
+            "username": user.username,
             "role": user.role,
             "grade_level": user.grade,
             "session_version": user_version,
@@ -500,6 +505,7 @@ def google_callback(
         token_type="bearer",
         is_new_user=is_new,
         user_id=str(user.id),
+        username=user.username,
         email=user.email,
         role=user.role,
         grade=user.grade,
@@ -544,6 +550,7 @@ def complete_onboarding(
         data={
             "sub": str(user.id),
             "email": user.email,
+            "username": user.username,
             "role": user.role,
             "grade_level": user.grade,
             "session_version": user.session_version,
@@ -567,6 +574,7 @@ def complete_onboarding(
         token_type="bearer",
         is_new_user=False,
         user_id=str(user.id),
+        username=user.username,
         email=user.email,
         role=user.role,
         grade=user.grade,
@@ -701,6 +709,7 @@ def verify_otp(
     user = db.query(models.User).filter(models.User.id == current_user["id"]).first()
     if user:
         user.email = email
+        user.notification_email = email
         user.email_verified = True
     db.commit()
 
@@ -808,6 +817,7 @@ def parent_verify_email_otp(
     user = db.query(models.User).filter(models.User.id == current_user["id"]).first()
     if user:
         user.email = new_email
+        user.notification_email = new_email
         user.email_verified = True
     db.commit()
 

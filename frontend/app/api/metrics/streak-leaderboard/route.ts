@@ -1,10 +1,11 @@
 /**
  * File: app/api/metrics/streak-leaderboard/route.ts
  * Mô tả: BFF Proxy chuyển tiếp request từ Next.js Client sang FastAPI Backend:
- *        GET /metrics/streak-leaderboard?grade=...&limit=...
- * - Task: T8.15 (US 8.2)
+ *        GET /metrics/streak-leaderboard?grade=...&limit=...&search=...
+ * - Task: T8.15 (US 8.2) & T9.15 (US 9.4)
  * - Tự động đính kèm access_token của học sinh/người dùng từ getServerSession.
  * - Hỗ trợ lọc theo khối lớp (grade: 4-9) hoặc xem Toàn Server (grade=None).
+ * - Chuyển tiếp query param `search` xuống Backend để tìm kiếm học sinh.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
     const grade = searchParams.get("grade");
     const limit = searchParams.get("limit") || "50";
+    const search = searchParams.get("search");
 
     const backendParams = new URLSearchParams();
     if (grade && grade !== "ALL") {
@@ -34,6 +36,9 @@ export async function GET(req: NextRequest) {
     }
     if (limit) {
       backendParams.set("limit", limit);
+    }
+    if (search && search.trim()) {
+      backendParams.set("search", search.trim());
     }
 
     const backendUrl = `${BACKEND_URL}/metrics/streak-leaderboard?${backendParams.toString()}`;

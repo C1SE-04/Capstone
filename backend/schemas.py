@@ -81,6 +81,7 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    username: Optional[str] = None  # Tên tài khoản định danh duy nhất
     grade: Optional[int] = None  # Task #132: trả thêm grade_level về FE sau login
     session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
 
@@ -105,6 +106,7 @@ class GoogleAuthResponse(BaseModel):
     token_type: str = "bearer"
     is_new_user: bool                     # True nếu tài khoản mới hoặc chưa onboarding, False nếu đã onboarding
     user_id: str
+    username: Optional[str] = None        # Tên tài khoản định danh duy nhất (từ DB)
     email: str
     role: str
     grade: Optional[int] = None
@@ -369,6 +371,7 @@ class StreakLeaderboardItem(BaseModel):
     """Thông tin một học sinh trên Bảng Xếp Hạng Chuỗi Ngày Học."""
     rank: int
     student_id: str
+    username: Optional[str] = None
     display_name: str
     avatar: Optional[str] = None
     grade: Optional[int] = None

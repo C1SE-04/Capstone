@@ -49,17 +49,18 @@ export const authOptions: NextAuthOptions = {
             payload.role === "PENDING" ||
             (payload.role === "STUDENT" && !payload.grade_level);
 
-          const displayName = payload.email
-            ? payload.email.split("@")[0]
-            : (payload.username || (payload.sub ? `user_${String(payload.sub).slice(0, 6)}` : "User"));
+          const displayName = payload.username
+            || (payload.email ? payload.email.split("@")[0] : (payload.sub ? `user_${String(payload.sub).slice(0, 6)}` : "User"));
 
           // Trả về object user để NextAuth lưu vào phiên đăng nhập (Session)
           return {
             id: payload.sub,
             email: payload.email || null,
             name: displayName,
+            username: payload.username || null,
             role: payload.role,
             grade_level: payload.grade_level,
+            oauth_provider: payload.oauth_provider || null,
             access_token: data.access_token,
             refresh_token: data.refresh_token, // US 6.2 (T6.13): lưu refresh_token của Backend
             is_new_user: isPending,
@@ -121,9 +122,13 @@ export const authOptions: NextAuthOptions = {
           // Gắn dữ liệu định danh và JWT Backend vào user để jwt callback lưu vào token
           user.id = data.user_id;
           user.email = data.email;
-          user.name = data.name || user.name || (data.email ? data.email.split("@")[0] : "User");
+          // Ưu tiên username trong DB để tên hiển thị đồng nhất giữa các máy đăng nhập
+          const resolvedGoogleName = data.username || data.name || (data.email ? data.email.split("@")[0] : (user.name || "User"));
+          user.name = resolvedGoogleName;
+          (user as any).username = data.username || null;
           user.role = data.role;
           user.grade_level = data.grade ?? undefined;
+          (user as any).oauth_provider = "google";
           user.access_token = data.access_token;
           user.refresh_token = data.refresh_token;
           user.is_new_user = data.is_new_user;
@@ -145,8 +150,11 @@ export const authOptions: NextAuthOptions = {
       // Lần đăng nhập đầu tiên: map thông tin từ user (từ authorize() hoặc signIn() Google)
       if (user) {
         token.id = user.id;
+        token.name = user.name;
+        (token as any).username = (user as any).username || null;
         token.role = user.role;
         token.grade_level = user.grade_level;
+        token.oauth_provider = (user as any).oauth_provider || (account?.provider === "google" ? "google" : null);
         token.access_token = user.access_token;
         token.refresh_token = user.refresh_token; // US 6.2 (T6.13): lưu refresh_token
         token.is_new_user = user.is_new_user;
@@ -177,6 +185,7 @@ export const authOptions: NextAuthOptions = {
             token.id = data.user_id;
             token.role = data.role;
             token.grade_level = data.grade ?? undefined;
+            token.oauth_provider = "google";
             token.access_token = data.access_token;
             token.refresh_token = data.refresh_token;
             token.is_new_user = data.is_new_user;
@@ -212,12 +221,17 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
+        if (token.name) {
+          session.user.name = token.name as string;
+        }
+        (session.user as any).username = (token as any).username as string | undefined;
         session.user.role = token.role as string | undefined;
         session.user.grade_level = token.grade_level as
           | string
           | number
           | undefined;
         session.user.is_new_user = token.is_new_user as boolean | undefined;
+        (session.user as any).oauth_provider = token.oauth_provider as string | undefined;
       }
       session.access_token = token.access_token as string | undefined;
       session.refresh_token = token.refresh_token as string | undefined; // US 6.2 (T6.13): expose refresh_token cho authFetch

@@ -534,7 +534,8 @@ def _compute_streak_from_dates(all_dates: set[date]) -> tuple[int, int]:
 @router.get("/metrics/streak-leaderboard", response_model=schemas.StreakLeaderboardResponse)
 def get_streak_leaderboard(
     grade: Optional[int] = Query(None, ge=4, le=9, description="Lọc theo khối lớp (Lớp 4 - 9). Bỏ trống để xem Toàn Server"),
-    limit: int = Query(20, ge=1, le=100, description="Số lượng học sinh trong top (mặc định 20, tối đa 100)"),
+    limit: int = Query(50, ge=1, le=100, description="Số lượng học sinh trong top (mặc định 50, tối đa 100)"),
+    search: Optional[str] = Query(None, description="Tìm kiếm học sinh theo tên hiển thị hoặc username"),
     current_user: dict = Depends(dependencies.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -613,13 +614,14 @@ def get_streak_leaderboard(
         cur_streak, m_streak = _compute_streak_from_dates(user_dates[sid])
         s_obj = student_map[sid]
 
-        # Tên hiển thị bảo vệ riêng tư: lấy phần trước @ của email (VD: hoangnam hoặc student1)
-        email_prefix = s_obj.email.split("@")[0] if s_obj.email else "Học sinh"
+        # Tên hiển thị bảo vệ riêng tư: Ưu tiên username của học sinh, fallback về phần trước @ của email
+        resolved_name = s_obj.username or (s_obj.email.split("@")[0] if s_obj.email else "Học sinh")
         avatar_url = f"https://api.dicebear.com/7.x/bottts/svg?seed={sid}"
 
         ranked_list.append({
             "student_id": sid,
-            "display_name": email_prefix,
+            "username": s_obj.username or "",
+            "display_name": resolved_name,
             "avatar": avatar_url,
             "grade": s_obj.grade,
             "streak_days": cur_streak,
@@ -637,14 +639,15 @@ def get_streak_leaderboard(
     )
 
     total_participants = len(ranked_list)
-    leaderboard_items: list[schemas.StreakLeaderboardItem] = []
     current_user_entry: Optional[schemas.StreakLeaderboardItem] = None
 
+    all_ranked_items: list[schemas.StreakLeaderboardItem] = []
     for idx, item in enumerate(ranked_list, start=1):
         is_cur = (item["student_id"] == current_uid)
         entry = schemas.StreakLeaderboardItem(
             rank=idx,
             student_id=item["student_id"],
+            username=item.get("username"),
             display_name=item["display_name"],
             avatar=item["avatar"],
             grade=item["grade"],
@@ -654,8 +657,23 @@ def get_streak_leaderboard(
         )
         if is_cur:
             current_user_entry = entry
-        if len(leaderboard_items) < limit:
-            leaderboard_items.append(entry)
+        all_ranked_items.append(entry)
+
+    # Lọc tìm kiếm nếu có query param search (US 9.4 - T9.15)
+    # Lọc không phân biệt hoa thường (ilike) theo cả display_name và username của bảng dữ liệu users
+    # Bảo toàn thứ hạng gốc (rank) của học sinh trên bảng tổng sắp toàn server
+    if search and search.strip():
+        search_kw = search.strip().lower()
+        filtered = [
+            it for it, raw in zip(all_ranked_items, ranked_list)
+            if (
+                search_kw in it.display_name.lower()
+                or search_kw in raw.get("username", "").lower()
+            )
+        ]
+        leaderboard_items = filtered[:limit]
+    else:
+        leaderboard_items = all_ranked_items[:limit]
 
     scope_name = f"GRADE_{grade}" if grade is not None else "ALL"
 

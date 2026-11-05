@@ -22,6 +22,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
             raise credentials_exception
         return {
             "id": user_id,
+            "username": payload.get("username"),
             "role": role,
             "grade_level": grade_level,
             "session_version": session_version,
@@ -55,6 +56,7 @@ def get_optional_current_user(token: str = Depends(oauth2_optional_scheme)):
             return None
         return {
             "id": user_id,
+            "username": payload.get("username"),
             "role": payload.get("role"),
             "grade_level": payload.get("grade_level"),
             "session_version": payload.get("session_version"),
