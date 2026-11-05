@@ -153,3 +153,51 @@ export interface AdminSafetyStatsResponse {
   not_understood_rate_percent: number;
   common_difficult_topics: AdminDifficultTopicStat[];
 }
+
+
+// ==============================================================================
+// US 9.5: QUẢN TRỊ BÁO LỖI & SỰ CỐ HỆ THỐNG (INCIDENT HUB - T9.21 & T9.22)
+// ==============================================================================
+
+export type SystemErrorType =
+  | "CRASH_500"
+  | "AI_TIMEOUT"
+  | "USER_REPORT"
+  | "SMTP_ERROR"
+  | string;
+
+export type SystemErrorSeverity = "CRITICAL" | "WARNING" | "INFO" | string;
+
+export type SystemErrorStatus = "OPEN" | "RESOLVED" | string;
+
+export interface SystemErrorItem {
+  id: string;
+  error_code: string;
+  error_type: SystemErrorType;
+  severity: SystemErrorSeverity;
+  message: string;
+  stack_trace?: string | null;
+  endpoint?: string | null;
+  request_payload?: string | null;
+  user_id?: string | null;
+  user_email?: string | null;
+  username?: string | null;
+  status: SystemErrorStatus;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+  resolved_note?: string | null;
+  created_at: string;
+}
+
+export interface SystemErrorsListResponse {
+  success: boolean;
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+  items: SystemErrorItem[];
+}
+
+export interface ResolveErrorPayload {
+  resolved_note?: string;
+}

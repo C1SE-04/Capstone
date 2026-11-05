@@ -339,7 +339,7 @@ export default function AdminUsersPage() {
   // Điều hướng xem log chi tiết của tài khoản (Task T8.28 / Task T8.30 - Hỗ trợ CSKH)
   const handleViewUserLogs = (user: AdminUser) => {
     // Điều hướng sang trang Tra cứu Logs kèm query email để tra cứu ngay log của user đó
-    router.push(`/admin/logs?email=${encodeURIComponent(user.email)}`);
+    router.push(`/admin/errors?search=${encodeURIComponent(user.email)}`);
   };
 
   // Khóa / Mở khóa tài khoản
