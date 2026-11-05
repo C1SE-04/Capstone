@@ -4,6 +4,7 @@
  * Hỗ trợ render Markdown và các công thức toán học (KaTeX) đối với tin nhắn từ AI (Assistant).
  * Tin nhắn của người dùng sẽ hiển thị dạng văn bản thô, lệch về bên phải.
  * US4.1: Hiển thị 2 nút "Đã hiểu" / "Chưa hiểu" sau tin nhắn cuối cùng của AI.
+ * US9.5 (T9.23): Thêm nút cờ 🚩 "Báo lỗi" cạnh tin nhắn của bot để học sinh báo lỗi trực tiếp.
  */
 "use client";
 
@@ -12,12 +13,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm"; // Hỗ trợ cú pháp GitHub Flavored Markdown (như table, strikethrough)
 import remarkMath from "remark-math"; // Hỗ trợ cú pháp toán học (dấu $ hoặc $$)
 import rehypeKatex from "rehype-katex"; // Biến đổi cú pháp toán học thành HTML chuẩn KaTeX
-import { AlertCircle, RotateCcw, Loader2, Maximize2 } from "lucide-react";
+import { AlertCircle, RotateCcw, Loader2, Maximize2, Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Message } from "@/types/chat";
 import { UnderstandingButtons } from "./UnderstandingButtons";
 import { ImageZoomModal } from "./ImageZoomModal";
 import { SaveBookmarkButton } from "./SaveBookmarkButton";
+import { ReportIssueModal } from "./ReportIssueModal";
 import { preprocessLaTeX } from "@/lib/latex";
 
 export type MessageProps = Message;
@@ -54,6 +56,10 @@ export function ChatMessage({
 
   // State quản lý xem ảnh phóng to ở giữa màn hình
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  // US 9.5 (Task T9.23): State quản lý modal báo lỗi
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isReported, setIsReported] = useState(false);
 
   // Lắng nghe phím Escape và khóa cuộn trang khi đang mở ảnh
   useEffect(() => {
@@ -149,7 +155,6 @@ export function ChatMessage({
             </div>
           ) : (
             // Tin nhắn của assistant: Cần render thành Markdown và Toán học.
-            // Sử dụng các class `prose-*` của Tailwind (hoặc tùy chỉnh thủ công) để định dạng các thẻ HTML (h1, p, pre, code, table) bên trong Markdown.
             <div className="markdown-prose prose-sm max-w-none text-stone-900 min-w-0 break-words overflow-visible
               prose-p:leading-relaxed prose-p:mb-3 
               prose-pre:bg-[#F1CCA6]/30 prose-pre:text-[#8C4905] prose-pre:p-3 prose-pre:rounded-lg
@@ -162,7 +167,6 @@ export function ChatMessage({
               prose-a:text-[#C1762A] hover:prose-a:text-[#8C4905] prose-a:underline
               prose-strong:text-[#8C4905]"
             >
-              {/* Component ReactMarkdown thực hiện chức năng phân tích cú pháp chuỗi thành HTML (đã qua preprocessor KaTeX chuẩn hóa) */}
               <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm]}
                 rehypePlugins={[rehypeKatex]}
@@ -172,6 +176,38 @@ export function ChatMessage({
             </div>
           )}
         </div>
+
+        {/* US 9.5 (Task T9.23 & AC 9.5.1): Nút cờ 🚩 báo lỗi bài toán / AI bên cạnh tin nhắn của bot */}
+        {!isUser && message.content !== "" && (
+          <div className="flex items-center gap-2 mt-1 px-1">
+            <button
+              type="button"
+              onClick={() => setIsReportOpen(true)}
+              className={cn(
+                "inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md transition-all cursor-pointer",
+                isReported
+                  ? "text-red-700 bg-red-100/90 border border-red-300 shadow-2xs"
+                  : "text-stone-400 hover:text-red-600 hover:bg-stone-200/50"
+              )}
+              title="Báo lỗi câu này lên hệ thống Quản trị (AC 9.5.1)"
+            >
+              <Flag className={cn("w-3 h-3", isReported ? "fill-red-600 text-red-600" : "")} />
+              <span>{isReported ? "Đã gửi báo lỗi" : "Báo lỗi"}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Modal Popup Chọn Lý Do Báo Lỗi (AC 9.5.1) */}
+        {!isUser && (
+          <ReportIssueModal
+            isOpen={isReportOpen}
+            onClose={() => setIsReportOpen(false)}
+            messageId={message.id}
+            messageSnippet={message.content}
+            sessionId={sessionId}
+            onSuccess={() => setIsReported(true)}
+          />
+        )}
 
         {/* T7.17: Nút ⭐ "Lưu vào Sổ tay" CHỈ xuất hiện DUY NHẤT dưới bong bóng chúc mừng (Giỏi lắm, Tuyệt vời, Xuất sắc) khi học sinh đã bấm "Đã hiểu" */}
         {!isUser && (
@@ -216,7 +252,7 @@ export function ChatMessage({
             {onRetry && (
               <button
                 onClick={() => onRetry(message.id, message.content)}
-                className="inline-flex items-center gap-1 font-semibold text-[#8C4905] bg-[#F1CCA6]/60 hover:bg-[#F1CCA6] px-2 py-0.5 rounded-full transition-colors ml-1"
+                className="inline-flex items-center gap-1 font-semibold text-[#8C4905] bg-[#F1CCA6]/60 hover:bg-[#F1CCA6] px-2 py-0.5 rounded-full transition-colors ml-1 cursor-pointer"
                 title="Gửi lại tin nhắn này"
               >
                 <RotateCcw size={11} />
