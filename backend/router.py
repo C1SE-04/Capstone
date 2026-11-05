@@ -201,60 +201,48 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
     elif attachment_url and not loaded_images:
         base_prompt += "\n[LƯU Ý]: Học sinh có đính kèm ảnh nhưng không tải được từ máy chủ Cloudinary. Hãy nhắc học sinh kiểm tra lại ảnh chụp."
 
-    reviewer = LocalReviewerAgent()
-    max_retries = 2
-    current_attempt = 0
-    final_text = ""
-    prompt = base_prompt
-    is_comprehension_detected = False
+    prompt = base_prompt.encode("utf-16", "surrogatepass").decode("utf-16", errors="replace") if isinstance(base_prompt, str) else base_prompt
+    call_payload = [*loaded_images, prompt] if loaded_images else prompt
 
-    while current_attempt <= max_retries:
-        print("=== PROMPT CHUẨN BỊ GỬI AI ===")
-        print(prompt)
-        print("================================")
-        
-        try:
-            # Lấy toàn bộ văn bản để Reviewer có thể đánh giá (không stream trực tiếp)
-            call_payload = [*loaded_images, prompt] if loaded_images else prompt
-            response = model.generate_content(call_payload, stream=False)
-            generated_text = response.text or ""
-            
-            # 1. Bóc tách tag [COMPREHENSION_CHECK] do Gemini phát hiện
-            has_comp_tag = (
-                "[COMPREHENSION_CHECK]" in generated_text
-                or "COMPREHENSION_CHECK" in generated_text
-            )
-            cleaned_text = (
-                generated_text.replace("[COMPREHENSION_CHECK]", "")
-                .replace("COMPREHENSION_CHECK", "")
-                .strip()
-            )
+    # ── Agents cần Reviewer: lấy full text trước, kiểm duyệt, rồi mới stream ──────────────
+    needs_review = target_agent in ("SCAFFOLDING_AGENT", "MISCONCEPTION_AGENT")
 
-            # 2. Cơ chế nhận diện hoàn thành bài toán (Comprehension Trigger)
-            # Kiểm tra xem câu trả lời có đang kết thúc bằng một câu hỏi gợi mở tiếp theo hay không.
-            # Nếu câu kết thúc bằng dấu '?', AI vẫn đang hỏi dở học sinh -> TUYỆT ĐỐI KHÔNG kích hoạt comprehension check!
-            ends_with_question = cleaned_text.strip().rstrip("*_~` \t\r\n").endswith("?")
+    if needs_review:
+        reviewer = LocalReviewerAgent()
+        max_retries = 2
+        current_attempt = 0
+        final_text = ""
+        is_comprehension_detected = False
 
-            # TUYỆT ĐỐI KHÔNG kích hoạt comprehension check khi:
-            # - Đang phân luồng MISCONCEPTION hoặc SAFETY (học sinh đang hiểu sai hoặc vi phạm ngoài lề)
-            # - Hoặc câu trả lời kết thúc bằng câu hỏi '?'
-            is_misconception_or_safety = target_agent in (
-                "MISCONCEPTION_AGENT", "SAFETY_AGENT", "MISCONCEPTION", "SAFETY"
-            )
+        while current_attempt <= max_retries:
+            try:
+                response = model.generate_content(call_payload, stream=False)
+                generated_text = response.text or ""
 
-            praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em", "khen ngợi", "rất giỏi")
-            is_praise = any(p in cleaned_text.lower() for p in praise_markers)
-            conclusive_keywords = ("đáp án", "kết quả", "chọn đúng", "đáp án a", "đáp án b", "đáp án c", "đáp án d", "nghiệm của phương trình", "nghiệm là", "vô nghiệm")
-            has_conclusive_markers = any(k in cleaned_text.lower() for k in conclusive_keywords)
+                has_comp_tag = (
+                    "[COMPREHENSION_CHECK]" in generated_text
+                    or "COMPREHENSION_CHECK" in generated_text
+                )
+                cleaned_text = (
+                    generated_text.replace("[COMPREHENSION_CHECK]", "")
+                    .replace("COMPREHENSION_CHECK", "")
+                    .strip()
+                )
 
-            # Chỉ kích hoạt khi bài toán đã kết luận, KHÔNG ở mode sửa sai/safety và KHÔNG kết thúc bằng câu hỏi gợi mở
-            attempt_has_comprehension = False
-            if not ends_with_question and not is_misconception_or_safety:
-                if has_comp_tag or (is_praise and has_conclusive_markers):
-                    attempt_has_comprehension = True
+                ends_with_question = cleaned_text.strip().rstrip("*_~` \t\r\n").endswith("?")
+                is_misconception_or_safety = target_agent in (
+                    "MISCONCEPTION_AGENT", "SAFETY_AGENT", "MISCONCEPTION", "SAFETY"
+                )
+                praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em", "khen ngợi", "rất giỏi")
+                is_praise = any(p in cleaned_text.lower() for p in praise_markers)
+                conclusive_keywords = ("đáp án", "kết quả", "chọn đúng", "đáp án a", "đáp án b", "đáp án c", "đáp án d", "nghiệm của phương trình", "nghiệm là", "vô nghiệm")
+                has_conclusive_markers = any(k in cleaned_text.lower() for k in conclusive_keywords)
 
-            # Kiểm duyệt gắt gao với cả SCAFFOLDING_AGENT và MISCONCEPTION_AGENT
-            if target_agent in ("SCAFFOLDING_AGENT", "MISCONCEPTION_AGENT"):
+                attempt_has_comprehension = False
+                if not ends_with_question and not is_misconception_or_safety:
+                    if has_comp_tag or (is_praise and has_conclusive_markers):
+                        attempt_has_comprehension = True
+
                 review_result = reviewer.review(
                     user_query,
                     expected_answer,
@@ -263,29 +251,72 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
                 )
                 if not review_result["is_approved"]:
                     current_attempt += 1
-                    print(f"[Reviewer Agent 🛑] Từ chối (Lần {current_attempt}/{max_retries}): {review_result['feedback']}")
-                    print(f"[Reviewer Agent 🛑] Lý do: {review_result['reasoning']}")
-                    
-                    # Nạp lại lời mắng vào prompt để ép AI phải sửa lỗi
-                    prompt += f"\n\n[HỆ THỐNG KIỂM DUYỆT CẢNH BÁO]: Câu trả lời vừa rồi của bạn bị TỪ CHỐI vì lý do: {review_result['feedback']}. \nHãy sinh lại câu trả lời khác và TUYỆT ĐỐI KHÔNG vi phạm lỗi này nữa."
-                    final_text = cleaned_text  # Backup lỡ như hết số lần thử vẫn ngu
+                    print(f"[Reviewer] Tu choi lan {current_attempt}: {review_result['feedback']}")
+                    call_payload = (
+                        [*loaded_images, prompt + f"\n\n[CANH BAO]: Phan hoi bi tu choi vi: {review_result['feedback']}. Hay sinh lai."]
+                        if loaded_images
+                        else prompt + f"\n\n[CANH BAO]: Phan hoi bi tu choi vi: {review_result['feedback']}. Hay sinh lai."
+                    )
+                    final_text = cleaned_text
                     continue
-            
-            # Nếu pass qua được Reviewer hoặc không phải Scaffolding thì chốt đáp án
-            final_text = cleaned_text
-            is_comprehension_detected = attempt_has_comprehension
-            break
-            
+
+                final_text = cleaned_text
+                is_comprehension_detected = attempt_has_comprehension
+                break
+
+            except Exception as e:
+                yield f" [Loi AI: {str(e)}]"
+                return
+
+        if meta is not None:
+            meta["has_comprehension"] = is_comprehension_detected
+
+        # Fake-stream word-by-word sau khi đã kiểm duyệt xong
+        words = final_text.split(" ")
+        for i, word in enumerate(words):
+            yield word + (" " if i < len(words) - 1 else "")
+
+    else:
+        # ── Agents không cần Reviewer: stream trực tiếp từ Gemini → user thấy chữ ngay ──
+        is_comprehension_detected = False
+        try:
+            response = model.generate_content(call_payload, stream=True)
+            full_text_buffer = ""
+            for chunk in response:
+                if chunk.text:
+                    full_text_buffer += chunk.text
+                    # Lọc tag comprehension khi stream
+                    out = chunk.text.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
+                    if out:
+                        yield out
+
+            # Phát hiện comprehension sau khi stream xong
+            cleaned = (
+                full_text_buffer.replace("[COMPREHENSION_CHECK]", "")
+                .replace("COMPREHENSION_CHECK", "")
+                .strip()
+            )
+            has_comp_tag = (
+                "[COMPREHENSION_CHECK]" in full_text_buffer
+                or "COMPREHENSION_CHECK" in full_text_buffer
+            )
+            ends_with_question = cleaned.strip().rstrip("*_~` \t\r\n").endswith("?")
+            is_misconception_or_safety = target_agent in (
+                "MISCONCEPTION_AGENT", "SAFETY_AGENT", "MISCONCEPTION", "SAFETY"
+            )
+            praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em", "khen ngợi", "rất giỏi")
+            is_praise = any(p in cleaned.lower() for p in praise_markers)
+            conclusive_keywords = ("đáp án", "kết quả", "chọn đúng", "đáp án a", "đáp án b", "đáp án c", "đáp án d", "nghiệm của phương trình", "nghiệm là", "vô nghiệm")
+            has_conclusive_markers = any(k in cleaned.lower() for k in conclusive_keywords)
+
+            if not ends_with_question and not is_misconception_or_safety:
+                if has_comp_tag or (is_praise and has_conclusive_markers):
+                    is_comprehension_detected = True
+
         except Exception as e:
-            yield f" [Lỗi khi gọi AI: {str(e)}]"
+            yield f" [Loi AI: {str(e)}]"
             return
 
-    # Lưu kết quả phát hiện comprehension vào meta object
-    if meta is not None:
-        meta["has_comprehension"] = is_comprehension_detected
-
-    # Sau khi chốt được văn bản xịn, chẻ nhỏ ra để giả lập luồng Stream trả về Frontend cho mượt
-    words = final_text.split(" ")
-    for i, word in enumerate(words):
-        yield word + (" " if i < len(words) - 1 else "")
+        if meta is not None:
+            meta["has_comprehension"] = is_comprehension_detected
 

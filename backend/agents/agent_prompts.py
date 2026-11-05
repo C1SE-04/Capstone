@@ -153,17 +153,18 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
     hk1_text = "\n".join(f"  - {t}" for t in topics_hk1) if topics_hk1 else "  (không có dữ liệu)"
     hk2_text = "\n".join(f"  - {t}" for t in topics_hk2) if topics_hk2 else "  (không có dữ liệu)"
 
-    # === Xây dựng danh sách kiến thức tích lũy (lớp 4 → lớp grade-1) ===
-    prev_topics = []
-    for lvl in range(4, grade):
-        lv_data = curriculum.get(str(lvl), {})
-        for t in lv_data.get("1", []) + lv_data.get("2", []):
-            prev_topics.append(f"  - [Lớp {lvl}] {t}")
-    prev_text = "\n".join(prev_topics) if prev_topics else "  (lớp 4 - không có dữ liệu)"
+    # === Tóm tắt kiến thức các lớp trước (lớp 4 → grade-1) — rút gọn để giảm token ===
+    prev_grades_range = list(range(4, grade))
+    if len(prev_grades_range) == 1:
+        prev_text = f"  Học sinh đã hoàn thành chương trình Lớp {prev_grades_range[0]}."
+    elif len(prev_grades_range) > 1:
+        prev_text = f"  Học sinh đã hoàn thành chương trình Lớp {prev_grades_range[0]}–{prev_grades_range[-1]}."
+    else:
+        prev_text = "  (không có dữ liệu)"
 
     # === Xác định nhãn kỳ hiện tại và kỳ kia ===
     if is_summer:
-        timeline_info = f"\ud83d\udcc5 Tháng {curr_month} — Kỳ nghỉ hè (Tháng 6–8)"
+        timeline_info = f"Tháng {curr_month} — Kỳ nghỉ hè (Tháng 6–8)"
         hk1_label = "HỌC KỲ 1"
         hk2_label = "HỌC KỲ 2"
         uncovered_guide = (
@@ -174,7 +175,7 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
             f"Nếu không rõ → Hướng dẫn từ gốc, tuyệt đối không phán xét."
         )
     elif server_sem == 1:
-        timeline_info = f"\ud83d\udcc5 Tháng {curr_month} — Đang Học kỳ 1 (Tháng 9–1)"
+        timeline_info = f"Tháng {curr_month} — Đang Học kỳ 1 (Tháng 9–1)"
         hk1_label = "HỌC KỲ 1 (học sinh ĐANG học)"
         hk2_label = "HỌC KỲ 2 (học sinh CHƯA học — chưa đến kỳ)"
         uncovered_guide = (
@@ -189,7 +190,7 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
             f"  → Đã học mà quên: KỊCH BẢN A (từ khóa gợi nhớ nhẹ nhàng)."
         )
     else:
-        timeline_info = f"\ud83d\udcc5 Tháng {curr_month} — Đang Học kỳ 2 (Tháng 2–5)"
+        timeline_info = f"Tháng {curr_month} — Đang Học kỳ 2 (Tháng 2–5)"
         hk1_label = "HỌC KỲ 1 (học sinh ĐÃ học — kỳ trước)"
         hk2_label = "HỌC KỲ 2 (học sinh ĐANG học)"
         uncovered_guide = (
@@ -208,13 +209,13 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
 Học sinh đang học: Lớp {grade}
 {timeline_info}
 
-📚 CHƯƠNG TRÌNH LỚP {grade} — {hk1_label}:
+CHUONG TRINH LOP {grade} — {hk1_label}:
 {hk1_text}
 
-📚 CHƯƠNG TRÌNH LỚP {grade} — {hk2_label}:
+CHUONG TRINH LOP {grade} — {hk2_label}:
 {hk2_text}
 
-📚 KIẾN THỨC CÁC LỚP TRƯỚC (Lớp 4 → Lớp {grade - 1}) — học sinh đã học:
+KIEN THUC CAC LOP TRUOC — hoc sinh da hoc:
 {prev_text}
 
 BẮT BUỘC xử lý các tình huống liên quan đến THÔNG TIN LỚP HỌC SINH:
