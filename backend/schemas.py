@@ -100,14 +100,14 @@ class GoogleCallbackRequest(BaseModel):
 
 
 class GoogleAuthResponse(BaseModel):
-    """Phản hồi sau khi xác thực Google OAuth thành công (US 8.3 - T8.19)."""
+    """Phản hồi sau khi xác thực Google OAuth thành công (US 8.3 - T8.19) hoặc hoàn tất Onboarding."""
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
     is_new_user: bool                     # True nếu tài khoản mới hoặc chưa onboarding, False nếu đã onboarding
     user_id: str
     username: Optional[str] = None        # Tên tài khoản định danh duy nhất (từ DB)
-    email: str
+    email: Optional[str] = None           # US 9.1: Học sinh đăng ký bằng username có email = None
     role: str
     grade: Optional[int] = None
     session_version: Optional[int] = 1

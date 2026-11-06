@@ -237,3 +237,46 @@ def test_07_normal_user_can_change_to_unused_email():
         assert user_db.email == new_free_email
     finally:
         db.close()
+
+
+def test_08_student_onboarding_without_email_succeeds_without_500():
+    """
+    6. Học sinh đăng ký bằng username/password (email=None) hoàn tất Onboarding:
+    POST /auth/onboarding với role='STUDENT' và grade=7 PHẢI trả về 200 OK
+    (không bị lỗi 500 Internal Server Error do schema GoogleAuthResponse đòi email non-null).
+    """
+    db: Session = SessionLocal()
+    student_id = f"stu_no_email_{uuid.uuid4().hex[:6]}"
+    student_username = f"stu_user_{uuid.uuid4().hex[:6]}"
+
+    try:
+        user = models.User(
+            id=student_id,
+            username=student_username,
+            email=None,
+            hashed_password=auth.hash_password("Password123!"),
+            role="PENDING",
+            grade=None,
+            email_verified=False,
+        )
+        db.add(user)
+        db.commit()
+
+        token = auth.create_access_token({"sub": student_id, "role": "PENDING", "username": student_username})
+        res = client.post(
+            "/auth/onboarding",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"role": "STUDENT", "grade": 7},
+        )
+        assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
+        data = res.json()
+        assert data["email"] is None, "Học sinh không có email, response phải trả về email=None"
+        assert data["role"] == "STUDENT"
+        assert data["grade"] == 7
+    finally:
+        db.query(models.RefreshToken).filter(models.RefreshToken.user_id == student_id).delete()
+        db.query(models.User).filter(models.User.id == student_id).delete()
+        db.commit()
+        db.close()
+
+
