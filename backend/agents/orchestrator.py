@@ -109,9 +109,8 @@ def _build_task_description(
         )
 
     if _detect_uncovered_claim(message):
-        # US 9.3 (Task T9.11): Dùng timeline context thay vì so khớp từ khóa cứng.
-        # Python xác định tháng → HK1/HK2/Hè + danh sách bài; Gemini tự đối chiếu và chọn kịch bản.
-        curr_grade = student_grade or 9
+        # US 9.3 (Task T9.11 & T9.13): Đưa dòng thời gian và Kịch bản thăm dò Socratic chuyên sâu vào task_description
+        curr_grade = student_grade or 7
         try:
             from agents.agent_prompts import build_timeline_context_for_prompt
             tl = build_timeline_context_for_prompt(student_grade=curr_grade)
@@ -122,21 +121,20 @@ def _build_task_description(
             hk1_str = "; ".join(hk1_topics[:8]) + ("..." if len(hk1_topics) > 8 else "")
             hk2_str = "; ".join(hk2_topics[:8]) + ("..." if len(hk2_topics) > 8 else "")
             return (
-                f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
-                f"[{timeline_label}] "
-                f"CHƯƠNG TRÌNH LỚP {curr_grade} — "
-                f"HK1: [{hk1_str}] | HK2: [{hk2_str}]. "
-                f"HƯỚNG DẪN XỬ LÝ: {scenario_guide} "
-                "TUYỆT ĐỐI KHÔNG tự ý phán đoán học sinh đã học hay chưa học mà không dựa vào danh sách trên. "
-                "Kết thúc phản hồi bằng một câu hỏi gợi mở nhẹ nhàng."
+                f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'.\n"
+                f"[{timeline_label}] CHƯƠNG TRÌNH LỚP {curr_grade}:\n"
+                f"- HK1: [{hk1_str}]\n"
+                f"- HK2: [{hk2_str}]\n\n"
+                f"CHỈ ĐẠO SƯ PHẠM BẮT BUỘC (SOCRATIC PROBE GUIDELINES):\n"
+                f"{scenario_guide}\n\n"
+                f"NGUYÊN TẮC QUAN TRỌNG: Nếu rơi vào trường hợp cần hỏi thăm dò tiến độ trường học hoặc kỳ nghỉ hè, "
+                f"BẠN PHẢI DỪNG LẠI Ở CÂU HỎI THĂM DÒ, TUYỆT ĐỐI KHÔNG GIẢI BÀI HOẶC ĐẶT PHÉP TÍNH TOÁN NGAY TRONG LƯỢT NÀY!"
             )
-        except Exception:
-            # Fallback an toàn nếu không lấy được timeline
+        except Exception as e:
             return (
                 f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
                 f"BẮT BUỘC KỊCH BẢN B: 'Vì em đang học lớp {curr_grade} nên chưa quen với kiến thức này là bình thường. "
-                "Thầy sẽ giải thích từ nền tảng đơn giản nhất nhé!' "
-                "Rồi hướng dẫn từng bước theo Socratic, kết thúc bằng câu hỏi gợi mở."
+                f"Thầy sẽ giải thích từ nền tảng đơn giản nhất nhé!' rồi hướng dẫn từng bước Socratic."
             )
     
     if agent == "KNOWLEDGE_TRACING":
