@@ -169,6 +169,104 @@ def _build_task_description(
         "rồi đặt câu hỏi cho bước tiếp theo. Không giải hộ."
     )
 
+
+def _detect_probe_in_history(history_text: str) -> Optional[str]:
+    """
+    US 9.3 - Task T9.14:
+    Kiểm tra xem câu nói gần nhất của AI trong lịch sử có phải là câu hỏi thăm dò hay không.
+    Hỗ trợ cả tin nhắn đơn dòng và tin nhắn nhiều dòng (multi-line markdown).
+    Trả về 'SCHOOL_PROBE', 'SUMMER_PROBE' hoặc None.
+    """
+    if not history_text:
+        return None
+    
+    # 1. Tách lịch sử thành từng khối tin nhắn theo role header (hỗ trợ câu trả lời nhiều dòng)
+    blocks = [b.strip() for b in re.split(r'(?im)^(?=\[(?:USER|STUDENT|AGENT|ASSISTANT|MODEL|THẦY)\]|(?:User|Model|Assistant):)', history_text) if b.strip()]
+    assistant_prefixes = ("[agent", "[assistant", "[thầy", "[model", "model:", "assistant:")
+    assistant_blocks = [
+        b for b in blocks 
+        if any(b.lower().startswith(p) for p in assistant_prefixes)
+    ]
+    if not assistant_blocks:
+        # Fallback nếu format phẳng không có role header đầy đủ
+        lines = [l.strip() for l in history_text.split("\n") if l.strip()]
+        assistant_blocks = [
+            l for l in lines 
+            if any(l.lower().startswith(p) for p in assistant_prefixes)
+        ]
+    
+    if not assistant_blocks:
+        return None
+    
+    last_ai_msg = assistant_blocks[-1].lower()
+    
+    school_probe_signals = (
+        "thầy cô đã dạy đến bài",
+        "thầy cô đã dạy đến",
+        "học đến phần nào rồi",
+        "học đến bài nào rồi",
+        "dạy đến bài này chưa",
+        "dạy đến bài",
+        "học tới bài này chưa",
+        "thầy cô dạy tới đâu rồi",
+    )
+    if any(s in last_ai_msg for s in school_probe_signals):
+        return "SCHOOL_PROBE"
+
+    summer_probe_signals = (
+        "học trước kiến thức",
+        "ôn lại bài năm vừa rồi",
+        "chuẩn bị học trước",
+        "ôn lại kiến thức cũ",
+        "học trước hay ôn lại",
+    )
+    if any(s in last_ai_msg for s in summer_probe_signals):
+        return "SUMMER_PROBE"
+    
+    return None
+
+
+def _classify_probe_reply(message: str) -> str:
+    """
+    US 9.3 - Task T9.14:
+    Phân loại phản hồi của học sinh sau câu hỏi thăm dò:
+    - 'LEARN_NEW': Chưa học tới ở trường hoặc đang tự học trước bài mới.
+    - 'FORGOT_OLD': Đã học rồi nhưng quên / hè xả hơi / ôn lại bài cũ / cô đã dạy rồi.
+    - 'UNCLEAR': Lấp lửng / không rõ ràng / bí quá.
+    """
+    msg_clean = message.lower().strip()
+
+    # 1. Dấu hiệu ĐÃ HỌC / ĐÃ DẠY / ÔN TẬP CŨ / QUÊN (Ưu tiên kiểm tra trước)
+    # Ví dụ: "học rồi", "dạy rồi", "cô dạy rồi", "dạ rồi", "rồi ạ", "ôn bài", "ôn lại", "quên sạch",...
+    forgot_signals = (
+        "quên", "quen", "học rồi", "hc rồi", "học qua", "hc qua", "dạy rồi", "dạy qua",
+        "cô dạy", "thầy dạy", "đã học", "đã dạy", "không nhớ", "ko nhớ", "k nhớ",
+        "xả hơi", "ôn lại", "ôn bài", "ôn tập", "bài cũ", "năm ngoái", "lâu quá", "lú quá",
+        "rồi mà", "r mà", "chơi nhiều nên quên",
+    )
+    has_learned_or_forgot = (
+        any(s in msg_clean for s in forgot_signals)
+        or bool(re.search(r"\b(học|hc|dạy)\s+(r|rồi)\b", msg_clean))
+        or bool(re.search(r"^(dạ\s+)?rồi(\s+(ạ|thầy|cô|nè))?$", msg_clean))
+        or bool(re.search(r"\b(dạ\s+)?(rồi|r)\s+(ạ|thầy|cô)\b", msg_clean))
+        or bool(re.search(r"\bôn\s+(thi|hè|lại|bài|tập)\b", msg_clean))
+    )
+    if has_learned_or_forgot:
+        return "FORGOT_OLD"
+
+    # 2. Dấu hiệu CHƯA HỌC TỚI / HỌC TRƯỚC / BÀI MỚI
+    new_signals = (
+        "chưa", "chx", "chua", "mới học", "ms học", "ms hc", "mới tới", "ms tới",
+        "học trước", "hc trước", "hc trc", "học trc", "tự học", "chuẩn bị", "xem trước",
+        "coi trước", "tìm hiểu trước", "chưa tới", "chx tới", "chưa dạy", "chx dạy",
+        "bài mới", "kiến thức mới", "chưa học đến", "chưa qua", "chưa ai dạy"
+    )
+    if any(s in msg_clean for s in new_signals) or bool(re.search(r"\b(bài|học|xem|coi)\s+mới\b", msg_clean)):
+        return "LEARN_NEW"
+
+    return "UNCLEAR"
+
+
 class OrchestratorAgent:
     """
     Orchestrator Agent điều phối câu hỏi học sinh theo KIẾN TRÚC ZERO-API.
@@ -976,6 +1074,34 @@ class OrchestratorAgent:
                 routing_scratchpad=f"[Trụ1] Greeting pattern: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )
+
+        # 1.3c [Task T9.14]: Nhận diện học sinh phản hồi sau câu hỏi thăm dò (Follow-up Turn)
+        probe_type = _detect_probe_in_history(history_text)
+        if probe_type:
+            reply_intent = _classify_probe_reply(text_clean)
+            praise_summer = "Nếu học sinh xác nhận đang tự học trước trong kỳ nghỉ hè, hãy bắt đầu bằng một lời khen ngợi tinh thần tự giác của em! " if probe_type == "SUMMER_PROBE" else ""
+            
+            guide_instruction = (
+                f"HỌC SINH ĐANG PHẢN HỒI CÂU HỎI THĂM DÒ TIẾN ĐỘ ({probe_type}): '{original_message[:80]}'.\n"
+                f"BẠN LÀ THẦY GIÁO SOCRATIC. Hãy đọc hiểu câu trả lời thực tế của học sinh trong ngữ cảnh hội thoại để rẽ nhánh sư phạm chuẩn xác nhất:\n\n"
+                f"1. NẾU HỌC SINH CHƯA HỌC TỚI / HỌC TRƯỚC BÀI MỚI (chưa học, cô chưa dạy, mới học tới bài trước, hoặc tự học trước hè):\n"
+                f"   -> BẮT BUỘC ÁP DỤNG KỊCH BẢN B (DẪN DẮT TỪ GỐC RỄ):\n"
+                f"   - Coi học sinh là 'tờ giấy trắng', tuyệt đối không ép học sinh phải nhớ công thức mới.\n"
+                f"   - {praise_summer}Giải thích từ nền tảng đơn giản nhất, chia nhỏ bài toán và đặt một câu hỏi gợi mở nhẹ nhàng.\n\n"
+                f"2. NẾU HỌC SINH ĐÃ HỌC RỒI NHƯNG QUÊN / ÔN LẠI BÀI CŨ (đã học trên lớp, lâu ngày không làm nên quên, xả hơi hè quên):\n"
+                f"   -> BẮT BUỘC ÁP DỤNG KỊCH BẢN A (GỢI NHỚ KIẾN THỨC CŨ):\n"
+                f"   - Đồng cảm nhẹ nhàng (quên là bình thường sau một thời gian), KHÔNG giảng lại từ đầu.\n"
+                f"   - Nhắc lại tên công thức hoặc quy tắc tổng quát, gợi mở để học sinh tự nhớ lại.\n\n"
+                f"3. NẾU HỌC SINH NÓI LẤP LỬNG / BÍ BÀI / KHÔNG BIẾT ('em ko bt', 'bí quá'):\n"
+                f"   -> Áp dụng Kịch bản B (hướng dẫn kiên nhẫn từ bước đơn giản nhất, không truy cứu hay phán xét)."
+            )
+            return RoutingResult(
+                selected_agent="SCAFFOLDING",
+                task_description=guide_instruction,
+                routing_scratchpad=f"[Trụ1] Follow-up Probe -> Socratic Decision Framework ({probe_type}) [{reply_intent}]",
+                emotion_flag="GUIDING",
+            )
+
         # 1.3b Học sinh tuyên bố chưa học — KHÔNG route KNOWLEDGE_TRACING, route SCAFFOLDING để xử lý context
         if _detect_uncovered_claim(text_clean):
             return RoutingResult(
