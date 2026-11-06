@@ -12,6 +12,7 @@
 import React from "react";
 import { StreakLeaderboardItem } from "@/types/leaderboard";
 import { getStreakMilestone } from "@/lib/streakMilestones";
+import { MilestoneFlameIcon } from "@/components/dashboard/MilestoneFlameIcon";
 import { Flame, Trophy, Crown, Award, Medal, ShieldCheck, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -163,20 +164,18 @@ export function LeaderboardTable({ items, searchQuery }: LeaderboardTableProps) 
                 </div>
               </div>
 
-              {/* Cột Cấp độ ngọn lửa (dựa trên Kỷ lục đạt được) */}
+              {/* Cột Cấp độ ngọn lửa (dựa trên Kỷ lục đạt được) - Vector thực tế thay vì emoji */}
               <div className="sm:col-span-3 sm:text-center w-full flex sm:justify-center items-center">
                 <div
                   className={cn(
-                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border",
+                    "inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-bold border shadow-2xs transition-transform hover:scale-102",
                     milestone.badgeBg,
                     milestone.badgeBorder,
                     milestone.textColor
                   )}
                 >
-                  <Flame size={14} className={cn("fill-current", milestone.flameColor)} />
-                  <span>
-                    {milestone.emoji} {milestone.name}
-                  </span>
+                  <MilestoneFlameIcon record={record} className="w-5 h-5" />
+                  <span>{milestone.name}</span>
                 </div>
               </div>
 
