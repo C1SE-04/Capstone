@@ -51,6 +51,62 @@ def _is_topic_in_active_curriculum(message: str, grade: Optional[int] = None) ->
     except Exception:
         return True
 
+def _has_probe_already_completed(history_text: str) -> bool:
+    """
+    US 9.3 (Task T9.15 - AC 9.3.7 - Tag-based Protocol & Semantic Fallback):
+    Kiểm tra xem trong lịch sử phiên chat đã từng diễn ra câu hỏi thăm dò VÀ học sinh đã trả lời chưa.
+    - ƯU TIÊN 1: Nhận diện thẻ ẩn [PROBE_PENDING], <!-- PROBE_PENDING --> (chính xác 100%, không phụ thuộc câu chữ).
+    - FALLBACK 2: Quét từ khóa/mẫu câu thăm dò truyền thống nếu là tin nhắn cũ chưa có tag.
+    Nếu đã hoàn tất, các lượt sau tuyệt đối không hỏi lại câu thăm dò tiến độ trường học/mùa hè nữa.
+    """
+    if not history_text:
+        return False
+
+    blocks = [b.strip() for b in re.split(r'(?im)^(?=\[(?:USER|STUDENT|AGENT|ASSISTANT|MODEL|THẦY)\]|(?:User|Model|Assistant):)', history_text) if b.strip()]
+    if not blocks:
+        blocks = [l.strip() for l in history_text.split("\n") if l.strip()]
+
+    assistant_prefixes = ("[agent", "[assistant", "[thầy", "[model", "model:", "assistant:")
+
+    # 1. Quét tìm Thẻ ẩn [PROBE_PENDING] / <!-- PROBE_PENDING --> / [SUMMER_PROBE_PENDING]
+    probe_tag_signals = ("probe_pending", "socratic_probe", "summer_probe_pending")
+    probe_idx = -1
+    for i, b in enumerate(blocks):
+        b_low = b.lower()
+        is_assistant = any(b_low.startswith(p) for p in assistant_prefixes) or ("[agent" in b_low[:15])
+        if is_assistant and any(tag in b_low for tag in probe_tag_signals):
+            probe_idx = i
+            break
+
+    # 2. Fallback đối chiếu từ khóa ngữ nghĩa câu hỏi thăm dò mẫu (nếu AI không có tag)
+    if probe_idx == -1:
+        probe_signals = (
+            "thầy cô đã dạy đến bài",
+            "thầy cô đã dạy đến",
+            "học đến phần nào rồi",
+            "học đến bài nào rồi",
+            "dạy đến bài này chưa",
+            "dạy đến bài",
+            "học tới bài này chưa",
+            "thầy cô dạy tới đâu rồi",
+            "học trước kiến thức",
+            "ôn lại bài năm vừa rồi",
+            "chuẩn bị học trước",
+            "ôn lại kiến thức cũ",
+            "học trước hay ôn lại",
+        )
+        for i, b in enumerate(blocks):
+            b_low = b.lower()
+            is_assistant = any(b_low.startswith(p) for p in assistant_prefixes) or ("[agent" in b_low[:15])
+            if is_assistant and any(s in b_low for s in probe_signals):
+                probe_idx = i
+                break
+
+    if probe_idx != -1 and probe_idx < len(blocks) - 1:
+        return True
+
+    return False
+
 def _build_task_description(
     agent: str,
     message: str,
@@ -59,6 +115,7 @@ def _build_task_description(
     expected_ans: Optional[str] = None,
     safety_subtype: Optional[str] = None,
     student_grade: Optional[int] = None,
+    history_text: str = "",
 ) -> str:
     """
     Tạo task_description có ngữ cảnh bài học và vai trò người thầy.
@@ -109,6 +166,19 @@ def _build_task_description(
         )
 
     if _detect_uncovered_claim(message):
+        # US 9.3 (Task T9.15 - AC 9.3.7): Kiểm tra xem phiên chat này đã từng thăm dò tiến độ chưa
+        # Nếu ĐÃ THĂM DÒ XONG -> Tuyệt đối không hỏi lại lần 2
+        if history_text and _has_probe_already_completed(history_text):
+            return (
+                f"HỌC SINH TIẾP TỤC BỐI RỐI HOẶC THAN CHƯA HỌC: '{message[:80]}'.\n"
+                f"LƯU Ý QUAN TRỌNG (CHỐNG LẶP LẠI THĂM DÒ - AC 9.3.7):\n"
+                f"1. Bạn ĐÃ HỎI thăm dò tiến độ ở lượt trước và học sinh đã trả lời rồi. "
+                f"TUYỆT ĐỐI KHÔNG HỎI LẠI câu 'Ở trường thầy cô đã dạy đến chưa' hay câu hỏi mùa hè lần thứ 2!\n"
+                f"2. BẮT BUỘC tiếp tục dẫn dắt Socratic theo KỊCH BẢN B: Hãy hạ thấp rào cản thêm một nấc nữa, "
+                f"tuyệt đối KHÔNG lặp lại câu hỏi toán học vừa hỏi ở lượt trước. "
+                f"Hãy chia nhỏ bước giải hơn nữa hoặc gợi ý một phép tính nhẩm cực kỳ đơn giản để học sinh tự tin trả lời."
+            )
+
         # US 9.3 (Task T9.11 & T9.13): Đưa dòng thời gian và Kịch bản thăm dò Socratic chuyên sâu vào task_description
         curr_grade = student_grade or 7
         try:
@@ -128,7 +198,8 @@ def _build_task_description(
                 f"CHỈ ĐẠO SƯ PHẠM BẮT BUỘC (SOCRATIC PROBE GUIDELINES):\n"
                 f"{scenario_guide}\n\n"
                 f"NGUYÊN TẮC QUAN TRỌNG: Nếu rơi vào trường hợp cần hỏi thăm dò tiến độ trường học hoặc kỳ nghỉ hè, "
-                f"BẠN PHẢI DỪNG LẠI Ở CÂU HỎI THĂM DÒ, TUYỆT ĐỐI KHÔNG GIẢI BÀI HOẶC ĐẶT PHÉP TÍNH TOÁN NGAY TRONG LƯỢT NÀY!"
+                f"BẠN PHẢI DỪNG LẠI Ở CÂU HỎI THĂM DÒ VÀ GẮN THẺ ẨN <!-- PROBE_PENDING --> (HOẶC [PROBE_PENDING]) Ở CUỐI CÂU TRẢ LỜI, "
+                f"TUYỆT ĐỐI KHÔNG GIẢI BÀI HOẶC ĐẶT PHÉP TÍNH TOÁN NGAY TRONG LƯỢT NÀY!"
             )
         except Exception as e:
             return (
@@ -172,9 +243,11 @@ def _build_task_description(
 
 def _detect_probe_in_history(history_text: str) -> Optional[str]:
     """
-    US 9.3 - Task T9.14:
+    US 9.3 - Task T9.14 & T9.15 (Tag-based Protocol & Semantic Fallback):
     Kiểm tra xem câu nói gần nhất của AI trong lịch sử có phải là câu hỏi thăm dò hay không.
     Hỗ trợ cả tin nhắn đơn dòng và tin nhắn nhiều dòng (multi-line markdown).
+    - ƯU TIÊN 1: Nhận diện thẻ ẩn [PROBE_PENDING] / <!-- PROBE_PENDING --> (chính xác 100%).
+    - FALLBACK 2: Quét từ khóa/mẫu câu thăm dò nếu tin nhắn không chứa tag.
     Trả về 'SCHOOL_PROBE', 'SUMMER_PROBE' hoặc None.
     """
     if not history_text:
@@ -200,6 +273,22 @@ def _detect_probe_in_history(history_text: str) -> Optional[str]:
     
     last_ai_msg = assistant_blocks[-1].lower()
     
+    # 1. Ưu tiên kiểm tra Thẻ ẩn [PROBE_PENDING] / <!-- PROBE_PENDING --> / [SUMMER_PROBE_PENDING]
+    has_summer_tag = (
+        "summer_probe_pending" in last_ai_msg
+        or ("probe_pending" in last_ai_msg and any(w in last_ai_msg for w in ("hè", "nghỉ hè", "summer", "ôn lại bài năm")))
+    )
+    if has_summer_tag:
+        return "SUMMER_PROBE"
+
+    has_school_tag = (
+        "probe_pending" in last_ai_msg
+        or "socratic_probe" in last_ai_msg
+    )
+    if has_school_tag:
+        return "SCHOOL_PROBE"
+
+    # 2. Fallback đối chiếu từ khóa và mẫu câu ngữ nghĩa
     school_probe_signals = (
         "thầy cô đã dạy đến bài",
         "thầy cô đã dạy đến",
@@ -985,7 +1074,7 @@ class OrchestratorAgent:
         if problem_context and problem_context.get("correctSolution"):
             return RoutingResult(
                 selected_agent="SCAFFOLDING",
-                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context, history_text=history_text),
                 routing_scratchpad=f"[Trụ3 - StateMachine]: Bài toán đang mở → SCAFFOLDING.",
                 emotion_flag="GUIDING",
             )
@@ -999,13 +1088,13 @@ class OrchestratorAgent:
             if last_agent == "MISCONCEPTION" and is_positive_close:
                 return RoutingResult(
                     selected_agent="SCAFFOLDING",
-                    task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                    task_description=_build_task_description("SCAFFOLDING", original_message, problem_context, history_text=history_text),
                     routing_scratchpad=f"[Trụ3 - StateMachine]: Học sinh đã hiểu sau MISCONCEPTION → SCAFFOLDING khen.",
                     emotion_flag="CORRECT",  # Cú vui vẻ vỗ tay vì học sinh hiểu bài rồi
                 )
             return RoutingResult(
                 selected_agent=last_agent,
-                task_description=_build_task_description(last_agent, original_message, problem_context),
+                task_description=_build_task_description(last_agent, original_message, problem_context, history_text=history_text),
                 routing_scratchpad=f"[Trụ3 - StateMachine]: Tiếp tục ngữ cảnh '{last_agent}' từ lịch sử.",
                 emotion_flag="WRONG" if last_agent == "MISCONCEPTION" else "GUIDING",
             )
@@ -1013,7 +1102,7 @@ class OrchestratorAgent:
         # 3.3 Mặc định an toàn
         return RoutingResult(
             selected_agent="SCAFFOLDING",
-            task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+            task_description=_build_task_description("SCAFFOLDING", original_message, problem_context, history_text=history_text),
             routing_scratchpad=f"[Trụ3 - StateMachine]: Mặc định SCAFFOLDING.",
             emotion_flag="GUIDING",
         )
@@ -1075,11 +1164,12 @@ class OrchestratorAgent:
                 emotion_flag="GUIDING",
             )
 
-        # 1.3c [Task T9.14]: Nhận diện học sinh phản hồi sau câu hỏi thăm dò (Follow-up Turn)
+        # 1.3c [Task T9.14 & T9.15]: Nhận diện học sinh phản hồi sau câu hỏi thăm dò (Follow-up Turn & Safe Fallback)
         probe_type = _detect_probe_in_history(history_text)
         if probe_type:
             reply_intent = _classify_probe_reply(text_clean)
             praise_summer = "Nếu học sinh xác nhận đang tự học trước trong kỳ nghỉ hè, hãy bắt đầu bằng một lời khen ngợi tinh thần tự giác của em! " if probe_type == "SUMMER_PROBE" else ""
+            summer_unclear_note = " (LƯU Ý MÙA HÈ - AC 9.3.7: Học sinh có tâm lý xả hơi hè, tuyệt đối không gặng hỏi hay truy cứu, hãy động viên ấm áp và giảng giải từng bước nhỏ từ gốc rễ theo Kịch bản B)." if probe_type == "SUMMER_PROBE" else ""
             
             guide_instruction = (
                 f"HỌC SINH ĐANG PHẢN HỒI CÂU HỎI THĂM DÒ TIẾN ĐỘ ({probe_type}): '{original_message[:80]}'.\n"
@@ -1093,7 +1183,7 @@ class OrchestratorAgent:
                 f"   - Đồng cảm nhẹ nhàng (quên là bình thường sau một thời gian), KHÔNG giảng lại từ đầu.\n"
                 f"   - Nhắc lại tên công thức hoặc quy tắc tổng quát, gợi mở để học sinh tự nhớ lại.\n\n"
                 f"3. NẾU HỌC SINH NÓI LẤP LỬNG / BÍ BÀI / KHÔNG BIẾT ('em ko bt', 'bí quá'):\n"
-                f"   -> Áp dụng Kịch bản B (hướng dẫn kiên nhẫn từ bước đơn giản nhất, không truy cứu hay phán xét)."
+                f"   -> Áp dụng Kịch bản B (hướng dẫn kiên nhẫn từ bước đơn giản nhất, không truy cứu hay phán xét).{summer_unclear_note}"
             )
             return RoutingResult(
                 selected_agent="SCAFFOLDING",
@@ -1106,7 +1196,10 @@ class OrchestratorAgent:
         if _detect_uncovered_claim(text_clean):
             return RoutingResult(
                 selected_agent="SCAFFOLDING",
-                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context, student_grade=student_grade),
+                task_description=_build_task_description(
+                    "SCAFFOLDING", original_message, problem_context,
+                    student_grade=student_grade, history_text=history_text
+                ),
                 routing_scratchpad=f"[Trụ1] Uncovered claim detected: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )

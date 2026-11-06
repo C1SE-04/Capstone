@@ -559,7 +559,8 @@ def build_timeline_context_for_prompt(
             f"BỐI CẢNH MÙA HÈ: Hiện tại đang là kỳ nghỉ hè (Tháng {curr_month}). "
             f"Học sinh đang hỏi bài toán thuộc chương trình Lớp {grade}. "
             f"KHI HỌC SINH THAN CHƯA HỌC: BẠN BẮT BUỘC PHẢI DỪNG LẠI ĐÚNG 1 NHỊP VÀ ĐẶT CÂU HỎI THĂM DÒ MÙA HÈ (SUMMER PROBE):\n"
-            f"'Thầy thấy trên tài khoản em đang chọn Lớp {grade}. Kỳ nghỉ hè này em đang chuẩn bị học trước kiến thức lớp {grade}, hay em đang ôn lại bài năm vừa rồi vậy em? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé!'\n"
+            f"'Thầy thấy trên tài khoản em đang chọn Lớp {grade}. Kỳ nghỉ hè này em đang chuẩn bị học trước kiến thức lớp {grade}, hay em đang ôn lại bài năm vừa rồi vậy em? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé! <!-- SUMMER_PROBE_PENDING -->'\n"
+            f"BẮT BUỘC: Bạn PHẢI gắn thẻ ẩn <!-- SUMMER_PROBE_PENDING --> (hoặc [PROBE_PENDING]) ở CUỐI CÙNG của câu trả lời. "
             f"TUYỆT ĐỐI KHÔNG giải bài hoặc đưa ra phép tính toán học ngay trong lượt này. Hãy lắng nghe học sinh phản hồi trước."
         )
     elif server_sem == 1:
@@ -572,7 +573,8 @@ def build_timeline_context_for_prompt(
             f"1. NẾU BÀI KHỚP HK2 (Chưa học thật sự) -> ÁP DỤNG KỊCH BẢN B NGAY:\n"
             f"   'Bài này thuộc học kỳ 2 nên em chưa quen là bình thường! Thầy sẽ hướng dẫn em từ nền tảng dễ hiểu nhất nhé.' rồi hướng dẫn từng bước nhỏ từ gốc rễ.\n"
             f"2. NẾU BÀI KHỚP HK1 (Vùng xám - trường có thể chưa dạy tới hoặc đã học mà quên) -> BẮT BUỘC DỪNG LẠI 1 NHỊP VÀ HỎI THĂM DÒ TIẾN ĐỘ TRƯỜNG HỌC (SOCRATIC PROBE):\n"
-            f"   'Ở trường thầy cô đã dạy đến bài này chưa, hay em mới học đến phần nào rồi? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé!'\n"
+            f"   'Ở trường thầy cô đã dạy đến bài này chưa, hay em mới học đến phần nào rồi? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé! <!-- PROBE_PENDING -->'\n"
+            f"   BẮT BUỘC: Gắn thẻ ẩn <!-- PROBE_PENDING --> (hoặc [PROBE_PENDING]) ở CUỐI CÙNG của câu trả lời.\n"
             f"   TUYỆT ĐỐI KHÔNG giải bài hay đưa ra gợi ý bước tính tiếp theo ngay trong lượt này!"
         )
     else:
@@ -585,7 +587,8 @@ def build_timeline_context_for_prompt(
             f"1. NẾU BÀI KHỚP HK1 (Kiến thức kỳ trước đã học) -> ÁP DỤNG KỊCH BẢN A:\n"
             f"   'Theo chương trình, đây là kiến thức HK1 em đã học rồi. Thầy tin em có thể nhớ lại...' và cung cấp từ khóa gợi nhớ nhẹ nhàng.\n"
             f"2. NẾU BÀI KHỚP HK2 -> BẮT BUỘC DỪNG LẠI 1 NHỊP VÀ HỎI THĂM DÒ TIẾN ĐỘ TRƯỜNG HỌC:\n"
-            f"   'Ở trường thầy cô đã dạy đến bài này chưa, hay em mới học đến phần nào rồi? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé!'\n"
+            f"   'Ở trường thầy cô đã dạy đến bài này chưa, hay em mới học đến phần nào rồi? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé! <!-- PROBE_PENDING -->'\n"
+            f"   BẮT BUỘC: Gắn thẻ ẩn <!-- PROBE_PENDING --> (hoặc [PROBE_PENDING]) ở CUỐI CÙNG của câu trả lời.\n"
             f"   TUYỆT ĐỐI KHÔNG giải bài ngay trong lượt này!"
         )
 
