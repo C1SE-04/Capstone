@@ -180,6 +180,19 @@ export function ChatInput({
               display: none !important;
             }
 
+            /* Triệt tiêu hoàn toàn hiệu ứng bôi đen / highlight nền đen của MathLive */
+            .ML__selection,
+            .ML__selected,
+            .ML__contains-highlight,
+            .ML__focused .ML__contains-highlight,
+            .ML__focused .ML__selection,
+            :host(:focus) .ML__selection,
+            :host(:focus) .ML__selected {
+              background: transparent !important;
+              background-color: transparent !important;
+              color: inherit !important;
+            }
+
             /* Căn chỉnh ô phân số nét đứt gọn gàng, tự co dãn chuẩn Google Math Solver */
             .ML__placeholder {
               border: 1.5px dashed #8C4905 !important;
@@ -649,7 +662,9 @@ export function ChatInput({
               style: {
                 "--primary-color": "#C1762A",
                 "--caret-color": "#8C4905",
-                "--selection-background-color": "#F1CCA6",
+                "--selection-background-color": "transparent",
+                "--contains-highlight-background-color": "transparent",
+                "--text-highlight-background-color": "transparent",
                 "--placeholder-color": "#8C4905",
                 "--placeholder-opacity": "0.75",
                 display: "block",
