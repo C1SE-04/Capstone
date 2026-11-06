@@ -30,10 +30,6 @@ class User(Base):
     # US 9.1 (T9.1): email_verified – True sau khi Phụ huynh xác thực OTP thành công
     email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
 
-    # Email riêng để nhận thông báo/cảnh báo (chủ yếu dùng cho MONITOR/phụ huynh)
-    # Nếu NULL → dùng email tài khoản chính. Nếu OAuth Google → không cho sửa (email = tài khoản Google).
-    notification_email = Column(String, nullable=True)
-
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Quan hệ Phụ huynh - Học sinh

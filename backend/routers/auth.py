@@ -208,10 +208,15 @@ def register_user(user_data: schemas.RegisterInput, db: Session = Depends(get_db
 
 @router.post("/register/student", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
-    normalized_email = user_data.email.lower()
-    existing_user = db.query(models.User).filter(models.User.email == normalized_email).first()
+    normalized_email = user_data.email.lower().strip()
+    existing_user = db.query(models.User).filter(func.lower(models.User.email) == normalized_email).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email đã được sử dụng")
+        if existing_user.oauth_provider == "google" or existing_user.google_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Email này đã được đăng nhập bằng tài khoản Google. Vui lòng sử dụng email khác hoặc đăng nhập bằng Google."
+            )
+        raise HTTPException(status_code=400, detail="Email này đã tồn tại trong hệ thống. Vui lòng chọn email khác.")
 
     # Validate grade bắt buộc và hợp lệ cho STUDENT
     if user_data.grade is None or user_data.grade not in range(4, 10):
@@ -230,10 +235,15 @@ def register(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
 
 @router.post("/register/monitor", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register_monitor(user_data: schemas.AuthInput, db: Session = Depends(get_db)):
-    normalized_email = user_data.email.lower()
-    existing_user = db.query(models.User).filter(models.User.email == normalized_email).first()
+    normalized_email = user_data.email.lower().strip()
+    existing_user = db.query(models.User).filter(func.lower(models.User.email) == normalized_email).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email đã được sử dụng")
+        if existing_user.oauth_provider == "google" or existing_user.google_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Email này đã được đăng nhập bằng tài khoản Google. Vui lòng sử dụng email khác hoặc đăng nhập bằng Google."
+            )
+        raise HTTPException(status_code=400, detail="Email này đã tồn tại trong hệ thống. Vui lòng chọn email khác.")
 
     new_user = models.User(
         email=normalized_email,
@@ -634,7 +644,12 @@ def request_otp(
             .first()
         )
         if conflict:
-            raise HTTPException(status_code=400, detail="Email này đã được sử dụng bởi tài khoản khác.")
+            if conflict.oauth_provider == "google" or conflict.google_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email này đã được đăng nhập bằng tài khoản Google. Vui lòng sử dụng email khác hoặc đăng nhập bằng Google."
+                )
+            raise HTTPException(status_code=400, detail="Email này đã tồn tại trong hệ thống. Vui lòng chọn email khác.")
 
     new_otp = _request_otp_internal(email=email, purpose=payload.purpose, db=db)
     _send_otp_email(to_email=email, otp_code=new_otp.otp_code, purpose=payload.purpose)
@@ -708,8 +723,24 @@ def verify_otp(
 
     user = db.query(models.User).filter(models.User.id == current_user["id"]).first()
     if user:
+        # Kiểm tra conflict email trước khi gán
+        conflict = (
+            db.query(models.User)
+            .filter(
+                func.lower(models.User.email) == email,
+                models.User.id != user.id,
+            )
+            .first()
+        )
+        if conflict:
+            if conflict.oauth_provider == "google" or conflict.google_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email này đã được đăng nhập bằng tài khoản Google. Vui lòng sử dụng email khác hoặc đăng nhập bằng Google."
+                )
+            raise HTTPException(status_code=400, detail="Email này đã tồn tại trong hệ thống. Vui lòng chọn email khác.")
+
         user.email = email
-        user.notification_email = email
         user.email_verified = True
     db.commit()
 
@@ -733,12 +764,21 @@ def parent_request_email_otp(
     US 9.1 - T9.5:
     Bước 1: Phụ huynh yêu cầu gửi OTP tới email mới muốn đổi.
     - Chỉ MONITOR mới được gọi endpoint này.
-    - Kiểm tra email mới chưa ai dùng.
+    - Tài khoản đăng nhập bằng Google OAuth cố định email, không được đổi.
+    - Kiểm tra email mới chưa ai dùng (đặc biệt không được dùng email đã đăng nhập Google).
     - Rate-limit và hủy mã cũ được xử lý tự động.
     """
+    # Nếu tài khoản là Google OAuth -> từ chối đổi email
+    current_db_user = db.query(models.User).filter(models.User.id == current_user["id"]).first()
+    if current_db_user and (current_db_user.oauth_provider == "google" or current_db_user.google_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Tài khoản Google OAuth không thể thay đổi email thông báo. Email thông báo luôn là email Google của bạn."
+        )
+
     new_email = payload.new_email.lower().strip()
 
-    # Kiểm tra email mới chưa được dùng bởi tài khoản khác
+    # Kiểm tra email mới chưa được dùng bởi tài khoản khác (bao gồm cả tài khoản Google)
     conflict = (
         db.query(models.User)
         .filter(
@@ -748,7 +788,12 @@ def parent_request_email_otp(
         .first()
     )
     if conflict:
-        raise HTTPException(status_code=400, detail="Email này đã được sử dụng bởi tài khoản khác.")
+        if conflict.oauth_provider == "google" or conflict.google_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Email này đã được đăng nhập bằng tài khoản Google. Vui lòng sử dụng email khác."
+            )
+        raise HTTPException(status_code=400, detail="Email này đã tồn tại trong hệ thống. Vui lòng chọn email khác.")
 
     new_otp = _request_otp_internal(email=new_email, purpose="PARENT_CHANGE_EMAIL", db=db)
     _send_otp_email(to_email=new_email, otp_code=new_otp.otp_code, purpose="PARENT_CHANGE_EMAIL")
@@ -775,6 +820,33 @@ def parent_verify_email_otp(
     """
     new_email = payload.new_email.lower().strip()
     now = datetime.now(timezone.utc)
+
+    user = db.query(models.User).filter(models.User.id == current_user["id"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại.")
+
+    if user.oauth_provider == "google" or user.google_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Tài khoản Google OAuth không thể thay đổi email thông báo."
+        )
+
+    # Kiểm tra conflict email trước khi đổi
+    conflict = (
+        db.query(models.User)
+        .filter(
+            func.lower(models.User.email) == new_email,
+            models.User.id != user.id,
+        )
+        .first()
+    )
+    if conflict:
+        if conflict.oauth_provider == "google" or conflict.google_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Email này đã được đăng nhập bằng tài khoản Google. Vui lòng sử dụng email khác."
+            )
+        raise HTTPException(status_code=400, detail="Email này đã tồn tại trong hệ thống. Vui lòng chọn email khác.")
 
     otp_record = (
         db.query(models.EmailOtp)
@@ -813,12 +885,8 @@ def parent_verify_email_otp(
 
     # ✔ Mã đúng: cập nhật email mới và đánh dấu đã xác thực
     otp_record.is_used = True
-
-    user = db.query(models.User).filter(models.User.id == current_user["id"]).first()
-    if user:
-        user.email = new_email
-        user.notification_email = new_email
-        user.email_verified = True
+    user.email = new_email
+    user.email_verified = True
     db.commit()
 
     return schemas.OtpVerifyResponse(

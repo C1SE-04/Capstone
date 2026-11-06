@@ -20,7 +20,7 @@ interface UserProfile {
   username?: string | null;
   email: string | null;
   oauth_provider: string | null;
-  notification_email: string | null;
+  notification_email?: string | null;
   email_verified?: boolean;
   role: string;
 }
@@ -57,8 +57,8 @@ export default function MonitorSettingsPage() {
         if (!res.ok) throw new Error("Không thể tải thông tin tài khoản");
         const data: UserProfile = await res.json();
         setProfile(data);
-        // Điền vào input: notification_email nếu đã lưu, ngược lại dùng email chính
-        const initialEmail = data.notification_email || data.email || "";
+        // Điền vào input: email tài khoản chính (gộp chung với email thông báo)
+        const initialEmail = data.email || data.notification_email || "";
         setNotifEmail(initialEmail);
       } catch (err) {
         console.error(err);
@@ -72,7 +72,7 @@ export default function MonitorSettingsPage() {
   }, [session?.access_token, backendUrl]);
 
   const isGoogleOAuth = profile?.oauth_provider === "google";
-  const currentSavedEmail = profile?.notification_email || profile?.email || "";
+  const currentSavedEmail = profile?.email || profile?.notification_email || "";
 
   // Bước 1: Bấm nút Lưu -> Gọi API request OTP và mở Modal OTP
   const handleInitiateChangeEmail = async (e?: React.FormEvent) => {
