@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu, Search, Bell, Plus, Sparkles, CheckCircle2 } from "lucide-react";
 import Breadcrumbs from "./Breadcrumbs";
 
@@ -10,8 +11,11 @@ interface AdminHeaderProps {
 }
 
 export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
+  const pathname = usePathname();
   const [searchValue, setSearchValue] = useState("");
   const [showNotificationToast, setShowNotificationToast] = useState(false);
+
+  const isContentTab = pathname?.startsWith("/admin/content");
 
   const handleNotificationClick = () => {
     setShowNotificationToast(true);
@@ -85,15 +89,17 @@ export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
           )}
         </div>
 
-        {/* Nút Hành động nhanh: + Thêm Học Liệu */}
-        <Link
-          href="/admin/content"
-          className="inline-flex items-center gap-1.5 px-3 md:px-3.5 py-1.5 md:py-2 rounded-xl bg-gradient-to-r from-[#C1762A] to-[#8C4905] hover:brightness-105 active:scale-95 text-white text-xs md:text-sm font-bold shadow-sm transition-all shrink-0 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Thêm Học Liệu</span>
-          <span className="sm:hidden">Thêm</span>
-        </Link>
+        {/* Nút Hành động nhanh: + Thêm Học Liệu (Chỉ hiện trong tab Học liệu) */}
+        {isContentTab && (
+          <Link
+            href="/admin/content"
+            className="inline-flex items-center gap-1.5 px-3 md:px-3.5 py-1.5 md:py-2 rounded-xl bg-gradient-to-r from-[#C1762A] to-[#8C4905] hover:brightness-105 active:scale-95 text-white text-xs md:text-sm font-bold shadow-sm transition-all shrink-0 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Thêm Học Liệu</span>
+            <span className="sm:hidden">Thêm</span>
+          </Link>
+        )}
       </div>
     </header>
   );

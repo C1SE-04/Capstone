@@ -11,7 +11,8 @@
 
 "use client";
 
-import React from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface MathSymbolItem {
@@ -24,7 +25,7 @@ export interface MathSymbolItem {
 }
 
 interface MathSymbolToolbarProps {
-  onInsertSymbol: (template: string, cursorOffset: number) => void;
+  onInsertSymbol: (template: string, cursorOffset: number, symbolId: string) => void;
   disabled?: boolean;
   className?: string;
 }
@@ -230,22 +231,132 @@ export function MathSymbolToolbar({
     },
   ];
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Refs quản lý kéo chuột (Click & Drag to Scroll)
+  const isMouseDownRef = useRef(false);
+  const startXRef = useRef(0);
+  const scrollLeftStartRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+
+  const checkScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanScrollLeft(scrollLeft > 6);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 6);
+  }, []);
+
+  useEffect(() => {
+    checkScroll();
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    el.addEventListener("scroll", checkScroll, { passive: true });
+    window.addEventListener("resize", checkScroll);
+    return () => {
+      el.removeEventListener("scroll", checkScroll);
+      window.removeEventListener("resize", checkScroll);
+    };
+  }, [checkScroll]);
+
+  const handleScroll = (direction: "left" | "right") => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const amount = direction === "left" ? -260 : 260;
+    el.scrollBy({ left: amount, behavior: "smooth" });
+  };
+
+  // Hỗ trợ lăn chuột dọc thành cuộn ngang trên máy tính
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    if (e.deltaY !== 0) {
+      el.scrollLeft += e.deltaY * 0.9;
+      checkScroll();
+    }
+  };
+
+  // ── Xử lý nhấn giữ và kéo chuột để di chuyển trên máy tính (Drag to Scroll) ──
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    isMouseDownRef.current = true;
+    hasDraggedRef.current = false;
+    startXRef.current = e.pageX - el.offsetLeft;
+    scrollLeftStartRef.current = el.scrollLeft;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isMouseDownRef.current) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const x = e.pageX - el.offsetLeft;
+    const walk = x - startXRef.current;
+
+    if (Math.abs(walk) > 4) {
+      hasDraggedRef.current = true;
+      if (!isDragging) setIsDragging(true);
+      el.scrollLeft = scrollLeftStartRef.current - walk;
+      checkScroll();
+    }
+  };
+
+  const handleMouseUpOrLeave = () => {
+    isMouseDownRef.current = false;
+    setIsDragging(false);
+    // Giữ cờ hasDragged thêm 60ms để ngăn chặn sự kiện click nhầm vào nút vừa kéo
+    setTimeout(() => {
+      hasDraggedRef.current = false;
+    }, 60);
+  };
+
   const handleButtonClick = (
     e: React.MouseEvent<HTMLButtonElement>,
     item: MathSymbolItem
   ) => {
     e.preventDefault();
+    // Nếu người dùng đang nhấn giữ kéo di chuyển thì KHÔNG bấm nút
+    if (hasDraggedRef.current) return;
     if (disabled) return;
-    onInsertSymbol(item.template, item.cursorOffset);
+    onInsertSymbol(item.template, item.cursorOffset, item.id);
   };
 
   return (
-    <div className={cn("relative w-full", className)}>
-      {/* ── Dải thanh công cụ cuộn ngang trên mobile ── */}
+    <div className={cn("relative w-full flex items-center group", className)}>
+      {/* ── Nút cuộn sang trái (hiển thị khi có phần tử bị khuất bên trái) ── */}
+      {canScrollLeft && (
+        <button
+          type="button"
+          onClick={() => handleScroll("left")}
+          aria-label="Cuộn sang trái"
+          className={cn(
+            "absolute -left-1 z-20 w-8 h-8 rounded-full bg-white/95 text-[#8C4905] border border-[#F1CCA6]",
+            "shadow-md flex items-center justify-center transition-all duration-150 cursor-pointer",
+            "hover:bg-[#F7ECE1] hover:scale-110 active:scale-95 animate-in fade-in duration-200"
+          )}
+        >
+          <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+        </button>
+      )}
+
+      {/* ── Dải thanh công cụ cuộn ngang (hỗ trợ nhấn giữ kéo chuột, lăn chuột, vuốt cảm ứng) ── */}
       <div
+        ref={scrollContainerRef}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUpOrLeave}
+        onMouseLeave={handleMouseUpOrLeave}
         className={cn(
-          "flex items-center gap-2 overflow-x-auto touch-pan-x py-1 px-0.5 scrollbar-none select-none",
-          "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          "flex items-center gap-2 overflow-x-auto touch-pan-x py-1 px-1 select-none w-full",
+          "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          isDragging ? "cursor-grabbing scroll-auto" : "cursor-grab scroll-smooth"
         )}
         role="toolbar"
         aria-label="Thanh công cụ ký hiệu toán học"
@@ -259,16 +370,17 @@ export function MathSymbolToolbar({
               aria-label={item.ariaLabel}
               title={item.title}
               onMouseDown={(e) => {
-                // Ngăn mất focus ô chat
+                // Ngăn mất focus ô chat nhưng cho phép mousemove nổi bọt lên container
                 e.preventDefault();
               }}
               onClick={(e) => handleButtonClick(e, item)}
               className={cn(
                 "min-w-[44px] h-[44px] px-2 rounded-2xl flex items-center justify-center shrink-0",
                 "bg-[#F7ECE1]/90 hover:bg-[#F1CCA6] text-[#8C4905] border border-[#F1CCA6] shadow-2xs",
-                "transition-all duration-150 active:scale-95 cursor-pointer font-semibold",
+                "transition-all duration-150 active:scale-95 font-semibold",
                 "hover:shadow-xs hover:border-[#C1762A]/50",
-                "disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+                "disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100",
+                isDragging ? "cursor-grabbing" : "cursor-pointer"
               )}
             >
               {item.label}
@@ -276,6 +388,22 @@ export function MathSymbolToolbar({
           ))}
         </div>
       </div>
+
+      {/* ── Nút cuộn sang phải (hiển thị khi có phần tử bị khuất bên phải) ── */}
+      {canScrollRight && (
+        <button
+          type="button"
+          onClick={() => handleScroll("right")}
+          aria-label="Cuộn sang phải"
+          className={cn(
+            "absolute -right-1 z-20 w-8 h-8 rounded-full bg-white/95 text-[#8C4905] border border-[#F1CCA6]",
+            "shadow-md flex items-center justify-center transition-all duration-150 cursor-pointer",
+            "hover:bg-[#F7ECE1] hover:scale-110 active:scale-95 animate-in fade-in duration-200"
+          )}
+        >
+          <ChevronRight className="w-5 h-5 stroke-[2.5]" />
+        </button>
+      )}
     </div>
   );
 }

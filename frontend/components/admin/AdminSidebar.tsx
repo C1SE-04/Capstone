@@ -48,11 +48,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     groupTitle: "Quản lý hệ thống",
     items: [
-      {
-        name: "Quản lý Users",
-        href: "/admin/users",
-        icon: Users,
-      },
+      // Tạm thời ẩn quản lý user theo yêu cầu UI
+      // {
+      //   name: "Quản lý Users",
+      //   href: "/admin/users",
+      //   icon: Users,
+      // },
       {
         name: "Học liệu Toán 4-9",
         href: "/admin/content",

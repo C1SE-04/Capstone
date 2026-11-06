@@ -112,28 +112,109 @@
 ---
 
 ### US 9.4: Bàn Phím Ký Tự Toán Học Trực Quan & Nâng Cấp Bảng Xếp Hạng
-*Mô tả: Là một Học sinh, tôi muốn dễ dàng gõ các ký hiệu toán như căn bậc hai, phân số, số mũ trên khung chat, và có thể tìm kiếm tên bạn bè trên Bảng xếp hạng.*
+*Mô tả: Là một Học sinh, tôi muốn dễ dàng gõ các ký hiệu toán cấp 2 như căn bậc hai, phân số, số mũ trên khung chat, và có thể tìm kiếm tên bạn bè trên Bảng xếp hạng.*
 
 - **Mô tả chi tiết:**
-  - **Thanh công cụ Ký tự đặc biệt (Math Toolbar):** Gắn ngay trên ô chat các nút bấm nhanh: $\sqrt{x}$, $x^2$, $x^y$, $\frac{a}{b}$, $\pm$, $\pi$, $\Delta$, $\le$, $\ge$, $\neq$, $\log$, $\sin$, $\cos$. Hỗ trợ vuốt cuộn ngang trên điện thoại di động (Responsive 375px).
+  - **Thanh công cụ Ký tự đặc biệt (Math Toolbar):** Gắn ngay trên ô nhập liệu khung chat các nút bấm nhanh: √x, x², x^y, a/b, ±, π, Δ, ≤, ≥, ≠, ≈, sin, cos, tan, °. Hỗ trợ vuốt cuộn ngang trên điện thoại di động (Responsive 375px), tự động giữ focus và đưa con trỏ chuột vào vị trí thuận tiện để nhập tiếp.
   - **Nâng cấp Bảng xếp hạng:**
-    - Thay thế chữ cố định "Top 35" bằng tổng số thực: "Bảng Vinh Danh ([N] Học Sinh Tham Gia)".
-    - Bổ sung ô tìm kiếm bạn bè theo Tên hiển thị (Display Name) hoặc Username có cơ chế debounce 300ms mượt mà.
+    - Thay thế chữ cố định "Top 35" bằng tổng số người thực tế: "Bảng Vinh Danh ([N] Học Sinh Tham Gia)" lấy từ trường dữ liệu total_participants.
+    - Bổ sung ô tìm kiếm bạn bè theo Tên hiển thị (Display Name) hoặc Username có cơ chế debounce 300ms mượt mà, bảo toàn đúng thứ hạng thực tế của học sinh.
 
-- **Tasks:**
-  - **T9.13** [Bảo] [FE] Xây dựng component `MathSymbolToolbar.tsx` gắn ngay trên ô nhập liệu `ChatInput.tsx`, chèn ký tự chính xác tại vị trí con trỏ chuột. (2.5h)
-  - **T9.13b** [Bảo] [FE] Tối ưu Responsive Mobile cho Toolbar: Cho phép cuộn ngang (touch swipe scroll) trên màn hình hẹp (375px), không làm tràn layout hoặc che khuất bàn phím ảo. (1h)
-  - **T9.14** [Bảo] [FE] Cập nhật giao diện Bảng xếp hạng `leaderboard/page.tsx`: Sửa tiêu đề động theo số lượng người tham gia thực tế và tích hợp ô tìm kiếm bạn bè. (2h)
-  - **T9.15** [Thống] [BE] Cập nhật API `GET /metrics/streak-leaderboard`: Thêm query param `search: Optional[str] = None` và trả về `total_participants: int`. (1.5h)
+- **Danh Sách Tasks (Chuẩn Giao Diện Quản Lý Task):**
+
+  ---
+
+  #### **Task T9.13**
+  - **Tiêu đề \***: `[Frontend] Xây dựng component MathSymbolToolbar gắn trên ChatInput và xử lý vị trí con trỏ chuột`
+  - **Mô tả task**:
+    - Tạo component `MathSymbolToolbar.tsx` chứa danh sách các ký hiệu toán học phổ biến lớp 4-9 (căn bậc hai, số mũ, phân số, pi, delta, lượng giác) đặt ngay phía trên textarea của `ChatInput.tsx`.
+    - Xử lý sự kiện click nút bấm không làm mất focus ô nhập (`e.preventDefault()`), chèn ký tự chính xác tại vị trí con trỏ chuột (`selectionStart`) và tự động đưa con trỏ vào giữa cặp ngoặc.
+    - Áp dụng chuẩn thiết kế SocraticKid với bảng màu ấm áp (#F7ECE1, #F1CCA6, #8C4905) kèm hiệu ứng hover và active phản hồi xúc giác mượt mà.
+  - **Thông tin cơ bản**:
+    - **Trạng thái**: To Do
+    - **Loại task \***: Task
+    - **Phân loại task \***: Frontend
+    - **Người được giao**: Nguyễn Gia Bảo
+  - **Thông tin bổ sung**:
+    - **Tên Sprint**: Sprint 9
+    - **Tên User Story \***: US 9.4: Bàn Phím Ký Tự Toán Học Trực Quan & Nâng Cấp Bảng Xếp Hạng
+    - **Thời gian ước lượng**: 2.5
+    - **Thời gian thực tế**: 0
+    - **Mức độ ưu tiên**: **High**
+    - **Task liên quan**: T9.13b, T9.14
+
+  ---
+
+  #### **Task T9.13b**
+  - **Tiêu đề \***: `[Frontend] Tối ưu trải nghiệm Responsive Touch và Mobile Viewport cho MathSymbolToolbar`
+  - **Mô tả task**:
+    - Thiết lập container thanh công cụ hỗ trợ thao tác vuốt cuộn ngang mượt mà (`overflow-x-auto`, `touch-pan-x`, ẩn scrollbar) trên màn hình hẹp kích thước 375px.
+    - Căn chỉnh kích thước nút bấm tối thiểu 36px-40px vừa vặn với thao tác chạm ngón tay của học sinh, ngăn ngừa hiện tượng vỡ layout khi bàn phím ảo bật lên.
+    - Đồng bộ với cấu trúc ổn định chiều cao màn hình `100dvh` của khung chat, đảm bảo thanh ký tự không che lấp nội dung tin nhắn hoặc nút gửi bài.
+  - **Thông tin cơ bản**:
+    - **Trạng thái**: To Do
+    - **Loại task \***: Task
+    - **Phân loại task \***: Frontend
+    - **Người được giao**: Nguyễn Gia Bảo
+  - **Thông tin bổ sung**:
+    - **Tên Sprint**: Sprint 9
+    - **Tên User Story \***: US 9.4: Bàn Phím Ký Tự Toán Học Trực Quan & Nâng Cấp Bảng Xếp Hạng
+    - **Thời gian ước lượng**: 1.0
+    - **Thời gian thực tế**: 0
+    - **Mức độ ưu tiên**: **Medium**
+    - **Task liên quan**: T9.13
+
+  ---
+
+  #### **Task T9.14**
+  - **Tiêu đề \***: `[Frontend] Cập nhật giao diện Bảng xếp hạng, tiêu đề động và tích hợp ô tìm kiếm bạn bè`
+  - **Mô tả task**:
+    - Cập nhật tiêu đề tại `leaderboard/page.tsx` hiển thị số lượng học sinh thực tế `total_participants` từ API (thay thế nhãn tĩnh cũ "Top 35").
+    - Tích hợp thanh tìm kiếm học sinh với cơ chế debounce 300ms, tự động lọc danh sách theo tên hiển thị hoặc username khi người dùng nhập liệu.
+    - Cập nhật BFF Proxy `app/api/metrics/streak-leaderboard/route.ts` để tiếp nhận và chuyển tiếp query param `search` từ client xuống Backend FastAPI.
+  - **Thông tin cơ bản**:
+    - **Trạng thái**: To Do
+    - **Loại task \***: Task
+    - **Phân loại task \***: Frontend
+    - **Người được giao**: Nguyễn Gia Bảo
+  - **Thông tin bổ sung**:
+    - **Tên Sprint**: Sprint 9
+    - **Tên User Story \***: US 9.4: Bàn Phím Ký Tự Toán Học Trực Quan & Nâng Cấp Bảng Xếp Hạng
+    - **Thời gian ước lượng**: 2.0
+    - **Thời gian thực tế**: 0
+    - **Mức độ ưu tiên**: **High**
+    - **Task liên quan**: T9.15
+
+  ---
+
+  #### **Task T9.15**
+  - **Tiêu đề \***: `[Backend] Cập nhật endpoint GET /metrics/streak-leaderboard hỗ trợ tìm kiếm và bảo toàn thứ hạng`
+  - **Mô tả task**:
+    - Bổ sung tham số `search: Optional[str] = Query(None)` vào endpoint `GET /metrics/streak-leaderboard` trong file `backend/routers/metrics.py`.
+    - Triển khai truy vấn lọc chuỗi không phân biệt hoa thường (`ilike`) theo cả `display_name` và `username` của bảng dữ liệu `users`.
+    - Giữ nguyên giá trị thứ hạng gốc (`rank`) của học sinh trên bảng tổng sắp toàn server trong danh sách kết quả lọc, không đánh lại số thứ tự từ 1.
+  - **Thông tin cơ bản**:
+    - **Trạng thái**: To Do
+    - **Loại task \***: Task
+    - **Phân loại task \***: Backend
+    - **Người được giao**: Lê Hữu Thống
+  - **Thông tin bổ sung**:
+    - **Tên Sprint**: Sprint 9
+    - **Tên User Story \***: US 9.4: Bàn Phím Ký Tự Toán Học Trực Quan & Nâng Cấp Bảng Xếp Hạng
+    - **Thời gian ước lượng**: 1.5
+    - **Thời gian thực tế**: 0
+    - **Mức độ ưu tiên**: **High**
+    - **Task liên quan**: T9.14
 
 - **Tiêu chí chấp nhận (Acceptance Criteria – 100% Nghiệm Thu Thao Tác Trên Web):**
-  - **[AC 9.4.1] Thao tác chèn ký tự toán học:** Bấm nút $\sqrt{}$ trên thanh công cụ $\rightarrow$ Ô chat tự động chèn chuỗi `√()` và con trỏ chuột nằm ngay giữa hai dấu ngoặc để học sinh nhập số tiếp.
-  - **[AC 9.4.2] AI giải chính xác công thức có ký tự đặc biệt:** Học sinh dùng toolbar chèn `√(16) + log(100) = ?` và bấm Gửi $\rightarrow$ AI đọc hiểu chuẩn xác và hướng dẫn từng bước: `√16 = 4, log(100) = 2, tổng bằng 6`.
-  - **[AC 9.4.3] Trải nghiệm Toolbar trên điện thoại (Mobile):** Mở giao diện trên thiết bị di động (hoặc DevTools giả lập 375px) $\rightarrow$ Thanh công cụ toán học hiển thị gọn gàng, vuốt ngang mượt mà để chọn các ký hiệu $\sin, \cos, \Delta$, không làm vỡ giao diện chat.
-  - **[AC 9.4.4] Tiêu đề Bảng xếp hạng cập nhật số người thực:** Truy cập trang Bảng xếp hạng $\rightarrow$ Tiêu đề hiển thị chuẩn định dạng *"Bảng Vinh Danh (128 Học Sinh Tham Gia)"* (thay thế hoàn toàn nhãn "Top 35" cũ).
+  - **[AC 9.4.1] Thao tác chèn ký tự toán học:** Bấm nút √ trên thanh công cụ -> Ô chat tự động chèn chuỗi `√()` và con trỏ chuột nằm ngay giữa hai dấu ngoặc để học sinh nhập số tiếp; bấm x² tự động chèn `^2` sau ký tự hiện tại mà không làm mất focus bàn phím.
+  - **[AC 9.4.2] AI giải chính xác công thức toán cấp 2 có ký tự đặc biệt:** Học sinh dùng toolbar chèn biểu thức `√(16) + 3^2 = ?` và bấm Gửi -> AI đọc hiểu chuẩn xác và hướng dẫn từng bước: `√16 = 4, 3^2 = 9, tổng bằng 13`.
+  - **[AC 9.4.3] Trải nghiệm Toolbar trên điện thoại (Mobile):** Mở giao diện trên thiết bị di động (hoặc DevTools giả lập 375px) -> Thanh công cụ toán học hiển thị gọn gàng, vuốt ngang mượt mà để chọn các ký hiệu sin, cos, Δ, không làm che khuất nút gửi hay nhảy vỡ khung chat.
+  - **[AC 9.4.4] Tiêu đề Bảng xếp hạng cập nhật số người thực:** Truy cập trang Bảng xếp hạng -> Tiêu đề hiển thị chuẩn định dạng *"Bảng Vinh Danh (128 Học Sinh Tham Gia)"* (thay thế hoàn toàn nhãn "Top 35" cũ) dựa trên dữ liệu thật của hệ thống.
   - **[AC 9.4.5] Tìm kiếm học sinh trên Bảng xếp hạng:**
-    - Gõ tên bạn *"Linh"* vào ô tìm kiếm $\rightarrow$ Bảng lập tức lọc và hiển thị danh sách các học sinh có tên chứa "Linh" kèm thứ hạng và số ngày streak.
-    - Gõ một cái tên không tồn tại (VD: *"XYZ123"*) $\rightarrow$ Bảng hiển thị thông báo thân thiện: *"Không tìm thấy học sinh nào phù hợp"*.
+    - Gõ tên bạn *"Linh"* vào ô tìm kiếm -> Sau 300ms, bảng lập tức lọc và hiển thị danh sách các học sinh có tên chứa "Linh", giữ nguyên thứ hạng gốc (ví dụ: #18) và số ngày streak.
+    - Xóa trắng ô tìm kiếm -> Bảng tự động khôi phục lại danh sách bảng xếp hạng ban đầu.
+    - Gõ một cái tên không tồn tại (VD: *"XYZ123"*) -> Bảng hiển thị thông báo thân thiện: *"Không tìm thấy học sinh nào phù hợp"*.
 
 ---
 

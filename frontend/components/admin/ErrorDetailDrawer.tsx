@@ -522,16 +522,6 @@ export default function ErrorDetailDrawer({
               )}
             </div>
           </div>
-
-          {/* ── 3. Drawer Footer ── */}
-          <div className="p-4 border-t border-[#C1762A]/20 bg-[#F7ECE1]/40 flex justify-end">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-white text-[#8C4905] border border-[#C1762A]/30 rounded-xl text-xs font-bold hover:bg-[#F7ECE1] transition-colors cursor-pointer"
-            >
-              Đóng Drawer
-            </button>
-          </div>
         </div>
       </div>
     </div>
