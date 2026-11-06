@@ -174,15 +174,33 @@ export function ChatInput({
     mathfieldRef.current = node;
     if (!node) return;
 
+    // 1. Lắng nghe sự kiện gõ phím & cập nhật hasContent ĐỒNG BỘ ngay lập tức
+    const updateContent = () => {
+      const val = node.value || "";
+      setHasContent(Boolean(val.trim().length > 0));
+    };
+
+    updateContent();
+    node.addEventListener("input", updateContent);
+    node.addEventListener("change", updateContent);
+    node.addEventListener("keyup", updateContent);
+
+    node.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSendRef.current?.();
+      }
+    });
+
     import("mathlive").then(() => {
-      // 1. Cấu hình các thuộc tính triệt tiêu lỗi font và phím tắt ngầm
+      // 2. Cấu hình các thuộc tính triệt tiêu lỗi font và phím tắt ngầm
       node.mathVirtualKeyboardPolicy = "manual";
       node.menuItems = [];
       node.letterShapeStyle = "upright"; // Chữ cái đứng thẳng, không in nghiêng
       node.mathModeSpace = "\\ "; // Nhấn Space chèn dấu cách thật
       node.inlineShortcuts = {}; // Tắt phím tắt ngầm để không bị nhảy chữ tiếng Việt
 
-      // 2. Can thiệp trực tiếp vào Shadow DOM để ép font Geist Sans và xóa bỏ lỗi hiển thị ký tự tiếng Việt
+      // 3. Can thiệp trực tiếp vào Shadow DOM để ép font Geist Sans và xóa bỏ lỗi hiển thị ký tự tiếng Việt
       if (node.shadowRoot) {
         let injectedStyle = node.shadowRoot.getElementById("socratic-math-style");
         if (!injectedStyle) {
@@ -263,19 +281,6 @@ export function ChatInput({
           node.shadowRoot.appendChild(injectedStyle);
         }
       }
-
-      // 3. Lắng nghe sự kiện gõ phím & Enter để gửi
-      node.addEventListener("input", () => {
-        const val = node.value || "";
-        setHasContent(Boolean(val.trim().length > 0));
-      });
-
-      node.addEventListener("keydown", (e: KeyboardEvent) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          handleSendRef.current?.();
-        }
-      });
     });
   }, []);
 
@@ -695,7 +700,7 @@ export function ChatInput({
             >
               {isOffline
                 ? "Mất kết nối. Đang chờ kết nối lại..."
-                : "Hỏi SocraticKid (nhập toán: bấm phân số, căn, mũ trên thanh công cụ)..."}
+                : "Hỏi SocraticKid..."}
             </div>
           )}
 
@@ -704,6 +709,10 @@ export function ChatInput({
               ref: onMathFieldRef,
               "math-virtual-keyboard-policy": "manual",
               class: "w-full outline-none border-none bg-transparent text-[#1C1917] font-medium text-base py-1 leading-normal",
+              onInput: (e: any) => {
+                const val = (e?.target as any)?.value || "";
+                setHasContent(Boolean(val.trim().length > 0));
+              },
               style: {
                 "--primary-color": "#C1762A",
                 "--caret-color": "#8C4905",
