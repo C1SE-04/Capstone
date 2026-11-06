@@ -52,6 +52,41 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 // ─── Helper: Format LaTeX cho Chat & KaTeX ─────────────────────────────────────
 
+function splitLeadingMathAndTrailingText(str: string): { mathPart: string; textPart: string } | null {
+  if (!str.startsWith("\\")) return null;
+
+  let depth = 0;
+  let lastMathEnd = -1;
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === "{" || str.startsWith("\\left", i)) {
+      depth++;
+    } else if (ch === "}" || str.startsWith("\\right", i)) {
+      depth--;
+      if (depth === 0) {
+        lastMathEnd = i + 1;
+      }
+    }
+  }
+
+  if (lastMathEnd > 0 && lastMathEnd < str.length) {
+    let j = lastMathEnd;
+    while (j < str.length && /[0-9\+\-\=\*\/\^\_\s\.]/.test(str[j])) {
+      j++;
+    }
+    const remainder = str.substring(j).trim();
+    if (remainder && /[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(remainder)) {
+      return {
+        mathPart: str.substring(0, j).trim(),
+        textPart: remainder,
+      };
+    }
+  }
+
+  return null;
+}
+
 function formatLatexForChat(latex: string): string {
   let text = (latex || "").trim();
   if (!text) return "";
@@ -61,40 +96,43 @@ function formatLatexForChat(latex: string): string {
     text = text.substring(1, text.length - 1).trim();
   }
 
-  // 2. Chuyển các ký tự thoát dấu khoảng trắng & dấu câu của MathLive về văn bản tự nhiên
+  // 2. Chuyển các ký tự thoát dấu khoảng trắng, placeholder & dấu câu của MathLive về văn bản tự nhiên
   text = text
+    .replace(/\\placeholder\{[^}]*\}/g, "\\square")
     .replace(/\\ /g, " ")
     .replace(/\\,/g, ",")
     .replace(/\\;/g, ";")
     .replace(/\\:/g, ":")
     .replace(/\\!/g, "")
+    .replace(/\\+$/g, "")
     .trim();
 
-  // 3. Regex bóc tách riêng từng công thức toán để bọc trong $...$
-  // Ví dụ: 'giải \frac23' -> 'giải $\frac23$'
-  // 'chào thầy hãy giúp em \frac{1}{2} + \sqrt{4}' -> 'chào thầy hãy giúp em $\frac{1}{2} + \sqrt{4}$'
-  const mathBlockRegex =
-    /(\\(?:frac(?:\{[^{}]*\}\{[^{}]*\}|[0-9a-zA-Z]{2})|sqrt(?:\{[^{}]*\}|[0-9a-zA-Z])|left\|[\s\S]*?\\right\||log(?:_\{[^{}]*\})?(?:\([^{}]*\))?|sin(?:\([^{}]*\))?|cos(?:\([^{}]*\))?|tan(?:\([^{}]*\))?|cot(?:\([^{}]*\))?|le|ge|ne|pm|pi|times|div|Delta)(?:[\s\+\-\=\*\/0-9a-zA-Z\(\)\{\}\^\_]|\\(?:frac|sqrt|left|right|log|sin|cos|tan|cot|le|ge|ne|pm|pi|times|div|Delta|[a-zA-Z]+))*)/g;
-
-  if (mathBlockRegex.test(text)) {
-    const formatted = text.replace(mathBlockRegex, (match) => {
-      const trimmed = match.trim();
-      if (!trimmed) return match;
-      return ` $${trimmed}$ `;
-    });
-    return formatted.replace(/\s+/g, " ").trim();
+  // 3. Nếu không có ký hiệu toán hay backslash nào -> văn bản thuần túy
+  if (!/[\\^_{}√±×÷≤≥≠π]/.test(text)) {
+    return text;
   }
 
-  // 4. Nếu là công thức thuần toán không có câu nói tự nhiên
-  const hasVietnameseWords =
-    /[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]{2,}/i.test(
-      text
-    );
-  if (!hasVietnameseWords && /[\\^_{}√±×÷≤≥≠π]/.test(text)) {
-    return `$${text}$`;
+  // 4. Trường hợp 1: Toán ở đầu câu, văn bản hỏi đáp ở sau (VD: "\sqrt{2323 \frac{2323}{44}} bằng mấy")
+  const leadingMath = splitLeadingMathAndTrailingText(text);
+  if (leadingMath) {
+    let cleanText = leadingMath.textPart.replace(/\\+$/g, "").trim();
+    // Khắc phục hiện tượng tách chữ do bộ gõ tiếng Việt (VD: "b ằng mấy" -> "bằng mấy")
+    cleanText = cleanText.replace(/\b([a-zA-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ])/gi, "$1$2");
+    return `$${leadingMath.mathPart}$ ${cleanText}`;
   }
 
-  return text;
+  // 5. Trường hợp 2: Văn bản ở đầu câu, toán ở sau (VD: "giải \frac{1}{2}", "chào thầy tính giúp em \sqrt{16}")
+  const firstMathIdx = text.search(/\\(frac|sqrt|left|log|sin|cos|tan|cot|le|ge|ne|pm|pi|times|div|Delta|square)/);
+  if (firstMathIdx > 0) {
+    const textPart = text.substring(0, firstMathIdx).trim();
+    const mathPart = text.substring(firstMathIdx).trim();
+    if (textPart) {
+      return `${textPart} $${mathPart}$`;
+    }
+  }
+
+  // 6. Trường hợp 3: Biểu thức toán thuần túy (VD: "\sqrt{2323 \frac{2323}{44}}", "x^2 + 5 = 10")
+  return `$${text}$`;
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────
