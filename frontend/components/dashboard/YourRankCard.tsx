@@ -28,8 +28,8 @@ export function YourRankCard({
     return (
       <div className="bg-white/80 backdrop-blur-md rounded-2xl p-5 border border-[#F1CCA6] shadow-sm mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 font-bold shrink-0">
-            <MilestoneFlameIcon record={0} className="w-7 h-7" />
+          <div className="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center text-stone-400 font-bold shrink-0 border border-stone-200">
+            <MilestoneFlameIcon record={0} className="w-6 h-6" />
           </div>
           <div>
             <h4 className="font-extrabold text-[#8C4905] text-base">
@@ -139,7 +139,7 @@ export function YourRankCard({
           <div className="text-center px-2">
             <div className="flex items-center justify-center gap-1.5">
               <MilestoneFlameIcon record={maxStreak} className="w-5 h-5" />
-              <span className="font-bold text-xs text-[#8C4905] truncate max-w-[90px]">
+              <span className={cn("text-xs truncate max-w-[95px]", maxStreak >= 3 ? "font-bold text-[#8C4905]" : "font-medium text-stone-400")}>
                 {milestone.name}
               </span>
             </div>

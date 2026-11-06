@@ -168,13 +168,14 @@ export function LeaderboardTable({ items, searchQuery }: LeaderboardTableProps) 
               <div className="sm:col-span-3 sm:text-center w-full flex sm:justify-center items-center">
                 <div
                   className={cn(
-                    "inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-bold border shadow-2xs transition-transform hover:scale-102",
+                    "inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs border transition-transform",
+                    record >= 3 ? "font-bold shadow-2xs hover:scale-102" : "font-medium opacity-85",
                     milestone.badgeBg,
                     milestone.badgeBorder,
                     milestone.textColor
                   )}
                 >
-                  <MilestoneFlameIcon record={record} className="w-5 h-5" />
+                  <MilestoneFlameIcon record={record} className={record >= 3 ? "w-5 h-5" : "w-4 h-4"} />
                   <span>{milestone.name}</span>
                 </div>
               </div>
