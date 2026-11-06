@@ -70,45 +70,31 @@ function formatLatexForChat(latex: string): string {
     .replace(/\\!/g, "")
     .trim();
 
-  // 3. Kiểm tra xem có chứa bất kỳ lệnh hoặc ký hiệu toán học nào không
-  const hasMathCommands =
-    /\\(frac|sqrt|left|right|log|sin|cos|tan|cot|le|ge|ne|pm|pi|times|div|Delta)/.test(
-      text
-    ) || /[\\^_{}√±×÷≤≥≠π]/.test(text);
-
-  if (!hasMathCommands) {
-    return text.replace(/\\/g, "").trim();
-  }
-
-  // 4. Kiểm tra xem có chứa các từ văn bản tự nhiên (tiếng Việt / câu nói) hay không
-  const strippedOfMathCmds = text.replace(
-    /\\(frac|sqrt|left|right|log|sin|cos|tan|cot|le|ge|ne|pm|pi|times|div|Delta|[a-zA-Z]+)/g,
-    ""
-  );
-  const hasNaturalWords =
-    /[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]{2,}/i.test(
-      strippedOfMathCmds
-    );
-
-  // Nếu là công thức thuần toán (không có câu nói tự nhiên)
-  if (!hasNaturalWords) {
-    return `$${text}$`;
-  }
-
-  // 5. Nếu là hỗn hợp giữa câu nói tự nhiên và công thức toán học:
-  // Ví dụ: 'chào thầy, hãy giúp em bài này \frac23'
-  // Bọc riêng các biểu thức toán vào trong $...$ để KaTeX chỉ render phần toán học,
-  // còn phần chữ tiếng Việt hiển thị dạng văn bản thông thường mượt mà
+  // 3. Regex bóc tách riêng từng công thức toán để bọc trong $...$
+  // Ví dụ: 'giải \frac23' -> 'giải $\frac23$'
+  // 'chào thầy hãy giúp em \frac{1}{2} + \sqrt{4}' -> 'chào thầy hãy giúp em $\frac{1}{2} + \sqrt{4}$'
   const mathBlockRegex =
     /(\\(?:frac(?:\{[^{}]*\}\{[^{}]*\}|[0-9a-zA-Z]{2})|sqrt(?:\{[^{}]*\}|[0-9a-zA-Z])|left\|[\s\S]*?\\right\||log(?:_\{[^{}]*\})?(?:\([^{}]*\))?|sin(?:\([^{}]*\))?|cos(?:\([^{}]*\))?|tan(?:\([^{}]*\))?|cot(?:\([^{}]*\))?|le|ge|ne|pm|pi|times|div|Delta)(?:[\s\+\-\=\*\/0-9a-zA-Z\(\)\{\}\^\_]|\\(?:frac|sqrt|left|right|log|sin|cos|tan|cot|le|ge|ne|pm|pi|times|div|Delta|[a-zA-Z]+))*)/g;
 
-  const formatted = text.replace(mathBlockRegex, (match) => {
-    const trimmed = match.trim();
-    if (!trimmed) return match;
-    return ` $${trimmed}$ `;
-  });
+  if (mathBlockRegex.test(text)) {
+    const formatted = text.replace(mathBlockRegex, (match) => {
+      const trimmed = match.trim();
+      if (!trimmed) return match;
+      return ` $${trimmed}$ `;
+    });
+    return formatted.replace(/\s+/g, " ").trim();
+  }
 
-  return formatted.replace(/\s+/g, " ").trim();
+  // 4. Nếu là công thức thuần toán không có câu nói tự nhiên
+  const hasVietnameseWords =
+    /[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]{2,}/i.test(
+      text
+    );
+  if (!hasVietnameseWords && /[\\^_{}√±×÷≤≥≠π]/.test(text)) {
+    return `$${text}$`;
+  }
+
+  return text;
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────
