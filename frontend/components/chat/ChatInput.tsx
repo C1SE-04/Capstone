@@ -125,24 +125,28 @@ export function ChatInput({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const sheetContainerRef = useRef<HTMLDivElement>(null);
+  const handleSendRef = useRef<() => void>(() => {});
 
   // ── [Cách 3] Khởi tạo MathLive & Can thiệp sâu vào Shadow DOM & Bộ gõ ──
   useEffect(() => {
     setIsMounted(true);
-    import("mathlive").then(() => {
-      const mf = mathfieldRef.current as any;
-      if (!mf) return;
+  }, []);
 
+  const onMathFieldRef = useCallback((node: any) => {
+    mathfieldRef.current = node;
+    if (!node) return;
+
+    import("mathlive").then(() => {
       // 1. Cấu hình các thuộc tính triệt tiêu lỗi font và phím tắt ngầm
-      mf.mathVirtualKeyboardPolicy = "manual";
-      mf.menuItems = [];
-      mf.letterShapeStyle = "upright"; // Chữ cái đứng thẳng, không in nghiêng
-      mf.mathModeSpace = "\\ "; // Nhấn Space chèn dấu cách thật
-      mf.inlineShortcuts = {}; // Tắt phím tắt ngầm để không bị nhảy chữ tiếng Việt
+      node.mathVirtualKeyboardPolicy = "manual";
+      node.menuItems = [];
+      node.letterShapeStyle = "upright"; // Chữ cái đứng thẳng, không in nghiêng
+      node.mathModeSpace = "\\ "; // Nhấn Space chèn dấu cách thật
+      node.inlineShortcuts = {}; // Tắt phím tắt ngầm để không bị nhảy chữ tiếng Việt
 
       // 2. Can thiệp trực tiếp vào Shadow DOM để ép font Geist Sans và xóa bỏ lỗi hiển thị ký tự tiếng Việt
-      if (mf.shadowRoot) {
-        let injectedStyle = mf.shadowRoot.getElementById("socratic-math-style");
+      if (node.shadowRoot) {
+        let injectedStyle = node.shadowRoot.getElementById("socratic-math-style");
         if (!injectedStyle) {
           injectedStyle = document.createElement("style");
           injectedStyle.id = "socratic-math-style";
@@ -218,30 +222,22 @@ export function ChatInput({
               height: 1.5px !important;
             }
           `;
-          mf.shadowRoot.appendChild(injectedStyle);
+          node.shadowRoot.appendChild(injectedStyle);
         }
       }
 
       // 3. Lắng nghe sự kiện gõ phím & Enter để gửi
-      const handleInput = () => {
-        const val = mf.value || "";
+      node.addEventListener("input", () => {
+        const val = node.value || "";
         setHasContent(Boolean(val.trim().length > 0));
-      };
+      });
 
-      const handleKeyDown = (e: KeyboardEvent) => {
+      node.addEventListener("keydown", (e: KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
-          handleSend();
+          handleSendRef.current?.();
         }
-      };
-
-      mf.addEventListener("input", handleInput);
-      mf.addEventListener("keydown", handleKeyDown);
-
-      return () => {
-        mf.removeEventListener("input", handleInput);
-        mf.removeEventListener("keydown", handleKeyDown);
-      };
+      });
     });
   }, []);
 
@@ -447,6 +443,7 @@ export function ChatInput({
     setHasContent(false);
     removeAttachment();
   };
+  handleSendRef.current = handleSend;
 
   return (
     <div className="p-2 sm:p-4 bg-transparent mt-auto relative z-10 w-full">
@@ -649,11 +646,13 @@ export function ChatInput({
         />
 
         {/* ── MathLive MathField Container ── */}
-        <div className="relative flex-1 flex items-center min-h-[44px] max-h-[160px] overflow-y-auto px-1 py-1">
+        <div
+          onClick={() => (mathfieldRef.current as any)?.focus()}
+          className="relative flex-1 flex items-center min-h-[44px] max-h-[160px] overflow-y-auto px-1 py-1 cursor-text"
+        >
           {/* Placeholder tự nhiên khi khung nhập rỗng */}
           {!hasContent && (
             <div
-              onClick={() => (mathfieldRef.current as any)?.focus()}
               className="absolute left-1 top-1/2 -translate-y-1/2 text-[#8C4905]/50 pointer-events-none text-xs sm:text-sm font-medium truncate select-none"
             >
               {isOffline
@@ -664,7 +663,7 @@ export function ChatInput({
 
           {isMounted ? (
             React.createElement("math-field", {
-              ref: mathfieldRef,
+              ref: onMathFieldRef,
               "math-virtual-keyboard-policy": "manual",
               class: "w-full outline-none border-none bg-transparent text-[#1C1917] font-medium text-base py-1 leading-normal",
               style: {
