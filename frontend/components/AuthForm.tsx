@@ -15,6 +15,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const [identifier, setIdentifier] = useState("");     // Đăng nhập: Tên tài khoản hoặc Email
   const [username, setUsername] = useState("");         // Đăng ký: Tên tài khoản
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState(""); // Đăng ký: Xác nhận mật khẩu
   const [isLoading, setIsLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);  // Trạng thái chuyển cảnh mượt mà chống nháy
 
@@ -22,6 +23,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     identifier?: string;
     username?: string;
     password?: string;
+    confirmPassword?: string;
     form?: string;
   }>({});
 
@@ -31,6 +33,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     setIdentifier("");
     setUsername("");
     setPassword("");
+    setConfirmPassword("");
   };
 
   const validateForm = () => {
@@ -49,7 +52,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         hasError = true;
       }
     } else {
-      // Validate đăng ký: Tên tài khoản (3-20 ký tự chữ, số, gạch dưới) + Mật khẩu + Xác nhận mật khẩu
+      // Validate đăng ký: Tên tài khoản (3-20 ký tự chữ, số, gạch dưới) + Mật khẩu (>= 6 ký tự) + Xác nhận mật khẩu
       const trimmedUsername = username.trim();
       if (!trimmedUsername) {
         newErrors.username = "Tên tài khoản không được bỏ trống";
@@ -64,6 +67,14 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         hasError = true;
       } else if (password.length < 6) {
         newErrors.password = "Mật khẩu phải có ít nhất 6 ký tự";
+        hasError = true;
+      }
+
+      if (!confirmPassword) {
+        newErrors.confirmPassword = "Vui lòng xác nhận lại mật khẩu";
+        hasError = true;
+      } else if (password !== confirmPassword) {
+        newErrors.confirmPassword = "Mật khẩu xác nhận không khớp";
         hasError = true;
       }
     }
@@ -169,6 +180,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           setIsLoginMode(true);
           setIdentifier(username.trim());
           setPassword("");
+          setConfirmPassword("");
           setErrors({ form: "✅ Đăng ký thành công! Vui lòng đăng nhập để tiếp tục." });
           setIsLoading(false);
           return;
@@ -310,6 +322,32 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                   <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.password}</p>
                 )}
               </div>
+
+              {/* Xác nhận mật khẩu (Chỉ hiển thị khi Đăng ký) */}
+              {!isLoginMode && (
+                <div>
+                  <label className="block text-[#8C4905] text-sm font-bold mb-1">
+                    Xác nhận mật khẩu
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                    }}
+                    placeholder="Nhập lại mật khẩu..."
+                    className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.confirmPassword
+                        ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                        : 'focus:ring-[#F7AD62] border-transparent'
+                      }`}
+                    disabled={isLoading}
+                  />
+                  {errors.confirmPassword && (
+                    <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.confirmPassword}</p>
+                  )}
+                </div>
+              )}
 
               {/* Login Options (Chỉ khi đăng nhập) */}
               {isLoginMode && (
