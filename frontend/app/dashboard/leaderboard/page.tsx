@@ -21,7 +21,6 @@ import {
   Users,
   RefreshCw,
   Sparkles,
-  ShieldCheck,
   ChevronRight,
   Info,
   Lock,
@@ -171,7 +170,7 @@ export default function LeaderboardPage() {
               <Trophy size={26} className="text-[#C1762A]" />
             </span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-[#8C4905] tracking-tight">
-              Bảng Vinh Danh ({totalParticipants} Học Sinh Tham Gia)
+              Bảng Vinh Danh
             </h1>
           </div>
           <p className="text-sm md:text-base text-[#C1762A] font-medium">
@@ -410,7 +409,7 @@ export default function LeaderboardPage() {
           />
 
           {/* Detailed Leaderboard Table */}
-          <div className="mb-6">
+          <div className="mb-2">
             <div className="flex items-center justify-between mb-3 px-1">
               <h3 className="text-lg font-extrabold text-[#8C4905] flex items-center gap-2">
                 <span className="bg-[#C1762A] w-2 h-6 rounded-full inline-block" />
@@ -418,7 +417,7 @@ export default function LeaderboardPage() {
                 <span className="text-xs font-semibold text-stone-500">
                   {debouncedSearch
                     ? `(Tìm thấy ${leaderboardItems.length} kết quả)`
-                    : `(Top ${leaderboardItems.length})`}
+                    : `(${leaderboardItems.length} học sinh tham gia)`}
                 </span>
               </h3>
             </div>
@@ -427,15 +426,6 @@ export default function LeaderboardPage() {
               items={leaderboardItems}
               searchQuery={debouncedSearch}
             />
-          </div>
-
-          {/* Privacy Footnote */}
-          <div className="flex items-center justify-center gap-2 text-xs text-[#8C4905]/70 bg-white/50 backdrop-blur-xs p-3 rounded-xl border border-[#F1CCA6]/50">
-            <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
-            <span>
-              <strong>Bảo mật thông tin:</strong> Tên hiển thị được ẩn danh và ảnh đại diện ngẫu nhiên
-              nhằm bảo vệ quyền riêng tư của học sinh theo tiêu chuẩn Sprint 8.
-            </span>
           </div>
         </>
       )}

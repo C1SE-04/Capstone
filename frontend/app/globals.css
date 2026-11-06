@@ -255,12 +255,16 @@ input:disabled,
   text-indent: 0;
 }
 
-.markdown-prose .katex-html {
-  overflow: visible;
+/* MathLive Customization: Ẩn nút bàn phím ảo, menu và cấu hình highlight bán trong suốt ấm áp */
+math-field {
+  --selection-background-color: rgba(193, 118, 42, 0.25) !important;
+  --contains-highlight-background-color: rgba(193, 118, 42, 0.12) !important;
+  --text-highlight-background-color: rgba(193, 118, 42, 0.12) !important;
 }
 
-/* MathLive Customization: Ẩn nút bàn phím ảo và nút menu mặc định */
 math-field::part(virtual-keyboard-toggle),
 math-field::part(menu-toggle) {
   display: none !important;
 }
+
+

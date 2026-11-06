@@ -11,6 +11,7 @@
 import React from "react";
 import { StreakLeaderboardItem } from "@/types/leaderboard";
 import { getStreakMilestone, getNextStreakMilestone } from "@/lib/streakMilestones";
+import { MilestoneFlameIcon } from "@/components/dashboard/MilestoneFlameIcon";
 import { Trophy, Flame, Target, Sparkles, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,8 +28,8 @@ export function YourRankCard({
     return (
       <div className="bg-white/80 backdrop-blur-md rounded-2xl p-5 border border-[#F1CCA6] shadow-sm mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 font-bold shrink-0">
-            🌱
+          <div className="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center text-stone-400 font-bold shrink-0 border border-stone-200">
+            <MilestoneFlameIcon record={0} className="w-6 h-6" />
           </div>
           <div>
             <h4 className="font-extrabold text-[#8C4905] text-base">
@@ -136,9 +137,9 @@ export function YourRankCard({
           <div className="h-8 w-px bg-stone-200" />
 
           <div className="text-center px-2">
-            <div className="flex items-center justify-center gap-1">
-              <span className="text-base">{milestone.emoji}</span>
-              <span className="font-bold text-xs text-[#8C4905] truncate max-w-[80px]">
+            <div className="flex items-center justify-center gap-1.5">
+              <MilestoneFlameIcon record={maxStreak} className="w-5 h-5" />
+              <span className={cn("text-xs truncate max-w-[95px]", maxStreak >= 3 ? "font-bold text-[#8C4905]" : "font-medium text-stone-400")}>
                 {milestone.name}
               </span>
             </div>
@@ -153,7 +154,8 @@ export function YourRankCard({
           <div className="flex items-center justify-between text-xs mb-1.5 font-semibold">
             <span className="text-[#8C4905] flex items-center gap-1.5">
               <Target size={14} className="text-[#C1762A]" />
-              Tiếp theo: <strong className="text-orange-600">{nextMilestone.name}</strong> ({nextMilestone.emoji})
+              Tiếp theo: <strong className="text-orange-600">{nextMilestone.name}</strong>
+              <MilestoneFlameIcon record={nextMilestone.minDays} className="w-4 h-4 inline-block ml-0.5" />
             </span>
             <span className="text-[#C1762A]">
               Còn <strong>{daysRemaining}</strong> ngày nữa

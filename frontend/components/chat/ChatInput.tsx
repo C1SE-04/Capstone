@@ -1,13 +1,12 @@
 /**
  * File: components/chat/ChatInput.tsx
- * Mô tả: Component nhập liệu cho khung chat chuẩn Trình giải toán Google (Google Math Solver) (US 9.4).
+ * Mô tả: Component nhập liệu cho khung chat học sinh (SocraticKid) tích hợp MathLive chuẩn Google Math Solver (Cách 3).
  * Tính năng chính:
- * - Tích hợp MathLive Engine: Hỗ trợ tạo và lồng ghép biểu thức toán học không giới hạn
- *   (phân số trong phân số, căn trong phân số, số mũ của số mũ, logarit, trị tuyệt đối...).
- * - Hiển thị các ô vuông nét đứt (\placeholder{}) nhỏ gọn, tự động co giãn theo số nhập vào.
- * - Khi bấm nút Phân số: tự động tạo 2 ô tử & mẫu và con trỏ chuột focus ngay lập tức vào ô tử số.
- * - Hỗ trợ chèn căn bậc hai, số mũ, phân số lồng sâu vào bất kỳ ô nào đã nhập.
- * - Phím tắt điều hướng thông minh (Mũi tên lên/xuống/trái/phải, Tab, Backspace).
+ * - Can thiệp sâu vào Shadow DOM & cấu hình MathLive để giữ 100% Font chuẩn Sans-serif (Geist Sans) đứng thẳng.
+ * - Triệt tiêu lỗi font chữ có chân (serif), in nghiêng, và hiện tượng ngắt từ của ký tự tiếng Việt (.ML__error).
+ * - Hỗ trợ các công thức toán học lồng nhau không giới hạn cấp độ (phân số trong căn, phân số lồng phân số).
+ * - Tự động hiển thị các ô vuông nét đứt nhỏ gọn (#?) và focus ngay vào tử số khi bấm phân số.
+ * - Thanh công cụ MathSymbolToolbar hỗ trợ kéo rê chuột (drag-to-scroll) trên desktop.
  * - Đính kèm ảnh (Camera/Library), xem trước, phóng to, giới hạn 5MB.
  * - Gửi tin nhắn bằng phím Enter (Shift+Enter để xuống dòng).
  */
@@ -53,23 +52,87 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 // ─── Helper: Format LaTeX cho Chat & KaTeX ─────────────────────────────────────
 
+function splitLeadingMathAndTrailingText(str: string): { mathPart: string; textPart: string } | null {
+  if (!str.startsWith("\\")) return null;
+
+  let depth = 0;
+  let lastMathEnd = -1;
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === "{" || str.startsWith("\\left", i)) {
+      depth++;
+    } else if (ch === "}" || str.startsWith("\\right", i)) {
+      depth--;
+      if (depth === 0) {
+        lastMathEnd = i + 1;
+      }
+    }
+  }
+
+  if (lastMathEnd > 0 && lastMathEnd < str.length) {
+    let j = lastMathEnd;
+    while (j < str.length && /[0-9\+\-\=\*\/\^\_\s\.]/.test(str[j])) {
+      j++;
+    }
+    const remainder = str.substring(j).trim();
+    if (remainder && /[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(remainder)) {
+      return {
+        mathPart: str.substring(0, j).trim(),
+        textPart: remainder,
+      };
+    }
+  }
+
+  return null;
+}
+
 function formatLatexForChat(latex: string): string {
-  const trimmed = latex.trim();
-  if (!trimmed) return "";
+  let text = (latex || "").trim();
+  if (!text) return "";
 
-  // Nếu là công thức toán (chứa lệnh \frac, \sqrt, số mũ, log, ký hiệu đặc biệt)
-  const hasMath = /[\\^_{}√±×÷≤≥≠π]/.test(trimmed);
-
-  if (!hasMath) {
-    // Văn bản thông thường
-    return trimmed.replace(/\\text{([^}]+)}/g, "$1").replace(/\\ /g, " ").trim();
+  // 1. Gỡ bỏ dấu $ bao quanh toàn bộ nếu có từ trước
+  if (text.startsWith("$") && text.endsWith("$") && text.length > 2) {
+    text = text.substring(1, text.length - 1).trim();
   }
 
-  // Nếu công thức chưa được bọc bởi $, bọc vào để KaTeX trong ChatMessage render chuẩn
-  if (!trimmed.startsWith("$") && !trimmed.endsWith("$")) {
-    return `$${trimmed}$`;
+  // 2. Chuyển các ký tự thoát dấu khoảng trắng, placeholder & dấu câu của MathLive về văn bản tự nhiên
+  text = text
+    .replace(/\\placeholder\{[^}]*\}/g, "\\square")
+    .replace(/\\ /g, " ")
+    .replace(/\\,/g, ",")
+    .replace(/\\;/g, ";")
+    .replace(/\\:/g, ":")
+    .replace(/\\!/g, "")
+    .replace(/\\+$/g, "")
+    .trim();
+
+  // 3. Nếu không có ký hiệu toán hay backslash nào -> văn bản thuần túy
+  if (!/[\\^_{}√±×÷≤≥≠π]/.test(text)) {
+    return text;
   }
-  return trimmed;
+
+  // 4. Trường hợp 1: Toán ở đầu câu, văn bản hỏi đáp ở sau (VD: "\sqrt{2323 \frac{2323}{44}} bằng mấy")
+  const leadingMath = splitLeadingMathAndTrailingText(text);
+  if (leadingMath) {
+    let cleanText = leadingMath.textPart.replace(/\\+$/g, "").trim();
+    // Khắc phục hiện tượng tách chữ do bộ gõ tiếng Việt (VD: "b ằng mấy" -> "bằng mấy")
+    cleanText = cleanText.replace(/\b([a-zA-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ])/gi, "$1$2");
+    return `$${leadingMath.mathPart}$ ${cleanText}`;
+  }
+
+  // 5. Trường hợp 2: Văn bản ở đầu câu, toán ở sau (VD: "giải \frac{1}{2}", "chào thầy tính giúp em \sqrt{16}")
+  const firstMathIdx = text.search(/\\(frac|sqrt|left|log|sin|cos|tan|cot|le|ge|ne|pm|pi|times|div|Delta|square)/);
+  if (firstMathIdx > 0) {
+    const textPart = text.substring(0, firstMathIdx).trim();
+    const mathPart = text.substring(firstMathIdx).trim();
+    if (textPart) {
+      return `${textPart} $${mathPart}$`;
+    }
+  }
+
+  // 6. Trường hợp 3: Biểu thức toán thuần túy (VD: "\sqrt{2323 \frac{2323}{44}}", "x^2 + 5 = 10")
+  return `$${text}$`;
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────
@@ -100,36 +163,123 @@ export function ChatInput({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const sheetContainerRef = useRef<HTMLDivElement>(null);
+  const handleSendRef = useRef<() => void>(() => {});
 
-  // Khởi tạo MathLive trên Client
+  // ── [Cách 3] Khởi tạo MathLive & Can thiệp sâu vào Shadow DOM & Bộ gõ ──
   useEffect(() => {
     setIsMounted(true);
+  }, []);
+
+  const onMathFieldRef = useCallback((node: any) => {
+    mathfieldRef.current = node;
+    if (!node) return;
+
+    // 1. Lắng nghe sự kiện gõ phím & cập nhật hasContent ĐỒNG BỘ ngay lập tức
+    const updateContent = () => {
+      const val = node.value || "";
+      setHasContent(Boolean(val.trim().length > 0));
+    };
+
+    updateContent();
+    node.addEventListener("input", updateContent);
+    node.addEventListener("change", updateContent);
+    node.addEventListener("keyup", updateContent);
+
+    node.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSendRef.current?.();
+      }
+    });
+
     import("mathlive").then(() => {
-      const mf = mathfieldRef.current as any;
-      if (mf) {
-        mf.mathVirtualKeyboardPolicy = "manual";
-        mf.menuItems = [];
-        mf.smartMode = true;
+      // 2. Cấu hình các thuộc tính triệt tiêu lỗi font và phím tắt ngầm
+      node.mathVirtualKeyboardPolicy = "manual";
+      node.menuItems = [];
+      node.letterShapeStyle = "upright"; // Chữ cái đứng thẳng, không in nghiêng
+      node.mathModeSpace = "\\ "; // Nhấn Space chèn dấu cách thật
+      node.inlineShortcuts = {}; // Tắt phím tắt ngầm để không bị nhảy chữ tiếng Việt
 
-        const handleInput = () => {
-          const val = mf.value || "";
-          setHasContent(Boolean(val.trim().length > 0));
-        };
+      // 3. Can thiệp trực tiếp vào Shadow DOM để ép font Geist Sans và xóa bỏ lỗi hiển thị ký tự tiếng Việt
+      if (node.shadowRoot) {
+        let injectedStyle = node.shadowRoot.getElementById("socratic-math-style");
+        if (!injectedStyle) {
+          injectedStyle = document.createElement("style");
+          injectedStyle.id = "socratic-math-style";
+          injectedStyle.textContent = `
+            /* Ép toàn bộ ký tự bên trong Shadow DOM về font Geist Sans chuẩn của website */
+            *, .ML__mathit, .ML__cmr, .ML__text, .ML__base, .ML__fieldcontainer, .ML__content, .ML__latex {
+              font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+              font-style: normal !important;
+              letter-spacing: normal !important;
+            }
 
-        const handleKeyDown = (e: KeyboardEvent) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-          }
-        };
+            /* Triệt tiêu khoảng cách biến số toán học để các chữ cái đứng liền nhau tự nhiên */
+            .ML__mathit, .ML__cmr {
+              font-style: normal !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              letter-spacing: normal !important;
+            }
 
-        mf.addEventListener("input", handleInput);
-        mf.addEventListener("keydown", handleKeyDown);
+            /* Xóa bỏ giao diện báo lỗi (nền hồng/chấm đỏ) khi gõ ký tự tiếng Việt có dấu */
+            .ML__error {
+              background: transparent !important;
+              background-image: none !important;
+              border: none !important;
+              padding: 0 !important;
+              display: inline !important;
+              color: inherit !important;
+            }
 
-        return () => {
-          mf.removeEventListener("input", handleInput);
-          mf.removeEventListener("keydown", handleKeyDown);
-        };
+            /* Ẩn hoàn toàn nút bàn phím ảo và nút menu mặc định */
+            ::part(virtual-keyboard-toggle),
+            ::part(menu-toggle),
+            .ML__virtual-keyboard-toggle,
+            .ML__menu-toggle {
+              display: none !important;
+            }
+
+            /* Màu nền highlight bán trong suốt màu cam ấm cho cấu trúc phân số/căn thức khi đang nhập */
+            .ML__contains-highlight,
+            .ML__focused .ML__contains-highlight,
+            .ML__focused .ML__selected,
+            :host(:focus) .ML__selected {
+              background: rgba(193, 118, 42, 0.12) !important;
+              background-color: rgba(193, 118, 42, 0.12) !important;
+              border-radius: 6px !important;
+              color: inherit !important;
+            }
+
+            /* Khi người dùng chủ động bôi đen (selection) */
+            .ML__selection,
+            .ML__focused .ML__selection,
+            :host(:focus) .ML__selection {
+              background: rgba(193, 118, 42, 0.25) !important;
+              background-color: rgba(193, 118, 42, 0.25) !important;
+              border-radius: 4px !important;
+              color: inherit !important;
+            }
+
+            /* Căn chỉnh ô phân số nét đứt gọn gàng, tự co dãn chuẩn Google Math Solver */
+            .ML__placeholder {
+              border: 1.5px dashed #8C4905 !important;
+              background: transparent !important;
+              border-radius: 4px !important;
+              min-width: 20px !important;
+              min-height: 20px !important;
+              margin: 0 2px !important;
+              opacity: 0.75 !important;
+            }
+
+            /* Đường kẻ phân số màu ấm áp đồng bộ hệ thống */
+            .ML__frac-line {
+              background-color: #8C4905 !important;
+              height: 1.5px !important;
+            }
+          `;
+          node.shadowRoot.appendChild(injectedStyle);
+        }
       }
     });
   }, []);
@@ -336,6 +486,7 @@ export function ChatInput({
     setHasContent(false);
     removeAttachment();
   };
+  handleSendRef.current = handleSend;
 
   return (
     <div className="p-2 sm:p-4 bg-transparent mt-auto relative z-10 w-full">
@@ -538,28 +689,36 @@ export function ChatInput({
         />
 
         {/* ── MathLive MathField Container ── */}
-        <div className="relative flex-1 flex items-center min-h-[44px] max-h-[160px] overflow-y-auto px-1 py-1">
+        <div
+          onClick={() => (mathfieldRef.current as any)?.focus()}
+          className="relative flex-1 flex items-center min-h-[44px] max-h-[160px] overflow-y-auto px-1 py-1 cursor-text"
+        >
           {/* Placeholder tự nhiên khi khung nhập rỗng */}
           {!hasContent && (
             <div
-              onClick={() => (mathfieldRef.current as any)?.focus()}
               className="absolute left-1 top-1/2 -translate-y-1/2 text-[#8C4905]/50 pointer-events-none text-xs sm:text-sm font-medium truncate select-none"
             >
               {isOffline
                 ? "Mất kết nối. Đang chờ kết nối lại..."
-                : "Hỏi SocraticKid (nhập toán: bấm phân số, căn, mũ trên thanh công cụ)..."}
+                : "Hỏi SocraticKid..."}
             </div>
           )}
 
           {isMounted ? (
             React.createElement("math-field", {
-              ref: mathfieldRef,
+              ref: onMathFieldRef,
               "math-virtual-keyboard-policy": "manual",
-              class: "w-full outline-none border-none bg-transparent text-[#1C1917] font-semibold text-base py-1 leading-normal",
+              class: "w-full outline-none border-none bg-transparent text-[#1C1917] font-medium text-base py-1 leading-normal",
+              onInput: (e: any) => {
+                const val = (e?.target as any)?.value || "";
+                setHasContent(Boolean(val.trim().length > 0));
+              },
               style: {
                 "--primary-color": "#C1762A",
                 "--caret-color": "#8C4905",
-                "--selection-background-color": "#F1CCA6",
+                "--selection-background-color": "rgba(193, 118, 42, 0.25)",
+                "--contains-highlight-background-color": "rgba(193, 118, 42, 0.12)",
+                "--text-highlight-background-color": "rgba(193, 118, 42, 0.12)",
                 "--placeholder-color": "#8C4905",
                 "--placeholder-opacity": "0.75",
                 display: "block",

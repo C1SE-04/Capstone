@@ -131,8 +131,15 @@ export function ChatMessage({
                 </>
               )}
               {message.content && (
-                <div className="whitespace-pre-wrap flex items-start gap-2">
-                  <span className="flex-1">{message.content}</span>
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 break-words [&>p]:m-0 [&_.katex]:text-white [&_.katex-html]:text-white">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                    >
+                      {preprocessLaTeX(message.content)}
+                    </ReactMarkdown>
+                  </div>
                   {isSending && (
                     <Loader2 size={16} className="animate-spin text-white/80 shrink-0 mt-1" />
                   )}

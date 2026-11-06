@@ -10,6 +10,7 @@
 import React from "react";
 import { StreakLeaderboardItem } from "@/types/leaderboard";
 import { getStreakMilestone } from "@/lib/streakMilestones";
+import { MilestoneFlameIcon } from "@/components/dashboard/MilestoneFlameIcon";
 import { Crown, Flame, Trophy, Award, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -113,8 +114,9 @@ export function LeaderboardPodium({ topThree }: LeaderboardPodiumProps) {
                 Lớp {item.grade}
               </span>
             ) : null}
-            <span className={cn("text-[11px] font-bold px-1.5 py-0.2 rounded-md", milestone.badgeBg, milestone.textColor)}>
-              {milestone.emoji} {record}d
+            <span className={cn("text-[11px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1", milestone.badgeBg, milestone.textColor)}>
+              <MilestoneFlameIcon record={record} className="w-3.5 h-3.5" />
+              <span>{record} ngày</span>
             </span>
           </div>
         </div>
