@@ -1,22 +1,25 @@
 /**
  * File: components/chat/ChatInput.tsx
- * Mô tả: Component nhập liệu cho khung chat chuẩn Trình giải toán Google (Google Math Solver) (US 9.4).
+ * Mô tả: Component nhập liệu cho khung chat học sinh (SocraticKid).
  * Tính năng chính:
- * - Tích hợp MathLive Engine: Hỗ trợ tạo và lồng ghép biểu thức toán học không giới hạn
- *   (phân số trong phân số, căn trong phân số, số mũ của số mũ, logarit, trị tuyệt đối...).
- * - Hiển thị các ô vuông nét đứt (\placeholder{}) nhỏ gọn, tự động co giãn theo số nhập vào.
- * - Khi bấm nút Phân số: tự động tạo 2 ô tử & mẫu và con trỏ chuột focus ngay lập tức vào ô tử số.
- * - Hỗ trợ chèn căn bậc hai, số mũ, phân số lồng sâu vào bất kỳ ô nào đã nhập.
- * - Phím tắt điều hướng thông minh (Mũi tên lên/xuống/trái/phải, Tab, Backspace).
- * - Đính kèm ảnh (Camera/Library), xem trước, phóng to, giới hạn 5MB.
- * - Gửi tin nhắn bằng phím Enter (Shift+Enter để xuống dòng).
+ * - Textarea tự động co giãn (auto-expand) dựa vào lượng text người dùng nhập.
+ * - Font chữ chuẩn Sans-serif đồng bộ toàn hệ thống, hỗ trợ 100% tiếng Việt Telex/VNI mượt mà.
+ * - Hỗ trợ nhấn Enter để gửi, Shift+Enter để xuống dòng.
+ * - Khóa nút gửi khi textarea trống hoặc khi AI đang bận phản hồi (isLoading).
+ * - [T6.20] Hỗ trợ paste ảnh từ clipboard (onPaste handler).
+ * - [T6.20] Đính kèm ảnh qua nút +, hiển thị thumbnail preview + nút X xóa ảnh.
+ * - [T6.21] Mobile Bottom Sheet khi bấm +: Chọn Camera hoặc Thư viện ảnh.
+ * - [US 9.4] MathSymbolToolbar: Chèn ký hiệu toán tại con trỏ (phân số ()/(), căn √(), mũ ^(), lượng giác...).
+ * - [US 9.4] Tự động chuyển đổi ký tự khi gõ: >= thành ≥, <= thành ≤, != thành ≠, +- thành ±.
  */
 "use client";
 
-import React, {
+import {
   useRef,
   useEffect,
   useState,
+  KeyboardEvent,
+  ClipboardEvent,
   useCallback,
   ChangeEvent,
 } from "react";
@@ -28,8 +31,6 @@ import {
   ImageIcon,
   AlertCircle,
   Maximize2,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FileTooLargeToast } from "./FileTooLargeToast";
@@ -51,70 +52,7 @@ export interface ChatInputProps {
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-// ─── Helper: Format LaTeX cho Chat & KaTeX ─────────────────────────────────────
-
-function formatLatexForChat(latex: string): string {
-  const trimmed = latex.trim();
-  if (!trimmed) return "";
-
-  // 1. Kiểm tra xem có chứa biểu thức toán học đặc biệt không (sau khi đã tách các thẻ \text)
-  const withoutText = trimmed
-    .replace(/\\text\{[^{}]*\}/g, "")
-    .replace(/\\ /g, " ")
-    .trim();
-  const hasMath = /[\\^_{}√±×÷≤≥≠π]/.test(withoutText);
-
-  // Nếu hoàn toàn không có công thức toán (văn bản thuần túy)
-  if (!hasMath) {
-    return trimmed
-      .replace(/\\text\{([^}]*)\}/g, "$1")
-      .replace(/\\ /g, " ")
-      .trim();
-  }
-
-  // 2. Nếu là công thức thuần toán (không có thẻ \text{} nào)
-  if (!trimmed.includes("\\text{")) {
-    if (!trimmed.startsWith("$") && !trimmed.endsWith("$")) {
-      return `$${trimmed}$`;
-    }
-    return trimmed;
-  }
-
-  // 3. Nếu là hỗn hợp giữa văn bản thường và công thức toán:
-  // Ví dụ: \text{Chào thầy, tính giúp em }\frac{1}{2}\text{ với ạ}
-  // Tách text thường giữ nguyên, công thức toán bọc trong $...$
-  let result = "";
-  let lastIndex = 0;
-  const textRegex = /\\text\{([^{}]*)\}/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = textRegex.exec(trimmed)) !== null) {
-    const mathPart = trimmed.substring(lastIndex, match.index).trim();
-    if (mathPart) {
-      if (!mathPart.startsWith("$") && !mathPart.endsWith("$")) {
-        result += ` $${mathPart}$ `;
-      } else {
-        result += ` ${mathPart} `;
-      }
-    }
-    const textPart = match[1];
-    result += textPart;
-    lastIndex = textRegex.lastIndex;
-  }
-
-  const remainingMath = trimmed.substring(lastIndex).trim();
-  if (remainingMath) {
-    if (!remainingMath.startsWith("$") && !remainingMath.endsWith("$")) {
-      result += ` $${remainingMath}$`;
-    } else {
-      result += ` ${remainingMath}`;
-    }
-  }
-
-  return result.replace(/\s+/g, " ").trim();
-}
-
-// ─── Main Component ──────────────────────────────────────────────────────────
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export function ChatInput({
   onSendMessage,
@@ -122,12 +60,12 @@ export function ChatInput({
   isOffline = false,
 }: ChatInputProps) {
   // ── State ──
-  const [hasContent, setHasContent] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+  const [content, setContent] = useState("");
   const [attachment, setAttachment] = useState<ImageAttachment | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [fileTooLargeInfo, setFileTooLargeInfo] = useState<{
     isOpen: boolean;
     sizeMb: number;
@@ -137,46 +75,11 @@ export function ChatInput({
     sizeMb: 0,
   });
 
-  // ── Refs ──
-  const mathfieldRef = useRef<HTMLElement | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const libraryInputRef = useRef<HTMLInputElement>(null);
-  const sheetContainerRef = useRef<HTMLDivElement>(null);
-
-  // Khởi tạo MathLive trên Client
   useEffect(() => {
     setIsMounted(true);
-    import("mathlive").then(() => {
-      const mf = mathfieldRef.current as any;
-      if (mf) {
-        mf.mathVirtualKeyboardPolicy = "manual";
-        mf.menuItems = [];
-        mf.defaultMode = "text"; // Bật Text Mode làm mặc định để gõ chữ tiếng Việt tự nhiên và giữ đúng font của web
-
-        const handleInput = () => {
-          const val = mf.value || "";
-          setHasContent(Boolean(val.trim().length > 0));
-        };
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-          }
-        };
-
-        mf.addEventListener("input", handleInput);
-        mf.addEventListener("keydown", handleKeyDown);
-
-        return () => {
-          mf.removeEventListener("input", handleInput);
-          mf.removeEventListener("keydown", handleKeyDown);
-        };
-      }
-    });
   }, []);
 
-  // Lắng nghe phím Escape để đóng preview ảnh
+  // Lắng nghe phím Escape và khóa cuộn trang khi đang xem trước ảnh
   useEffect(() => {
     if (!isPreviewOpen) return;
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -194,13 +97,74 @@ export function ChatInput({
     };
   }, [isPreviewOpen]);
 
-  // Image Attachment Helpers
+  // ── Refs ──
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
+  const sheetContainerRef = useRef<HTMLDivElement>(null);
+
+  // ── Auto-resize textarea ──
+
+  const adjustHeight = () => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
+    }
+  };
+
+  useEffect(() => {
+    adjustHeight();
+  }, [content]);
+
+  // ── [US 9.4] Tự động chuyển đổi ký tự khi gõ (>= thành ≥, <= thành ≤, != thành ≠, +- thành ±) ──
+
+  const handleContentChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    const rawVal = e.target.value;
+    const cursor = e.target.selectionStart;
+
+    const replacements: [string, string][] = [
+      [">=", "≥"],
+      ["<=", "≤"],
+      ["!=", "≠"],
+      ["+-", "±"],
+    ];
+
+    let updatedVal = rawVal;
+    let offsetChange = 0;
+
+    for (const [asciiSym, unicodeSym] of replacements) {
+      if (updatedVal.includes(asciiSym)) {
+        const index = updatedVal.indexOf(asciiSym);
+        updatedVal = updatedVal.replaceAll(asciiSym, unicodeSym);
+        if (cursor !== null && cursor > index) {
+          offsetChange += asciiSym.length - unicodeSym.length;
+        }
+      }
+    }
+
+    setContent(updatedVal);
+
+    if (offsetChange > 0 && cursor !== null && textareaRef.current) {
+      const newCursorPos = Math.max(0, cursor - offsetChange);
+      requestAnimationFrame(() => {
+        textareaRef.current?.setSelectionRange(newCursorPos, newCursorPos);
+      });
+    }
+  };
+
+  // ── Image Attachment Helpers ──
+
   const attachImage = useCallback((file: File) => {
     setErrorMessage(null);
+
     if (!file.type.startsWith("image/")) {
-      setErrorMessage("Vui lòng chỉ chọn định dạng file hình ảnh (PNG, JPG, WEBP...)");
+      setErrorMessage(
+        "Vui lòng chỉ chọn định dạng file hình ảnh (PNG, JPG, WEBP...)",
+      );
       return;
     }
+
     if (file.size > MAX_FILE_SIZE) {
       const sizeMb = file.size / (1024 * 1024);
       setFileTooLargeInfo({
@@ -208,9 +172,12 @@ export function ChatInput({
         sizeMb,
         message: `Ảnh bạn chọn có dung lượng ${sizeMb.toFixed(1)}MB, vượt quá giới hạn 5MB của hệ thống. Vui lòng chọn hoặc nén ảnh dưới 5MB nhé!`,
       });
-      setErrorMessage(`Dung lượng ảnh (${sizeMb.toFixed(1)}MB) vượt quá giới hạn 5MB`);
+      setErrorMessage(
+        `Dung lượng ảnh (${sizeMb.toFixed(1)}MB) vượt quá giới hạn 5MB`,
+      );
       return;
     }
+
     setAttachment((prev) => {
       if (prev) URL.revokeObjectURL(prev.previewUrl);
       return { file, previewUrl: URL.createObjectURL(file) };
@@ -241,9 +208,30 @@ export function ChatInput({
     };
   }, []);
 
-  // Đóng Bottom Sheet khi click ra ngoài
+  // ── [T6.20] Paste ảnh từ clipboard ──
+
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          attachImage(file);
+          return;
+        }
+      }
+    }
+  };
+
+  // ── Đóng Bottom Sheet khi click ra ngoài ──
+
   useEffect(() => {
     if (!isSheetOpen) return;
+
     const handleOutside = (e: MouseEvent) => {
       if (
         sheetContainerRef.current &&
@@ -252,9 +240,12 @@ export function ChatInput({
         setIsSheetOpen(false);
       }
     };
+
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [isSheetOpen]);
+
+  // ── Xử lý file input ──
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -274,117 +265,76 @@ export function ChatInput({
     }
   };
 
-  // ── Xử lý chèn biểu thức toán học từ Toolbar (Hỗ trợ lồng ghép phân số, căn, mũ không giới hạn) ──
+  // ── [US 9.4] Xử lý chèn ký tự toán học từ MathSymbolToolbar ──
 
-  const handleInsertMathSymbol = useCallback(
-    (template: string, cursorOffset: number, symbolId: string) => {
-      const mf = mathfieldRef.current as any;
-      if (!mf) return;
+  const handleInsertSymbol = useCallback(
+    (template: string, cursorOffset: number, symbolId?: string) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
 
-      mf.focus();
+      const start = textarea.selectionStart ?? content.length;
+      const end = textarea.selectionEnd ?? content.length;
 
-      // Sử dụng lệnh insert với mode: "math" để chèn khối toán học vào văn bản
-      const insertMath = (latex: string) => {
-        if (typeof mf.insert === "function") {
-          mf.insert(latex, { mode: "math", selectionMode: "placeholder" });
-        } else if (typeof mf.executeCommand === "function") {
-          mf.executeCommand(["insert", latex, { mode: "math", selectionMode: "placeholder" }]);
+      let insertedText = template;
+      let targetCursor = start + cursorOffset;
+
+      // Hỗ trợ bọc đoạn văn bản đang được bôi đen (selection)
+      if (start !== end) {
+        const selectedText = content.substring(start, end);
+        if (symbolId === "fraction") {
+          insertedText = `(${selectedText})/()`;
+          targetCursor = start + insertedText.length - 1;
+        } else if (symbolId === "sqrt") {
+          insertedText = `√(${selectedText})`;
+          targetCursor = start + insertedText.length;
+        } else if (symbolId === "abs") {
+          insertedText = `|${selectedText}|`;
+          targetCursor = start + insertedText.length;
+        } else if (symbolId === "pow") {
+          insertedText = `${selectedText}^()`;
+          targetCursor = start + insertedText.length - 1;
+        } else if (template.includes("()")) {
+          insertedText = template.replace("()", `(${selectedText})`);
+          targetCursor = start + insertedText.length;
         }
-      };
-
-      switch (symbolId) {
-        case "fraction":
-          insertMath("\\frac{#?}{#?}");
-          break;
-        case "sqrt":
-          insertMath("\\sqrt{#?}");
-          break;
-        case "pow":
-          insertMath("#@^{#?}");
-          break;
-        case "abs":
-          insertMath("\\left|#?\\right|");
-          break;
-        case "log":
-          insertMath("\\log_{#?}(#?)");
-          break;
-        case "degree":
-          insertMath("^{\\circ}");
-          break;
-        case "percent":
-          insertMath("\\%");
-          break;
-        case "le":
-          insertMath("\\le");
-          break;
-        case "ge":
-          insertMath("\\ge");
-          break;
-        case "ne":
-          insertMath("\\ne");
-          break;
-        case "pm":
-          insertMath("\\pm");
-          break;
-        case "pi":
-          insertMath("\\pi");
-          break;
-        case "times":
-          insertMath("\\times");
-          break;
-        case "divide":
-          insertMath("\\div");
-          break;
-        case "delta":
-          insertMath("\\Delta");
-          break;
-        case "var_x":
-          insertMath("x");
-          break;
-        case "var_y":
-          insertMath("y");
-          break;
-        case "sin":
-          insertMath("\\sin(#?)");
-          break;
-        case "cos":
-          insertMath("\\cos(#?)");
-          break;
-        case "tan":
-          insertMath("\\tan(#?)");
-          break;
-        case "cot":
-          insertMath("\\cot(#?)");
-          break;
-        default:
-          insertMath(template);
-          break;
       }
 
-      setHasContent(Boolean(mf.value && mf.value.trim().length > 0));
+      const newContent =
+        content.substring(0, start) + insertedText + content.substring(end);
+      setContent(newContent);
+
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(targetCursor, targetCursor);
+        adjustHeight();
+      });
     },
-    []
+    [content],
   );
 
   // ── Gửi tin nhắn ──
 
   const canSend =
-    (hasContent || attachment !== null) &&
+    (content.trim().length > 0 || attachment !== null) &&
     !isLoading &&
     !isOffline;
 
   const handleSend = () => {
-    const mf = mathfieldRef.current as any;
-    const rawVal = mf?.value || "";
-    const formatted = formatLatexForChat(rawVal);
-    if (!formatted && !attachment) return;
-
-    onSendMessage(formatted, attachment?.file);
-    if (mf) {
-      mf.value = "";
-    }
-    setHasContent(false);
+    if (!canSend) return;
+    onSendMessage(content.trim(), attachment?.file);
+    setContent("");
     removeAttachment();
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   return (
@@ -459,7 +409,9 @@ export function ChatInput({
         isOpen={fileTooLargeInfo.isOpen}
         fileSizeMb={fileTooLargeInfo.sizeMb}
         message={fileTooLargeInfo.message}
-        onClose={() => setFileTooLargeInfo((prev) => ({ ...prev, isOpen: false }))}
+        onClose={() =>
+          setFileTooLargeInfo((prev) => ({ ...prev, isOpen: false }))
+        }
       />
 
       {/* Modal xem ảnh phóng to */}
@@ -470,38 +422,26 @@ export function ChatInput({
         onClose={() => setIsPreviewOpen(false)}
       />
 
-      {/* Style ẩn nút bàn phím và nút menu mặc định của MathLive & set font chuẩn cho text thường */}
-      <style>{`
-        math-field::part(virtual-keyboard-toggle),
-        math-field::part(menu-toggle) {
-          display: none !important;
-        }
-        math-field {
-          --text-font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-          font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-        }
-        math-field::part(content) {
-          font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-        }
-      `}</style>
-
-      {/* ── [US 9.4] MathSymbolToolbar: Chuẩn Google Math Calculator ── */}
+      {/* ── [US 9.4] MathSymbolToolbar: Hỗ trợ kéo rê chuột (drag-to-scroll) & chèn ký hiệu ── */}
       <div className="mb-2 px-0.5">
         <MathSymbolToolbar
-          onInsertSymbol={handleInsertMathSymbol}
+          onInsertSymbol={handleInsertSymbol}
           disabled={isLoading || isOffline}
         />
       </div>
 
-      {/* ── Vùng background bo góc chứa các nút và ô nhập liệu Trình giải toán Google (MathLive) ── */}
+      {/* ── Vùng background chứa nút + / textarea / nút gửi ── */}
       <div
         className={cn(
           "relative flex items-center gap-2 bg-[#F1CCA6]/40 p-2 pl-3 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-all",
-          isOffline && "opacity-75 bg-[#F7ECE1] border-[#F1CCA6]"
+          isOffline && "opacity-75 bg-[#F7ECE1] border-[#F1CCA6]",
         )}
       >
         {/* Nút + và Mobile Bottom Sheet */}
-        <div className="relative shrink-0 self-center" ref={sheetContainerRef}>
+        <div
+          className="relative self-end mb-0.5 shrink-0"
+          ref={sheetContainerRef}
+        >
           <button
             id="chat-attach-btn"
             onClick={handlePlusClick}
@@ -511,7 +451,7 @@ export function ChatInput({
             className={cn(
               "p-2.5 text-[#8C4905] hover:bg-[#F1CCA6] rounded-full transition-all duration-150 cursor-pointer",
               "disabled:opacity-40 disabled:cursor-not-allowed",
-              isSheetOpen && "bg-[#F1CCA6] rotate-45"
+              isSheetOpen && "bg-[#F1CCA6] rotate-45",
             )}
           >
             <Plus size={20} />
@@ -532,7 +472,7 @@ export function ChatInput({
                 className={cn(
                   "fixed bottom-0 left-0 right-0 z-40 md:hidden",
                   "bg-white rounded-t-2xl shadow-2xl border-t border-[#C1762A]/10",
-                  "animate-in slide-in-from-bottom duration-250 ease-out"
+                  "animate-in slide-in-from-bottom duration-250 ease-out",
                 )}
               >
                 <div className="flex justify-center pt-3 pb-1">
@@ -594,48 +534,22 @@ export function ChatInput({
           tabIndex={-1}
         />
 
-        {/* ── MathLive MathField Container ── */}
-        <div className="relative flex-1 flex items-center min-h-[44px] max-h-[160px] overflow-y-auto px-1 py-1">
-          {/* Placeholder tự nhiên khi khung nhập rỗng */}
-          {!hasContent && (
-            <div
-              onClick={() => (mathfieldRef.current as any)?.focus()}
-              className="absolute left-1 top-1/2 -translate-y-1/2 text-[#8C4905]/50 pointer-events-none text-xs sm:text-sm font-medium truncate select-none"
-            >
-              {isOffline
-                ? "Mất kết nối. Đang chờ kết nối lại..."
-                : "Hỏi SocraticKid (gõ văn bản thường, bấm phân số, căn trên thanh công cụ)..."}
-            </div>
-          )}
-
-          {isMounted ? (
-            React.createElement("math-field", {
-              ref: mathfieldRef,
-              "math-virtual-keyboard-policy": "manual",
-              "default-mode": "text",
-              class: "w-full outline-none border-none bg-transparent text-[#1C1917] font-normal text-base py-1 leading-normal",
-              style: {
-                "--primary-color": "#C1762A",
-                "--caret-color": "#8C4905",
-                "--selection-background-color": "#F1CCA6",
-                "--placeholder-color": "#8C4905",
-                "--placeholder-opacity": "0.75",
-                "--text-font-family": "var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                fontFamily: "var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                display: "block",
-                minHeight: "36px",
-              } as React.CSSProperties,
-            })
-          ) : (
-            <div className="w-full min-h-[36px]" />
-          )}
-        </div>
-
-        {/* ── Cặp Chevron chuẩn Google Math Solver (ở góc phải khung nhập) ── */}
-        <div className="hidden sm:flex flex-col items-center justify-center text-[#8C4905]/40 select-none shrink-0 self-center px-1">
-          <ChevronUp className="w-3.5 h-3.5 -mb-1 stroke-[2.5]" />
-          <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
-        </div>
+        {/* Ô nhập liệu Textarea nguyên bản - Font chữ chuẩn 100% tiếng Việt mượt mà */}
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={handleContentChange}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          placeholder={
+            isOffline
+              ? "Mất kết nối. Đang chờ kết nối lại..."
+              : "Hỏi SocraticKid (nhập text thường hoặc chọn ký hiệu toán học trên toolbar)..."
+          }
+          className="flex-1 max-h-[150px] min-h-[44px] py-3 bg-transparent text-stone-900 placeholder:text-[#8C4905]/60 outline-none resize-none overflow-y-auto font-medium disabled:cursor-not-allowed leading-relaxed"
+          rows={1}
+          disabled={isLoading || isOffline}
+        />
 
         {/* Nút Gửi */}
         <button
@@ -643,10 +557,10 @@ export function ChatInput({
           onClick={handleSend}
           disabled={!canSend}
           className={cn(
-            "p-2.5 rounded-full flex items-center justify-center transition-all self-center shadow-sm shrink-0",
+            "p-2.5 rounded-full flex items-center justify-center transition-all self-end mb-0.5 shadow-sm shrink-0",
             canSend
               ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 active:scale-95 cursor-pointer"
-              : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed"
+              : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed",
           )}
           title={isOffline ? "Không thể gửi khi mất kết nối" : "Gửi tin nhắn"}
         >
