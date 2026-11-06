@@ -516,7 +516,7 @@ export default function ChatPage() {
   // US4.1 - Trigger AI giai thich lai (AN, khong them tin nhan user vao UI)
   // Nhan tham so prompt de tai su dung cho ca lan 1 (giai thich lai) va lan 5+ (dua dap an)
   const triggerSilentReexplain = async (conversationId: string, prompt: string) => {
-    if (!conversationId) return;
+    if (!conversationId || isTyping) return;
     setIsTyping(true);
     const botMessageId = (Date.now() + 1).toString();
     const initialBotMsg: Message = {
@@ -638,6 +638,7 @@ export default function ChatPage() {
   // - Lan 5+: AI dua ra dap an truc tiep va giai thich tung buoc (prompt ngam)
   const MAX_NOT_UNDERSTOOD = 5;
   const handleNotUnderstood = () => {
+    if (isTyping) return;
     const newCount = notUnderstoodCount + 1;
     setNotUnderstoodCount(newCount);
 
@@ -855,6 +856,11 @@ export default function ChatPage() {
   // -> Khong reset notUnderstoodCount vi day la phan cua flow "Chua hieu"
   // imageFile?: File - File ảnh đính kèm từ ChatInput (US 6.4: Tích hợp upload Cloudinary)
   const handleSendMessage = async (content: string, isExplanation = false, imageFile?: File) => {
+    // Chống spam: Chặn gửi tin nhắn khi AI đang suy nghĩ / phản hồi
+    if (isTyping) {
+      return;
+    }
+
     // US4.1: Chi reset dem "Chua hieu" khi hoc sinh tu go tin nhan moi hoan toan,
     // khong reset khi gui giai thich tu UnderstandingButtons
     if (!isExplanation) {
@@ -1020,7 +1026,7 @@ export default function ChatPage() {
 
   // Handler: Thử lại (Retry) khi gửi tin nhắn thất bại
   const handleRetryMessage = (messageId: string, content: string) => {
-    if (!activeChatId) return;
+    if (!activeChatId || isTyping) return;
 
     let targetAttachmentUrl: string | undefined = undefined;
     const currentConv = conversations.find((c) => c.id === activeChatId);

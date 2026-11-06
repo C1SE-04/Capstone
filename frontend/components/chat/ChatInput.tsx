@@ -164,6 +164,17 @@ export function ChatInput({
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const sheetContainerRef = useRef<HTMLDivElement>(null);
   const handleSendRef = useRef<() => void>(() => {});
+  const isLoadingRef = useRef(isLoading);
+
+  // Cập nhật trạng thái disabled / readOnly cho MathLive khi isLoading hoặc isOffline thay đổi
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+    const mf = mathfieldRef.current as any;
+    if (mf) {
+      mf.disabled = Boolean(isLoading || isOffline);
+      mf.readOnly = Boolean(isLoading || isOffline);
+    }
+  }, [isLoading, isOffline]);
 
   // ── [Cách 3] Khởi tạo MathLive & Can thiệp sâu vào Shadow DOM & Bộ gõ ──
   useEffect(() => {
@@ -173,6 +184,10 @@ export function ChatInput({
   const onMathFieldRef = useCallback((node: any) => {
     mathfieldRef.current = node;
     if (!node) return;
+
+    // Đồng bộ trạng thái khóa ngay khi node được gắn
+    node.disabled = Boolean(isLoadingRef.current || isOffline);
+    node.readOnly = Boolean(isLoadingRef.current || isOffline);
 
     // 1. Lắng nghe sự kiện gõ phím & cập nhật hasContent ĐỒNG BỘ ngay lập tức
     const updateContent = () => {
@@ -188,10 +203,13 @@ export function ChatInput({
     node.addEventListener("keydown", (e: KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
+        // Chặn gửi tin nhắn nếu đang đợi AI phản hồi
+        if (isLoadingRef.current) return;
         handleSendRef.current?.();
       }
     });
 
+    // @ts-ignore
     import("mathlive").then(() => {
       // 2. Cấu hình các thuộc tính triệt tiêu lỗi font và phím tắt ngầm
       node.mathVirtualKeyboardPolicy = "manual";
@@ -474,6 +492,9 @@ export function ChatInput({
     !isOffline;
 
   const handleSend = () => {
+    // Chặn tuyệt đối nếu hệ thống đang phản hồi hoặc mất kết nối
+    if (isLoading || isOffline) return;
+
     const mf = mathfieldRef.current as any;
     const rawVal = mf?.value || "";
     const formatted = formatLatexForChat(rawVal);
@@ -591,7 +612,8 @@ export function ChatInput({
       <div
         className={cn(
           "relative flex items-center gap-2 bg-[#F1CCA6]/40 p-2 pl-3 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-all",
-          isOffline && "opacity-75 bg-[#F7ECE1] border-[#F1CCA6]"
+          isOffline && "opacity-75 bg-[#F7ECE1] border-[#F1CCA6]",
+          isLoading && "bg-[#F7ECE1]/80 border-[#C1762A]/30 cursor-not-allowed opacity-80"
         )}
       >
         {/* Nút + và Mobile Bottom Sheet */}
@@ -599,14 +621,17 @@ export function ChatInput({
           <button
             id="chat-attach-btn"
             onClick={handlePlusClick}
-            disabled={isOffline}
+            disabled={isOffline || isLoading}
             aria-label="Đính kèm ảnh"
             aria-expanded={isSheetOpen}
             className={cn(
-              "p-2.5 text-[#8C4905] hover:bg-[#F1CCA6] rounded-full transition-all duration-150 cursor-pointer",
-              "disabled:opacity-40 disabled:cursor-not-allowed",
+              "p-2.5 text-[#8C4905] rounded-full transition-all duration-150",
+              isOffline || isLoading
+                ? "opacity-40 cursor-not-allowed"
+                : "hover:bg-[#F1CCA6] cursor-pointer",
               isSheetOpen && "bg-[#F1CCA6] rotate-45"
             )}
+            title={isLoading ? "Vui lòng đợi hệ thống phản hồi xong" : "Đính kèm ảnh"}
           >
             <Plus size={20} />
           </button>
@@ -690,17 +715,30 @@ export function ChatInput({
 
         {/* ── MathLive MathField Container ── */}
         <div
-          onClick={() => (mathfieldRef.current as any)?.focus()}
-          className="relative flex-1 flex items-center min-h-[44px] max-h-[160px] overflow-y-auto px-1 py-1 cursor-text"
+          onClick={() => {
+            if (!isLoading && !isOffline) {
+              (mathfieldRef.current as any)?.focus();
+            }
+          }}
+          className={cn(
+            "relative flex-1 flex items-center min-h-[44px] max-h-[160px] overflow-y-auto px-1 py-1 transition-all",
+            isLoading || isOffline ? "cursor-not-allowed select-none opacity-60" : "cursor-text"
+          )}
         >
           {/* Placeholder tự nhiên khi khung nhập rỗng */}
           {!hasContent && (
             <div
               className="absolute left-1 top-1/2 -translate-y-1/2 text-[#8C4905]/50 pointer-events-none text-xs sm:text-sm font-medium truncate select-none"
             >
-              {isOffline
-                ? "Mất kết nối. Đang chờ kết nối lại..."
-                : "Hỏi SocraticKid..."}
+              {isOffline ? (
+                "Mất kết nối. Đang chờ kết nối lại..."
+              ) : isLoading ? (
+                <span className="flex items-center gap-1.5 text-[#C1762A] animate-pulse">
+                  <span>SocraticKid đang trả lời, vui lòng đợi... 🦉</span>
+                </span>
+              ) : (
+                "Hỏi SocraticKid..."
+              )}
             </div>
           )}
 
@@ -708,7 +746,14 @@ export function ChatInput({
             React.createElement("math-field", {
               ref: onMathFieldRef,
               "math-virtual-keyboard-policy": "manual",
-              class: "w-full outline-none border-none bg-transparent text-[#1C1917] font-medium text-base py-1 leading-normal",
+              disabled: isLoading || isOffline ? "true" : undefined,
+              "read-only": isLoading || isOffline ? "true" : undefined,
+              class: cn(
+                "w-full outline-none border-none bg-transparent font-medium text-base py-1 leading-normal transition-all",
+                isLoading || isOffline
+                  ? "text-[#1C1917]/40 cursor-not-allowed pointer-events-none"
+                  : "text-[#1C1917] cursor-text"
+              ),
               onInput: (e: any) => {
                 const val = (e?.target as any)?.value || "";
                 setHasContent(Boolean(val.trim().length > 0));
@@ -740,16 +785,26 @@ export function ChatInput({
         <button
           id="chat-send-btn"
           onClick={handleSend}
-          disabled={!canSend}
+          disabled={!canSend || isLoading || isOffline}
           className={cn(
             "p-2.5 rounded-full flex items-center justify-center transition-all self-center shadow-sm shrink-0",
-            canSend
+            canSend && !isLoading && !isOffline
               ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 active:scale-95 cursor-pointer"
-              : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed"
+              : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed opacity-60"
           )}
-          title={isOffline ? "Không thể gửi khi mất kết nối" : "Gửi tin nhắn"}
+          title={
+            isOffline
+              ? "Không thể gửi khi mất kết nối"
+              : isLoading
+              ? "SocraticKid đang phản hồi, vui lòng đợi..."
+              : "Gửi tin nhắn"
+          }
         >
-          <Send size={20} className={cn(canSend && !isOffline && "ml-0.5")} />
+          {isLoading ? (
+            <div className="w-5 h-5 border-2 border-[#8C4905]/30 border-t-[#C1762A] rounded-full animate-spin" />
+          ) : (
+            <Send size={20} className={cn(canSend && !isOffline && "ml-0.5")} />
+          )}
         </button>
       </div>
 
