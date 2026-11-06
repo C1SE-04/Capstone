@@ -359,7 +359,6 @@ def _unlock_badges_for_student(student_id: str, db: Session) -> list[models.Stud
         db.query(func.count(models.IndependenceScore.id))
         .filter(
             models.IndependenceScore.student_id == student_id,
-            models.IndependenceScore.is_duplicate == False,
         )
         .scalar()
     ) or 0
@@ -480,7 +479,6 @@ def check_and_award_badges(
         db.query(func.count(models.IndependenceScore.id))
         .filter(
             models.IndependenceScore.student_id == target_student_id,
-            models.IndependenceScore.is_duplicate == False,
         )
         .scalar()
     ) or 0
@@ -528,7 +526,6 @@ def get_student_badges(
         db.query(func.count(models.IndependenceScore.id))
         .filter(
             models.IndependenceScore.student_id == student_id,
-            models.IndependenceScore.is_duplicate == False,
         )
         .scalar()
     ) or 0
