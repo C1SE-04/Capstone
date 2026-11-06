@@ -266,8 +266,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                     }}
                     placeholder="Nhập tên tài khoản hoặc email..."
                     className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.identifier
-                        ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
-                        : 'focus:ring-[#F7AD62] border-transparent'
+                      ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                      : 'focus:ring-[#F7AD62] border-transparent'
                       }`}
                     disabled={isLoading}
                   />
@@ -290,8 +290,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                     }}
                     placeholder="VD: socratic_kid (3-20 ký tự, chữ, số, _)"
                     className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.username
-                        ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
-                        : 'focus:ring-[#F7AD62] border-transparent'
+                      ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                      : 'focus:ring-[#F7AD62] border-transparent'
                       }`}
                     disabled={isLoading}
                   />
@@ -313,8 +313,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                   }}
                   placeholder="Nhập mật khẩu..."
                   className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.password
-                      ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
-                      : 'focus:ring-[#F7AD62] border-transparent'
+                    ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                    : 'focus:ring-[#F7AD62] border-transparent'
                     }`}
                   disabled={isLoading}
                 />
@@ -338,8 +338,8 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                     }}
                     placeholder="Nhập lại mật khẩu..."
                     className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.confirmPassword
-                        ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
-                        : 'focus:ring-[#F7AD62] border-transparent'
+                      ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                      : 'focus:ring-[#F7AD62] border-transparent'
                       }`}
                     disabled={isLoading}
                   />
