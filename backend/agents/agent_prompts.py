@@ -554,37 +554,39 @@ def build_timeline_context_for_prompt(
     hk2_list_str = "; ".join(topics_hk2[:6]) + ("..." if len(topics_hk2) > 6 else "")
 
     if is_summer:
-        timeline_label = f"Tháng {curr_month} — Kỳ nghỉ hè"
+        timeline_label = f"Tháng {curr_month} — Kỳ nghỉ hè (Tháng 6–8)"
         scenario_guide = (
-            f"Đây là kỳ nghỉ hè. Khi học sinh than chưa học, hỏi thăm tự nhiên: "
-            f"'Kỳ nghỉ hè này em đang học trước kiến thức mới, hay ôn lại bài năm vừa rồi?' "
-            f"Nếu học trước → Kịch bản B (hướng dẫn từ căn bản, khen ngợi tinh thần). "
-            f"Nếu ôn bài cũ → Kịch bản A (từ khóa gợi nhớ, đồng cảm). "
-            f"Nếu không rõ → Hướng dẫn từ gốc, tuyệt đối không phán xét."
+            f"BỐI CẢNH MÙA HÈ: Hiện tại đang là kỳ nghỉ hè (Tháng {curr_month}). "
+            f"Học sinh đang hỏi bài toán thuộc chương trình Lớp {grade}. "
+            f"KHI HỌC SINH THAN CHƯA HỌC: BẠN BẮT BUỘC PHẢI DỪNG LẠI ĐÚNG 1 NHỊP VÀ ĐẶT CÂU HỎI THĂM DÒ MÙA HÈ (SUMMER PROBE):\n"
+            f"'Thầy thấy trên tài khoản em đang chọn Lớp {grade}. Kỳ nghỉ hè này em đang chuẩn bị học trước kiến thức lớp {grade}, hay em đang ôn lại bài năm vừa rồi vậy em? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé!'\n"
+            f"TUYỆT ĐỐI KHÔNG giải bài hoặc đưa ra phép tính toán học ngay trong lượt này. Hãy lắng nghe học sinh phản hồi trước."
         )
     elif server_sem == 1:
-        timeline_label = f"Tháng {curr_month} — Đang Học kỳ 1"
+        timeline_label = f"Tháng {curr_month} — Đang Học kỳ 1 (Tháng 9–1)"
         scenario_guide = (
-            f"Tháng {curr_month} — đang HK1. "
-            f"HK1 Lớp {grade}: [{hk1_list_str}]. "
-            f"HK2 Lớp {grade} (CHƯA HỌC): [{hk2_list_str}]. "
-            f"Khi học sinh than chưa học: TỰ ĐỐI CHIẾU bài với danh sách trên. "
-            f"Nếu bài thuộc HK2 → CHẮC CHẮN CHƯA HỌC → KỊCH BẢN B: "
-            f"'Bài này thuộc HK2 nên em chưa quen là bình thường! Thầy hướng dẫn từ nền tảng nhé.' "
-            f"Nếu bài thuộc HK1 → Hỏi tiến độ trường: 'Ở trường đã dạy đến bài này chưa?' "
-            f"→ Chưa dạy: Kịch bản B. → Đã dạy mà quên: Kịch bản A (gợi nhớ nhẹ nhàng)."
+            f"BỐI CẢNH HỌC KỲ 1 (Tháng {curr_month}):\n"
+            f"- Danh mục HK1 Lớp {grade}: [{hk1_list_str}]\n"
+            f"- Danh mục HK2 Lớp {grade} (CHƯA HỌC): [{hk2_list_str}]\n"
+            f"KHI HỌC SINH THAN CHƯA HỌC: BẠN BẮT BUỘC TỰ ĐỐI CHIẾU VỚI DANH MỤC TRÊN:\n"
+            f"1. NẾU BÀI KHỚP HK2 (Chưa học thật sự) -> ÁP DỤNG KỊCH BẢN B NGAY:\n"
+            f"   'Bài này thuộc học kỳ 2 nên em chưa quen là bình thường! Thầy sẽ hướng dẫn em từ nền tảng dễ hiểu nhất nhé.' rồi hướng dẫn từng bước nhỏ từ gốc rễ.\n"
+            f"2. NẾU BÀI KHỚP HK1 (Vùng xám - trường có thể chưa dạy tới hoặc đã học mà quên) -> BẮT BUỘC DỪNG LẠI 1 NHỊP VÀ HỎI THĂM DÒ TIẾN ĐỘ TRƯỜNG HỌC (SOCRATIC PROBE):\n"
+            f"   'Ở trường thầy cô đã dạy đến bài này chưa, hay em mới học đến phần nào rồi? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé!'\n"
+            f"   TUYỆT ĐỐI KHÔNG giải bài hay đưa ra gợi ý bước tính tiếp theo ngay trong lượt này!"
         )
     else:
-        timeline_label = f"Tháng {curr_month} — Đang Học kỳ 2"
+        timeline_label = f"Tháng {curr_month} — Đang Học kỳ 2 (Tháng 2–5)"
         scenario_guide = (
-            f"Tháng {curr_month} — đang HK2. "
-            f"HK1 Lớp {grade} (ĐÃ HỌC): [{hk1_list_str}]. "
-            f"HK2 Lớp {grade}: [{hk2_list_str}]. "
-            f"Khi học sinh than chưa học: TỰ ĐỐI CHIẾU bài với danh sách trên. "
-            f"Nếu bài thuộc HK1 → Bài kỳ trước đã học → KỊCH BẢN A: "
-            f"'Theo chương trình, đây là kiến thức HK1 em đã học. Thầy tin em có thể nhớ lại...' "
-            f"Nếu bài thuộc HK2 → Hỏi tiến độ: 'Ở trường đã dạy đến bài này chưa?' "
-            f"→ Chưa dạy: Kịch bản B. → Đã dạy mà quên: Kịch bản A (gợi nhớ nhẹ nhàng)."
+            f"BỐI CẢNH HỌC KỲ 2 (Tháng {curr_month}):\n"
+            f"- Danh mục HK1 Lớp {grade} (ĐÃ HỌC KỲ TRƯỚC): [{hk1_list_str}]\n"
+            f"- Danh mục HK2 Lớp {grade} (ĐANG HỌC): [{hk2_list_str}]\n"
+            f"KHI HỌC SINH THAN CHƯA HỌC: BẠN BẮT BUỘC TỰ ĐỐI CHIẾU:\n"
+            f"1. NẾU BÀI KHỚP HK1 (Kiến thức kỳ trước đã học) -> ÁP DỤNG KỊCH BẢN A:\n"
+            f"   'Theo chương trình, đây là kiến thức HK1 em đã học rồi. Thầy tin em có thể nhớ lại...' và cung cấp từ khóa gợi nhớ nhẹ nhàng.\n"
+            f"2. NẾU BÀI KHỚP HK2 -> BẮT BUỘC DỪNG LẠI 1 NHỊP VÀ HỎI THĂM DÒ TIẾN ĐỘ TRƯỜNG HỌC:\n"
+            f"   'Ở trường thầy cô đã dạy đến bài này chưa, hay em mới học đến phần nào rồi? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé!'\n"
+            f"   TUYỆT ĐỐI KHÔNG giải bài ngay trong lượt này!"
         )
 
     return {
