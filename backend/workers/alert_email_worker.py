@@ -23,16 +23,13 @@ from agents.email_alert_generator import (
 from agents.problem_title_generator import generate_friendly_problem_title
 
 
-def get_parent_notify_email(parent: "models.User") -> str:
+def get_parent_notify_email(parent: "models.User") -> Optional[str]:
     """
-    Lấy email để gửi thông báo cho phụ huynh.
-    - Nếu phụ huynh đã cài notification_email riêng → dùng email đó.
-    - Nếu phụ huynh đăng nhập bằng Google OAuth → dùng email Google (= email tài khoản).
-    - Fallback về email tài khoản chính.
+    Lấy email để gửi thông báo cho phụ huynh từ cột email duy nhất (gộp email thông báo và Google).
     """
-    if parent.notification_email and parent.notification_email.strip():
-        return parent.notification_email.strip()
-    return parent.email
+    if parent.email and parent.email.strip():
+        return parent.email.strip()
+    return None
 
 
 def resolve_problem_display_title(

@@ -181,7 +181,6 @@ class TestAuthUsernameAndSync:
                 id=parent_id,
                 username=parent_user,
                 email=None,
-                notification_email=None,
                 hashed_password=auth.hash_password("Password123!"),
                 role="MONITOR",
                 email_verified=False,
@@ -213,10 +212,9 @@ class TestAuthUsernameAndSync:
             )
             assert res.status_code == 200
 
-            # Kiểm tra trong DB: CẢ 2 cột email và notification_email đều được lưu
+            # Kiểm tra trong DB: Cột email duy nhất được lưu và email_verified = True
             db.refresh(parent)
             assert parent.email == target_email
-            assert parent.notification_email == target_email
             assert parent.email_verified is True
         finally:
             db.close()

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import dependencies
@@ -31,7 +32,7 @@ def get_current_user_profile(
         "session_version": user_db.session_version,
         "google_id": user_db.google_id,
         "oauth_provider": user_db.oauth_provider,
-        "notification_email": user_db.notification_email,
+        "notification_email": user_db.email,
         "email_verified": getattr(user_db, "email_verified", False),
     }
 
@@ -92,8 +93,10 @@ def update_notification_email(
 ):
     """
     Phụ huynh (MONITOR) cập nhật email nhận cảnh báo/thông báo.
+    - Cột notification_email đã gộp chung vào cột email duy nhất.
     - Chỉ cho phép role MONITOR.
     - Nếu đăng nhập bằng Google OAuth → từ chối (email Google là cố định).
+    - Không được đổi sang email đã tồn tại trên hệ thống (đặc biệt là tài khoản Google).
     """
     if current_user.get("role") != "MONITOR":
         raise HTTPException(status_code=403, detail="Chỉ phụ huynh mới có thể cập nhật email thông báo.")
@@ -103,19 +106,43 @@ def update_notification_email(
         raise HTTPException(status_code=404, detail="Người dùng không tồn tại.")
 
     # Nếu đăng nhập bằng Google OAuth → email thông báo = email Google, không cho sửa
-    if user_db.oauth_provider == "google":
+    if user_db.oauth_provider == "google" or user_db.google_id:
         raise HTTPException(
             status_code=400,
             detail="Tài khoản Google OAuth không thể thay đổi email thông báo. Email thông báo luôn là email Google của bạn."
         )
 
-    user_db.notification_email = str(body.notification_email)
+    new_email = str(body.notification_email).lower().strip()
+
+    # Kiểm tra xem email mới đã được sử dụng bởi tài khoản khác (bao gồm cả tài khoản Google)
+    conflict = (
+        db.query(models.User)
+        .filter(
+            func.lower(models.User.email) == new_email,
+            models.User.id != user_db.id,
+        )
+        .first()
+    )
+    if conflict:
+        if conflict.oauth_provider == "google" or conflict.google_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Email này đã được đăng nhập bằng tài khoản Google. Vui lòng sử dụng email khác."
+            )
+        raise HTTPException(
+            status_code=400,
+            detail="Email này đã tồn tại trong hệ thống. Vui lòng chọn email khác."
+        )
+
+    user_db.email = new_email
+    user_db.email_verified = True
     db.commit()
     db.refresh(user_db)
 
     return {
         "message": "Đã cập nhật email thông báo thành công.",
-        "notification_email": user_db.notification_email,
+        "email": user_db.email,
+        "notification_email": user_db.email,
     }
 
 
