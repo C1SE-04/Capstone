@@ -255,11 +255,11 @@ input:disabled,
   text-indent: 0;
 }
 
-/* MathLive Customization: Ẩn nút bàn phím ảo, menu và triệt tiêu bôi đen highlight */
+/* MathLive Customization: Ẩn nút bàn phím ảo, menu và cấu hình highlight bán trong suốt ấm áp */
 math-field {
-  --selection-background-color: transparent !important;
-  --contains-highlight-background-color: transparent !important;
-  --text-highlight-background-color: transparent !important;
+  --selection-background-color: rgba(193, 118, 42, 0.25) !important;
+  --contains-highlight-background-color: rgba(193, 118, 42, 0.12) !important;
+  --text-highlight-background-color: rgba(193, 118, 42, 0.12) !important;
 }
 
 math-field::part(virtual-keyboard-toggle),

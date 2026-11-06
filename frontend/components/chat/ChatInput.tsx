@@ -180,16 +180,24 @@ export function ChatInput({
               display: none !important;
             }
 
-            /* Triệt tiêu hoàn toàn hiệu ứng bôi đen / highlight nền đen của MathLive */
-            .ML__selection,
-            .ML__selected,
+            /* Màu nền highlight bán trong suốt màu cam ấm cho cấu trúc phân số/căn thức khi đang nhập */
             .ML__contains-highlight,
             .ML__focused .ML__contains-highlight,
-            .ML__focused .ML__selection,
-            :host(:focus) .ML__selection,
+            .ML__focused .ML__selected,
             :host(:focus) .ML__selected {
-              background: transparent !important;
-              background-color: transparent !important;
+              background: rgba(193, 118, 42, 0.12) !important;
+              background-color: rgba(193, 118, 42, 0.12) !important;
+              border-radius: 6px !important;
+              color: inherit !important;
+            }
+
+            /* Khi người dùng chủ động bôi đen (selection) */
+            .ML__selection,
+            .ML__focused .ML__selection,
+            :host(:focus) .ML__selection {
+              background: rgba(193, 118, 42, 0.25) !important;
+              background-color: rgba(193, 118, 42, 0.25) !important;
+              border-radius: 4px !important;
               color: inherit !important;
             }
 
@@ -662,9 +670,9 @@ export function ChatInput({
               style: {
                 "--primary-color": "#C1762A",
                 "--caret-color": "#8C4905",
-                "--selection-background-color": "transparent",
-                "--contains-highlight-background-color": "transparent",
-                "--text-highlight-background-color": "transparent",
+                "--selection-background-color": "rgba(193, 118, 42, 0.25)",
+                "--contains-highlight-background-color": "rgba(193, 118, 42, 0.12)",
+                "--text-highlight-background-color": "rgba(193, 118, 42, 0.12)",
                 "--placeholder-color": "#8C4905",
                 "--placeholder-opacity": "0.75",
                 display: "block",
