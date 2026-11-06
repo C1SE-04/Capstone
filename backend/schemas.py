@@ -447,6 +447,9 @@ class ChildProblemItem(BaseModel):
     problem_text: Optional[str] = None       # Đề bài toán gốc con gửi
     category: Optional[str] = "NEW_TOPIC"   # US 8.1 - AC 8.1.2: NEW_TOPIC | ISOMORPHIC_PRACTICE | EXACT_DUPLICATE
     is_duplicate: bool = False               # US 8.1 - AC 8.1.1: Đánh dấu bài trùng lặp
+    repeat_count: Optional[int] = 1          # US 9.2: Số lần giải bài (1 = lần đầu, >1 = giải lại)
+    max_score: Optional[int] = 100           # US 9.2: Điểm trần tối đa của lần giải này
+    repeat_warning: Optional[str] = None     # US 9.2: Cảnh báo bài trùng (VD: 'Bài giải lại, điểm tối đa là 90đ')
     dialogue_messages: list[ProblemDialogueMessage] = [] # Danh sách đầy đủ các bước đối thoại giữa con và hệ thống
 
     class Config:

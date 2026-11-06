@@ -38,13 +38,14 @@ from agents.independence_evaluator import evaluate_independence
 client = TestClient(app)
 
 TEST_USER_ID = f"test_user_us92_{uuid.uuid4().hex[:8]}"
+TEST_USERNAME = f"std_us92_{uuid.uuid4().hex[:6]}"
 TEST_SESSION_PREFIX = f"session_us92_{uuid.uuid4().hex[:6]}"
 
 
 def mock_current_user():
     return {
         "id": TEST_USER_ID,
-        "username": "student_us92",
+        "username": TEST_USERNAME,
         "email": f"{TEST_USER_ID}@socratickid.local",
         "role": "STUDENT",
         "grade": 5,
@@ -68,7 +69,7 @@ def setup_and_teardown_user():
     try:
         user = models.User(
             id=TEST_USER_ID,
-            username="student_us92",
+            username=TEST_USERNAME,
             email=f"{TEST_USER_ID}@socratickid.local",
             hashed_password="mocked_password",
             role="STUDENT",
@@ -90,6 +91,7 @@ def setup_and_teardown_user():
         db.query(models.User).filter(models.User.id == TEST_USER_ID).delete()
         db.commit()
         db.close()
+        app.dependency_overrides.pop(dependencies.get_current_user, None)
 
 
 # ==============================================================================

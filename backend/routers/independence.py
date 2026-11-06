@@ -283,10 +283,9 @@ def get_independence_summary(
     """
     target_id = student_id or current_user["id"]
 
-    # Lọc bỏ bài trùng lặp khi lấy danh sách biểu đồ lịch sử
+    # Lấy danh sách điểm số lịch sử phục vụ biểu đồ Line Chart và bài gần nhất (US 9.2: Ghi nhận cả bài giải lại)
     query = db.query(models.IndependenceScore).filter(
         models.IndependenceScore.student_id == target_id,
-        models.IndependenceScore.is_duplicate == False  # US 8.1: Không hiển thị bài lặp trùng
     )
     if start_date:
         query = query.filter(cast(models.IndependenceScore.created_at, Date) >= start_date)
