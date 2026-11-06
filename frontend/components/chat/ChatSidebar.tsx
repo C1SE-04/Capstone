@@ -6,6 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Conversation } from "@/types/chat";
+import { cleanLatexForTitle } from "@/lib/latex";
 // T6.5 – US 6.1: Thanh tiến trình Mastery tự lực
 import { MasteryProgressBar } from "./MasteryProgressBar";
 
@@ -128,7 +129,7 @@ export function ChatSidebar({
                         : "text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#8C4905]"
                     )}
                   >
-                    <span className="truncate flex-1 text-sm">{chat.title}</span>
+                    <span className="truncate flex-1 text-sm">{cleanLatexForTitle(chat.title)}</span>
                     {onDeleteChat && activeChatId === chat.id && (
                       <div className="flex gap-2 text-[#C1762A]">
                         <button

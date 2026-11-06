@@ -16,6 +16,7 @@ import { Menu, PanelRight, Trophy } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/authFetch";
 import { cn } from "@/lib/utils";
+import { cleanLatexForTitle } from "@/lib/latex";
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -892,9 +893,9 @@ export default function ChatPage() {
     if (!targetId) {
       // Trường hợp New Chat: cần tạo Session trên DB trước, rồi mới chat
       const title =
-        content.trim().length > 25
-          ? content.trim().slice(0, 25) + "..."
-          : content.trim() || (imageFile ? "Bài toán từ ảnh" : "Phòng chat mới");
+        cleanLatexForTitle(content) || (imageFile ? "Bài toán từ ảnh" : "Phòng chat mới"); // clean title
+
+
 
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";

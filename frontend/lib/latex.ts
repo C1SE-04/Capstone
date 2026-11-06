@@ -147,3 +147,59 @@ export function preprocessLaTeX(content: string): string {
 
   return protectedContent;
 }
+
+/**
+ * US 9.4: Làm sạch chuỗi LaTeX để hiển thị tiêu đề hội thoại (Chat History) ngắn gọn, dễ đọc.
+ * Chuyển đổi các công thức LaTeX như $\frac{23}{23}$ thành 23/23, \sqrt{...} thành √(...),
+ * loại bỏ dấu $ và các lệnh định dạng thừa để tiêu đề hiển thị tự nhiên.
+ */
+export function cleanLatexForTitle(content: string): string {
+  if (!content || typeof content !== "string") return "Phòng chat mới";
+  let t = content.trim();
+
+  // 1. Gỡ bỏ dấu $ bao bọc
+  t = t.replace(/\$/g, "");
+
+  // 2. Chuyển phân số \frac{a}{b} thành a/b đệ quy
+  while (/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/.test(t)) {
+    t = t.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, "$1/$2");
+  }
+  t = t.replace(/\\frac\s*([0-9a-zA-Z])([0-9a-zA-Z])/g, "$1/$2");
+
+  // 3. Chuyển căn thức \sqrt{...} thành √(...)
+  while (/\\sqrt\s*\{([^{}]*)\}/.test(t)) {
+    t = t.replace(/\\sqrt\s*\{([^{}]*)\}/g, "√($1)");
+  }
+  t = t.replace(/\\sqrt\s*([0-9a-zA-Z])/g, "√$1");
+
+  // 4. Các ký hiệu toán học phổ biến
+  t = t
+    .replace(/\\times/g, "×")
+    .replace(/\\div/g, "÷")
+    .replace(/\\pm/g, "±")
+    .replace(/\\pi/g, "π")
+    .replace(/\\le/g, "≤")
+    .replace(/\\ge/g, "≥")
+    .replace(/\\ne/g, "≠")
+    .replace(/\\left\|/g, "|")
+    .replace(/\\right\|/g, "|")
+    .replace(/\\left/g, "")
+    .replace(/\\right/g, "")
+    .replace(/\\placeholder\{[^}]*\}/g, "...")
+    .replace(/\\square/g, "...")
+    .replace(/\\ /g, " ")
+    .replace(/\\[a-zA-Z]+/g, "") // Bỏ các lệnh LaTeX còn sót
+    .replace(/[{}]/g, "") // Bỏ ngoặc nhọn thừa nếu còn
+    .replace(/\\/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Tách số và chữ tiếng Việt nếu bị dính nhau (VD: "23bằng" -> "23 bằng")
+  t = t.replace(/([0-9])([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ])/gi, "$1 $2");
+  // Khắc phục tách chữ tiếng Việt nếu có (VD: "b ằng mấy" -> "bằng mấy")
+  t = t.replace(/\b([a-zA-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ])/gi, "$1$2");
+
+  if (!t) return "Phòng chat mới";
+
+  return t.length > 25 ? t.slice(0, 25) + "..." : t;
+}
