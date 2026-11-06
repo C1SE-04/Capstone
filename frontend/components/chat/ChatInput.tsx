@@ -57,19 +57,61 @@ function formatLatexForChat(latex: string): string {
   const trimmed = latex.trim();
   if (!trimmed) return "";
 
-  // Nếu là công thức toán (chứa lệnh \frac, \sqrt, số mũ, log, ký hiệu đặc biệt)
-  const hasMath = /[\\^_{}√±×÷≤≥≠π]/.test(trimmed);
+  // 1. Kiểm tra xem có chứa biểu thức toán học đặc biệt không (sau khi đã tách các thẻ \text)
+  const withoutText = trimmed
+    .replace(/\\text\{[^{}]*\}/g, "")
+    .replace(/\\ /g, " ")
+    .trim();
+  const hasMath = /[\\^_{}√±×÷≤≥≠π]/.test(withoutText);
 
+  // Nếu hoàn toàn không có công thức toán (văn bản thuần túy)
   if (!hasMath) {
-    // Văn bản thông thường
-    return trimmed.replace(/\\text{([^}]+)}/g, "$1").replace(/\\ /g, " ").trim();
+    return trimmed
+      .replace(/\\text\{([^}]*)\}/g, "$1")
+      .replace(/\\ /g, " ")
+      .trim();
   }
 
-  // Nếu công thức chưa được bọc bởi $, bọc vào để KaTeX trong ChatMessage render chuẩn
-  if (!trimmed.startsWith("$") && !trimmed.endsWith("$")) {
-    return `$${trimmed}$`;
+  // 2. Nếu là công thức thuần toán (không có thẻ \text{} nào)
+  if (!trimmed.includes("\\text{")) {
+    if (!trimmed.startsWith("$") && !trimmed.endsWith("$")) {
+      return `$${trimmed}$`;
+    }
+    return trimmed;
   }
-  return trimmed;
+
+  // 3. Nếu là hỗn hợp giữa văn bản thường và công thức toán:
+  // Ví dụ: \text{Chào thầy, tính giúp em }\frac{1}{2}\text{ với ạ}
+  // Tách text thường giữ nguyên, công thức toán bọc trong $...$
+  let result = "";
+  let lastIndex = 0;
+  const textRegex = /\\text\{([^{}]*)\}/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = textRegex.exec(trimmed)) !== null) {
+    const mathPart = trimmed.substring(lastIndex, match.index).trim();
+    if (mathPart) {
+      if (!mathPart.startsWith("$") && !mathPart.endsWith("$")) {
+        result += ` $${mathPart}$ `;
+      } else {
+        result += ` ${mathPart} `;
+      }
+    }
+    const textPart = match[1];
+    result += textPart;
+    lastIndex = textRegex.lastIndex;
+  }
+
+  const remainingMath = trimmed.substring(lastIndex).trim();
+  if (remainingMath) {
+    if (!remainingMath.startsWith("$") && !remainingMath.endsWith("$")) {
+      result += ` $${remainingMath}$`;
+    } else {
+      result += ` ${remainingMath}`;
+    }
+  }
+
+  return result.replace(/\s+/g, " ").trim();
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────
@@ -109,7 +151,7 @@ export function ChatInput({
       if (mf) {
         mf.mathVirtualKeyboardPolicy = "manual";
         mf.menuItems = [];
-        mf.smartMode = true;
+        mf.defaultMode = "text"; // Bật Text Mode làm mặc định để gõ chữ tiếng Việt tự nhiên và giữ đúng font của web
 
         const handleInput = () => {
           const val = mf.value || "";
@@ -241,73 +283,81 @@ export function ChatInput({
 
       mf.focus();
 
-      // Sử dụng lệnh insert với placeholder (#?) chuẩn MathLive Engine
+      // Sử dụng lệnh insert với mode: "math" để chèn khối toán học vào văn bản
+      const insertMath = (latex: string) => {
+        if (typeof mf.insert === "function") {
+          mf.insert(latex, { mode: "math", selectionMode: "placeholder" });
+        } else if (typeof mf.executeCommand === "function") {
+          mf.executeCommand(["insert", latex, { mode: "math", selectionMode: "placeholder" }]);
+        }
+      };
+
       switch (symbolId) {
         case "fraction":
-          mf.executeCommand(["insert", "\\frac{#?}{#?}"]);
+          insertMath("\\frac{#?}{#?}");
           break;
         case "sqrt":
-          mf.executeCommand(["insert", "\\sqrt{#?}"]);
+          insertMath("\\sqrt{#?}");
           break;
         case "pow":
-          mf.executeCommand(["insert", "#@^{#?}"]);
+          insertMath("#@^{#?}");
           break;
         case "abs":
-          mf.executeCommand(["insert", "\\left|#?\\right|"]);
+          insertMath("\\left|#?\\right|");
           break;
         case "log":
-          mf.executeCommand(["insert", "\\log_{#?}(#?)"]);
+          insertMath("\\log_{#?}(#?)");
           break;
         case "degree":
-          mf.executeCommand(["insert", "^{\\circ}"]);
+          insertMath("^{\\circ}");
           break;
         case "percent":
-          mf.executeCommand(["insert", "\\%"]);
+          insertMath("\\%");
           break;
         case "le":
-          mf.executeCommand(["insert", "\\le"]);
+          insertMath("\\le");
           break;
         case "ge":
-          mf.executeCommand(["insert", "\\ge"]);
+          insertMath("\\ge");
           break;
         case "ne":
-          mf.executeCommand(["insert", "\\ne"]);
+          insertMath("\\ne");
           break;
         case "pm":
-          mf.executeCommand(["insert", "\\pm"]);
+          insertMath("\\pm");
           break;
         case "pi":
-          mf.executeCommand(["insert", "\\pi"]);
+          insertMath("\\pi");
           break;
         case "times":
-          mf.executeCommand(["insert", "\\times"]);
+          insertMath("\\times");
           break;
         case "divide":
-          mf.executeCommand(["insert", "\\div"]);
+          insertMath("\\div");
           break;
         case "delta":
-          mf.executeCommand(["insert", "\\Delta"]);
+          insertMath("\\Delta");
           break;
         case "var_x":
-          mf.executeCommand(["insert", "x"]);
+          insertMath("x");
           break;
         case "var_y":
-          mf.executeCommand(["insert", "y"]);
+          insertMath("y");
           break;
         case "sin":
-          mf.executeCommand(["insert", "\\sin(#?)"]);
+          insertMath("\\sin(#?)");
           break;
         case "cos":
-          mf.executeCommand(["insert", "\\cos(#?)"]);
+          insertMath("\\cos(#?)");
           break;
         case "tan":
-          mf.executeCommand(["insert", "\\tan(#?)"]);
+          insertMath("\\tan(#?)");
           break;
         case "cot":
-          mf.executeCommand(["insert", "\\cot(#?)"]);
+          insertMath("\\cot(#?)");
           break;
         default:
-          mf.executeCommand(["insert", template]);
+          insertMath(template);
           break;
       }
 
@@ -420,11 +470,18 @@ export function ChatInput({
         onClose={() => setIsPreviewOpen(false)}
       />
 
-      {/* Style ẩn nút bàn phím và nút menu mặc định của MathLive */}
+      {/* Style ẩn nút bàn phím và nút menu mặc định của MathLive & set font chuẩn cho text thường */}
       <style>{`
         math-field::part(virtual-keyboard-toggle),
         math-field::part(menu-toggle) {
           display: none !important;
+        }
+        math-field {
+          --text-font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+          font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        }
+        math-field::part(content) {
+          font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         }
       `}</style>
 
@@ -547,7 +604,7 @@ export function ChatInput({
             >
               {isOffline
                 ? "Mất kết nối. Đang chờ kết nối lại..."
-                : "Hỏi SocraticKid (nhập toán: bấm phân số, căn, mũ trên thanh công cụ)..."}
+                : "Hỏi SocraticKid (gõ văn bản thường, bấm phân số, căn trên thanh công cụ)..."}
             </div>
           )}
 
@@ -555,13 +612,16 @@ export function ChatInput({
             React.createElement("math-field", {
               ref: mathfieldRef,
               "math-virtual-keyboard-policy": "manual",
-              class: "w-full outline-none border-none bg-transparent text-[#1C1917] font-semibold text-base py-1 leading-normal",
+              "default-mode": "text",
+              class: "w-full outline-none border-none bg-transparent text-[#1C1917] font-normal text-base py-1 leading-normal",
               style: {
                 "--primary-color": "#C1762A",
                 "--caret-color": "#8C4905",
                 "--selection-background-color": "#F1CCA6",
                 "--placeholder-color": "#8C4905",
                 "--placeholder-opacity": "0.75",
+                "--text-font-family": "var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                fontFamily: "var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
                 display: "block",
                 minHeight: "36px",
               } as React.CSSProperties,

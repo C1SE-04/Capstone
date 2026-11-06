@@ -259,7 +259,16 @@ input:disabled,
   overflow: visible;
 }
 
-/* MathLive Customization: Ẩn nút bàn phím ảo và nút menu mặc định */
+/* MathLive Customization: Chuẩn hóa font chữ text thường & ẩn nút bàn phím ảo, menu */
+math-field {
+  --text-font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+math-field::part(content) {
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
 math-field::part(virtual-keyboard-toggle),
 math-field::part(menu-toggle) {
   display: none !important;
