@@ -427,7 +427,14 @@ export default function TryPage() {
               {msg.content === "" ? (
                 "Đang soạn..."
               ) : msg.role === "user" ? (
-                msg.content
+                <div className="break-words [&>p]:m-0 [&_.katex]:text-white [&_.katex-html]:text-white">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkMath, remarkGfm]}
+                    rehypePlugins={[rehypeKatex]}
+                  >
+                    {preprocessLaTeX(msg.content)}
+                  </ReactMarkdown>
+                </div>
               ) : (
                 <div className="markdown-prose prose-sm max-w-none min-w-0 break-words overflow-visible
                   prose-p:leading-relaxed prose-p:mb-2

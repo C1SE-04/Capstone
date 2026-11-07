@@ -7,6 +7,7 @@ import { Message } from "@/types/chat";
 import { BookmarkDialogueMessage } from "@/types/bookmark";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { authFetch } from "@/lib/authFetch";
+import { cleanLatexForDisplay } from "@/lib/latex";
 
 interface RawSessionMessage {
   id?: string;
@@ -173,7 +174,7 @@ export function BookmarkChatDrawer({
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-[#8C4905] truncate">
-                {problemTitle || "Xem lại đối thoại tư duy"}
+                {cleanLatexForDisplay(problemTitle) || "Xem lại đối thoại tư duy"}
               </h3>
               <div className="flex items-center gap-2 text-[11px] text-[#C1762A] mt-0.5">
                 {independenceScore !== undefined && independenceScore !== null && (
