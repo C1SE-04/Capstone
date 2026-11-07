@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { BookmarkItem } from "@/types/bookmark";
 import { ImageZoomModal } from "@/components/chat/ImageZoomModal";
+import { cleanLatexForDisplay } from "@/lib/latex";
 
 interface FlashcardItemProps {
   bookmark: BookmarkItem;
@@ -52,11 +53,12 @@ export function FlashcardItem({
     }
   };
 
-  const displayTitle =
+  const rawTitle =
     bookmark.title ||
     bookmark.problem_snapshot ||
     bookmark.session_title ||
     "Bài toán Sổ tay";
+  const displayTitle = cleanLatexForDisplay(rawTitle);
 
   return (
     <>
@@ -103,7 +105,7 @@ export function FlashcardItem({
                   Đề bài
                 </p>
                 <div className="p-3 rounded-lg bg-stone-50 border border-stone-200/60 text-xs text-stone-800 leading-relaxed font-normal line-clamp-3">
-                  {bookmark.problem_snapshot}
+                  {cleanLatexForDisplay(bookmark.problem_snapshot)}
                 </div>
               </div>
             )}
@@ -142,7 +144,7 @@ export function FlashcardItem({
                   Bí kíp cốt lõi
                 </p>
                 <p className="text-xs text-stone-800 leading-relaxed font-medium line-clamp-3">
-                  {bookmark.chat_summary}
+                  {cleanLatexForDisplay(bookmark.chat_summary)}
                 </p>
               </div>
             )}

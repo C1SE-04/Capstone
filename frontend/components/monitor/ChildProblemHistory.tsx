@@ -38,7 +38,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { preprocessLaTeX } from "@/lib/latex";
+import { preprocessLaTeX, cleanLatexForDisplay } from "@/lib/latex";
 
 // Schema tin nhắn đối thoại từng bước giữa Con và AI
 export interface ProblemDialogueMessage {
@@ -412,7 +412,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
 
                         {/* Tiêu đề bài toán */}
                         <h3 className="text-base font-extrabold text-[#8C4905] leading-snug">
-                          {title}
+                          {cleanLatexForDisplay(title)}
                         </h3>
 
                         {/* Thống kê gợi ý & chưa hiểu */}
@@ -433,7 +433,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                             <span className="font-bold text-[#C1762A] not-italic mr-1.5">
                               Con hỏi:
                             </span>
-                            &ldquo;{(item.chat_summary ? item.chat_summary.split(" | ")[0] : item.problem_text)}&rdquo;
+                            &ldquo;{cleanLatexForDisplay(item.chat_summary ? item.chat_summary.split(" | ")[0] : item.problem_text)}&rdquo;
                           </div>
                         )}
                       </div>
@@ -598,7 +598,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                     Hành Trình Tư Duy Của Con
                   </h3>
                   <p className="text-xs text-[#C1762A] line-clamp-1">
-                    {activeDialogue.session_title || "Bài toán giải cùng AI Socratic"}
+                    {cleanLatexForDisplay(activeDialogue.session_title || "Bài toán giải cùng AI Socratic")}
                   </p>
                 </div>
               </div>
@@ -728,11 +728,16 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                               </div>
                             )}
 
-                            {/* Nội dung đối thoại (Hỗ trợ render KaTeX & Markdown chuẩn cho AI) */}
+                            {/* Nội dung đối thoại (Hỗ trợ render KaTeX & Markdown chuẩn cho cả Con và AI) */}
                             {isUser ? (
-                              <p className="text-xs leading-relaxed whitespace-pre-line font-medium text-[#8C4905]">
-                                {msg.content}
-                              </p>
+                              <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#8C4905] min-w-0 break-words overflow-visible">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkMath, remarkGfm]}
+                                  rehypePlugins={[rehypeKatex]}
+                                >
+                                  {preprocessLaTeX(msg.content)}
+                                </ReactMarkdown>
+                              </div>
                             ) : (
                               <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#1C1917] min-w-0 break-words overflow-visible">
                                 <ReactMarkdown
@@ -778,7 +783,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                             : `Con phản hồi bước ${index + 1}:`}
                         </span>
                         <p className="text-xs text-[#8C4905] leading-relaxed font-medium">
-                          &ldquo;{sentence}&rdquo;
+                          &ldquo;{cleanLatexForDisplay(sentence)}&rdquo;
                         </p>
                       </div>
                     </div>

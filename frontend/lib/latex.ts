@@ -149,15 +149,20 @@ export function preprocessLaTeX(content: string): string {
 }
 
 /**
- * US 9.4: Làm sạch chuỗi LaTeX để hiển thị tiêu đề hội thoại (Chat History) ngắn gọn, dễ đọc.
- * Chuyển đổi các công thức LaTeX như $\frac{23}{23}$ thành 23/23, \sqrt{...} thành √(...),
- * loại bỏ dấu $ và các lệnh định dạng thừa để tiêu đề hiển thị tự nhiên.
+ * US 9.4: Làm sạch chuỗi LaTeX để hiển thị văn bản tự nhiên, dễ đọc.
+ * Chuyển đổi các công thức LaTeX như $\frac{10}{2} = ?$ thành 10/2 = ?, $5^2+ 5^2$ thành 5² + 5²,
+ * \sqrt{...} thành √(...), loại bỏ hoàn toàn các ký hiệu $ và lệnh LaTeX code thừa.
  */
-export function cleanLatexForTitle(content: string): string {
-  if (!content || typeof content !== "string") return "Phòng chat mới";
+export function cleanLatexForDisplay(content: string | null | undefined, maxLength?: number): string {
+  if (!content || typeof content !== "string") return "";
   let t = content.trim();
 
-  // 1. Gỡ bỏ dấu $ bao bọc
+  // Bỏ dấu ngoặc kép thừa nếu chuỗi bị bọc lặp (VD: "\"$\frac{...}$\"")
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith('“') && t.endsWith('”'))) {
+    t = t.slice(1, -1).trim();
+  }
+
+  // 1. Gỡ bỏ dấu $ và $$
   t = t.replace(/\$/g, "");
 
   // 2. Chuyển phân số \frac{a}{b} thành a/b đệ quy
@@ -172,21 +177,37 @@ export function cleanLatexForTitle(content: string): string {
   }
   t = t.replace(/\\sqrt\s*([0-9a-zA-Z])/g, "√$1");
 
-  // 4. Các ký hiệu toán học phổ biến
+  // 4. Lũy thừa phổ biến: ^2 -> ², ^3 -> ³, ^{...} -> ^(...)
+  t = t.replace(/\^2(?![0-9])/g, "²");
+  t = t.replace(/\^3(?![0-9])/g, "³");
+  t = t.replace(/\^\{([^{}]*)\}/g, "^($1)");
+
+  // 5. Các ký hiệu toán học phổ biến
   t = t
     .replace(/\\times/g, "×")
+    .replace(/\\cdot/g, "·")
     .replace(/\\div/g, "÷")
     .replace(/\\pm/g, "±")
     .replace(/\\pi/g, "π")
-    .replace(/\\le/g, "≤")
-    .replace(/\\ge/g, "≥")
-    .replace(/\\ne/g, "≠")
+    .replace(/\\le(?:q)?(?![a-zA-Z])/g, "≤")
+    .replace(/\\ge(?:q)?(?![a-zA-Z])/g, "≥")
+    .replace(/\\ne(?:q)?(?![a-zA-Z])/g, "≠")
+    .replace(/\\approx/g, "≈")
+    .replace(/\\circ|\\degree/g, "°")
     .replace(/\\left\|/g, "|")
     .replace(/\\right\|/g, "|")
+    .replace(/\\left\[/g, "[")
+    .replace(/\\right\]/g, "]")
+    .replace(/\\left\(/g, "(")
+    .replace(/\\right\)/g, ")")
+    .replace(/\\left\./g, "")
+    .replace(/\\right\./g, "")
     .replace(/\\left/g, "")
     .replace(/\\right/g, "")
+    .replace(/\\text\s*\{([^{}]*)\}/g, "$1")
     .replace(/\\placeholder\{[^}]*\}/g, "...")
     .replace(/\\square/g, "...")
+    .replace(/\\(?:quad|enspace|;|,)*/g, " ")
     .replace(/\\ /g, " ")
     .replace(/\\[a-zA-Z]+/g, "") // Bỏ các lệnh LaTeX còn sót
     .replace(/[{}]/g, "") // Bỏ ngoặc nhọn thừa nếu còn
@@ -199,7 +220,15 @@ export function cleanLatexForTitle(content: string): string {
   // Khắc phục tách chữ tiếng Việt nếu có (VD: "b ằng mấy" -> "bằng mấy")
   t = t.replace(/\b([a-zA-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ])/gi, "$1$2");
 
-  if (!t) return "Phòng chat mới";
+  if (maxLength && t.length > maxLength) {
+    return t.slice(0, maxLength) + "...";
+  }
 
-  return t.length > 25 ? t.slice(0, 25) + "..." : t;
+  return t;
+}
+
+export function cleanLatexForTitle(content: string): string {
+  if (!content || typeof content !== "string") return "Phòng chat mới";
+  const cleaned = cleanLatexForDisplay(content, 25);
+  return cleaned || "Phòng chat mới";
 }

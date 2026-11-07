@@ -47,6 +47,7 @@ import {
   PieChart,
   Pie,
 } from "recharts";
+import { cleanLatexForDisplay } from "@/lib/latex";
 
 import {
   AdminSafetyLogItem,
@@ -1548,7 +1549,7 @@ function AdminSafetyContent() {
                       {/* Cột 3: Nội dung câu chat */}
                       <td className="py-3.5 px-4 max-w-xs">
                         <div className="font-medium text-[#1C1917] line-clamp-2 bg-[#F7ECE1] p-2 rounded-lg border border-[#F1CCA6]/60 text-xs">
-                          &quot;{log.message_snippet}&quot;
+                          &quot;{cleanLatexForDisplay(log.message_snippet)}&quot;
                         </div>
                         <div className="text-[11px] text-[#7A3E04] mt-1 line-clamp-1 italic">
                           Lý do: {log.flagged_reason}
@@ -1793,7 +1794,7 @@ function AdminSafetyContent() {
                       <div className="flex items-center gap-1 font-bold text-red-700 text-[11px] mb-1">
                         <AlertTriangle size={12} /> Tin nhắn vi phạm của học sinh:
                       </div>
-                      <p className="font-semibold">&quot;{selectedLog.conversation_context?.student_message}&quot;</p>
+                      <p className="font-semibold">&quot;{cleanLatexForDisplay(selectedLog.conversation_context?.student_message)}&quot;</p>
                     </div>
                     <div className="w-7 h-7 rounded-lg bg-red-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
                       HS
