@@ -40,6 +40,9 @@ from middleware import ChatSessionVersionMiddleware, SystemErrorMiddleware
 app.add_middleware(ChatSessionVersionMiddleware)
 # US 9.5 (Task T9.17): Middleware tu dong bat unhandled exceptions & ghi system_errors
 app.add_middleware(SystemErrorMiddleware)
+# US 10.2 (T10.2.1): Telemetry Middleware đo latency và HTTP status mỗi request
+from middleware.telemetry_middleware import TelemetryMiddleware
+app.add_middleware(TelemetryMiddleware)
 
 # Cấu hình CORS của team FE (bọc ngoài cùng để response từ middleware cũng có CORS headers)
 app.add_middleware(
@@ -147,6 +150,12 @@ async def startup_event():
         asyncio.create_task(schedule_alert_email_worker(interval_seconds=20))
     except Exception as e:
         print(f"⚠️ Không thể khởi động Alert Email Worker: {e}")
+    # 5. US 10.2 (T10.2.3): Khởi động Telemetry Batch Worker — gom event và cập nhật Redis counters
+    try:
+        from workers.telemetry_batch_worker import start_telemetry_worker
+        asyncio.create_task(start_telemetry_worker())
+    except Exception as e:
+        print(f"⚠️ Không thể khởi động Telemetry Batch Worker: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():

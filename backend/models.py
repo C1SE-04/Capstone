@@ -1,6 +1,6 @@
 # models.py
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index, Integer, Text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index, Integer, Text, BigInteger, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -682,3 +682,110 @@ class SystemError(Base):
 
     user = relationship("User", foreign_keys=[user_id], backref="system_errors")
     resolver = relationship("User", foreign_keys=[resolved_by])
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 10.2 (Task T10.2.0): Bảng Hệ Thống KPI Telemetry & Giám Sát Hiệu Năng
+# ────────────────────────────────────────────────────────────────────────────
+
+class SystemMetricsHourly(Base):
+    """
+    US 10.2 - Task T10.2.0:
+    Lưu trữ tổng hợp hiệu năng toàn hệ thống theo từng giờ (Hourly Rollup).
+    Phục vụ các biểu đồ Throughput (RPM/RPH), Token tiêu thụ, Độ trễ phân vị (P50/P95/P99),
+    Time To First Token (TTFT), và phân bổ mã trạng thái HTTP (2xx, 4xx, 5xx, 429).
+    """
+    __tablename__ = "system_metrics_hourly"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    bucket_timestamp = Column(DateTime(timezone=True), nullable=False, unique=True, index=True)
+
+    # Throughput theo nhóm API
+    total_requests = Column(Integer, default=0, nullable=False)
+    chat_requests = Column(Integer, default=0, nullable=False)
+    eval_requests = Column(Integer, default=0, nullable=False)
+    auth_requests = Column(Integer, default=0, nullable=False)
+    other_requests = Column(Integer, default=0, nullable=False)
+
+    # Tiêu thụ Token & Chi phí
+    prompt_tokens = Column(BigInteger, default=0, nullable=False)
+    completion_tokens = Column(BigInteger, default=0, nullable=False)
+    total_tokens = Column(BigInteger, default=0, nullable=False)
+    estimated_cost_usd = Column(Numeric(12, 6), default=0.0, nullable=False)
+
+    # Latency & SLA (ms)
+    avg_latency_ms = Column(Integer, default=0, nullable=False)
+    p50_latency_ms = Column(Integer, default=0, nullable=False)
+    p95_latency_ms = Column(Integer, default=0, nullable=False)
+    p99_latency_ms = Column(Integer, default=0, nullable=False)
+    avg_ttft_ms = Column(Integer, default=0, nullable=False)
+
+    # HTTP Status Distribution
+    status_2xx_count = Column(Integer, default=0, nullable=False)
+    status_4xx_count = Column(Integer, default=0, nullable=False)
+    status_5xx_count = Column(Integer, default=0, nullable=False)
+    gemini_429_count = Column(Integer, default=0, nullable=False)
+    failover_count = Column(Integer, default=0, nullable=False)
+
+    # Hạ tầng & Bộ đệm
+    redis_cache_hits = Column(Integer, default=0, nullable=False)
+    redis_cache_misses = Column(Integer, default=0, nullable=False)
+    peak_concurrent_sse = Column(Integer, default=0, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SystemAgentMetricsHourly(Base):
+    """
+    US 10.2 - Task T10.2.0:
+    Phân rã lưu lượng và mức độ sử dụng token theo 6 phân hệ (Agent) và model AI cụ thể.
+    Agent: Chat, Classifier, Flashcard, ParentReport, Email, Fallback
+    Model:
+      - gemini-2.5-flash      (Chat chính)
+      - gemini-2.0-flash      (Chat dự phòng)
+      - gemini-2.0-flash-lite (Sub-Agent: Classifier, Rubric)
+      - gemini-1.5-pro        (Parent Insights - context 2M tokens)
+    """
+    __tablename__ = "system_agent_metrics_hourly"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    bucket_timestamp = Column(DateTime(timezone=True), nullable=False)
+    agent_name = Column(String(64), nullable=False)
+    model_name = Column(String(64), nullable=False)
+
+    request_count = Column(Integer, default=0, nullable=False)
+    prompt_tokens = Column(BigInteger, default=0, nullable=False)
+    completion_tokens = Column(BigInteger, default=0, nullable=False)
+    total_cost_usd = Column(Numeric(12, 6), default=0.0, nullable=False)
+    avg_latency_ms = Column(Integer, default=0, nullable=False)
+    error_count = Column(Integer, default=0, nullable=False)
+
+    __table_args__ = (
+        Index("ix_agent_metrics_bucket_agent", "bucket_timestamp", "agent_name"),
+        Index("uq_agent_metrics_bucket_agent_model", "bucket_timestamp", "agent_name", "model_name", unique=True),
+    )
+
+
+class SystemIncidentLog(Base):
+    """
+    US 10.2 - Task T10.2.0:
+    Nhật ký cảnh báo vi phạm ngưỡng SLA (5xx > 2%, P95 > 1800ms, Quota 429...)
+    Dùng hiển thị banner đỏ trực quan trên Admin Dashboard khi status = 'ACTIVE'.
+    """
+    __tablename__ = "system_incidents_log"
+
+    id = Column(String(64), primary_key=True, default=lambda: uuid.uuid4().hex)
+    incident_type = Column(String(32), nullable=False)  # HIGH_LATENCY | ERROR_SPIKE | QUOTA_EXCEEDED | DB_POOL_EXHAUSTED
+    severity = Column(String(16), nullable=False)       # WARNING | CRITICAL
+    metric_name = Column(String(64), nullable=False)    # p95_latency_ms, status_5xx_rate, etc.
+    threshold_value = Column(Numeric(12, 2), nullable=False)
+    actual_value = Column(Numeric(12, 2), nullable=False)
+    message = Column(Text, nullable=False)
+    status = Column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE")  # ACTIVE | RESOLVED
+    triggered_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_incidents_active_triggered", "status", "triggered_at"),
+    )
+
