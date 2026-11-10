@@ -106,8 +106,9 @@ def _get_sync_redis():
     rest_token = os.getenv("UPSTASH_REDIS_REST_TOKEN")
     if rest_url and rest_token:
         try:
-            import upstash_redis
-            _sync_redis_client = upstash_redis.Redis(url=rest_url, token=rest_token)
+            import importlib
+            upstash_redis = importlib.import_module("upstash_redis")
+            _sync_redis_client = getattr(upstash_redis, "Redis")(url=rest_url, token=rest_token)
             return _sync_redis_client
         except (ImportError, Exception):
             pass
