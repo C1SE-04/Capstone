@@ -130,9 +130,13 @@ def generate_parent_learning_insights(
 
     genai.configure(api_key=key)
 
-    # Sử dụng model gemini-3.5-flash-lite đồng bộ toàn dự án
-    # Nhiệt độ thấp (0.25) để báo cáo mang tính sư phạm chuẩn xác, không bịa đặt số liệu
-    model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    # US 10.3 (Task T10.3.3): Đọc parent_insight_model động từ SystemConfigService
+    try:
+        from services.system_config_service import get_system_settings
+        sys_config = get_system_settings()
+        model_name = sys_config.get("parent_insight_model") or os.getenv("GEMINI_INSIGHT_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+    except Exception:
+        model_name = os.getenv("GEMINI_INSIGHT_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
     
     generation_config = {
         "temperature": 0.25,
