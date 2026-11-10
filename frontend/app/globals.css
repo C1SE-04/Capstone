@@ -3,6 +3,21 @@
 :root {
   --background: #F7ECE1;
   --foreground: #1C1917;
+
+  /* SocraticKid Design Tokens (DESIGN.md) */
+  --bg-warm-canvas: #F7ECE1;
+  --surface-card: #FFFFFF;
+  --surface-secondary: #F1CCA6;
+  --surface-accent: #F7AD62;
+  --primary: #C1762A;
+  --primary-hover: #8C4905;
+  --ink-deep: #8C4905;
+  --ink-body: #1C1917;
+  --ink-muted: #7A3E04;
+  --success: #10B981;
+  --success-bg: #ECFDF5;
+  --warning: #F59E0B;
+  --error: #EF4444;
 }
 
 @theme {
@@ -12,9 +27,11 @@
   --font-mono: var(--font-geist-mono);
 
   /* SocraticKid Pedagogical Warm Color Palette (DESIGN.md) */
+  --color-bg-warm-canvas: #F7ECE1;
   --color-primary: #C1762A;
   --color-primary-hover: #8C4905;
   --color-primary-gradient-end: #8C4905;
+  --color-ink-deep: #8C4905;
   --color-ink: #8C4905;
   --color-ink-body: #1C1917;
   --color-ink-muted: #7A3E04;
@@ -29,12 +46,20 @@
   --color-error: #EF4444;
 }
 
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 @keyframes message-pop-in {
