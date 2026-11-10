@@ -102,7 +102,14 @@ def classify_problem(
         )
 
     genai.configure(api_key=key)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+
+    # US 10.3 (Task T10.3.3): Đọc classifier_model động từ SystemConfigService
+    try:
+        from services.system_config_service import get_system_settings
+        sys_config = get_system_settings()
+        model_name = sys_config.get("classifier_model") or os.getenv("GEMINI_CLASSIFIER_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    except Exception:
+        model_name = os.getenv("GEMINI_CLASSIFIER_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
     formatted_history = (
         _format_history_for_gemini(history_problems)
