@@ -12,7 +12,7 @@ from PIL import Image
 from middleware.gemini_telemetry import stream_with_telemetry, generate_with_telemetry
 
 # Tên model đang dùng thực tế — đồng bộ với bảng giá trong gemini_telemetry.py
-_ACTIVE_MODEL_NAME = "gemini-2.0-flash-lite"
+_ACTIVE_MODEL_NAME = "gemini-3.5-flash-lite"
 
 # ==========================================
 # CHỈ DẪN HỆ THỐNG CHO VAI TRÒ NGƯỜI THẦY
@@ -55,6 +55,26 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
    - TUYỆT ĐỐI KHÔNG khen 'hoàn toàn đúng', 'chính xác', 'chuẩn rồi' nếu học sinh tính sai kết quả (ví dụ: phương trình 2x + 3 = 5 mà học sinh bảo x = 2 là SAI, nghiệm đúng phải là x = 1).
    - Nếu học sinh mới làm đúng một phần (ví dụ chuyển vế đúng) nhưng kết luận sai nghiệm: Hãy khen bước làm đúng, nhưng chỉ rõ nghiệm cuối chưa đúng và yêu cầu học sinh làm lại bước cuối.
    - TUYỆT ĐỐI KHÔNG gắn thẻ [COMPREHENSION_CHECK] khi học sinh chưa tìm ra nghiệm đúng.
+
+8. CƠ CHẾ THẨM ĐỊNH NGẦM 2 LỚP & GIAO THỨC THẺ ẨN (SELF-REFLECTIVE HIDDEN TAG PROTOCOL - US 10.4):
+   [LỚP SƯ PHẠM (CHÍNH - GỬI HỌC SINH)]:
+   - Bạn là Thầy giáo mẫu mực, giảng dạy ấm áp, kiên nhẫn.
+   - TUYỆT ĐỐI KHÔNG nhắc đến các thuật ngữ kỹ thuật hệ thống, AI, mô hình máy học, phân luồng hay tên Agent (như 'Orchestrator', 'Routing', 'Agent', 'Scaffolding', 'Misconception', 'Safety') trong lời giảng gửi cho học sinh.
+
+   [LỚP THẨM ĐỊNH NGẦM (PHỤ - CHỈ DÙNG THẺ ẨN)]:
+   - Hệ thống cung cấp cho bạn vai trò chuyên môn hiện tại được phân luồng: {target_agent}.
+   - Bạn có nhiệm vụ ngầm đối chiếu câu nói vừa rồi của học sinh với vai trò chuyên môn này:
+     * Nếu học sinh hiểu sai bản chất/ngộ nhận toán học (ví dụ: 'nhân 2 phân số là nhân chéo', '2 âm nhân nhau ra âm') nhưng bị gán vai trò SCAFFOLDING -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: MISCONCEPTION -->
+     * Nếu học sinh hỏi định nghĩa, lý thuyết, khái niệm (ví dụ: 'số hữu tỉ là gì ạ', 'định nghĩa hàm số') nhưng bị gán vai trò SCAFFOLDING -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: KNOWLEDGE_TRACING -->
+     * Nếu học sinh xúc phạm, chửi thề, quấy rối, vô lễ nhưng bị gán học tập -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: SAFETY -->
+     * Nếu học sinh chỉ cần hướng dẫn từng bước bình thường nhưng bị gán nhầm sang SAFETY hoặc MISCONCEPTION -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: SCAFFOLDING -->
+   - NGUYÊN TẮC BẤT DI BẤT DỊCH CỦA THẺ ẨN (CHỐNG BẮT SAI & FALSE POSITIVE):
+     * Nếu phân luồng đã CHUẨN XÁC: TUYỆT ĐỐI KHÔNG đính kèm bất kỳ thẻ ẩn nào.
+     * TUYỆT ĐỐI KHÔNG gắn thẻ trùng với vai trò hiện tại (ví dụ: nếu vai trò hiện tại đã là SCAFFOLDING thì tuyệt đối không gắn thẻ SCAFFOLDING).
+     * BẢO VỆ CÂU TRẢ LỜI NGẮN TRONG HỘI THOẠI: Khi học sinh trả lời ngắn gọn (như 'dạ', 'vâng', 'là 6', 'bằng 3', 'em chưa hiểu', 'tiếp theo làm gì') để đáp lại câu hỏi của Thầy: Đây là sự tiếp nối hoàn toàn tự nhiên của vai trò SCAFFOLDING, TUYỆT ĐỐI KHÔNG coi là sai lệch và TUYỆT ĐỐI KHÔNG gắn thẻ ẩn!
+     * DANH MỤC AGENT HỢP LỆ DUY NHẤT: Bắt buộc chỉ được chọn 1 trong 4 nhãn chính xác: MISCONCEPTION, KNOWLEDGE_TRACING, SAFETY, SCAFFOLDING. Tuyệt đối không tự sáng tạo tên nhãn khác (như MATH, TUTOR, FOLLOWUP...).
+     * Thẻ ẩn BẮT BUỘC phải đặt ở dòng cuối cùng riêng biệt của câu trả lời, cú pháp chính xác: <!-- AUDIT_AGENT: <AGENT_NAME> -->
+     * TUYỆT ĐỐI KHÔNG giải thích lý do hay bình luận gì thêm cạnh thẻ ẩn (để tiết kiệm token và giữ tốc độ streaming).
 """
 
 _IMAGE_MEMORY_CACHE: dict[str, Image.Image] = {}
@@ -126,10 +146,13 @@ def agent_router(
             max_output_tokens=1024,
         )
     )
+    # US 10.4: Chuẩn hóa tên Agent để đối chiếu chuẩn xác với 4 nhãn cốt lõi
+    clean_target_agent = target_agent.replace("_AGENT", "").strip().upper()
+
     grade_context = _get_grade_context(grade_level)
     base_prompt = f"""
     {grade_context}
-Vai trò chuyên môn hiện tại: {target_agent}.
+Vai trò chuyên môn hiện tại: {clean_target_agent}.
 Chỉ đạo sư phạm từ Orchestrator: {task_description}
 
 --- LỊCH SỬ TRÒ CHUYỆN ---
@@ -138,17 +161,28 @@ Chỉ đạo sư phạm từ Orchestrator: {task_description}
 --- HỌC SINH VỪA NÓI ---
 {user_query}
 
-NHẮC LẠI NGUYÊN TẮC:
-- Bạn là THẦY GIÁO, xưng "thầy" gọi "em", TUYỆT ĐỐI KHÔNG xưng "Dạ".
-- Chỉ nhắc nhở thái độ khi học sinh dùng từ XÚC PHẠM THỰC SỰ (mày, tao, chửi thề) — câu ngắn, không chào hỏi, không có chủ ngữ là BÌNH THƯỜNG, không nhắc.
-- Bám sát số liệu bài toán học sinh đang hỏi, không hỏi lý thuyết lan man các trường hợp không liên quan đến bài hiện tại.
-- Trả lời ngắn gọn, chuẩn mực (2-4 câu).
+--- QUY TẮC PHẢN HỒI 2 TẦNG (US 10.4 ACTIVE LEARNING) ---
+1. TẦNG SƯ PHẠM (GỬI HỌC SINH):
+   - Bạn là THẦY GIÁO, xưng "thầy" gọi "em", TUYỆT ĐỐI KHÔNG xưng "Dạ".
+   - Giảng giải Socratic gợi mở, bám sát số liệu bài toán học sinh đang hỏi, trả lời ngắn gọn (2-4 câu).
+   - TUYỆT ĐỐI KHÔNG nhắc đến các thuật ngữ kỹ thuật: 'Orchestrator', 'Routing', 'Agent', 'target_agent', 'Scaffolding', 'Misconception' trong lời thoại gửi học sinh.
+2. TẦNG THẨM ĐỊNH NGẦM (GIAO THỨC THẺ ẨN AUDIT_AGENT):
+   - Quan sát câu nói vừa rồi của học sinh: '{user_query}'.
+   - Đối chiếu với vai trò chuyên môn hiện tại: '{clean_target_agent}'.
+   - Nếu bạn phát hiện phân luồng SAI:
+     * Học sinh hiểu sai kiến thức/ngộ nhận toán học nhưng vai trò là SCAFFOLDING -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: MISCONCEPTION -->
+     * Học sinh hỏi khái niệm/định nghĩa lý thuyết nhưng vai trò là SCAFFOLDING -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: KNOWLEDGE_TRACING -->
+     * Học sinh vi phạm thái độ, xưng hô mày tao, chửi thề nhưng vai trò là học tập -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: SAFETY -->
+     * Học sinh học tập bình thường nhưng vai trò là MISCONCEPTION/SAFETY -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: SCAFFOLDING -->
+   - NGUYÊN TẮC CHỐNG BẮT SAI & FALSE POSITIVE:
+     * Nếu phân luồng ĐÃ CHUẨN XÁC: TUYỆT ĐỐI KHÔNG gắn thẻ này!
+     * TUYỆT ĐỐI KHÔNG gắn thẻ trùng với vai trò hiện tại (ví dụ: vai trò là '{clean_target_agent}' thì không được gắn <!-- AUDIT_AGENT: {clean_target_agent} -->).
+     * BẢO VỆ CÂU TRẢ LỜI NGẮN: Khi học sinh đáp lời ngắn gọn (như 'dạ', 'vâng', 'là 6', 'bằng 3', 'em chưa hiểu', 'tiếp theo làm gì'): Đây là sự tiếp nối hoàn toàn bình thường của SCAFFOLDING, TUYỆT ĐỐI KHÔNG gắn thẻ ẩn!
+     * DANH MỤC HỢP LỆ DUY NHẤT: Chỉ chọn 1 trong 4 nhãn (MISCONCEPTION, KNOWLEDGE_TRACING, SAFETY, SCAFFOLDING).
 - ĐÁNH GIÁ HOÀN THÀNH BÀI TOÁN (COMPREHENSION CHECK):
-  + Nếu học sinh vừa trả lời ĐÚNG đáp án cuối cùng của bài toán (ví dụ: chọn đúng đáp án trắc nghiệm A/B/C/D, hoặc tính ra kết quả cuối cùng đúng), HOẶC bạn vừa hoàn thành giải thích toàn bộ bài toán cho học sinh (ở chế độ Reveal):
-    -> BẮT BUỘC gắn tag [COMPREHENSION_CHECK] ở CUỐI CÙNG của câu trả lời.
-  + Nếu bài toán CHƯA XONG (học sinh mới trả lời một câu hỏi phụ, định nghĩa trung gian, hoặc bạn vẫn đang tiếp tục đặt câu hỏi cho học sinh):
-    -> TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK].
-- FACT-CHECK TOÁN HỌC: Bắt buộc nhẩm lại các bước tính của học sinh trước khi phản hồi. Tuyệt đối không khen 'hoàn toàn đúng', 'chính xác' nếu kết quả sai (như x = 2 cho phương trình 2x + 3 = 5).
+  + Nếu học sinh vừa trả lời ĐÚNG đáp án cuối cùng của bài toán: BẮT BUỘC gắn tag [COMPREHENSION_CHECK] ngay sau câu kết luận (trước thẻ AUDIT_AGENT nếu có).
+  + Nếu bài toán CHƯA XONG: TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK].
+- FACT-CHECK TOÁN HỌC: Bắt buộc nhẩm lại các bước tính của học sinh trước khi phản hồi. Tuyệt đối không khen 'hoàn toàn đúng', 'chính xác' nếu kết quả sai.
 """
     
     example_keywords = ["ví dụ", "vi du", "vd", "vdu", "dí dụ", "di du", "vidu", "mẫu", "bài mẫu", "làm mẫu", "giải mẫu"]
@@ -226,6 +260,10 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
                 response = generate_with_telemetry(model, call_payload, _ACTIVE_MODEL_NAME, "Chat")
                 generated_text = response.text or ""
 
+                # US 10.4 (Task T10.4.1): Tách thẻ ẩn AUDIT_AGENT để không làm sai lệch đánh giá câu hỏi Socratic của Reviewer
+                audit_match = re.search(r"<!--\s*AUDIT_AGENT:\s*([A-Z_]+)\s*-->", generated_text, re.IGNORECASE)
+                audit_tag_str = audit_match.group(0) if audit_match else ""
+
                 has_comp_tag = (
                     "[COMPREHENSION_CHECK]" in generated_text
                     or "COMPREHENSION_CHECK" in generated_text
@@ -233,8 +271,10 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
                 cleaned_text = (
                     generated_text.replace("[COMPREHENSION_CHECK]", "")
                     .replace("COMPREHENSION_CHECK", "")
-                    .strip()
                 )
+                if audit_tag_str:
+                    cleaned_text = cleaned_text.replace(audit_tag_str, "")
+                cleaned_text = cleaned_text.strip()
 
                 ends_with_question = cleaned_text.strip().rstrip("*_~` \t\r\n").endswith("?")
                 is_misconception_or_safety = target_agent in (
@@ -264,10 +304,10 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
                         if loaded_images
                         else prompt + f"\n\n[CANH BAO]: Phan hoi bi tu choi vi: {review_result['feedback']}. Hay sinh lai."
                     )
-                    final_text = cleaned_text
+                    final_text = cleaned_text + (f"\n{audit_tag_str}" if audit_tag_str else "")
                     continue
 
-                final_text = cleaned_text
+                final_text = cleaned_text + (f"\n{audit_tag_str}" if audit_tag_str else "")
                 is_comprehension_detected = attempt_has_comprehension
                 break
 
