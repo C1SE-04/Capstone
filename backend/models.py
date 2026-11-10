@@ -855,3 +855,30 @@ class SystemSettingAudit(Base):
     )
 
 
+# ==============================================================================
+# US 10.4 - Task T10.4.0: Active Learning & Self-Reflective Feedback Model
+# ==============================================================================
+
+class AuditFeedbackLog(Base):
+    """
+    US 10.4 - Task T10.4.0:
+    Bảng lưu nhật ký phản hồi phân luồng Agent sai (Active Learning & Hidden Tag Protocol).
+    Ghi nhận câu hỏi học sinh, nhãn ban đầu (predicted_agent) và nhãn Gemini đề xuất (suggested_agent)
+    ở trạng thái PENDING để Quản trị viên duyệt và tái huấn luyện mô hình (T10.4.4 & T10.4.5).
+    """
+    __tablename__ = "audit_feedback_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_query = Column(Text, nullable=False)
+    predicted_agent = Column(String(64), nullable=False)
+    suggested_agent = Column(String(64), nullable=False)
+    status = Column(String(20), nullable=False, default="PENDING", server_default="PENDING")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_audit_feedback_logs_status_created", "status", "created_at"),
+        Index("ix_audit_feedback_logs_created_at", "created_at"),
+    )
+
+
+
