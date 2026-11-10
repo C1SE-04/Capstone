@@ -80,6 +80,9 @@ app.include_router(admin_mock.router)
 app.include_router(admin_mock.admin_router)  # US 8.5 (Task T8.29B): API Admin Logs GET /admin/logs
 from routers import admin_errors  # US 9.5 (Tasks T9.16-T9.18): Quan tri su co & bao loi Incident Hub
 app.include_router(admin_errors.router)
+from routers import admin_settings  # US 10.3 (Task T10.3.2): Quan tri cai dat Admin Settings Hub
+app.include_router(admin_settings.router)
+app.include_router(admin_settings.mock_compat_router)
 from routers import admin_kpi_metrics  # US 10.2 (Task T10.2.5): Admin System KPI & Observability Hub
 app.include_router(admin_kpi_metrics.router)
 
