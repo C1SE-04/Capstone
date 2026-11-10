@@ -211,13 +211,33 @@ def agent_router(
         return
         
     genai.configure(api_key=api_key)
+
+    # US 10.3 (Task T10.3.3): Đọc cấu hình động từ SystemConfigService (Redis Cache -> Neon DB)
+    active_model = _ACTIVE_MODEL_NAME
+    active_temperature = 0.35
+    active_top_p = 0.90
+    active_max_tokens = 512
+    try:
+        from services.system_config_service import get_system_settings
+        sys_config = get_system_settings()
+        active_model = sys_config.get("primary_model") or os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+        active_temperature = float(sys_config.get("temperature", 0.35))
+        active_top_p = float(sys_config.get("top_p", 0.90))
+        active_max_tokens = int(sys_config.get("max_output_tokens", 512))
+    except Exception as err:
+        print(f"[Router] Cảnh báo đọc SystemConfig: {err} — Dùng fallback.")
+        active_model = os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+
+    if meta is not None:
+        meta["model_used"] = active_model
+
     model = genai.GenerativeModel(
-        model_name=_ACTIVE_MODEL_NAME,
+        model_name=active_model,
         system_instruction=TEACHER_SYSTEM_INSTRUCTION,
         generation_config=genai.GenerationConfig(
-            temperature=0.3,
-            top_p=0.9,
-            max_output_tokens=1024,
+            temperature=active_temperature,
+            top_p=active_top_p,
+            max_output_tokens=active_max_tokens,
         )
     )
     # US 10.4: Chuẩn hóa tên Agent để đối chiếu chuẩn xác với 4 nhãn cốt lõi
@@ -331,7 +351,7 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         while current_attempt <= max_retries:
             try:
                 # T10.2.2: Dùng generate_with_telemetry để thu thập token usage tự động
-                response = generate_with_telemetry(model, call_payload, _ACTIVE_MODEL_NAME, "Chat")
+                response = generate_with_telemetry(model, call_payload, active_model, "Chat")
                 generated_text = response.text or ""
 
                 # US 10.4 (Task T10.4.2): Bóc tách thẻ ẩn bằng hàm chuẩn hóa
@@ -406,7 +426,7 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         is_comprehension_detected = False
         try:
             full_text_buffer = ""
-            raw_stream = stream_with_telemetry(model, call_payload, _ACTIVE_MODEL_NAME, "Chat")
+            raw_stream = stream_with_telemetry(model, call_payload, active_model, "Chat")
 
             def _stream_and_record():
                 nonlocal full_text_buffer

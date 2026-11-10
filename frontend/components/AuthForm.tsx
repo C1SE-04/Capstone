@@ -376,7 +376,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-4 bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold py-3.5 rounded-xl hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-md cursor-pointer"
+                className="w-full mt-4 bg-[#C1762A] hover:bg-[#8C4905] text-white font-semibold py-3.5 rounded-xl active:scale-[0.98] transition-all duration-150 ease-out flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-xs focus-visible:outline-2 focus-visible:outline-[#C1762A] cursor-pointer"
               >
                 {isLoading ? (
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -393,7 +393,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                 <div className="w-full border-t border-[#8C4905]/20" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-[#F1CCA6] px-3 font-bold text-[#8C4905]">
+                <span className="bg-[#F1CCA6] px-3 font-semibold text-[#8C4905]">
                   Hoặc tiếp tục với
                 </span>
               </div>
@@ -403,7 +403,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               type="button"
               disabled={isLoading}
               onClick={() => signIn("google", { callbackUrl: "/onboarding" })}
-              className="w-full flex items-center justify-center gap-3 py-3 bg-white text-[#8C4905] rounded-xl font-bold text-sm shadow-xs hover:shadow transition-all border border-[#F1CCA6] cursor-pointer hover:bg-[#F7ECE1]/60 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-3 py-3 bg-white text-[#1C1917] rounded-xl font-semibold text-sm shadow-xs hover:border-[#C1762A] transition-all duration-150 ease-out border border-[#F1CCA6] cursor-pointer hover:bg-[#F7ECE1]/60 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] disabled:opacity-70 disabled:cursor-not-allowed"
             >
               <img src="/google-logo.svg" alt="Google Login" className="w-5 h-5 object-contain" />
               <span>Đăng nhập bằng Google</span>

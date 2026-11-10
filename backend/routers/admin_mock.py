@@ -39,8 +39,8 @@ admin_router = APIRouter(
 # ==============================================================================
 
 MOCK_SETTINGS = {
-    "model_name": "gemini-1.5-flash",
-    "backup_model": "gemini-1.5-pro",
+    "model_name": "gemini-3.8-flash",
+    "backup_model": "gemini-3.5-flash-lite",
     "temperature": 0.4,
     "max_output_tokens": 1024,
     "safety_threshold": "BLOCK_MEDIUM_AND_ABOVE",
