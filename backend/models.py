@@ -1,6 +1,6 @@
 # models.py
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index, Integer, Text, BigInteger, Numeric
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index, Integer, Text, BigInteger, Numeric, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -788,4 +788,70 @@ class SystemIncidentLog(Base):
     __table_args__ = (
         Index("ix_incidents_active_triggered", "status", "triggered_at"),
     )
+
+
+class SystemSettings(Base):
+    """
+    US 10.3 - Task T10.3.0:
+    Bảng cấu hình hệ thống duy nhất (Singleton Pattern: id = 'current').
+    Lưu trữ cấu hình 6 model AI tương ứng 6 phân hệ, tham số sư phạm,
+    rate limit và mốc thời gian học kỳ giả lập (US 9.3 Mock Month).
+    BẢO MẬT: TUYỆT ĐỐI KHÔNG lưu API Key vào DB (đã xóa api_key_override & multi_key_pool).
+    """
+    __tablename__ = "system_settings"
+
+    id = Column(String(32), primary_key=True, default="current", server_default="current")
+
+    # 6 Cột Model AI mới cho 6 phân hệ (Tab 1 Model Gateway)
+    primary_model = Column(String(64), nullable=False, default="gemini-3.8-flash", server_default="gemini-3.8-flash")
+    parent_insight_model = Column(String(64), nullable=False, default="gemini-3.5-flash", server_default="gemini-3.5-flash")
+    classifier_model = Column(String(64), nullable=False, default="gemini-3.1-flash-lite", server_default="gemini-3.1-flash-lite")
+    email_model = Column(String(64), nullable=False, default="gemini-3.1-flash-lite", server_default="gemini-3.1-flash-lite")
+    flashcard_model = Column(String(64), nullable=False, default="gemini-3.5-flash-lite", server_default="gemini-3.5-flash-lite")
+    backup_model = Column(String(64), nullable=False, default="gemini-3.5-flash-lite", server_default="gemini-3.5-flash-lite")
+
+    # Tham số sinh văn bản (Generation Config)
+    temperature = Column(Numeric(3, 2), nullable=False, default=0.35, server_default="0.35")
+    top_p = Column(Numeric(3, 2), nullable=False, default=0.90, server_default="0.90")
+    max_output_tokens = Column(Integer, nullable=False, default=512, server_default="512")
+
+    # Tham số Sư phạm & An toàn (Pedagogical & Safety)
+    socratic_strictness = Column(String(20), nullable=False, default="BALANCED", server_default="BALANCED")
+    enable_math_reviewer = Column(Boolean, nullable=False, default=True, server_default="true")
+    enable_vision_support = Column(Boolean, nullable=False, default=True, server_default="true")
+    safety_threshold = Column(String(32), nullable=False, default="BLOCK_MEDIUM_AND_ABOVE", server_default="BLOCK_MEDIUM_AND_ABOVE")
+    enable_parent_alert = Column(Boolean, nullable=False, default=True, server_default="true")
+
+    # Giới hạn tần suất (Rate Limiting - tin / 5 phút)
+    guest_rate_limit = Column(Integer, nullable=False, default=10, server_default="10")
+    student_rate_limit = Column(Integer, nullable=False, default=30, server_default="30")
+
+    # Giả lập thời gian học kỳ (US 9.3 Mock Month: NULL = giờ thực, 1-12 = mock tháng)
+    mock_curriculum_month = Column(Integer, nullable=True)
+
+    # Thông tin quản trị
+    system_version = Column(String(32), nullable=False, default="v1.7.0", server_default="v1.7.0")
+    environment = Column(String(32), nullable=False, default="Production (Neon + Vercel)", server_default="Production (Neon + Vercel)")
+    last_updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    last_updated_by = Column(String(255), nullable=False, default="admin@socratickid.edu.vn", server_default="admin@socratickid.edu.vn")
+
+
+class SystemSettingAudit(Base):
+    """
+    US 10.3 - Task T10.3.0:
+    Bảng lưu lịch sử thay đổi cấu hình hệ thống (Audit Trail) phục vụ Rollback 1-Click.
+    """
+    __tablename__ = "system_setting_audits"
+
+    id = Column(String(64), primary_key=True, default=lambda: uuid.uuid4().hex)
+    changed_by = Column(String(255), nullable=False)
+    change_summary = Column(Text, nullable=False)
+    previous_config = Column(JSON, nullable=False)
+    new_config = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_setting_audits_created_at", "created_at"),
+    )
+
 
