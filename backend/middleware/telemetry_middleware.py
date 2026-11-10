@@ -24,6 +24,24 @@ from starlette.middleware.base import BaseHTTPMiddleware
 # Nếu đầy, event mới sẽ bị bỏ qua (không block request chính).
 telemetry_queue: asyncio.Queue = asyncio.Queue(maxsize=10_000)
 
+# Biến đếm số phiên streaming SSE active thời gian thực
+_active_sse_sessions: int = 0
+
+
+def increment_sse_session():
+    global _active_sse_sessions
+    _active_sse_sessions += 1
+
+
+def decrement_sse_session():
+    global _active_sse_sessions
+    if _active_sse_sessions > 0:
+        _active_sse_sessions -= 1
+
+
+def get_active_sse_sessions() -> int:
+    return max(0, _active_sse_sessions)
+
 
 def _classify_endpoint(path: str) -> str:
     """

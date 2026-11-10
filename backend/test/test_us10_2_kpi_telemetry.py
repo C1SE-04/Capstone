@@ -39,9 +39,35 @@ from middleware.gemini_telemetry import (
 )
 from workers.telemetry_batch_worker import (
     _minute_bucket,
+    _hour_bucket,
     _flush_events,
+    flush_metrics_to_db,
+    ensure_baseline_metrics,
     _COUNTER_TTL_SECONDS,
+    _accumulator,
 )
+import auth
+from fastapi.testclient import TestClient
+from main import app
+
+client = TestClient(app)
+
+ADMIN_USER_ID = "c8bb335bcbe24b859d10d740afbacaf4"
+ADMIN_TOKEN = auth.create_access_token({
+    "sub": ADMIN_USER_ID,
+    "email": "admin@socratickid.edu.vn",
+    "role": "ADMIN",
+    "session_version": 1,
+})
+ADMIN_HEADERS = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+
+STUDENT_TOKEN = auth.create_access_token({
+    "sub": "student_test_123",
+    "email": "student@socratickid.edu.vn",
+    "role": "STUDENT",
+    "session_version": 1,
+})
+STUDENT_HEADERS = {"Authorization": f"Bearer {STUDENT_TOKEN}"}
 
 
 # ==============================================================================
@@ -407,6 +433,218 @@ class TestT10_2_3_UpstashRedisCounters:
             await _flush_events(mock_redis, events)  # Không được văng lỗi
 
         asyncio.run(_run())
+
+
+# ==============================================================================
+# T10.2.4: 60-SECOND DATABASE BATCH AGGREGATION & SLA INCIDENTS TESTS
+# ==============================================================================
+
+class TestT10_2_4_DatabaseAggregation:
+    """Kiểm tra chức năng gom batch và ghi xuống Neon PostgreSQL mỗi 60 giây."""
+
+    def test_flush_metrics_to_db_upsert(self):
+        """Kiểm tra flush_metrics_to_db ghi đúng số liệu tích lũy vào system_metrics_hourly."""
+        # Nạp dữ liệu giả vào accumulator
+        _accumulator.reset()
+        _accumulator.add_http_event({"status_code": 200, "latency_ms": 320, "endpoint_group": "chat"})
+        _accumulator.add_http_event({"status_code": 200, "latency_ms": 450, "endpoint_group": "eval"})
+        _accumulator.add_http_event({"status_code": 500, "latency_ms": 1200, "endpoint_group": "other"})
+        _accumulator.add_token_event({
+            "type": "token_usage",
+            "prompt_tokens": 400,
+            "completion_tokens": 150,
+            "total_tokens": 550,
+            "cost_usd": 0.00015,
+            "agent_name": "Chat",
+            "model_name": "gemini-2.5-flash",
+            "ttft_ms": 380,
+        })
+
+        db = SessionLocal()
+        try:
+            result = flush_metrics_to_db(db)
+            assert result["status"] == "success"
+            assert result["flushed_requests"] == 3
+            assert result["flushed_tokens"] == 550
+
+            # Kiểm tra bản ghi trong system_metrics_hourly
+            bucket_ts = _hour_bucket()
+            row = db.query(models.SystemMetricsHourly).filter_by(bucket_timestamp=bucket_ts).first()
+            assert row is not None
+            assert row.total_requests >= 3
+            assert row.chat_requests >= 1
+            assert row.total_tokens >= 550
+        finally:
+            db.close()
+
+    def test_sla_incident_trigger_on_5xx_rate(self):
+        """AC-KPI-07: Kiểm tra khi lỗi 5xx vượt 2%, hệ thống tự tạo incident ERROR_SPIKE."""
+        _accumulator.reset()
+        # Nạp 10 requests với 2 request lỗi 500 -> tỷ lệ lỗi 20% > 2%
+        for _ in range(8):
+            _accumulator.add_http_event({"status_code": 200, "latency_ms": 250, "endpoint_group": "chat"})
+        for _ in range(2):
+            _accumulator.add_http_event({"status_code": 500, "latency_ms": 950, "endpoint_group": "chat"})
+
+        db = SessionLocal()
+        try:
+            flush_metrics_to_db(db)
+
+            # Kiểm tra bảng system_incidents_log có bản ghi ACTIVE
+            inc = (
+                db.query(models.SystemIncidentLog)
+                .filter_by(incident_type="ERROR_SPIKE", status="ACTIVE")
+                .first()
+            )
+            assert inc is not None
+            assert inc.severity == "CRITICAL"
+            assert float(inc.threshold_value) == 2.0
+            assert float(inc.actual_value) > 2.0
+
+            # Cleanup
+            db.delete(inc)
+            db.commit()
+        finally:
+            db.close()
+
+    def test_ensure_baseline_metrics(self):
+        """Kiểm tra seeder baseline nạp tối thiểu 24 giờ dữ liệu lịch sử."""
+        db = SessionLocal()
+        try:
+            ensure_baseline_metrics(db)
+            count = db.query(models.SystemMetricsHourly).count()
+            assert count >= 24
+        finally:
+            db.close()
+
+
+# ==============================================================================
+# T10.2.5: ADMIN KPI METRICS API TESTS (8 ENDPOINTS)
+# ==============================================================================
+
+class TestT10_2_5_AdminKpiMetricsAPI:
+    """Kiểm tra toàn bộ 8 endpoints của router admin_kpi_metrics.py."""
+
+    def test_01_rbac_student_forbidden(self):
+        """Học sinh gọi API KPI Admin phải nhận 403 Forbidden."""
+        res = client.get("/admin/kpi/overview", headers=STUDENT_HEADERS)
+        assert res.status_code == 403
+
+    def test_02_rbac_unauthenticated_unauthorized(self):
+        """Chưa đăng nhập gọi API KPI Admin phải nhận 401 Unauthorized."""
+        res = client.get("/admin/kpi/overview")
+        assert res.status_code == 401
+
+    def test_03_get_overview_success(self):
+        """Endpoint 1: GET /admin/kpi/overview trả về 4 thẻ KPI tổng quan."""
+        res = client.get("/admin/kpi/overview", headers=ADMIN_HEADERS)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "success"
+        assert "throughput" in data
+        assert "tokens_and_cost" in data
+        assert "latency_and_sla" in data
+        assert "reliability" in data
+        assert data["tokens_and_cost"]["cost_vnd_today"] > 0
+        assert data["latency_and_sla"]["p50_status"] in ("optimal", "high")
+
+    def test_04_get_throughput_minute_and_hourly(self):
+        """Endpoint 2: GET /admin/kpi/throughput hỗ trợ chế độ theo phút và theo giờ."""
+        # Chế độ 60 phút
+        res_min = client.get("/admin/kpi/throughput?range=1h&granularity=minute", headers=ADMIN_HEADERS)
+        assert res_min.status_code == 200
+        data_min = res_min.json()
+        assert data_min["granularity"] == "minute"
+        assert len(data_min["items"]) == 60
+        assert "display_time" in data_min["items"][0]
+
+        # Chế độ 24 giờ
+        res_hour = client.get("/admin/kpi/throughput?range=24h", headers=ADMIN_HEADERS)
+        assert res_hour.status_code == 200
+        data_hour = res_hour.json()
+        assert data_hour["granularity"] == "hour"
+        assert len(data_hour["items"]) > 0
+
+    def test_05_get_tokens_breakdown(self):
+        """Endpoint 3: GET /admin/kpi/tokens trả về tiêu thụ và chi phí 4 model AI."""
+        res = client.get("/admin/kpi/tokens?days=14", headers=ADMIN_HEADERS)
+        assert res.status_code == 200
+        data = res.json()
+        assert "model_breakdown" in data
+        assert "gemini-2.5-flash" in data["model_breakdown"]
+        assert "gemini-2.0-flash-lite" in data["model_breakdown"]
+        assert "gemini-1.5-pro" in data["model_breakdown"]
+        assert data["total_tokens"] > 0
+        assert data["total_cost_usd"] > 0
+        assert data["total_cost_vnd"] > 0
+
+    def test_06_get_latency_percentiles(self):
+        """Endpoint 4: GET /admin/kpi/latency trả về P50, P95, P99 và đồng hồ TTFT."""
+        res = client.get("/admin/kpi/latency?range=24h", headers=ADMIN_HEADERS)
+        assert res.status_code == 200
+        data = res.json()
+        assert "overall_p50_ms" in data
+        assert "overall_p95_ms" in data
+        assert "overall_p99_ms" in data
+        assert "current_ttft_ms" in data
+        assert data["ttft_status"] in ("green", "yellow", "red")
+        assert len(data["items"]) > 0
+
+    def test_07_get_agents_distribution(self):
+        """Endpoint 5: GET /admin/kpi/agents trả về biểu đồ Donut 6 phân hệ."""
+        res = client.get("/admin/kpi/agents", headers=ADMIN_HEADERS)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["total_subsystems"] == 6
+        agent_names = [a["id"] for a in data["agents"]]
+        assert "Chat" in agent_names
+        assert "Classifier" in agent_names
+        assert "Flashcard" in agent_names
+        assert "ParentReport" in agent_names
+        assert "Email" in agent_names
+        assert "Fallback" in agent_names
+
+    def test_08_get_traffic_heatmap(self):
+        """Endpoint 6: GET /admin/kpi/traffic-heatmap trả về 168 ô nhiệt 7x24."""
+        res = client.get("/admin/kpi/traffic-heatmap", headers=ADMIN_HEADERS)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["total_cells"] == 168
+        assert "peak_traffic" in data
+        assert data["peak_traffic"]["day"] in ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
+
+    def test_09_get_infrastructure(self):
+        """Endpoint 7: GET /admin/kpi/infrastructure trả về kết nối Neon DB và Redis."""
+        res = client.get("/admin/kpi/infrastructure", headers=ADMIN_HEADERS)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["neon_connections_max"] == 20
+        assert data["neon_connections_active"] <= 20
+        assert data["redis_hit_rate_pct"] >= 0
+        assert len(data["services"]) == 4
+
+    def test_10_get_incidents(self):
+        """Endpoint 8: GET /admin/kpi/incidents trả về thông tin banner SLA."""
+        res = client.get("/admin/kpi/incidents", headers=ADMIN_HEADERS)
+        assert res.status_code == 200
+        data = res.json()
+        assert "has_active_incidents" in data
+        assert "active_incidents" in data
+
+    def test_11_export_kpi_csv_and_json(self):
+        """Endpoint 9: GET /admin/kpi/export xuất báo cáo CSV và JSON có header tải file."""
+        # Test CSV
+        res_csv = client.get("/admin/kpi/export?format=csv&days=7", headers=ADMIN_HEADERS)
+        assert res_csv.status_code == 200
+        assert "text/csv" in res_csv.headers["content-type"]
+        assert "attachment; filename=" in res_csv.headers["content-disposition"]
+        assert b"Tong Requests" in res_csv.content
+
+        # Test JSON
+        res_json = client.get("/admin/kpi/export?format=json&days=7", headers=ADMIN_HEADERS)
+        assert res_json.status_code == 200
+        assert res_json.json()["report_name"] == "SocraticKid_Admin_KPI_Report"
+
 
 
 if __name__ == "__main__":
