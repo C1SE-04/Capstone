@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
@@ -17,6 +17,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SocraticKid — Gia Sư AI Toán Học Theo Phương Pháp Socratic",
   description: "Trợ lý AI sư phạm giúp học sinh từ lớp 4 đến lớp 9 tự học, hiểu sâu và nhớ lâu toán học qua phương pháp gợi mở từng bước.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({

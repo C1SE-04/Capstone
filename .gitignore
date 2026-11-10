@@ -25,4 +25,15 @@ Thumbs.db
 .agent/
 .agents/
 .codex/
-skills-lock.json
+skills-lock.json
+.cursor/
+.github/skills/
+.github/agents/
+.github/hooks/
+CLAUDE.md
+
+# Reference Materials & Books
+docs/Architecture Books/
+docs/Architecture Lectures/
+
+

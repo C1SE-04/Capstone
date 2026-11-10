@@ -9,9 +9,9 @@ export default function GoogleSignInButton() {
     return (
       <button
         disabled
-        className="flex h-12 w-full max-w-sm items-center justify-center gap-3 rounded-full bg-white px-5 text-sm font-medium text-stone-800 shadow-sm ring-1 ring-inset ring-stone-200 transition-all sm:w-auto"
+        className="flex h-11 w-full max-w-sm items-center justify-center gap-3 rounded-xl bg-white px-5 text-sm font-medium text-[#7A3E04] shadow-xs border border-[#F1CCA6] transition-all sm:w-auto"
       >
-        <div className="h-5 w-5 animate-pulse rounded-full bg-stone-200" />
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#C1762A] border-t-transparent" />
         Đang tải...
       </button>
     );
@@ -19,13 +19,13 @@ export default function GoogleSignInButton() {
 
   if (session) {
     return (
-      <div className="flex h-12 items-center justify-center gap-3 rounded-full bg-white px-5 text-sm font-medium text-stone-800 shadow-sm ring-1 ring-inset ring-stone-200 transition-all dark:bg-stone-900 dark:text-stone-100 dark:ring-stone-800">
+      <div className="flex h-11 items-center justify-center gap-3 rounded-xl bg-white px-5 text-sm font-medium text-[#1C1917] shadow-xs border border-[#F1CCA6] transition-all">
         <img
           src={session.user?.image || "/globe.svg"}
           alt="Avatar"
-          className="h-6 w-6 rounded-full"
+          className="h-6 w-6 rounded-full border border-[#F1CCA6]"
         />
-        <span>Xin chào, {session.user?.name}</span>
+        <span>Xin chào, <strong className="text-[#8C4905]">{session.user?.name}</strong></span>
       </div>
     );
   }
@@ -33,7 +33,7 @@ export default function GoogleSignInButton() {
   return (
     <button
       onClick={() => signIn("google", { callbackUrl: "/onboarding" })}
-      className="group flex h-12 w-full max-w-sm items-center justify-center gap-3 rounded-full bg-white px-6 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-200 transition-all hover:bg-gray-50 hover:shadow-md hover:ring-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-[0.98] dark:bg-zinc-900 dark:text-gray-200 dark:ring-zinc-800 dark:hover:bg-zinc-800 dark:hover:ring-zinc-700 sm:w-auto"
+      className="group flex h-11 w-full max-w-sm items-center justify-center gap-3 rounded-xl bg-white px-6 text-sm font-semibold text-[#1C1917] shadow-xs border border-[#F1CCA6] transition-all duration-150 ease-out hover:bg-[#F7ECE1]/60 hover:border-[#C1762A] focus-visible:outline-2 focus-visible:outline-[#C1762A] active:scale-[0.98] sm:w-auto"
     >
       <svg className="h-5 w-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
         <path
