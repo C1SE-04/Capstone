@@ -83,6 +83,8 @@ app.include_router(admin_errors.router)
 from routers import admin_settings  # US 10.3 (Task T10.3.2): Quan tri cai dat Admin Settings Hub
 app.include_router(admin_settings.router)
 app.include_router(admin_settings.mock_compat_router)
+from routers import admin_kpi_metrics  # US 10.2 (Task T10.2.5): Admin System KPI & Observability Hub
+app.include_router(admin_kpi_metrics.router)
 
 
 
