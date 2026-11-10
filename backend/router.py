@@ -8,6 +8,12 @@ from typing import Optional
 import httpx
 from PIL import Image
 
+# US 10.2 (T10.2.2): Import telemetry wrappers để thu thập token và TTFT
+from middleware.gemini_telemetry import stream_with_telemetry, generate_with_telemetry
+
+# Tên model đang dùng thực tế — đồng bộ với bảng giá trong gemini_telemetry.py
+_ACTIVE_MODEL_NAME = "gemini-2.0-flash-lite"
+
 # ==========================================
 # CHỈ DẪN HỆ THỐNG CHO VAI TRÒ NGƯỜI THẦY
 # ==========================================
@@ -112,7 +118,7 @@ def agent_router(
         
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(
-        model_name="gemini-3.5-flash-lite",
+        model_name=_ACTIVE_MODEL_NAME,
         system_instruction=TEACHER_SYSTEM_INSTRUCTION,
         generation_config=genai.GenerationConfig(
             temperature=0.3,
@@ -216,7 +222,8 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
 
         while current_attempt <= max_retries:
             try:
-                response = model.generate_content(call_payload, stream=False)
+                # T10.2.2: Dùng generate_with_telemetry để thu thập token usage tự động
+                response = generate_with_telemetry(model, call_payload, _ACTIVE_MODEL_NAME, "Chat")
                 generated_text = response.text or ""
 
                 has_comp_tag = (
@@ -280,15 +287,14 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         # ── Agents không cần Reviewer: stream trực tiếp từ Gemini → user thấy chữ ngay ──
         is_comprehension_detected = False
         try:
-            response = model.generate_content(call_payload, stream=True)
             full_text_buffer = ""
-            for chunk in response:
-                if chunk.text:
-                    full_text_buffer += chunk.text
-                    # Lọc tag comprehension khi stream
-                    out = chunk.text.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
-                    if out:
-                        yield out
+            # T10.2.2: Dùng stream_with_telemetry để đo TTFT và thu thập token usage
+            for chunk_text in stream_with_telemetry(model, call_payload, _ACTIVE_MODEL_NAME, "Chat"):
+                full_text_buffer += chunk_text
+                # Lọc tag comprehension khi stream
+                out = chunk_text.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
+                if out:
+                    yield out
 
             # Phát hiện comprehension sau khi stream xong
             cleaned = (

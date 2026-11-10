@@ -355,3 +355,12 @@ class SystemErrorMiddleware(BaseHTTPMiddleware):
             print(f"[SystemErrorMiddleware] CẢNH BÁO: Lỗi khi lưu sự cố vào DB: {db_err}")
 
         return error_code, error_type
+
+
+# ==============================================================================
+# US 10.2 (Tasks T10.2.1 - T10.2.2): Telemetry & Observability Exports
+# ==============================================================================
+from middleware.telemetry_middleware import TelemetryMiddleware, telemetry_queue
+from middleware.gemini_telemetry import stream_with_telemetry, generate_with_telemetry
+
+
