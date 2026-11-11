@@ -13,6 +13,7 @@ import {
   X,
   ShieldCheck,
   AlertTriangle,
+  Bot,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -60,9 +61,9 @@ const NAV_GROUPS: NavGroup[] = [
         icon: BookOpen,
       },
       {
-        name: "Giám sát Safety AI",
+        name: "Giám sát Agent",
         href: "/admin/safety",
-        icon: ShieldAlert,
+        icon: Bot,
       },
       {
         name: "Quản trị Báo Lỗi",

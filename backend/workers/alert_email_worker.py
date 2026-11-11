@@ -202,7 +202,7 @@ def process_safety_alerts(db: Session) -> int:
             log.parent_notified_at = now_utc
             db.commit()
             processed_count += 1
-            print(f"[AlertWorker] 🛡️ Đã xử lý cảnh báo ngôn từ log {log.id} (Học sinh: {student_name})")
+            print(f"[AlertWorker] [SAFETY ALERT] Đã xử lý cảnh báo ngôn từ log {log.id} (Học sinh: {student_name})")
 
         except Exception as e:
             db.rollback()
@@ -354,7 +354,7 @@ def process_academic_alerts(db: Session, cooldown_hours: int = 24) -> int:
 
             db.commit()
             processed_count += 1
-            print(f"[AlertWorker] 📚 Đã gửi email cảnh báo học tập cho phụ huynh học sinh {student_name}")
+            print(f"[AlertWorker] [ACADEMIC ALERT] Đã gửi email cảnh báo học tập cho phụ huynh học sinh {student_name}")
 
         except Exception as e:
             db.rollback()
@@ -378,17 +378,17 @@ async def schedule_alert_email_worker(interval_seconds: int = 20):
     Background worker chạy định kỳ (mặc định mỗi 300s = 5 phút)
     tự động gửi email cảnh báo kép cho phụ huynh.
     """
-    print(f"[AlertWorker] 🚀 Khởi động Background Alert Email Worker (chu kỳ {interval_seconds} giây)...")
+    print(f"[AlertWorker] Khởi động Background Alert Email Worker (chu kỳ {interval_seconds} giây)...")
     while True:
         try:
             db = SessionLocal()
             try:
                 counts = process_email_alerts_once(db)
                 if counts["safety_alerts"] > 0 or counts["academic_alerts"] > 0:
-                    print(f"[AlertWorker] 🔔 Chu kỳ hoàn tất: Đã gửi {counts['safety_alerts']} cảnh báo ngôn từ & {counts['academic_alerts']} cảnh báo học tập.")
+                    print(f"[AlertWorker] Chu kỳ hoàn tất: Đã gửi {counts['safety_alerts']} cảnh báo ngôn từ & {counts['academic_alerts']} cảnh báo học tập.")
             finally:
                 db.close()
         except Exception as e:
-            print(f"[AlertWorker] ⚠️ Lỗi trong chu kỳ worker: {e}")
+            print(f"[AlertWorker] [ERROR] Lỗi trong chu kỳ worker: {e}")
 
         await asyncio.sleep(interval_seconds)

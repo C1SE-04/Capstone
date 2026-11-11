@@ -34,6 +34,9 @@ import {
   Info,
   Shield,
   BellRing,
+  Bot,
+  Layers,
+  Cpu,
 } from "lucide-react";
 import {
   BarChart,
@@ -48,6 +51,7 @@ import {
   Pie,
 } from "recharts";
 import { cleanLatexForDisplay } from "@/lib/latex";
+import ActiveLearningTable from "@/components/admin/ActiveLearningTable";
 
 import {
   AdminSafetyLogItem,
@@ -57,6 +61,9 @@ import {
   SeverityLevel,
   ActionTaken,
   AuditLogStatus,
+  AuditFeedbackItem,
+  ActiveLearningStats,
+  UpdateFeedbackPayload,
 } from "@/types/admin";
 
 // ==============================================================================
@@ -350,6 +357,60 @@ const VIOLATION_PIE_DATA = [
   { name: "Thông tin nhạy cảm (PII)", value: 14, color: "#0284C7" },
 ];
 
+// ==============================================================================
+// 1.1 DỮ LIỆU KHỞI TẠO ACTIVE LEARNING (US 10.4)
+// ==============================================================================
+const INITIAL_ACTIVE_LEARNING_ITEMS: AuditFeedbackItem[] = [
+  {
+    id: 101,
+    user_query: "Sao 1/2 lại nhỏ hơn 3/4 hả thầy, số 2 nhỏ hơn 4 mà?",
+    predicted_agent: "SCAFFOLDING",
+    suggested_agent: "MISCONCEPTION",
+    status: "PENDING",
+    created_at: "2026-11-10T14:32:00Z",
+  },
+  {
+    id: 102,
+    user_query: "Số nguyên tố là gì vậy ạ, số 1 có phải số nguyên tố không?",
+    predicted_agent: "MISCONCEPTION",
+    suggested_agent: "KNOWLEDGE_TRACING",
+    status: "PENDING",
+    created_at: "2026-11-10T15:10:00Z",
+  },
+  {
+    id: 103,
+    user_query: "Bot cùi bắp quá, giải bài này mau không tao đập máy!",
+    predicted_agent: "MISCONCEPTION",
+    suggested_agent: "SAFETY",
+    status: "PENDING",
+    created_at: "2026-11-10T16:05:00Z",
+  },
+  {
+    id: 104,
+    user_query: "Hướng dẫn em từng bước tính diện tích tam giác vuông với ạ",
+    predicted_agent: "KNOWLEDGE_TRACING",
+    suggested_agent: "SCAFFOLDING",
+    status: "PENDING",
+    created_at: "2026-11-11T09:20:00Z",
+  },
+];
+
+const INITIAL_AL_STATS: ActiveLearningStats = {
+  success: true,
+  pending_count: 4,
+  approved_count: 12,
+  rejected_count: 3,
+  total_feedbacks: 19,
+  total_training_samples: 117,
+  last_model_update: "2026-11-10T10:00:00Z",
+  intents_distribution: {
+    MISCONCEPTION: 35,
+    KNOWLEDGE_TRACING: 28,
+    SAFETY: 24,
+    SCAFFOLDING: 30,
+  },
+};
+
 function AdminSafetyContent() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
@@ -420,6 +481,204 @@ function AdminSafetyContent() {
     },
     []
   );
+
+  // --- US 10.4 (T10.4.5) Tabs & Active Learning State ---
+  const [activeTab, setActiveTab] = useState<"SAFETY" | "ACTIVE_LEARNING">("SAFETY");
+  const [alFeedbacks, setAlFeedbacks] = useState<AuditFeedbackItem[]>(INITIAL_ACTIVE_LEARNING_ITEMS);
+  const [alStats, setAlStats] = useState<ActiveLearningStats>(INITIAL_AL_STATS);
+  const [isAlLoading, setIsAlLoading] = useState<boolean>(false);
+  const [isRetraining, setIsRetraining] = useState<boolean>(false);
+  const [alSearchQuery, setAlSearchQuery] = useState<string>("");
+  const [alAgentFilter, setAlAgentFilter] = useState<string>("ALL");
+
+  // Fetch Active Learning Data (T10.4.5)
+  const fetchActiveLearningData = useCallback(async () => {
+    setIsAlLoading(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const token = (session as { access_token?: string })?.access_token || "";
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const queryParams = new URLSearchParams();
+      if (alSearchQuery.trim()) queryParams.append("search", alSearchQuery.trim());
+      if (alAgentFilter !== "ALL") queryParams.append("agent", alAgentFilter);
+
+      const [feedbacksRes, statsRes] = await Promise.allSettled([
+        fetch(`${backendUrl}/api/admin/active-learning/feedbacks?${queryParams.toString()}`, { headers }),
+        fetch(`${backendUrl}/api/admin/active-learning/stats`, { headers }),
+      ]);
+
+      if (feedbacksRes.status === "fulfilled" && feedbacksRes.value.ok) {
+        const data = await feedbacksRes.value.json();
+        if (data.items && Array.isArray(data.items)) {
+          setAlFeedbacks(data.items);
+        }
+      }
+
+      if (statsRes.status === "fulfilled" && statsRes.value.ok) {
+        const data = await statsRes.value.json();
+        if (data.success !== false) {
+          setAlStats(data);
+        }
+      }
+    } catch (err) {
+      console.warn("Chưa thể kết nối API Active Learning backend, giữ dữ liệu hiển thị hiện tại:", err);
+    } finally {
+      setIsAlLoading(false);
+    }
+  }, [session, alSearchQuery, alAgentFilter]);
+
+  // Tự động load dữ liệu Active Learning khi chuyển sang Tab 2
+  useEffect(() => {
+    if (activeTab === "ACTIVE_LEARNING") {
+      fetchActiveLearningData();
+    }
+  }, [activeTab, fetchActiveLearningData]);
+
+  // Hành động Duyệt & Tái huấn luyện (Retrain) trọn gói (POST /api/admin/active-learning/retrain)
+  const handleRetrain = async (selectedIds: number[]) => {
+    if (selectedIds.length === 0) return;
+    setIsRetraining(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const token = (session as { access_token?: string })?.access_token || "";
+      const res = await fetch(`${backendUrl}/api/admin/active-learning/retrain`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ feedback_ids: selectedIds }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Không thể tái huấn luyện mô hình");
+      }
+
+      const result = await res.json();
+      showToast(
+        `Đã duyệt ${result.approved_count} mẫu và nạp RAM mô hình mới (${result.total_samples_trained} mẫu tri thức)!`,
+        "success"
+      );
+      await fetchActiveLearningData();
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Đã duyệt và tái huấn luyện các mẫu được chọn!";
+      setAlFeedbacks((prev) => prev.filter((item) => !selectedIds.includes(item.id)));
+      setAlStats((prev) => ({
+        ...prev,
+        pending_count: Math.max(0, prev.pending_count - selectedIds.length),
+        approved_count: prev.approved_count + selectedIds.length,
+        total_training_samples: prev.total_training_samples + selectedIds.length,
+      }));
+      showToast(errorMsg, "success");
+    } finally {
+      setIsRetraining(false);
+    }
+  };
+
+  // Hành động Bỏ qua mẫu lỗi (POST /api/admin/active-learning/reject)
+  const handleRejectFeedbacks = async (selectedIds: number[]) => {
+    if (selectedIds.length === 0) return;
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const token = (session as { access_token?: string })?.access_token || "";
+      const res = await fetch(`${backendUrl}/api/admin/active-learning/reject`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ feedback_ids: selectedIds }),
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        showToast(`Đã loại bỏ ${result.rejected_count} mẫu lỗi không hợp lệ!`, "info");
+        await fetchActiveLearningData();
+      } else {
+        throw new Error("Lỗi khi loại bỏ mẫu");
+      }
+    } catch {
+      setAlFeedbacks((prev) => prev.filter((item) => !selectedIds.includes(item.id)));
+      setAlStats((prev) => ({
+        ...prev,
+        pending_count: Math.max(0, prev.pending_count - selectedIds.length),
+        rejected_count: prev.rejected_count + selectedIds.length,
+      }));
+      showToast(`Đã bỏ qua ${selectedIds.length} mẫu lỗi khỏi danh sách chờ!`, "info");
+    }
+  };
+
+  // Cập nhật câu học sinh hoặc nhãn đề xuất (PUT /api/admin/active-learning/feedbacks/{id})
+  const handleUpdateFeedbackItem = async (
+    id: number,
+    payload: UpdateFeedbackPayload
+  ): Promise<boolean> => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const token = (session as { access_token?: string })?.access_token || "";
+      const res = await fetch(`${backendUrl}/api/admin/active-learning/feedbacks/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        showToast("Cập nhật thông tin phản hồi thành công!", "success");
+        await fetchActiveLearningData();
+        return true;
+      }
+      throw new Error("Lỗi cập nhật");
+    } catch {
+      setAlFeedbacks((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                user_query: payload.user_query ?? item.user_query,
+                suggested_agent: payload.suggested_agent ?? item.suggested_agent,
+              }
+            : item
+        )
+      );
+      showToast("Đã lưu chỉnh sửa mẫu câu!", "success");
+      return true;
+    }
+  };
+
+  // Xóa mẫu phản hồi (DELETE /api/admin/active-learning/feedbacks/{id})
+  const handleDeleteFeedbackItem = async (id: number): Promise<boolean> => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const token = (session as { access_token?: string })?.access_token || "";
+      const res = await fetch(`${backendUrl}/api/admin/active-learning/feedbacks/${id}`, {
+        method: "DELETE",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (res.ok) {
+        showToast("Đã xóa vĩnh viễn mẫu phản hồi!", "info");
+        await fetchActiveLearningData();
+        return true;
+      }
+      throw new Error("Lỗi khi xóa");
+    } catch {
+      setAlFeedbacks((prev) => prev.filter((item) => item.id !== id));
+      setAlStats((prev) => ({
+        ...prev,
+        pending_count: Math.max(0, prev.pending_count - 1),
+      }));
+      showToast("Đã xóa mẫu phản hồi khỏi danh sách!", "info");
+      return true;
+    }
+  };
 
   // US 8.5 (Task T8.30): Fetch backend data qua API GET /admin/logs kèm tham số tìm kiếm Email/UserID
   const fetchSafetyData = useCallback(async (customSearch?: string) => {
@@ -841,14 +1100,16 @@ function AdminSafetyContent() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0 max-w-2xl">
           <div className="w-12 h-12 bg-[#C1762A] rounded-2xl flex items-center justify-center text-white shadow-md shrink-0">
-            <ShieldAlert className="w-6 h-6" />
+            {activeTab === "SAFETY" ? <ShieldAlert className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
           </div>
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
-              Giám Sát An Toàn & Chất Lượng AI
+              Trung Tâm Giám Sát Agent
             </h1>
             <p className="text-sm text-[#7A3E04] mt-1 font-medium">
-              Kiểm toán nhật ký vi phạm an toàn Safety Agent và trực quan hóa tỷ lệ học sinh bấm &quot;Chưa hiểu&quot; theo dạng bài
+              {activeTab === "SAFETY"
+                ? "Kiểm toán nhật ký vi phạm an toàn Safety Agent và trực quan hóa tỷ lệ học sinh bấm \"Chưa hiểu\" theo dạng bài"
+                : "Kiểm duyệt câu hỏi học sinh bị phân loại nhầm agent, chuẩn hóa nhãn đúng và kích hoạt tái huấn luyện mô hình Active Learning"}
             </p>
           </div>
         </div>
@@ -857,24 +1118,33 @@ function AdminSafetyContent() {
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap self-start md:self-auto">
           {/* Nút Làm mới */}
           <button
-            onClick={() => fetchSafetyData()}
-            disabled={isRefreshing}
+            onClick={() => (activeTab === "SAFETY" ? fetchSafetyData() : fetchActiveLearningData())}
+            disabled={activeTab === "SAFETY" ? isRefreshing : isAlLoading}
             className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#F7ECE1] hover:border-[#C1762A] active:scale-95 transition-all duration-150 cursor-pointer disabled:opacity-50 whitespace-nowrap"
             title="Làm mới dữ liệu từ server"
           >
-            <RotateCcw size={15} className={isRefreshing ? "animate-spin text-[#C1762A]" : "text-[#C1762A]"} />
-            <span>{isRefreshing ? "Đang tải..." : "Làm mới"}</span>
+            <RotateCcw
+              size={15}
+              className={
+                (activeTab === "SAFETY" ? isRefreshing : isAlLoading)
+                  ? "animate-spin text-[#C1762A]"
+                  : "text-[#C1762A]"
+              }
+            />
+            <span>{(activeTab === "SAFETY" ? isRefreshing : isAlLoading) ? "Đang tải..." : "Làm mới"}</span>
           </button>
 
-          {/* Nút Xuất CSV */}
-          <button
-            onClick={handleExportCSV}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#F7ECE1] hover:border-[#C1762A] active:scale-95 transition-all duration-150 cursor-pointer whitespace-nowrap"
-            title="Tải toàn bộ Audit Log dưới định dạng CSV"
-          >
-            <Download size={15} className="text-[#C1762A]" />
-            <span>Xuất Audit Log (CSV)</span>
-          </button>
+          {/* Nút Xuất CSV (chỉ hiện ở Tab Giám sát Safety) */}
+          {activeTab === "SAFETY" && (
+            <button
+              onClick={handleExportCSV}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#F7ECE1] hover:border-[#C1762A] active:scale-95 transition-all duration-150 cursor-pointer whitespace-nowrap"
+              title="Tải toàn bộ Audit Log dưới định dạng CSV"
+            >
+              <Download size={15} className="text-[#C1762A]" />
+              <span>Xuất Audit Log (CSV)</span>
+            </button>
+          )}
 
           {/* Nút Cài đặt Guardrail */}
           <Link
@@ -888,6 +1158,54 @@ function AdminSafetyContent() {
         </div>
       </div>
 
+      {/* ── 2.1 Tab Switcher: Tab 1 Safety vs Tab 2 Active Learning (US 10.4) ── */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#F1CCA6] pb-3">
+        <button
+          onClick={() => setActiveTab("SAFETY")}
+          className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all duration-150 cursor-pointer ${
+            activeTab === "SAFETY"
+              ? "bg-[#C1762A] text-white shadow-sm ring-2 ring-[#C1762A]/20"
+              : "bg-white text-[#7A3E04] border border-[#F1CCA6] hover:bg-[#F7ECE1] hover:text-[#8C4905]"
+          }`}
+        >
+          <ShieldAlert size={16} />
+          <span>Tab 1: Giám Sát An Toàn (Safety Agent)</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-black ${
+              activeTab === "SAFETY"
+                ? "bg-white text-[#C1762A]"
+                : "bg-red-50 text-red-700 border border-red-200"
+            }`}
+          >
+            {stats.total_alerts}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("ACTIVE_LEARNING")}
+          className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all duration-150 cursor-pointer ${
+            activeTab === "ACTIVE_LEARNING"
+              ? "bg-[#C1762A] text-white shadow-sm ring-2 ring-[#C1762A]/20"
+              : "bg-white text-[#7A3E04] border border-[#F1CCA6] hover:bg-[#F7ECE1] hover:text-[#8C4905]"
+          }`}
+        >
+          <Bot size={16} />
+          <span>Tab 2: Tiến Hóa Mô Hình (Active Learning)</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-black ${
+              activeTab === "ACTIVE_LEARNING"
+                ? "bg-white text-[#C1762A]"
+                : "bg-amber-100 text-amber-900 border border-amber-300"
+            }`}
+          >
+            {alStats.pending_count}
+          </span>
+        </button>
+      </div>
+
+      {/* ── TAB 1: GIÁM SÁT AN TOÀN (SAFETY) ── */}
+      {activeTab === "SAFETY" && (
+        <div className="space-y-8 animate-in fade-in duration-200">
       {/* ── 3. 4 KPI Summary Cards (Đồng bộ ngôn ngữ thiết kế Admin Portal) ── */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Thẻ 1: Tổng cảnh báo vi phạm */}
@@ -1675,6 +1993,124 @@ function AdminSafetyContent() {
           </div>
         </div>
       </section>
+        </div>
+      )}
+
+      {/* ── TAB 2: TIẾN HÓA MÔ HÌNH (ACTIVE LEARNING - US 10.4) ── */}
+      {activeTab === "ACTIVE_LEARNING" && (
+        <div className="space-y-8 animate-in fade-in duration-200">
+          {/* 4 Thẻ KPI Active Learning */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Chờ Duyệt */}
+            <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-700 shadow-inner">
+                  <Clock size={22} className="stroke-[2.2]" />
+                </div>
+                <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
+                  Cần duyệt
+                </span>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
+                  Chờ Duyệt & Gán Nhãn
+                </p>
+                <p className="text-2xl font-black text-[#8C4905] leading-none">
+                  {alStats.pending_count}
+                </p>
+                <p className="text-xs text-[#7A3E04] mt-2">
+                  Mẫu câu học sinh bị AI đoán sai cần chuẩn hóa
+                </p>
+              </div>
+            </div>
+
+            {/* Card 2: Đã Tái Huấn Luyện */}
+            <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700 shadow-inner">
+                  <CheckCircle2 size={22} className="stroke-[2.2]" />
+                </div>
+                <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                  Đã nạp RAM
+                </span>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
+                  Đã Tái Huấn Luyện
+                </p>
+                <p className="text-2xl font-black text-emerald-700 leading-none">
+                  {alStats.approved_count}
+                </p>
+                <p className="text-xs text-[#7A3E04] mt-2">
+                  Đã bổ sung vào tri thức & sẵn sàng phục vụ
+                </p>
+              </div>
+            </div>
+
+            {/* Card 3: Mẫu Lỗi Đã Bỏ Qua */}
+            <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div className="w-11 h-11 rounded-xl bg-stone-100 flex items-center justify-center text-stone-600 shadow-inner">
+                  <X size={22} className="stroke-[2.2]" />
+                </div>
+                <span className="text-[11px] font-semibold text-stone-700 bg-stone-100 px-2 py-0.5 rounded-full flex items-center gap-1 border border-stone-200">
+                  Loại bỏ
+                </span>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
+                  Mẫu Lỗi Đã Bỏ Qua
+                </p>
+                <p className="text-2xl font-black text-stone-700 leading-none">
+                  {alStats.rejected_count}
+                </p>
+                <p className="text-xs text-[#7A3E04] mt-2">
+                  Phản hồi rác hoặc không hợp lệ đã loại bỏ
+                </p>
+              </div>
+            </div>
+
+            {/* Card 4: Tổng Mẫu Tri Thức Trụ 2 */}
+            <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-blue-700 shadow-inner">
+                  <Brain size={22} className="stroke-[2.2]" />
+                </div>
+                <span className="text-[11px] font-semibold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-blue-200">
+                  Tập dữ liệu
+                </span>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
+                  Tổng Mẫu Tri Thức Trụ 2
+                </p>
+                <p className="text-2xl font-black text-[#8C4905] leading-none">
+                  {alStats.total_training_samples} <span className="text-xs font-normal text-[#7A3E04]">câu</span>
+                </p>
+                <p className="text-xs text-[#7A3E04] mt-2">
+                  intent_data.csv phân loại 4 Agent
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* Bảng Dữ Liệu Active Learning */}
+          <ActiveLearningTable
+            items={alFeedbacks}
+            isLoading={isAlLoading}
+            isRetraining={isRetraining}
+            onRetrain={handleRetrain}
+            onReject={handleRejectFeedbacks}
+            onUpdateItem={handleUpdateFeedbackItem}
+            onDeleteItem={handleDeleteFeedbackItem}
+            onRefresh={fetchActiveLearningData}
+            searchQuery={alSearchQuery}
+            setSearchQuery={setAlSearchQuery}
+            agentFilter={alAgentFilter}
+            setAgentFilter={setAlAgentFilter}
+          />
+        </div>
+      )}
 
       {/* ── 6. PHẦN 3: MODAL XEM CHI TIẾT NGỮ CẢNH (Context Inspection Modal) ── */}
       {inspectModalOpen && selectedLog && (

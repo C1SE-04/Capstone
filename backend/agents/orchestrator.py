@@ -726,7 +726,7 @@ class OrchestratorAgent:
                 self._local_model = new_pipeline
                 self._last_loaded_mtime = current_mtime
                 classes_str = ", ".join(new_pipeline.classes_)
-                print(f"[OrchestratorAgent] 🔄 [HOT-RELOAD SUCCESS] Đã nạp mô hình mới vào RAM ({stat_info.st_size // 1024}KB, mtime={self._last_loaded_mtime:.2f}, classes=[{classes_str}])")
+                print(f"[OrchestratorAgent] [HOT-RELOAD SUCCESS] Đã nạp mô hình mới vào RAM ({stat_info.st_size // 1024}KB, mtime={self._last_loaded_mtime:.2f}, classes=[{classes_str}])")
                 return True
             except Exception as e:
                 print(f"[OrchestratorAgent] [ERROR] Lỗi khi nạp mô hình (giữ nguyên bản cũ trên RAM): {e}")

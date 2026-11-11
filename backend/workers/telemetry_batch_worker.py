@@ -567,7 +567,7 @@ def ensure_baseline_metrics(db=None):
                 db.merge(ag_row)
 
         db.commit()
-        print("[TelemetryWorker] ✅ Khởi tạo dữ liệu baseline thành công.")
+        print("[TelemetryWorker] Khởi tạo dữ liệu baseline thành công.")
     except Exception as e:
         db.rollback()
         print(f"[TelemetryWorker] Không thể seed dữ liệu baseline: {e}")
@@ -585,7 +585,7 @@ async def start_telemetry_worker() -> None:
     2. Vòng lặp 60 giây: Ghi batch xuống Neon PostgreSQL (T10.2.4).
     """
     redis = _get_upstash_redis()
-    print("[TelemetryWorker] ✅ Đã khởi động Telemetry Batch Worker (Redis & 60s DB Aggregator).")
+    print("[TelemetryWorker] Đã khởi động Telemetry Batch Worker (Redis & 60s DB Aggregator).")
 
     # Khởi tạo baseline nếu DB mới
     try:
