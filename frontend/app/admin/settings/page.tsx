@@ -244,6 +244,7 @@ export default function AdminSettingsPage() {
   const [availableModels, setAvailableModels] = useState<ModelOption[]>(
     INITIAL_CURATED_MODELS
   );
+  const [enableFailover, setEnableFailover] = useState<boolean>(true);
 
   // Loading flags
   const [isLoadingSettings, setIsLoadingSettings] = useState<boolean>(true);
@@ -1008,10 +1009,30 @@ export default function AdminSettingsPage() {
 
           {/* Sơ đồ Failover Cascade Trực Quan */}
           <div className="bg-white rounded-2xl border border-[#F1CCA6] p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-extrabold text-[#1C1917] flex items-center gap-2 pb-3 border-b border-[#F1CCA6]/40">
-              <Network className="w-4 h-4 text-[#C1762A]" />
-              Sơ Đồ Cơ Chế Điều Phối & Phục Hồi Thất Bại (Failover Cascade 3 Nấc)
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F1CCA6]/40">
+              <h3 className="text-sm font-extrabold text-[#1C1917] flex items-center gap-2">
+                <Network className="w-4 h-4 text-[#C1762A]" />
+                Sơ Đồ Cơ Chế Điều Phối & Phục Hồi Thất Bại (Failover Cascade 3 Nấc)
+              </h3>
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-bold text-[#1C1917]">
+                  {enableFailover ? "Đang bật Failover" : "Đã tắt Failover"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setEnableFailover(!enableFailover)}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    enableFailover ? "bg-[#C1762A]" : "bg-[#F1CCA6]"
+                  }`}
+                >
+                  <span
+                    className={`block w-4 h-4 rounded-full bg-white transition-transform ${
+                      enableFailover ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
               <div className="p-4 rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] space-y-1.5">
                 <div className="font-extrabold text-[#10B981] flex items-center gap-1.5">
