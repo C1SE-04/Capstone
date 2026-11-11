@@ -132,7 +132,7 @@ def save_audit_feedback_log(
             .first()
         )
         if existing:
-            print(f"[ActiveLearning] ℹ️ Đã tồn tại bản ghi PENDING cho câu hỏi: '{clean_query[:35]}...', bỏ qua trùng lặp.")
+            print(f"[ActiveLearning] [INFO] Đã tồn tại bản ghi PENDING cho câu hỏi: '{clean_query[:35]}...', bỏ qua trùng lặp.")
             return
 
         feedback_log = models.AuditFeedbackLog(
@@ -143,7 +143,7 @@ def save_audit_feedback_log(
         )
         session.add(feedback_log)
         session.commit()
-        print(f"[ActiveLearning] 📝 Đã ghi nhận câu hỏi phân luồng sai vào audit_feedback_logs: '{clean_query[:40]}' ({clean_predicted} -> {clean_suggested})")
+        print(f"[ActiveLearning] [SUCCESS] Đã ghi nhận câu hỏi phân luồng sai vào audit_feedback_logs: '{clean_query[:40]}' ({clean_predicted} -> {clean_suggested})")
     except Exception as e:
         session.rollback()
         print(f"[ActiveLearning] Lỗi lưu audit_feedback_logs: {e}")

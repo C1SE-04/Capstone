@@ -201,3 +201,57 @@ export interface SystemErrorsListResponse {
 export interface ResolveErrorPayload {
   resolved_note?: string;
 }
+
+// ==============================================================================
+// US 10.4 - Task T10.4.5: Active Learning & Giám Sát Tiến Hóa Agent
+// ==============================================================================
+
+export type ActiveLearningAgent =
+  | "MISCONCEPTION"
+  | "SAFETY"
+  | "KNOWLEDGE_TRACING"
+  | "SCAFFOLDING";
+
+export type AuditFeedbackStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface AuditFeedbackItem {
+  id: number;
+  user_query: string;
+  predicted_agent: string;
+  suggested_agent: string;
+  status: AuditFeedbackStatus;
+  created_at: string;
+}
+
+export interface AuditFeedbackListResponse {
+  success: boolean;
+  total: number;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
+  items: AuditFeedbackItem[];
+}
+
+export interface ActiveLearningStats {
+  success: boolean;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
+  total_feedbacks: number;
+  total_training_samples: number;
+  last_model_update?: string | null;
+  intents_distribution: Record<string, number>;
+}
+
+export interface RetrainResult {
+  success: boolean;
+  message: string;
+  retrained_count: number;
+  total_samples: number;
+}
+
+export interface UpdateFeedbackPayload {
+  user_query?: string;
+  suggested_agent?: string;
+}
+
