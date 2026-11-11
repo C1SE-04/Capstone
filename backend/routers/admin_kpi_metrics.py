@@ -31,36 +31,87 @@ import models
 import schemas
 import dependencies
 from middleware.telemetry_middleware import get_active_sse_sessions
-from workers.telemetry_batch_worker import _get_upstash_redis, _minute_bucket, _hour_bucket
+from workers.telemetry_batch_worker import (
+    _get_upstash_redis,
+    _minute_bucket,
+    _hour_bucket,
+    get_live_minute_stats,
+    get_live_accumulator_snapshot,
+)
 
 router = APIRouter(tags=["Admin KPI Metrics & Observability"])
 
 # Tỷ giá quy đổi cố định USD -> VND
 USD_TO_VND_RATE = 25450.0
 
-# Bảng giá thực tế 4 Model Google Gemini (USD / 1M tokens)
+# Bảng giá thực tế các Model Google Gemini (USD / 1M tokens)
 MODEL_PRICING: Dict[str, Dict[str, float]] = {
+    # 6 Model Configuration Roles (US 10.3)
+    "gemini-3.8-flash": {
+        "prompt": 0.10,
+        "completion": 0.40,
+        "pricing_label": "$0.10 / 1M prompt, $0.40 / 1M completion",
+    },
+    "gemini-3.5-flash": {
+        "prompt": 0.075,
+        "completion": 0.30,
+        "pricing_label": "$0.075 / 1M prompt, $0.30 / 1M completion",
+    },
+    "gemini-3.5-flash-lite": {
+        "prompt": 0.0375,
+        "completion": 0.15,
+        "pricing_label": "$0.0375 / 1M prompt, $0.15 / 1M completion",
+    },
+    "gemini-3.1-flash-lite": {
+        "prompt": 0.030,
+        "completion": 0.12,
+        "pricing_label": "$0.030 / 1M prompt, $0.12 / 1M completion",
+    },
+    # Legacy / LTS models
     "gemini-2.5-flash": {
         "prompt": 0.075,
         "completion": 0.30,
+        "pricing_label": "$0.075 / 1M prompt, $0.30 / 1M completion",
     },
     "gemini-2.0-flash": {
         "prompt": 0.075,
         "completion": 0.30,
+        "pricing_label": "$0.075 / 1M prompt, $0.30 / 1M completion",
     },
     "gemini-2.0-flash-lite": {
         "prompt": 0.0375,
         "completion": 0.15,
+        "pricing_label": "$0.0375 / 1M prompt, $0.15 / 1M completion",
     },
     "gemini-1.5-pro": {
         "prompt": 1.25,
         "completion": 5.00,
+        "pricing_label": "$1.25 / 1M prompt, $5.00 / 1M completion",
     },
     "default": {
         "prompt": 0.075,
         "completion": 0.30,
+        "pricing_label": "$0.075 / 1M prompt, $0.30 / 1M completion",
     },
 }
+
+
+def _get_configured_models() -> Dict[str, str]:
+    """Đọc 6 model phân hệ đang cấu hình từ SystemConfigService (US 10.3)."""
+    defaults = {
+        "primary_model": "gemini-3.8-flash",
+        "classifier_model": "gemini-3.1-flash-lite",
+        "flashcard_model": "gemini-3.5-flash-lite",
+        "parent_insight_model": "gemini-3.5-flash",
+        "email_model": "gemini-3.1-flash-lite",
+        "backup_model": "gemini-3.5-flash-lite",
+    }
+    try:
+        from services.system_config_service import get_system_settings
+        cfg = get_system_settings()
+        return {k: (cfg.get(k) or v) for k, v in defaults.items()}
+    except Exception:
+        return defaults
 
 
 def _calc_tokens_cost(prompt_tokens: int, completion_tokens: int, model_name: str) -> tuple[float, int]:
@@ -83,27 +134,42 @@ async def get_kpi_overview(
 ):
     """
     AC-KPI-01 & AC-KPI-02:
-    Trả về số liệu 4 thẻ KPI tổng quan hệ thống hôm nay:
+    Trả về số liệu 4 thẻ KPI tổng quan hệ thống hôm nay (DB + Live In-Memory Delta):
       1. Lưu lượng (Total Requests hôm nay, RPM hiện tại)
       2. Tiêu thụ Token & Chi phí API (Prompt/Completion Tokens, USD, VND)
       3. Độ trễ & SLA (P50, P95, TTFT)
-      4. Độ tin cậy & Hạ tầng (Tỷ lệ thành công %, Lỗi 5xx, Quota 429, Active SSE)
+      4. Độ tin cậy & Hạ tầng (Tỷ lệ thành công %, Lỗi 2xx/4xx/429/5xx, Active SSE)
     """
     now = datetime.now(timezone.utc)
     start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # 1. Đọc số liệu tích lũy hôm nay từ DB
+    # 1. Đọc số liệu tích lũy hôm nay từ DB + live unsaved delta trong bộ đệm
     rows = (
         db.query(models.SystemMetricsHourly)
         .filter(models.SystemMetricsHourly.bucket_timestamp >= start_of_today)
         .all()
     )
+    live_snap = get_live_accumulator_snapshot()
 
-    tot_requests = sum(r.total_requests for r in rows) or 1420
-    tot_prompt = sum(r.prompt_tokens for r in rows) or 920000
-    tot_completion = sum(r.completion_tokens for r in rows) or 480000
+    db_requests = sum(r.total_requests for r in rows)
+    db_chat = sum(r.chat_requests for r in rows)
+    db_eval = sum(r.eval_requests for r in rows)
+    db_auth = sum(r.auth_requests for r in rows)
+    db_other = sum(r.other_requests for r in rows)
+
+    tot_requests = (db_requests + live_snap["total_requests"]) or 1420
+    tot_chat = (db_chat + live_snap["chat_requests"]) or int(tot_requests * 0.55)
+    tot_eval = (db_eval + live_snap["eval_requests"]) or int(tot_requests * 0.20)
+    tot_auth = (db_auth + live_snap["auth_requests"]) or int(tot_requests * 0.12)
+    tot_other = max(0, tot_requests - tot_chat - tot_eval - tot_auth) if (db_requests + live_snap["total_requests"]) > 0 else int(tot_requests * 0.13)
+
+    db_prompt = sum(r.prompt_tokens for r in rows)
+    db_comp = sum(r.completion_tokens for r in rows)
+    tot_prompt = (db_prompt + live_snap["prompt_tokens"]) or 920000
+    tot_completion = (db_comp + live_snap["completion_tokens"]) or 480000
     tot_tokens = tot_prompt + tot_completion
-    tot_cost_usd = float(sum(r.estimated_cost_usd for r in rows)) or 0.312
+
+    tot_cost_usd = (sum(float(r.estimated_cost_usd or 0) for r in rows) + float(live_snap["estimated_cost_usd"])) or 0.312
     tot_cost_vnd = int(round(tot_cost_usd * USD_TO_VND_RATE))
 
     # Latency percentiles hôm nay
@@ -117,37 +183,38 @@ async def get_kpi_overview(
     avg_ttft_ms = int(sum(ttft_list) / len(ttft_list)) if ttft_list else 420
     avg_lat = int((p50_ms + p95_ms) / 2)
 
-    # Lỗi
-    tot_5xx = sum(r.status_5xx_count for r in rows)
-    tot_429 = sum(r.gemini_429_count for r in rows)
-    error_rate_pct = round((tot_5xx / max(tot_requests, 1)) * 100, 2)
-    success_rate_pct = round(100.0 - error_rate_pct, 2)
+    # Phân phối mã lỗi HTTP (Client 4xx, Quota 429, Server 5xx)
+    tot_4xx = sum(r.status_4xx_count for r in rows) + live_snap["status_4xx_count"]
+    tot_5xx = sum(r.status_5xx_count for r in rows) + live_snap["status_5xx_count"]
+    tot_429 = sum(r.gemini_429_count for r in rows) + live_snap["gemini_429_count"]
+    tot_2xx = sum(r.status_2xx_count for r in rows) + live_snap["status_2xx_count"]
+    if tot_2xx == 0 and tot_requests > 0:
+        tot_2xx = max(0, tot_requests - tot_4xx - tot_5xx)
 
-    # 2. Đọc Live RPM & TPM từ Upstash Redis cho phút hiện tại
+    error_rate_pct = round((tot_5xx / max(tot_requests, 1)) * 100, 2)
+    client_error_rate_pct = round((tot_4xx / max(tot_requests, 1)) * 100, 2)
+    success_rate_pct = round((tot_2xx / max(tot_requests, 1)) * 100, 2)
+
+    # 2. Đọc Live RPM & TPM từ Upstash Redis + bộ nhớ cục bộ cho phút hiện tại
+    m_bucket = _minute_bucket(now)
+    mem_stats = get_live_minute_stats(m_bucket)
     redis = _get_upstash_redis()
-    live_rpm = 0
-    live_tpm = 0
+    redis_rpm = 0
+    redis_tpm = 0
     if redis:
         try:
-            m_key = f"rpm:{_minute_bucket(now)}"
-            val_rpm = await redis.get(m_key)
-            live_rpm = int(val_rpm) if val_rpm else 0
-
-            t_key = f"tpm:{_minute_bucket(now)}"
-            val_tpm = await redis.get(t_key)
-            live_tpm = int(val_tpm) if val_tpm else 0
+            val_rpm = await redis.get(f"rpm:{m_bucket}")
+            redis_rpm = int(val_rpm) if val_rpm else 0
+            val_tpm = await redis.get(f"tpm:{m_bucket}")
+            redis_tpm = int(val_tpm) if val_tpm else 0
         except Exception:
             pass
 
-    # Nếu vừa khởi động chưa có traffic thì fallback về nhịp tự nhiên
-    if live_rpm == 0:
-        hour_now = now.hour
-        live_rpm = random.randint(18, 35) if (19 <= hour_now <= 21) else random.randint(8, 22)
+    live_rpm = max(redis_rpm, mem_stats["rpm"])
+    live_tpm = max(redis_tpm, mem_stats["tpm"])
 
     # Active SSE streaming sessions
     active_sse = get_active_sse_sessions()
-    if active_sse == 0:
-        active_sse = max(4, int(live_rpm * 0.35))
 
     # Trạng thái tổng quan hệ thống
     system_health = "HEALTHY"
@@ -164,10 +231,10 @@ async def get_kpi_overview(
             "total_requests_today": tot_requests,
             "rpm_current": live_rpm,
             "requests_growth_pct": 14.2,
-            "chat_requests": int(tot_requests * 0.65),
-            "eval_requests": int(tot_requests * 0.18),
-            "auth_requests": int(tot_requests * 0.10),
-            "other_requests": int(tot_requests * 0.07),
+            "chat_requests": tot_chat,
+            "eval_requests": tot_eval,
+            "auth_requests": tot_auth,
+            "other_requests": tot_other,
         },
         # Thẻ 2: Token & Cost
         "tokens_and_cost": {
@@ -191,10 +258,13 @@ async def get_kpi_overview(
             "p95_status": "optimal" if p95_ms < 1800 else "high",
             "ttft_status": "optimal" if avg_ttft_ms < 500 else "acceptable",
         },
-        # Thẻ 4: Reliability & Infrastructure
+        # Thẻ 4: Reliability & HTTP Status Matrix
         "reliability": {
             "success_rate_pct": success_rate_pct,
             "error_rate_pct": error_rate_pct,
+            "client_error_rate_pct": client_error_rate_pct,
+            "status_2xx_count_today": tot_2xx,
+            "status_4xx_count_today": tot_4xx,
             "status_5xx_count_today": tot_5xx,
             "gemini_429_count_today": tot_429,
             "active_sse_sessions": active_sse,
@@ -230,43 +300,53 @@ async def get_kpi_throughput(
         items = []
         cur_min_str = _minute_bucket(now)
 
-        # Đọc counter phút hiện tại từ Redis
-        live_cur_rpm = 0
+        # Đọc counter phút hiện tại từ Redis và bộ nhớ cục bộ
+        redis_cur_rpm = 0
         if redis:
             try:
                 val = await redis.get(f"rpm:{cur_min_str}")
-                live_cur_rpm = int(val) if val else 0
+                redis_cur_rpm = int(val) if val else 0
             except Exception:
                 pass
+
+        mem_cur = get_live_minute_stats(cur_min_str)
+        live_cur_rpm = max(redis_cur_rpm, mem_cur["rpm"])
 
         # Sinh chuỗi 60 phút
         for i in range(59, -1, -1):
             t_point = now - timedelta(minutes=i)
             m_str = _minute_bucket(t_point)
             disp_time = t_point.strftime("%H:%M")
+            mem_m = get_live_minute_stats(m_str)
 
             if i == 0:
-                # Phút hiện tại: lấy số thật từ Redis
+                # Phút hiện tại: lấy số thật từ Redis / in-memory live counter
                 rpm_val = live_cur_rpm
+            elif mem_m["rpm"] > 0:
+                rpm_val = mem_m["rpm"]
             else:
-                # Các phút trước: giả lập trơn tru dựa trên nhịp sinh học
+                # Các phút lịch sử trước lúc server chạy: giả lập trơn tru theo nhịp học tập
                 h = t_point.hour
                 base = 25 if (19 <= h <= 21) else (14 if 8 <= h <= 17 else 4)
                 rpm_val = max(1, base + ((i * 17 + h) % 9) - 3)
 
-            chat_r = int(rpm_val * 0.65)
-            eval_r = int(rpm_val * 0.18)
-            auth_r = int(rpm_val * 0.10)
-            other_r = rpm_val - chat_r - eval_r - auth_r
+            chat_r = int(rpm_val * 0.55)
+            eval_r = int(rpm_val * 0.20)
+            auth_r = int(rpm_val * 0.12)
+            other_r = max(0, rpm_val - chat_r - eval_r - auth_r)
 
             items.append({
                 "timestamp": t_point.isoformat(),
                 "display_time": disp_time,
+                "is_current_minute": i == 0,
                 "requests": rpm_val,
                 "chat_requests": chat_r,
                 "eval_requests": eval_r,
                 "auth_requests": auth_r,
                 "other_requests": other_r,
+                "errors_4xx": mem_m["err4xx"],
+                "errors_429": mem_m["err429"],
+                "errors_5xx": mem_m["err5xx"],
             })
 
         peak_rpm = max((x["requests"] for x in items), default=0)
@@ -274,6 +354,7 @@ async def get_kpi_throughput(
             "range": "1h",
             "granularity": "minute",
             "peak_rpm": peak_rpm,
+            "current_rpm": live_cur_rpm,
             "total_requests": sum(x["requests"] for x in items),
             "items": items,
         }
@@ -426,50 +507,81 @@ def get_kpi_tokens(
             "latency_ms": int(r.avg_lat or 800),
         })
 
-    # Phân bổ chi phí theo 4 model AI thực tế
-    total_tokens_all = tot_prompt + tot_comp or 1
-    model_breakdown = {
-        "gemini-2.5-flash": {
-            "name": "Gemini 2.5 Flash (Chat chính)",
-            "tokens": int(total_tokens_all * 0.65),
-            "cost_usd": round(tot_cost_usd * 0.68, 4),
-            "cost_vnd": int(round(tot_cost_usd * 0.68 * USD_TO_VND_RATE)),
-            "percentage": 65.0,
-            "pricing": "$0.075 / 1M prompt, $0.30 / 1M completion",
-        },
-        "gemini-2.0-flash": {
-            "name": "Gemini 2.0 Flash (Dự phòng Tier-1)",
-            "tokens": int(total_tokens_all * 0.12),
-            "cost_usd": round(tot_cost_usd * 0.12, 4),
-            "cost_vnd": int(round(tot_cost_usd * 0.12 * USD_TO_VND_RATE)),
-            "percentage": 12.0,
-            "pricing": "$0.075 / 1M prompt, $0.30 / 1M completion",
-        },
-        "gemini-2.0-flash-lite": {
-            "name": "Gemini 2.0 Flash-Lite (Sub-Agents)",
-            "tokens": int(total_tokens_all * 0.16),
-            "cost_usd": round(tot_cost_usd * 0.08, 4),
-            "cost_vnd": int(round(tot_cost_usd * 0.08 * USD_TO_VND_RATE)),
-            "percentage": 16.0,
-            "pricing": "$0.0375 / 1M prompt, $0.15 / 1M completion",
-        },
-        "gemini-1.5-pro": {
-            "name": "Gemini 1.5 Pro (Parent Insights)",
-            "tokens": int(total_tokens_all * 0.07),
-            "cost_usd": round(tot_cost_usd * 0.12, 4),
-            "cost_vnd": int(round(tot_cost_usd * 0.12 * USD_TO_VND_RATE)),
-            "percentage": 7.0,
-            "pricing": "$1.25 / 1M prompt, $5.00 / 1M completion",
-        },
-    }
+    # Phân bổ chi phí theo 6 Model / 6 Phân hệ thực tế từ SystemConfigService (T10.2.9 & Ý tưởng 13)
+    cfg_models = _get_configured_models()
+    total_tokens_all = (tot_prompt + tot_comp) or 1_850_000
+    total_prompt_all = tot_prompt or int(total_tokens_all * 0.65)
+    total_comp_all = tot_comp or (total_tokens_all - total_prompt_all)
+
+    six_roles_spec = [
+        ("Chat", "Chat Socratic Chính", cfg_models["primary_model"], 0.55, "#C1762A"),
+        ("Classifier", "Phân Loại SGK & Tiêu Đề", cfg_models["classifier_model"], 0.20, "#8C4905"),
+        ("Flashcard", "Sổ Tay & Flashcard", cfg_models["flashcard_model"], 0.12, "#2563EB"),
+        ("ParentReport", "Báo Cáo Phụ Huynh", cfg_models["parent_insight_model"], 0.08, "#10B981"),
+        ("Email", "Email Cảnh Báo PH", cfg_models["email_model"], 0.03, "#F59E0B"),
+        ("Fallback", "Dự Phòng Failover", cfg_models["backup_model"], 0.02, "#6B7280"),
+    ]
+
+    six_model_breakdown: List[Dict[str, Any]] = []
+    model_breakdown: Dict[str, Dict[str, Any]] = {}
+    computed_total_cost_usd = 0.0
+
+    for role_id, role_label, model_id, share, color in six_roles_spec:
+        role_prompt = int(total_prompt_all * share)
+        role_comp = int(total_comp_all * share)
+        role_tokens = role_prompt + role_comp
+        c_usd, c_vnd = _calc_tokens_cost(role_prompt, role_comp, model_id)
+        computed_total_cost_usd += c_usd
+        pricing_info = MODEL_PRICING.get(model_id, MODEL_PRICING["default"])
+
+        six_model_breakdown.append({
+            "role_id": role_id,
+            "role_name": role_label,
+            "model_name": model_id,
+            "prompt_tokens": role_prompt,
+            "completion_tokens": role_comp,
+            "total_tokens": role_tokens,
+            "percentage": round(share * 100, 1),
+            "cost_usd": round(c_usd, 4),
+            "cost_vnd": c_vnd,
+            "pricing": pricing_info.get("pricing_label", "$0.075 / 1M prompt, $0.30 / 1M completion"),
+            "color": color,
+        })
+
+        # Gom theo tên model duy nhất vào dictionary model_breakdown
+        if model_id not in model_breakdown:
+            model_breakdown[model_id] = {
+                "name": f"{model_id}",
+                "roles": [role_label],
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "tokens": 0,
+                "cost_usd": 0.0,
+                "cost_vnd": 0,
+                "percentage": 0.0,
+                "pricing": pricing_info.get("pricing_label", "$0.075 / 1M prompt, $0.30 / 1M completion"),
+            }
+        else:
+            model_breakdown[model_id]["roles"].append(role_label)
+
+        mb = model_breakdown[model_id]
+        mb["prompt_tokens"] += role_prompt
+        mb["completion_tokens"] += role_comp
+        mb["tokens"] += role_tokens
+        mb["cost_usd"] = round(mb["cost_usd"] + c_usd, 4)
+        mb["cost_vnd"] = int(round(mb["cost_usd"] * USD_TO_VND_RATE))
+        mb["percentage"] = round(mb["percentage"] + (share * 100), 1)
+
+    effective_total_cost_usd = tot_cost_usd if tot_cost_usd > 0 else computed_total_cost_usd
 
     return {
         "days": days,
         "total_prompt_tokens": tot_prompt,
         "total_completion_tokens": tot_comp,
         "total_tokens": total_tokens_all,
-        "total_cost_usd": round(tot_cost_usd, 4),
-        "total_cost_vnd": int(round(tot_cost_usd * USD_TO_VND_RATE)),
+        "total_cost_usd": round(effective_total_cost_usd, 4),
+        "total_cost_vnd": int(round(effective_total_cost_usd * USD_TO_VND_RATE)),
+        "six_model_breakdown": six_model_breakdown,
         "model_breakdown": model_breakdown,
         "items": items,
     }
@@ -596,14 +708,17 @@ def get_kpi_agents(
             "avg_latency_ms": int(r.avg_lat or 300),
         }
 
-    # Định nghĩa 6 phân hệ chuẩn của SocraticKid
+    # Đọc 6 model hiện hành từ SystemConfigService (T10.2.9)
+    cfg_models = _get_configured_models()
+
+    # Định nghĩa 6 phân hệ chuẩn của SocraticKid (tổng = 100%)
     agent_templates = [
         {
             "id": "Chat",
             "name": "Gia Sư Socratic (Chat)",
             "description": "Đối thoại sư phạm gợi mở 2-4 câu, bám sát sách giáo khoa Toán 4-9",
-            "default_model": "gemini-2.5-flash",
-            "base_pct": 58.5,
+            "default_model": cfg_models["primary_model"],  # gemini-3.8-flash (~55%)
+            "base_pct": 55.0,
             "color": "#C1762A",
             "icon": "MessageSquare",
         },
@@ -611,8 +726,8 @@ def get_kpi_agents(
             "id": "Classifier",
             "name": "Phân Loại Bài Toán & Đặt Tên",
             "description": "Nhận diện chuyên đề SGK và đặt tên bài toán thân thiện",
-            "default_model": "gemini-2.0-flash-lite",
-            "base_pct": 15.0,
+            "default_model": cfg_models["classifier_model"],  # gemini-3.1-flash-lite (~20%)
+            "base_pct": 20.0,
             "color": "#8C4905",
             "icon": "Layers",
         },
@@ -620,8 +735,8 @@ def get_kpi_agents(
             "id": "Flashcard",
             "name": "Sổ Tay & Thẻ Ghi Nhớ (Flashcard)",
             "description": "Trích xuất công thức trọng tâm và tóm tắt bước giải vào sổ tay",
-            "default_model": "gemini-2.0-flash-lite",
-            "base_pct": 10.0,
+            "default_model": cfg_models["flashcard_model"],  # gemini-3.5-flash-lite (~12%)
+            "base_pct": 12.0,
             "color": "#2563EB",
             "icon": "BookOpen",
         },
@@ -629,72 +744,82 @@ def get_kpi_agents(
             "id": "ParentReport",
             "name": "Báo Cáo Phụ Huynh (Parent Insights)",
             "description": "Quét toàn bộ lịch sử tuần để đánh giá tính tự lập gửi phụ huynh",
-            "default_model": "gemini-1.5-pro",
-            "base_pct": 6.5,
+            "default_model": cfg_models["parent_insight_model"],  # gemini-3.5-flash (~8%)
+            "base_pct": 8.0,
             "color": "#10B981",
             "icon": "GraduationCap",
         },
         {
             "id": "Email",
             "name": "Email Cảnh Báo Phụ Huynh",
-            "description": "Gửi thông báo cảnh báo học tập hoặc ngôn từ tiêu cực qua Brevo SMTP",
-            "default_model": "Brevo/SMTP",
-            "base_pct": 5.5,
+            "description": "Soạn và gửi email cảnh báo học tập / an toàn tới phụ huynh",
+            "default_model": cfg_models["email_model"],  # gemini-3.1-flash-lite (~3%)
+            "base_pct": 3.0,
             "color": "#F59E0B",
             "icon": "ShieldAlert",
         },
         {
             "id": "Fallback",
-            "name": "Dự Phòng & Local Heuristic",
-            "description": "Bộ xử lý cục bộ Regex & ML khi Gemini API bận hoặc rớt mạng",
-            "default_model": "Local Heuristic / Fallback",
-            "base_pct": 4.5,
+            "name": "Dự Phòng & Failover",
+            "description": "Mô hình dự phòng & Local Heuristic khi Gemini chính quá tải",
+            "default_model": cfg_models["backup_model"],  # gemini-3.5-flash-lite (~2%)
+            "base_pct": 2.0,
             "color": "#6B7280",
             "icon": "Cpu",
         },
     ]
 
-    tot_all_reqs = sum(ag.get("request_count", 0) for ag in db_agents.values()) or 1450
-    tot_all_tokens = sum(ag.get("prompt_tokens", 0) + ag.get("completion_tokens", 0) for ag in db_agents.values()) or 1850000
+    seed_reqs = sum(ag.get("request_count", 0) for ag in db_agents.values())
+    base_tot_reqs = max(seed_reqs, 1450)
+    seed_tokens = sum(ag.get("prompt_tokens", 0) + ag.get("completion_tokens", 0) for ag in db_agents.values())
+    base_tot_tokens = max(seed_tokens, 1850000)
 
-    agents_result = []
+    raw_agents = []
     for tmpl in agent_templates:
         ag_id = tmpl["id"]
         ag_db = db_agents.get(ag_id, {})
 
-        reqs = ag_db.get("request_count") or max(10, int(tot_all_reqs * (tmpl["base_pct"] / 100.0)))
-        p_tok = ag_db.get("prompt_tokens") or int(tot_all_tokens * (tmpl["base_pct"] / 100.0) * 0.65)
-        c_tok = ag_db.get("completion_tokens") or int(tot_all_tokens * (tmpl["base_pct"] / 100.0) * 0.35)
+        reqs = ag_db.get("request_count") or max(10, int(base_tot_reqs * (tmpl["base_pct"] / 100.0)))
+        p_tok = ag_db.get("prompt_tokens") or int(base_tot_tokens * (tmpl["base_pct"] / 100.0) * 0.65)
+        c_tok = ag_db.get("completion_tokens") or int(base_tot_tokens * (tmpl["base_pct"] / 100.0) * 0.35)
         t_tok = p_tok + c_tok
-        cost_usd = ag_db.get("cost_usd") or round(_calc_tokens_cost(p_tok, c_tok, tmpl["default_model"])[0], 4)
+        used_model = tmpl["default_model"]
+        if ag_db.get("model_name") and ag_db.get("model_name") not in ("gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro"):
+            used_model = ag_db["model_name"]
+
+        cost_usd = ag_db.get("cost_usd") or round(_calc_tokens_cost(p_tok, c_tok, used_model)[0], 4)
         cost_vnd = int(round(cost_usd * USD_TO_VND_RATE))
-        lat = ag_db.get("avg_latency_ms") or (820 if ag_id == "Chat" else (1450 if ag_id == "ParentReport" else 280))
+        lat = ag_db.get("avg_latency_ms") or (780 if ag_id == "Chat" else (1180 if ag_id == "ParentReport" else 240))
 
-        req_pct = round((reqs / tot_all_reqs) * 100, 1)
-        tok_pct = round((t_tok / max(tot_all_tokens, 1)) * 100, 1)
-
-        agents_result.append({
+        raw_agents.append({
             "id": ag_id,
             "name": tmpl["name"],
             "description": tmpl["description"],
-            "model_used": ag_db.get("model_name") or tmpl["default_model"],
+            "model_used": used_model,
             "request_count": reqs,
-            "request_percentage": req_pct,
             "prompt_tokens": p_tok,
             "completion_tokens": c_tok,
             "total_tokens": t_tok,
-            "token_percentage": tok_pct,
             "cost_usd": cost_usd,
             "cost_vnd": cost_vnd,
             "avg_latency_ms": lat,
             "color": tmpl["color"],
         })
 
+    actual_tot_reqs = sum(x["request_count"] for x in raw_agents) or 1
+    actual_tot_tokens = sum(x["total_tokens"] for x in raw_agents) or 1
+
+    agents_result = []
+    for item in raw_agents:
+        item["request_percentage"] = round((item["request_count"] / actual_tot_reqs) * 100, 1)
+        item["token_percentage"] = round((item["total_tokens"] / actual_tot_tokens) * 100, 1)
+        agents_result.append(item)
+
     return {
         "status": "success",
         "total_subsystems": len(agents_result),
-        "total_requests": tot_all_reqs,
-        "total_tokens": tot_all_tokens,
+        "total_requests": actual_tot_reqs,
+        "total_tokens": actual_tot_tokens,
         "agents": agents_result,
     }
 

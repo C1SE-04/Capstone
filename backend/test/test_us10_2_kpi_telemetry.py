@@ -245,7 +245,15 @@ class TestT10_2_2_GeminiTelemetry:
     """Kiểm tra tính chi phí, thu thập usage_metadata và đo TTFT."""
 
     def test_calc_cost_usd(self):
-        """Kiểm tra công thức tính chi phí USD theo bảng giá từng model."""
+        """Kiểm tra công thức tính chi phí USD theo bảng giá từng model (3.x & LTS)."""
+        # gemini-3.8-flash: prompt $0.10/1M, comp $0.40/1M
+        cost_3_8 = _calc_cost_usd(1_000_000, 1_000_000, "gemini-3.8-flash")
+        assert cost_3_8 == pytest.approx(0.50, rel=1e-3)
+
+        # gemini-3.1-flash-lite: prompt $0.030/1M, comp $0.12/1M
+        cost_3_1_lite = _calc_cost_usd(1_000_000, 1_000_000, "gemini-3.1-flash-lite")
+        assert cost_3_1_lite == pytest.approx(0.15, rel=1e-3)
+
         # gemini-2.5-flash: prompt $0.075/1M, comp $0.30/1M
         cost_2_5 = _calc_cost_usd(1_000_000, 1_000_000, "gemini-2.5-flash")
         assert cost_2_5 == pytest.approx(0.375, rel=1e-3)
@@ -536,7 +544,7 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert res.status_code == 401
 
     def test_03_get_overview_success(self):
-        """Endpoint 1: GET /admin/kpi/overview trả về 4 thẻ KPI tổng quan."""
+        """Endpoint 1: GET /admin/kpi/overview trả về 4 thẻ KPI tổng quan và ma trận HTTP."""
         res = client.get("/admin/kpi/overview", headers=ADMIN_HEADERS)
         assert res.status_code == 200
         data = res.json()
@@ -545,6 +553,10 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert "tokens_and_cost" in data
         assert "latency_and_sla" in data
         assert "reliability" in data
+        assert "status_2xx_count_today" in data["reliability"]
+        assert "status_4xx_count_today" in data["reliability"]
+        assert "status_5xx_count_today" in data["reliability"]
+        assert "gemini_429_count_today" in data["reliability"]
         assert data["tokens_and_cost"]["cost_vnd_today"] > 0
         assert data["latency_and_sla"]["p50_status"] in ("optimal", "high")
 
@@ -566,14 +578,14 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert len(data_hour["items"]) > 0
 
     def test_05_get_tokens_breakdown(self):
-        """Endpoint 3: GET /admin/kpi/tokens trả về tiêu thụ và chi phí 4 model AI."""
+        """Endpoint 3: GET /admin/kpi/tokens trả về tiêu thụ và chi phí 6 phân hệ model AI."""
         res = client.get("/admin/kpi/tokens?days=14", headers=ADMIN_HEADERS)
         assert res.status_code == 200
         data = res.json()
+        assert "six_model_breakdown" in data
+        assert len(data["six_model_breakdown"]) == 6
         assert "model_breakdown" in data
-        assert "gemini-2.5-flash" in data["model_breakdown"]
-        assert "gemini-2.0-flash-lite" in data["model_breakdown"]
-        assert "gemini-1.5-pro" in data["model_breakdown"]
+        assert len(data["model_breakdown"]) >= 1
         assert data["total_tokens"] > 0
         assert data["total_cost_usd"] > 0
         assert data["total_cost_vnd"] > 0
@@ -591,7 +603,7 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert len(data["items"]) > 0
 
     def test_07_get_agents_distribution(self):
-        """Endpoint 5: GET /admin/kpi/agents trả về biểu đồ Donut 6 phân hệ."""
+        """Endpoint 5: GET /admin/kpi/agents trả về biểu đồ Donut 6 phân hệ và tỷ lệ chuẩn."""
         res = client.get("/admin/kpi/agents", headers=ADMIN_HEADERS)
         assert res.status_code == 200
         data = res.json()
@@ -603,6 +615,8 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert "ParentReport" in agent_names
         assert "Email" in agent_names
         assert "Fallback" in agent_names
+        pct_sum = sum(a["request_percentage"] for a in data["agents"])
+        assert 99.0 <= pct_sum <= 101.0
 
     def test_08_get_traffic_heatmap(self):
         """Endpoint 6: GET /admin/kpi/traffic-heatmap trả về 168 ô nhiệt 7x24."""
