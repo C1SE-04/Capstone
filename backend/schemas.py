@@ -1,5 +1,5 @@
 # schemas.py
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -1323,3 +1323,87 @@ class SystemErrorsListResponse(BaseModel):
     limit: int
     total_pages: int
     items: list[SystemErrorItemResponse]
+
+
+# ==============================================================================
+# US 10.4 - Task T10.4.4: Active Learning & Retrain Schemas
+# ==============================================================================
+
+class AuditFeedbackLogItem(BaseModel):
+    """Schema biểu diễn một bản ghi phản hồi phân luồng chờ duyệt."""
+    id: int
+    user_query: str
+    predicted_agent: str
+    suggested_agent: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuditFeedbackListResponse(BaseModel):
+    """Phản hồi danh sách nhật ký phân luồng phục vụ Active Learning Hub."""
+    success: bool = True
+    total: int
+    pending_count: int
+    approved_count: int = 0
+    rejected_count: int = 0
+    items: List[AuditFeedbackLogItem]
+
+
+class RetrainRequest(BaseModel):
+    """Payload gửi lên từ Admin để duyệt và tái huấn luyện mô hình."""
+    feedback_ids: List[int] = Field(
+        default_factory=list,
+        description="Danh sách ID các bản ghi AuditFeedbackLog cần duyệt và đưa vào huấn luyện lại"
+    )
+
+
+class RetrainResponse(BaseModel):
+    """Kết quả phản hồi sau khi tái huấn luyện mô hình và Hot-Reload vào RAM."""
+    success: bool = True
+    message: str
+    retrained_count: int
+    total_samples: int
+
+
+class RejectFeedbacksRequest(BaseModel):
+    """Payload từ chối hoặc bỏ qua các mẫu câu spam, lỗi cú pháp."""
+    feedback_ids: List[int] = Field(
+        default_factory=list,
+        description="Danh sách ID các bản ghi AuditFeedbackLog cần từ chối"
+    )
+
+
+class RejectFeedbacksResponse(BaseModel):
+    """Kết quả phản hồi sau khi từ chối các mẫu câu."""
+    success: bool = True
+    message: str
+    rejected_count: int
+
+
+class UpdateFeedbackRequest(BaseModel):
+    """Payload Admin chỉnh sửa trực tiếp câu hỏi hoặc nhãn đề xuất trước khi duyệt (T10.4.5 UI)."""
+    user_query: Optional[str] = Field(None, min_length=1, max_length=1000, description="Câu hỏi của học sinh đã sửa")
+    suggested_agent: Optional[str] = Field(None, description="Nhãn Agent đề xuất đã hiệu chỉnh")
+
+
+class ActiveLearningStatsResponse(BaseModel):
+    """Thống kê tổng quan phục vụ các thẻ KPI trên giao diện Giám Sát Agent (T10.4.5 UI)."""
+    success: bool = True
+    pending_count: int
+    approved_count: int
+    rejected_count: int
+    total_feedbacks: int
+    total_training_samples: int
+    last_model_update: Optional[str] = None
+    intents_distribution: Dict[str, int] = {}
+
+
+class DeleteFeedbackResponse(BaseModel):
+    """Kết quả phản hồi khi xóa một bản ghi phản hồi khỏi hệ thống."""
+    success: bool = True
+    message: str = "Đã xóa bản ghi thành công"
+    deleted_id: int
+

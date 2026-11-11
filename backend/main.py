@@ -85,6 +85,9 @@ app.include_router(admin_settings.router)
 app.include_router(admin_settings.mock_compat_router)
 from routers import admin_kpi_metrics  # US 10.2 (Task T10.2.5): Admin System KPI & Observability Hub
 app.include_router(admin_kpi_metrics.router)
+from routers import admin_active_learning  # US 10.4 (Task T10.4.4): Admin Active Learning & Tái Huấn Luyện Mô Hình
+app.include_router(admin_active_learning.router)
+app.include_router(admin_active_learning.compat_router)
 
 
 
