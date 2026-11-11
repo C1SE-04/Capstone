@@ -658,7 +658,7 @@ export default function AdminSettingsPage() {
                 Cài Đặt Hệ Thống & Tham Số AI
               </h1>
               <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-[#ECFDF5] text-[#10B981] border border-[#A7F3D0]">
-                {settings.systemVersion} • Hot-Reloading
+                {settings.system_version} • Hot-Reloading
               </span>
             </div>
             <p className="text-xs md:text-sm text-[#7A3E04] mt-1 font-medium">
