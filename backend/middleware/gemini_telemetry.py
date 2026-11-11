@@ -24,9 +24,27 @@ from middleware.telemetry_middleware import telemetry_queue
 # Giá tiền mỗi 1 triệu token theo bảng giá Gemini API thực tế (USD)
 # Nguồn: https://ai.google.dev/gemini-api/docs/models/gemini#gemini-2.5-flash
 _MODEL_PRICING: dict[str, dict[str, float]] = {
+    # ── Bộ Model Hiện Hành (US 10.3 - 6 Phân Hệ) ─────────────────────────────
+    "gemini-3.8-flash": {
+        "prompt": 0.10,        # USD / 1M prompt tokens (Chat Socratic chính)
+        "completion": 0.40,    # USD / 1M completion tokens
+    },
+    "gemini-3.5-flash": {
+        "prompt": 0.075,       # USD / 1M prompt tokens (Báo cáo phụ huynh)
+        "completion": 0.30,
+    },
+    "gemini-3.5-flash-lite": {
+        "prompt": 0.0375,      # USD / 1M prompt tokens (Flashcard & Dự phòng)
+        "completion": 0.15,
+    },
+    "gemini-3.1-flash-lite": {
+        "prompt": 0.030,       # USD / 1M prompt tokens (Classifier & Email - siêu tiết kiệm)
+        "completion": 0.12,
+    },
+    # ── Các Model Dự Phòng & Phiên Bản LTS ───────────────────────────────────
     "gemini-2.5-flash": {
-        "prompt": 0.075,       # USD / 1M prompt tokens
-        "completion": 0.30,    # USD / 1M completion tokens
+        "prompt": 0.075,
+        "completion": 0.30,
     },
     "gemini-2.0-flash": {
         "prompt": 0.075,

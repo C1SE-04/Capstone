@@ -157,7 +157,7 @@ class HourlyAccumulator:
 
         # Agent breakdown
         agent_name = event.get("agent_name", "Chat")
-        model_name = event.get("model_name", "gemini-2.0-flash-lite")
+        model_name = event.get("model_name", "gemini-3.1-flash-lite")
         key = (agent_name, model_name)
         if key not in self.agent_stats:
             self.agent_stats[key] = {
@@ -179,6 +179,37 @@ class HourlyAccumulator:
 
 _accumulator = HourlyAccumulator()
 
+# In-memory rolling minute counters (dự phòng tức thì khi Redis offline hoặc giữa chu kỳ batch)
+_live_minute_counters: Dict[str, Dict[str, int]] = {}
+
+
+def get_live_minute_stats(minute_str: Optional[str] = None) -> Dict[str, int]:
+    """Đọc số liệu RPM/TPM/Error của 1 phút từ bộ nhớ cục bộ."""
+    key = minute_str or _minute_bucket()
+    return _live_minute_counters.get(key, {
+        "rpm": 0, "tpm": 0, "err4xx": 0, "err429": 0, "err5xx": 0
+    })
+
+
+def get_live_accumulator_snapshot() -> Dict[str, Any]:
+    """Trả về ảnh chụp nhanh các delta chưa flush xuống DB để Overview API cộng dồn tức thì."""
+    return {
+        "total_requests": _accumulator.total_requests,
+        "chat_requests": _accumulator.chat_requests,
+        "eval_requests": _accumulator.eval_requests,
+        "auth_requests": _accumulator.auth_requests,
+        "other_requests": _accumulator.other_requests,
+        "prompt_tokens": _accumulator.prompt_tokens,
+        "completion_tokens": _accumulator.completion_tokens,
+        "total_tokens": _accumulator.total_tokens,
+        "estimated_cost_usd": _accumulator.estimated_cost_usd,
+        "status_2xx_count": _accumulator.status_2xx_count,
+        "status_4xx_count": _accumulator.status_4xx_count,
+        "status_5xx_count": _accumulator.status_5xx_count,
+        "gemini_429_count": _accumulator.gemini_429_count,
+        "failover_count": _accumulator.failover_count,
+    }
+
 
 # ==============================================================================
 # FLUSH VÀO REDIS (T10.2.3)
@@ -195,6 +226,8 @@ async def _flush_events(redis: Optional[Redis], events: list[dict]) -> None:
 
     rpm_delta = 0
     tpm_delta = 0
+    err4xx_delta = 0
+    err429_delta = 0
     err5xx_delta = 0
 
     for ev in events:
@@ -203,9 +236,29 @@ async def _flush_events(redis: Optional[Redis], events: list[dict]) -> None:
             _accumulator.add_token_event(ev)
         else:
             rpm_delta += 1
-            if ev.get("status_code", 200) >= 500:
+            sc = ev.get("status_code", 200)
+            if sc == 429:
+                err429_delta += 1
+                err4xx_delta += 1
+            elif 400 <= sc < 500:
+                err4xx_delta += 1
+            elif sc >= 500:
                 err5xx_delta += 1
             _accumulator.add_http_event(ev)
+
+    # Cập nhật in-memory minute counter (giữ tối đa 90 phút gần nhất)
+    if minute not in _live_minute_counters:
+        _live_minute_counters[minute] = {"rpm": 0, "tpm": 0, "err4xx": 0, "err429": 0, "err5xx": 0}
+        if len(_live_minute_counters) > 90:
+            oldest_key = sorted(_live_minute_counters.keys())[0]
+            _live_minute_counters.pop(oldest_key, None)
+
+    bucket_mem = _live_minute_counters[minute]
+    bucket_mem["rpm"] += rpm_delta
+    bucket_mem["tpm"] += tpm_delta
+    bucket_mem["err4xx"] += err4xx_delta
+    bucket_mem["err429"] += err429_delta
+    bucket_mem["err5xx"] += err5xx_delta
 
     if redis is None:
         return
@@ -367,34 +420,41 @@ def flush_metrics_to_db(db_session=None) -> Dict[str, Any]:
         # Đảm bảo session nạp lại dữ liệu mới nhất sau câu lệnh execute raw SQL
         db.expire_all()
         row = db.query(models.SystemMetricsHourly).filter_by(bucket_timestamp=bucket_ts).first()
-        if row and row.total_requests >= 5:
+
+        # Tính tỷ lệ 5xx và P95 trên cả cửa sổ batch 60s gần nhất lẫn giờ tích lũy
+        snap_err_rate = (snap.status_5xx_count / snap.total_requests) if snap.total_requests >= 5 else 0.0
+        row_err_rate = (row.status_5xx_count / row.total_requests) if (row and row.total_requests >= 5) else 0.0
+        effective_err_rate = max(snap_err_rate, row_err_rate)
+
+        effective_p95 = max(p95_lat, row.p95_latency_ms if row else 0)
+
+        if (row and row.total_requests >= 5) or snap.total_requests >= 5:
             # Rule 1: Lỗi 5xx vượt quá 2%
-            error_5xx_rate = row.status_5xx_count / row.total_requests
-            if error_5xx_rate > _SLA_ERROR_5XX_MAX_RATE:
+            if effective_err_rate > _SLA_ERROR_5XX_MAX_RATE:
                 _trigger_or_update_incident(
                     db,
                     incident_type="ERROR_SPIKE",
                     severity="CRITICAL",
                     metric_name="status_5xx_rate",
                     threshold=2.0,
-                    actual=round(error_5xx_rate * 100, 2),
-                    message=f"Tỷ lệ lỗi máy chủ (5xx) đạt {round(error_5xx_rate * 100, 1)}%, vượt ngưỡng an toàn 2.0%",
+                    actual=round(effective_err_rate * 100, 2),
+                    message=f"Tỷ lệ lỗi máy chủ (5xx) đạt {round(effective_err_rate * 100, 1)}%, vượt ngưỡng an toàn 2.0%",
                 )
-            else:
+            elif snap.total_requests >= 5 and snap_err_rate <= _SLA_ERROR_5XX_MAX_RATE and row_err_rate <= _SLA_ERROR_5XX_MAX_RATE:
                 _resolve_incident_if_active(db, "ERROR_SPIKE")
 
             # Rule 2: P95 latency vượt 1800ms
-            if row.p95_latency_ms > _SLA_P95_MAX_MS:
+            if effective_p95 > _SLA_P95_MAX_MS:
                 _trigger_or_update_incident(
                     db,
                     incident_type="HIGH_LATENCY",
                     severity="WARNING",
                     metric_name="p95_latency_ms",
                     threshold=1800.0,
-                    actual=float(row.p95_latency_ms),
-                    message=f"Độ trễ phản hồi P95 đạt {row.p95_latency_ms}ms, vượt ngưỡng SLA 1800ms",
+                    actual=float(effective_p95),
+                    message=f"Độ trễ phản hồi P95 đạt {effective_p95}ms, vượt ngưỡng SLA 1800ms",
                 )
-            else:
+            elif snap.total_requests >= 5 and p95_lat <= _SLA_P95_MAX_MS and (not row or row.p95_latency_ms <= _SLA_P95_MAX_MS):
                 _resolve_incident_if_active(db, "HIGH_LATENCY")
 
         db.commit()
