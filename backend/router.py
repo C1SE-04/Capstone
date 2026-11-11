@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import google.generativeai as genai
 from agents.reviewer import LocalReviewerAgent
@@ -76,6 +77,79 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
      * Thẻ ẩn BẮT BUỘC phải đặt ở dòng cuối cùng riêng biệt của câu trả lời, cú pháp chính xác: <!-- AUDIT_AGENT: <AGENT_NAME> -->
      * TUYỆT ĐỐI KHÔNG giải thích lý do hay bình luận gì thêm cạnh thẻ ẩn (để tiết kiệm token và giữ tốc độ streaming).
 """
+
+# ==============================================================================
+# US 10.4 (Task T10.4.2): GIAO THỨC BÓC TÁCH THẺ ẨN (HIDDEN TAG PARSER)
+# ==============================================================================
+AUDIT_REGEX = re.compile(r"<!--\s*AUDIT_AGENT\s*:\s*([A-Z_]+)\s*-->", re.IGNORECASE)
+VALID_AUDIT_AGENTS = {"MISCONCEPTION", "KNOWLEDGE_TRACING", "SAFETY", "SCAFFOLDING"}
+
+def extract_audit_tag(text: str) -> tuple[str, Optional[str]]:
+    """
+    Bóc tách thẻ ẩn <!-- AUDIT_AGENT: <AGENT> --> khỏi chuỗi văn bản phản hồi.
+    Lấy thẻ xuất hiện cuối cùng (theo đúng chuẩn dòng cuối) và xóa toàn bộ thẻ ẩn.
+    
+    Returns:
+        tuple (clean_text, suggested_agent):
+        - clean_text: Văn bản đã được lọc sạch hoàn toàn thẻ ẩn, sẵn sàng gửi học sinh.
+        - suggested_agent: Tên Agent viết hoa chuẩn (MISCONCEPTION, KNOWLEDGE_TRACING, SAFETY, SCAFFOLDING)
+                           hoặc None nếu không có thẻ ẩn / thẻ không hợp lệ.
+    """
+    if not text:
+        return "", None
+        
+    matches = list(AUDIT_REGEX.finditer(text))
+    if not matches:
+        return text.strip(), None
+
+    last_match = matches[-1]
+    raw_agent = last_match.group(1).strip().upper().replace("_AGENT", "")
+    suggested_agent = raw_agent if raw_agent in VALID_AUDIT_AGENTS else None
+
+    # Làm sạch toàn bộ thẻ ẩn khỏi văn bản
+    clean_text = AUDIT_REGEX.sub("", text).strip()
+    return clean_text, suggested_agent
+
+
+def sanitize_stream_chunks(chunk_iterator):
+    """
+    US 10.4: Bộ lọc chống rò rỉ thẻ ẩn và tag comprehension khi streaming.
+    Sử dụng kỹ thuật Lookahead Holding Buffer để ngăn chặn việc các thẻ bị cắt đôi/cắt ba
+    giữa các chunk (Chunk Boundary Fragmentation) hiển thị lên màn hình học sinh ([AC-AL-01]).
+    """
+    buffer = ""
+    for chunk in chunk_iterator:
+        buffer += chunk
+        
+        # Liên tục loại bỏ các tag hoàn chỉnh đã xuất hiện trong buffer
+        buffer = AUDIT_REGEX.sub("", buffer)
+        buffer = buffer.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
+        
+        # Kiểm tra xem cuối buffer có dấu hiệu mở thẻ chưa đóng không:
+        # Thẻ ẩn: bắt đầu bằng '<' (tối đa ~55 ký tự)
+        # Thẻ comp: bắt đầu bằng '[' (tối đa ~25 ký tự)
+        last_lt = buffer.rfind("<")
+        last_lb = buffer.rfind("[")
+        
+        hold_pos = len(buffer)
+        if last_lt != -1 and (len(buffer) - last_lt) <= 55:
+            hold_pos = min(hold_pos, last_lt)
+        if last_lb != -1 and (len(buffer) - last_lb) <= 25:
+            hold_pos = min(hold_pos, last_lb)
+            
+        safe_to_yield = buffer[:hold_pos]
+        buffer = buffer[hold_pos:]
+        
+        if safe_to_yield:
+            yield safe_to_yield
+            
+    # Khi stream kết thúc, xử lý và xả nốt phần buffer còn lại
+    if buffer:
+        final_clean = AUDIT_REGEX.sub("", buffer)
+        final_clean = final_clean.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "").strip()
+        if final_clean:
+            yield final_clean
+
 
 _IMAGE_MEMORY_CACHE: dict[str, Image.Image] = {}
 
@@ -280,21 +354,18 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
                 response = generate_with_telemetry(model, call_payload, active_model, "Chat")
                 generated_text = response.text or ""
 
-                # US 10.4 (Task T10.4.1): Tách thẻ ẩn AUDIT_AGENT để không làm sai lệch đánh giá câu hỏi Socratic của Reviewer
-                audit_match = re.search(r"<!--\s*AUDIT_AGENT:\s*([A-Z_]+)\s*-->", generated_text, re.IGNORECASE)
-                audit_tag_str = audit_match.group(0) if audit_match else ""
+                # US 10.4 (Task T10.4.2): Bóc tách thẻ ẩn bằng hàm chuẩn hóa
+                clean_for_review, suggested_agent = extract_audit_tag(generated_text)
 
                 has_comp_tag = (
                     "[COMPREHENSION_CHECK]" in generated_text
                     or "COMPREHENSION_CHECK" in generated_text
                 )
                 cleaned_text = (
-                    generated_text.replace("[COMPREHENSION_CHECK]", "")
+                    clean_for_review.replace("[COMPREHENSION_CHECK]", "")
                     .replace("COMPREHENSION_CHECK", "")
+                    .strip()
                 )
-                if audit_tag_str:
-                    cleaned_text = cleaned_text.replace(audit_tag_str, "")
-                cleaned_text = cleaned_text.strip()
 
                 ends_with_question = cleaned_text.strip().rstrip("*_~` \t\r\n").endswith("?")
                 is_misconception_or_safety = target_agent in (
@@ -324,10 +395,15 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
                         if loaded_images
                         else prompt + f"\n\n[CANH BAO]: Phan hoi bi tu choi vi: {review_result['feedback']}. Hay sinh lai."
                     )
-                    final_text = cleaned_text + (f"\n{audit_tag_str}" if audit_tag_str else "")
+                    final_text = cleaned_text
                     continue
 
-                final_text = cleaned_text + (f"\n{audit_tag_str}" if audit_tag_str else "")
+                # Lưu nhãn đề xuất vào meta để bên ngoài orchestrator_bridge ghi DB
+                if meta is not None:
+                    meta["suggested_agent"] = suggested_agent
+
+                # Stream văn bản ĐÃ LÀM SẠCH HOÀN TOÀN ra ngoài (không kèm thẻ ẩn)
+                final_text = cleaned_text
                 is_comprehension_detected = attempt_has_comprehension
                 break
 
@@ -337,6 +413,8 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
 
         if meta is not None:
             meta["has_comprehension"] = is_comprehension_detected
+            if "suggested_agent" not in meta or meta["suggested_agent"] is None:
+                meta["suggested_agent"] = suggested_agent
 
         # Fake-stream word-by-word sau khi đã kiểm duyệt xong
         words = final_text.split(" ")
@@ -348,13 +426,24 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         is_comprehension_detected = False
         try:
             full_text_buffer = ""
-            # T10.2.2: Dùng stream_with_telemetry để đo TTFT và thu thập token usage
-            for chunk_text in stream_with_telemetry(model, call_payload, active_model, "Chat"):
-                full_text_buffer += chunk_text
-                # Lọc tag comprehension khi stream
-                out = chunk_text.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
-                if out:
-                    yield out
+            raw_stream = stream_with_telemetry(model, call_payload, active_model, "Chat")
+
+            def _stream_and_record():
+                nonlocal full_text_buffer
+                for chunk_text in raw_stream:
+                    full_text_buffer += chunk_text
+                    yield chunk_text
+
+            # T10.4.2: Bọc qua sanitize_stream_chunks để bảo vệ giao diện [AC-AL-01],
+            # chống rò rỉ thẻ ẩn khi bị phân mảnh qua các ranh giới chunk
+            for safe_chunk in sanitize_stream_chunks(_stream_and_record()):
+                if safe_chunk:
+                    yield safe_chunk
+
+            # US 10.4 (Task T10.4.2): Trích xuất thẻ ẩn từ buffer sau khi stream xong
+            _, stream_suggested_agent = extract_audit_tag(full_text_buffer)
+            if meta is not None:
+                meta["suggested_agent"] = stream_suggested_agent
 
             # Phát hiện comprehension sau khi stream xong
             cleaned = (
