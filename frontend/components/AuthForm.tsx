@@ -43,7 +43,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
     if (isLoginMode) {
       const trimmedIdentifier = identifier.trim();
       if (!trimmedIdentifier) {
-        newErrors.identifier = "Tên tài khoản hoặc Email không được bỏ trống";
+        newErrors.identifier = "Tên tài khoản không được bỏ trống";
         hasError = true;
       }
 
@@ -106,7 +106,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         });
 
         if (result?.error) {
-          throw new Error("Tên tài khoản/Email hoặc mật khẩu không chính xác");
+          throw new Error("Tên tài khoản hoặc mật khẩu không chính xác");
         }
 
         // Bật trạng thái chuyển cảnh mượt mà ngay lập tức
@@ -252,10 +252,10 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>
               {/* Ô nhập thông tin định danh */}
               {isLoginMode ? (
-                /* Đăng nhập: Tên tài khoản hoặc Email */
+                /* Đăng nhập: Tên tài khoản */
                 <div>
                   <label className="block text-[#8C4905] text-sm font-bold mb-1">
-                    Tên tài khoản hoặc Email
+                    Tên tài khoản
                   </label>
                   <input
                     type="text"
@@ -264,7 +264,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                       setIdentifier(e.target.value);
                       if (errors.identifier) setErrors((prev) => ({ ...prev, identifier: undefined }));
                     }}
-                    placeholder="Nhập tên tài khoản hoặc email..."
+                    placeholder="Nhập tên tài khoản..."
                     className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.identifier
                       ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
                       : 'focus:ring-[#F7AD62] border-transparent'
