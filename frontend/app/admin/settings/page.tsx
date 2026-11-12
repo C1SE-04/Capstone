@@ -249,7 +249,6 @@ export default function AdminSettingsPage() {
   // Loading flags
   const [isLoadingSettings, setIsLoadingSettings] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isSyncingModels, setIsSyncingModels] = useState<boolean>(false);
   const [isPingingKey, setIsPingingKey] = useState<boolean>(false);
   const [isRefreshingHealth, setIsRefreshingHealth] = useState<boolean>(false);
   const [isRunningPlayground, setIsRunningPlayground] = useState<boolean>(false);
@@ -477,28 +476,20 @@ export default function AdminSettingsPage() {
     }
   };
 
-  // Đồng bộ danh sách Model từ Google API
-  const handleSyncModels = async () => {
-    setIsSyncingModels(true);
-    try {
-      const res = await authFetch(`${BACKEND_URL}/admin/settings/models`);
-      if (res.ok) {
-        const models: ModelOption[] = await res.json();
-        if (Array.isArray(models) && models.length > 0) {
-          setAvailableModels(models);
-          triggerToast(
-            `Đã đồng bộ ${models.length} mô hình chính thức từ Google API!`,
-            "success"
-          );
-        }
-      } else {
-        triggerToast("Không thể đồng bộ danh sách model từ Google.", "error");
-      }
-    } catch {
-      triggerToast("Lỗi kết nối khi đồng bộ mô hình Google.", "error");
-    } finally {
-      setIsSyncingModels(false);
-    }
+  // Khôi phục 6 Model về mặc định tối ưu (1-Click Reset)
+  const handleResetDefaultModels = () => {
+    setSettings((prev) => ({
+      ...prev,
+      primary_model: "gemini-3.8-flash",
+      parent_insight_model: "gemini-3.5-flash",
+      classifier_model: "gemini-3.1-flash-lite",
+      email_model: "gemini-3.1-flash-lite",
+      flashcard_model: "gemini-3.5-flash-lite",
+      backup_model: "gemini-3.5-flash-lite",
+    }));
+    // Dọn sạch danh sách dropdown về danh mục 4 model chuẩn tinh hoa
+    setAvailableModels(INITIAL_CURATED_MODELS);
+    triggerToast("Đã khôi phục 6 Model về cấu hình mặc định tối ưu!", "success");
   };
 
   // Test Ping API Key đo latency thật (AC-SET-03)
@@ -790,16 +781,12 @@ export default function AdminSettingsPage() {
             </div>
             <button
               type="button"
-              onClick={handleSyncModels}
-              disabled={isSyncingModels}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-[#8C4905] bg-[#F7ECE1] border border-[#F1CCA6] hover:bg-[#F1CCA6]/50 hover:border-[#C1762A] transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
+              onClick={handleResetDefaultModels}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-[#8C4905] bg-[#F7ECE1] border border-[#F1CCA6] hover:bg-[#F1CCA6]/60 hover:border-[#C1762A] active:scale-95 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto shadow-xs"
+              title="Khôi phục cả 6 phân hệ về cấu hình model tối ưu chuẩn của nhóm"
             >
-              <RefreshCw
-                className={`w-3.5 h-3.5 text-[#C1762A] ${
-                  isSyncingModels ? "animate-spin" : ""
-                }`}
-              />
-              <span>{isSyncingModels ? "Đang truy vấn Google API..." : "Đồng bộ từ Google API"}</span>
+              <RotateCcw className="w-3.5 h-3.5 text-[#C1762A]" />
+              <span>Khôi phục 6 Model Mặc định</span>
             </button>
           </div>
 
