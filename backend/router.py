@@ -1,4 +1,12 @@
 import os
+import pathlib
+from dotenv import load_dotenv
+
+_env_path = pathlib.Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_env_path)
+if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
+
 import re
 import json
 import google.generativeai as genai
@@ -10,7 +18,8 @@ import httpx
 from PIL import Image
 
 # US 10.2 (T10.2.2): Import telemetry wrappers để thu thập token và TTFT
-from middleware.gemini_telemetry import stream_with_telemetry, generate_with_telemetry
+from middleware.gemini_telemetry import stream_with_telemetry, generate_with_telemetry, _is_429_exception
+from middleware.telemetry_middleware import push_failover_event
 
 # Tên model đang dùng thực tế — đồng bộ với bảng giá trong gemini_telemetry.py
 _ACTIVE_MODEL_NAME = "gemini-3.5-flash-lite"
@@ -210,10 +219,11 @@ def agent_router(
         yield "Lỗi: Chưa cấu hình GEMINI_API_KEY"
         return
         
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=api_key, transport="rest")
 
     # US 10.3 (Task T10.3.3): Đọc cấu hình động từ SystemConfigService (Redis Cache -> Neon DB)
     active_model = _ACTIVE_MODEL_NAME
+    backup_model = os.getenv("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
     active_temperature = 0.35
     active_top_p = 0.90
     active_max_tokens = 512
@@ -221,27 +231,32 @@ def agent_router(
         from services.system_config_service import get_system_settings
         sys_config = get_system_settings()
         active_model = sys_config.get("primary_model") or os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+        backup_model = sys_config.get("backup_model") or os.getenv("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
         active_temperature = float(sys_config.get("temperature", 0.35))
         active_top_p = float(sys_config.get("top_p", 0.90))
         active_max_tokens = int(sys_config.get("max_output_tokens", 512))
     except Exception as err:
         print(f"[Router] Cảnh báo đọc SystemConfig: {err} — Dùng fallback.")
         active_model = os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+        backup_model = os.getenv("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
 
     if meta is not None:
         meta["model_used"] = active_model
 
     print(f"[AI Runtime] Socratic Tutor dispatched with dynamic model: {active_model} | temp={active_temperature} | max_tokens={active_max_tokens}")
 
-    model = genai.GenerativeModel(
-        model_name=active_model,
-        system_instruction=TEACHER_SYSTEM_INSTRUCTION,
-        generation_config=genai.GenerationConfig(
-            temperature=active_temperature,
-            top_p=active_top_p,
-            max_output_tokens=active_max_tokens,
+    def _build_gemini_model(model_name_str: str):
+        return genai.GenerativeModel(
+            model_name=model_name_str,
+            system_instruction=TEACHER_SYSTEM_INSTRUCTION,
+            generation_config=genai.GenerationConfig(
+                temperature=active_temperature,
+                top_p=active_top_p,
+                max_output_tokens=active_max_tokens,
+            )
         )
-    )
+    model = _build_gemini_model(active_model)
+    current_agent_label = "Chat"
     # US 10.4: Chuẩn hóa tên Agent để đối chiếu chuẩn xác với 4 nhãn cốt lõi
     clean_target_agent = target_agent.replace("_AGENT", "").strip().upper()
 
@@ -353,11 +368,25 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         while current_attempt <= max_retries:
             try:
                 # T10.2.2: Dùng generate_with_telemetry để thu thập token usage tự động
-                response = generate_with_telemetry(model, call_payload, active_model, "Chat")
+                try:
+                    response = generate_with_telemetry(model, call_payload, active_model, current_agent_label)
+                except Exception as primary_err:
+                    if backup_model and backup_model != active_model:
+                        push_failover_event(is_429=_is_429_exception(primary_err))
+                        active_model = backup_model
+                        current_agent_label = "Fallback"
+                        model = _build_gemini_model(active_model)
+                        if meta is not None:
+                            meta["model_used"] = active_model
+                        response = generate_with_telemetry(model, call_payload, active_model, "Fallback")
+                    else:
+                        raise
                 generated_text = response.text or ""
 
                 # US 10.4 (Task T10.4.2): Bóc tách thẻ ẩn bằng hàm chuẩn hóa
                 clean_for_review, suggested_agent = extract_audit_tag(generated_text)
+                if meta is not None and suggested_agent:
+                    meta["suggested_agent"] = suggested_agent
 
                 has_comp_tag = (
                     "[COMPREHENSION_CHECK]" in generated_text
@@ -428,28 +457,43 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         is_comprehension_detected = False
         try:
             full_text_buffer = ""
-            raw_stream = stream_with_telemetry(model, call_payload, active_model, "Chat")
+            # T10.2.2 + T10.4.2: Stream qua telemetry, tự động failover sang backup_model khi lỗi trước chunk đầu,
+            # đồng thời lọc thẻ ẩn/comprehension an toàn qua ranh giới chunk bằng sanitize_stream_chunks.
+            def _stream_with_failover_and_record():
+                nonlocal full_text_buffer, active_model, current_agent_label, model
 
-            def _stream_and_record():
-                nonlocal full_text_buffer
-                for chunk_text in raw_stream:
-                    full_text_buffer += chunk_text
-                    yield chunk_text
+                def _emit(mdl, mdl_name: str, agent_lbl: str):
+                    nonlocal full_text_buffer
+                    for chunk_text in stream_with_telemetry(mdl, call_payload, mdl_name, agent_lbl):
+                        full_text_buffer += chunk_text
+                        yield chunk_text
 
-            # T10.4.2: Bọc qua sanitize_stream_chunks để bảo vệ giao diện [AC-AL-01],
-            # chống rò rỉ thẻ ẩn khi bị phân mảnh qua các ranh giới chunk
-            for safe_chunk in sanitize_stream_chunks(_stream_and_record()):
+                try:
+                    yield from _emit(model, active_model, current_agent_label)
+                except Exception as primary_err:
+                    if not full_text_buffer and backup_model and backup_model != active_model:
+                        push_failover_event(is_429=_is_429_exception(primary_err))
+                        active_model = backup_model
+                        current_agent_label = "Fallback"
+                        model = _build_gemini_model(active_model)
+                        if meta is not None:
+                            meta["model_used"] = active_model
+                        yield from _emit(model, active_model, "Fallback")
+                    else:
+                        raise
+
+            for safe_chunk in sanitize_stream_chunks(_stream_with_failover_and_record()):
                 if safe_chunk:
                     yield safe_chunk
 
             # US 10.4 (Task T10.4.2): Trích xuất thẻ ẩn từ buffer sau khi stream xong
-            _, stream_suggested_agent = extract_audit_tag(full_text_buffer)
+            stream_clean_text, stream_suggested_agent = extract_audit_tag(full_text_buffer)
             if meta is not None:
                 meta["suggested_agent"] = stream_suggested_agent
 
-            # Phát hiện comprehension sau khi stream xong
+            # Phát hiện comprehension sau khi stream xong (dùng text đã loại thẻ ẩn)
             cleaned = (
-                full_text_buffer.replace("[COMPREHENSION_CHECK]", "")
+                stream_clean_text.replace("[COMPREHENSION_CHECK]", "")
                 .replace("COMPREHENSION_CHECK", "")
                 .strip()
             )

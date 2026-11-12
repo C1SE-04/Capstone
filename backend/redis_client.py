@@ -11,10 +11,12 @@ Cách dùng (trong bất kỳ file nào):
 """
 
 import os
+import pathlib
 import redis.asyncio as aioredis
 from dotenv import load_dotenv
 
-load_dotenv()
+_env_path = pathlib.Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_env_path)
 
 # URL kết nối Redis - lấy từ biến môi trường, fallback về localhost cho môi trường dev
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")

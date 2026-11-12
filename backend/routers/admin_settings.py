@@ -185,7 +185,7 @@ def list_available_models():
 
     try:
         import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key, transport="rest")
 
         models_list = []
         # Lấy danh sách model từ Google API
@@ -253,29 +253,20 @@ def test_gemini_api_key():
 
     try:
         import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key, transport="rest")
 
-        # Gửi test ping siêu nhẹ: ưu tiên primary_model hoặc gemini-2.5-flash / gemini-2.0-flash-lite
-        target_model = "gemini-2.5-flash"
-        try:
-            from services.system_config_service import get_system_settings
-            cfg = get_system_settings()
-            target_model = cfg.get("primary_model") or "gemini-2.5-flash"
-        except Exception:
-            target_model = "gemini-2.5-flash"
-
-        try:
-            model = genai.GenerativeModel(target_model)
-            _ = model.generate_content("Ping", generation_config={"max_output_tokens": 2})
-        except Exception:
-            fallback_target = "gemini-2.5-flash" if target_model != "gemini-2.5-flash" else "gemini-2.0-flash-lite"
-            model = genai.GenerativeModel(fallback_target)
-            _ = model.generate_content("Ping", generation_config={"max_output_tokens": 2})
+        # Gửi test ping siêu nhẹ: sinh 1 từ duy nhất với model tốc độ cao
+        model = genai.GenerativeModel("gemini-3.5-flash-lite")
+        from middleware.gemini_telemetry import generate_with_telemetry
+        _ = generate_with_telemetry(
+            model, "Ping", "gemini-3.5-flash-lite", "Fallback", generation_config={"max_output_tokens": 2}
+        )
 
         latency_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
 
         return schemas.AdminTestKeyResponse(
             success=True,
+            status="SUCCESS",
             latency_ms=latency_ms,
             message=f"Kết nối thành công! Độ trễ: {latency_ms}ms - Sẵn sàng phục vụ",
             key_masked=masked_key,
@@ -285,6 +276,7 @@ def test_gemini_api_key():
         latency_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
         return schemas.AdminTestKeyResponse(
             success=False,
+            status="FAILED",
             latency_ms=latency_ms,
             message=f"Kết nối thất bại ({err})",
             key_masked=masked_key,
@@ -356,12 +348,9 @@ def get_system_health(db: Session = Depends(get_db)):
     if api_key:
         try:
             import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            # Thử nhẹ kiểm tra kết nối model
-            try:
-                genai.get_model("models/gemini-2.5-flash")
-            except Exception:
-                genai.get_model("models/gemini-2.0-flash-lite")
+            genai.configure(api_key=api_key, transport="rest")
+            # Thử nhẹ list model limit
+            genai.get_model("models/gemini-3.5-flash-lite")
             latency_ai = max(int((time.perf_counter() - t0) * 1000), 1)
             services["gemini_api"] = schemas.AdminHealthServiceDetail(
                 status="ONLINE",
@@ -469,7 +458,7 @@ Luôn xưng hô 'thầy - em' thân thiện, chuẩn mực."""
     start_time = time.perf_counter()
     try:
         import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key, transport="rest")
 
         model = genai.GenerativeModel(
             model_name=model_name,
@@ -480,7 +469,8 @@ Luôn xưng hô 'thầy - em' thân thiện, chuẩn mực."""
             },
         )
 
-        response = model.generate_content(body.prompt)
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(model, body.prompt, model_name, "Chat")
         latency_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
 
         # Đọc usage metadata nếu có

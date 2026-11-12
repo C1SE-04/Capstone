@@ -31,6 +31,13 @@ _active_sse_sessions: int = 0
 def increment_sse_session():
     global _active_sse_sessions
     _active_sse_sessions += 1
+    try:
+        telemetry_queue.put_nowait({
+            "type": "sse_peak",
+            "active_sessions": _active_sse_sessions,
+        })
+    except Exception:
+        pass
 
 
 def decrement_sse_session():
@@ -41,6 +48,38 @@ def decrement_sse_session():
 
 def get_active_sse_sessions() -> int:
     return max(0, _active_sse_sessions)
+
+
+def push_cache_event(hit: bool):
+    """Ghi nhận sự kiện Redis Cache Hit / Miss vào queue bất đồng bộ."""
+    try:
+        telemetry_queue.put_nowait({
+            "type": "cache_event",
+            "hit": bool(hit),
+        })
+    except Exception:
+        pass
+
+
+def push_failover_event(is_429: bool = False):
+    """Ghi nhận sự kiện chuyển sang model Dự phòng (Failover)."""
+    try:
+        telemetry_queue.put_nowait({
+            "type": "failover",
+            "is_429": bool(is_429),
+        })
+    except Exception:
+        pass
+
+
+def push_error_429_event():
+    """Ghi nhận sự kiện lỗi Gemini 429 Quota / Rate limit."""
+    try:
+        telemetry_queue.put_nowait({
+            "type": "error_429",
+        })
+    except Exception:
+        pass
 
 
 def _classify_endpoint(path: str) -> str:
