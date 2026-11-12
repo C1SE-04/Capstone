@@ -101,12 +101,12 @@ _OFFICIAL_CURATED_MODELS: List[Dict[str, str]] = [
         "recommended_for": "Chat Socratic / Dự phòng cấp 2",
     },
     {
-        "id": "gemini-2.0-flash",
-        "name": "gemini-2.0-flash",
-        "display_name": "Gemini 2.0 Flash",
+        "id": "gemini-2.0-flash-lite",
+        "name": "gemini-2.0-flash-lite",
+        "display_name": "Gemini 2.0 Flash-Lite",
         "description": "Model đa phương thức thế hệ 2.0, độ phủ rộng và ổn định",
-        "speed": "Nhanh (~0.3s)",
-        "recommended_for": "Chat Socratic",
+        "speed": "Rất nhanh (~0.2s)",
+        "recommended_for": "Sub-Agent & Dự phòng",
     },
 ]
 
@@ -255,9 +255,22 @@ def test_gemini_api_key():
         import google.generativeai as genai
         genai.configure(api_key=api_key)
 
-        # Gửi test ping siêu nhẹ: sinh 1 từ duy nhất
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        _ = model.generate_content("Ping", generation_config={"max_output_tokens": 2})
+        # Gửi test ping siêu nhẹ: ưu tiên primary_model hoặc gemini-2.5-flash / gemini-2.0-flash-lite
+        target_model = "gemini-2.5-flash"
+        try:
+            from services.system_config_service import get_system_settings
+            cfg = get_system_settings()
+            target_model = cfg.get("primary_model") or "gemini-2.5-flash"
+        except Exception:
+            target_model = "gemini-2.5-flash"
+
+        try:
+            model = genai.GenerativeModel(target_model)
+            _ = model.generate_content("Ping", generation_config={"max_output_tokens": 2})
+        except Exception:
+            fallback_target = "gemini-2.5-flash" if target_model != "gemini-2.5-flash" else "gemini-2.0-flash-lite"
+            model = genai.GenerativeModel(fallback_target)
+            _ = model.generate_content("Ping", generation_config={"max_output_tokens": 2})
 
         latency_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
 
@@ -344,8 +357,11 @@ def get_system_health(db: Session = Depends(get_db)):
         try:
             import google.generativeai as genai
             genai.configure(api_key=api_key)
-            # Thử nhẹ list model limit
-            genai.get_model("models/gemini-2.0-flash")
+            # Thử nhẹ kiểm tra kết nối model
+            try:
+                genai.get_model("models/gemini-2.5-flash")
+            except Exception:
+                genai.get_model("models/gemini-2.0-flash-lite")
             latency_ai = max(int((time.perf_counter() - t0) * 1000), 1)
             services["gemini_api"] = schemas.AdminHealthServiceDetail(
                 status="ONLINE",
