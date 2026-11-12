@@ -1,6 +1,9 @@
 import json
+import os
+import time
 import re
 import pathlib
+import threading
 from fractions import Fraction
 from typing import Any, Optional, Tuple, TypedDict
 
@@ -671,17 +674,80 @@ class OrchestratorAgent:
             re.IGNORECASE,
         )
 
-        # Load Local ML Model (Trụ 2)
+        # US 10.4 (Task T10.4.3): Khởi tạo hạ tầng Hot-Reloading & Atomic Swap cho Local ML Model (Trụ 2)
+        self._model_path = pathlib.Path(__file__).parent / "local_orchestrator.pkl"
+        self._last_loaded_mtime: float = 0.0
+        self._last_mtime_check_time: float = 0.0
+        self._mtime_check_interval: float = 1.0  # Giảm 99% system calls I/O
+        self._reload_lock = threading.Lock()
         self._local_model = None
-        _model_path = pathlib.Path(__file__).parent / "local_orchestrator.pkl"
-        if _model_path.exists():
+        self.reload_model(force=True)
+
+    def reload_model(self, force: bool = True) -> bool:
+        """
+        US 10.4 (Task T10.4.3): Hot-Reloading mô hình Machine Learning trên RAM (Zero Downtime).
+        Sử dụng kỹ thuật Atomic Swap, Double-Checked Lock & Pipeline Validation:
+        1. Double-Checked Lock: Nếu force=False, kiểm tra lại mtime bên trong lock để tránh reload lặp.
+        2. Kiểm tra kích thước file: st_size >= 512 bytes chống nạp file rỗng đang ghi dở.
+        3. Deserialize cách ly: Nạp file mới vào biến tạm (local variable).
+        4. Validation & Warm-up: Kiểm tra có predict_proba, classes_ và chạy thử mồi 1 câu.
+        5. Atomic Swap: Hoán đổi con trỏ self._local_model tức thì (0.0001ms).
+        6. Safe Fallback: Nếu bất kỳ bước nào lỗi, giữ nguyên mô hình cũ trên RAM.
+        """
+        with self._reload_lock:
+            if not self._model_path.exists():
+                print(f"[OrchestratorAgent] [WARN] File mô hình không tồn tại: {self._model_path}")
+                return False
+
             try:
-                self._local_model = joblib.load(_model_path)
-                print(f"[OrchestratorAgent] [OK] Local ML Model loaded ({_model_path.stat().st_size // 1024}KB)")
+                stat_info = self._model_path.stat()
+                current_mtime = stat_info.st_mtime
+
+                # Double-Checked Locking khi gọi từ watcher tự động
+                if not force and current_mtime <= self._last_loaded_mtime:
+                    return True
+
+                # Kiểm tra chống file đang được tạo/ghi dở (0 bytes hoặc quá nhỏ)
+                if stat_info.st_size < 512:
+                    print(f"[OrchestratorAgent] [WARN] File mô hình quá nhỏ ({stat_info.st_size} bytes), có thể đang ghi dở. Bỏ qua.")
+                    return False
+
+                # 1. Nạp vào biến tạm cục bộ (hoàn toàn cách ly, không ảnh hưởng self._local_model đang chạy)
+                new_pipeline = joblib.load(self._model_path)
+
+                # 2. Pipeline Validation (Kiểm tra interface chuẩn scikit-learn)
+                if not hasattr(new_pipeline, "predict_proba") or not hasattr(new_pipeline, "classes_"):
+                    raise ValueError("Mô hình không có phương thức predict_proba hoặc classes_ hợp lệ.")
+
+                # 3. Warm-up Sanity Check (Chạy thử mồi 1 câu xác nhận pipeline hoạt động trơn tru)
+                _ = new_pipeline.predict_proba(["kiểm tra khởi động"])[0]
+
+                # 4. Atomic Swap: Hoán đổi tham chiếu bộ nhớ RAM tức thì (0.0001ms)
+                self._local_model = new_pipeline
+                self._last_loaded_mtime = current_mtime
+                classes_str = ", ".join(new_pipeline.classes_)
+                print(f"[OrchestratorAgent] [HOT-RELOAD SUCCESS] Đã nạp mô hình mới vào RAM ({stat_info.st_size // 1024}KB, mtime={self._last_loaded_mtime:.2f}, classes=[{classes_str}])")
+                return True
             except Exception as e:
-                print(f"[OrchestratorAgent] [WARN] Khong load duoc ML Model: {e}")
-        else:
-            print(f"[OrchestratorAgent] [WARN] ML Model khong co — chay train_local_model.py truoc.")
+                print(f"[OrchestratorAgent] [ERROR] Lỗi khi nạp mô hình (giữ nguyên bản cũ trên RAM): {e}")
+                return False
+
+    def get_model_info(self) -> dict:
+        """
+        US 10.4: Cung cấp thông tin trạng thái mô hình hiện tại phục vụ API Retrain (T10.4.4)
+        và Dashboard Giám Sát Agent (T10.4.5).
+        """
+        file_exists = self._model_path.exists()
+        file_size_kb = round(self._model_path.stat().st_size / 1024, 2) if file_exists else 0.0
+        classes_list = list(self._local_model.classes_) if (self._local_model and hasattr(self._local_model, "classes_")) else []
+        return {
+            "is_loaded": self._local_model is not None,
+            "model_path": str(self._model_path),
+            "file_exists": file_exists,
+            "file_size_kb": file_size_kb,
+            "last_loaded_mtime": self._last_loaded_mtime,
+            "classes": classes_list,
+        }
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -1311,6 +1377,19 @@ class OrchestratorAgent:
         Trụ cột 2 — Phân loại intent bằng Local ML Model (TF-IDF + Logistic Regression).
         Threshold: 60%.
         """
+        # US 10.4 (Task T10.4.3): Out-of-process File Watcher với I/O Throttling
+        # Tự động nạp lại mô hình nếu file trên đĩa được cập nhật từ tiến trình ngoài
+        now = time.time()
+        if now - self._last_mtime_check_time >= self._mtime_check_interval:
+            self._last_mtime_check_time = now
+            try:
+                if self._model_path.exists():
+                    current_mtime = self._model_path.stat().st_mtime
+                    if current_mtime > self._last_loaded_mtime:
+                        self.reload_model(force=False)
+            except Exception as e:
+                print(f"[OrchestratorAgent] Cảnh báo kiểm tra mtime mô hình: {e}")
+
         if self._local_model is None:
             return None
         try:

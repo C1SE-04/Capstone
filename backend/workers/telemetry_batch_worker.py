@@ -616,7 +616,7 @@ async def start_telemetry_worker() -> None:
     2. Vòng lặp 60 giây: Ghi batch xuống Neon PostgreSQL (T10.2.4).
     """
     redis = _get_upstash_redis()
-    print("[TelemetryWorker] ✅ Đã khởi động Telemetry Batch Worker (100% Real Telemetry Mode).")
+    print("[TelemetryWorker] Da khoi dong Telemetry Batch Worker (100% Real Telemetry Mode).")
 
     last_db_flush_time = asyncio.get_event_loop().time()
 
