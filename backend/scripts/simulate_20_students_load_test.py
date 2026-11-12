@@ -5,8 +5,9 @@ Mục đích:
   1. Giả lập 20 học sinh đồng thời gửi câu hỏi Toán qua `POST /chat/orchestrator` (`asyncio` + `httpx`).
   2. Gửi kèm request sai schema (`422` -> `4xx`) để kiểm chứng ghi nhận lỗi Client (AC-KPI-03).
   3. Đo độ trễ thực tế của từng học sinh (End-to-End, P50, P95, P99, TTFT chunk đầu).
-  4. Truy vấn `GET /admin/kpi/overview` và `GET /admin/kpi/throughput?range=1h` trước và sau tải
-     để chứng minh Dashboard nhảy số real-time (RPM & Total Requests) không cần chờ batch 60 giây.
+  4. Đối chiếu `/admin/kpi/overview`, `/admin/kpi/throughput?range=1h`, `/admin/kpi/infrastructure`
+     và `/admin/kpi/agents` trước & sau tải để chứng minh Dashboard nhảy số real-time:
+     RPM, Total Requests, Tokens, Lỗi 4xx và Peak Concurrent SSE Sessions.
 
 Cách sử dụng:
   - Chế độ In-Process (tự test trực tiếp FastAPI app với ASGI transport + mock Gemini stream):
@@ -14,6 +15,8 @@ Cách sử dụng:
 
   - Chế độ Live Server (khi Backend server đang chạy ở localhost:8000):
       .\venv\Scripts\python.exe scripts/simulate_20_students_load_test.py --base-url http://127.0.0.1:8000 --admin-token <JWT>
+      hoặc:
+      .\venv\Scripts\python.exe scripts/simulate_20_students_load_test.py --base-url http://127.0.0.1:8000 --admin-username <user> --admin-password <pass>
 """
 
 import argparse
@@ -176,8 +179,22 @@ def _prepare_in_process_auth_and_session() -> tuple[Dict[str, str], Dict[str, st
             db.add(sim_session)
             db.commit()
 
-        admin_token = auth.create_access_token({"sub": admin_user.username, "role": "ADMIN"})
-        student_token = auth.create_access_token({"sub": student_user.username, "role": "STUDENT"})
+        admin_token = auth.create_access_token(
+            {
+                "sub": str(admin_user.id),
+                "username": admin_user.username,
+                "role": "ADMIN",
+                "session_version": getattr(admin_user, "session_version", 1) or 1,
+            }
+        )
+        student_token = auth.create_access_token(
+            {
+                "sub": str(student_user.id),
+                "username": student_user.username,
+                "role": "STUDENT",
+                "session_version": getattr(student_user, "session_version", 1) or 1,
+            }
+        )
         return (
             {"Authorization": f"Bearer {admin_token}"},
             {"Authorization": f"Bearer {student_token}"},
@@ -187,6 +204,44 @@ def _prepare_in_process_auth_and_session() -> tuple[Dict[str, str], Dict[str, st
         db.close()
 
 
+async def _login_for_token(client: httpx.AsyncClient, username: str, password: str) -> str:
+    """Đăng nhập qua OAuth2 `POST /login` để lấy JWT cho chế độ live server."""
+    resp = await client.post(
+        "/login",
+        data={"username": username, "password": password},
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Đăng nhập thất bại cho '{username}' (HTTP {resp.status_code}): {resp.text}")
+    token = resp.json().get("access_token", "")
+    if not token:
+        raise RuntimeError(f"Response /login cho '{username}' không chứa access_token.")
+    return token
+
+
+async def _fetch_kpi_snapshot(
+    client: httpx.AsyncClient,
+    admin_headers: Dict[str, str],
+) -> tuple[Optional[Dict[str, Any]], List[tuple[str, int]]]:
+    """Đọc đồng thời /overview, /throughput?range=1h và /infrastructure từ KPI API."""
+    ov_res, tp_res, infra_res = await asyncio.gather(
+        client.get("/admin/kpi/overview", headers=admin_headers),
+        client.get("/admin/kpi/throughput?range=1h", headers=admin_headers),
+        client.get("/admin/kpi/infrastructure", headers=admin_headers),
+    )
+    statuses = [
+        ("overview", ov_res.status_code),
+        ("throughput", tp_res.status_code),
+        ("infrastructure", infra_res.status_code),
+    ]
+    if any(code != 200 for _, code in statuses):
+        return None, statuses
+    return {
+        "overview": ov_res.json(),
+        "throughput": tp_res.json(),
+        "infrastructure": infra_res.json(),
+    }, statuses
+
+
 async def run_load_simulation(
     students: int = 20,
     base_url: str = "http://127.0.0.1:8000",
@@ -194,6 +249,10 @@ async def run_load_simulation(
     in_process: bool = False,
     admin_token: str = "",
     student_token: str = "",
+    admin_username: str = "",
+    admin_password: str = "",
+    student_username: str = "",
+    student_password: str = "",
     session_id: str = "",
     client_error_probes: int = 2,
 ) -> bool:
@@ -207,9 +266,12 @@ async def run_load_simulation(
 
     if in_process:
         from main import app
+        from middleware.telemetry_middleware import telemetry_queue
         from workers.telemetry_batch_worker import _accumulator, _live_minute_counters
 
-        # Reset counters cục bộ để thấy rõ mức nhảy số do chính phiên mô phỏng tạo ra
+        # Reset counters & hàng đợi cục bộ để đo chính xác delta của phiên mô phỏng
+        while not telemetry_queue.empty():
+            telemetry_queue.get_nowait()
         _accumulator.reset()
         _live_minute_counters.clear()
 
@@ -236,11 +298,7 @@ async def run_load_simulation(
         )
     else:
         admin_headers = {"Authorization": f"Bearer {admin_token}"} if admin_token else {}
-        student_headers = (
-            {"Authorization": f"Bearer {student_token}"}
-            if student_token
-            else admin_headers
-        )
+        student_headers = {"Authorization": f"Bearer {student_token}"} if student_token else {}
         client_kwargs["base_url"] = base_url
         resolved_session_id = session_id
 
@@ -249,43 +307,59 @@ async def run_load_simulation(
 
     try:
         async with httpx.AsyncClient(**client_kwargs) as client:
+            if not in_process:
+                if not admin_headers and admin_username and admin_password:
+                    admin_headers = {
+                        "Authorization": f"Bearer {await _login_for_token(client, admin_username, admin_password)}"
+                    }
+                if not student_headers:
+                    if student_username and student_password:
+                        student_headers = {
+                            "Authorization": f"Bearer {await _login_for_token(client, student_username, student_password)}"
+                        }
+                    else:
+                        student_headers = admin_headers
+
             if not resolved_session_id:
-                # Ở chế độ live server nếu không truyền --session-id, tự tạo 1 session thật
-                sess_res = await client.post(
-                    "/sessions",
-                    json={"title": "US 10.2 Load Test Session"},
-                    headers=student_headers,
-                )
-                if sess_res.status_code in (200, 201):
-                    resolved_session_id = sess_res.json().get("id", f"guest-loadtest-{uuid.uuid4().hex[:6]}")
-                else:
+                # Chỉ gọi POST /sessions khi dùng token student tách biệt để tránh 403 trước mốc BEFORE
+                if student_token or (student_username and student_password):
+                    sess_res = await client.post(
+                        "/sessions",
+                        json={"title": "US 10.2 Load Test Session"},
+                        headers=student_headers,
+                    )
+                    if sess_res.status_code in (200, 201):
+                        resolved_session_id = sess_res.json().get("id", f"guest-loadtest-{uuid.uuid4().hex[:6]}")
+                if not resolved_session_id:
                     resolved_session_id = f"guest-loadtest-{uuid.uuid4().hex[:6]}"
 
-            # 1. Lấy KPI Overview & Throughput trước mô phỏng
-            before_ov_res = await client.get("/admin/kpi/overview", headers=admin_headers)
-            before_tp_res = await client.get("/admin/kpi/throughput?range=1h", headers=admin_headers)
-            if before_ov_res.status_code != 200 or before_tp_res.status_code != 200:
+            # 1. Lấy snapshot KPI trước mô phỏng
+            before_snap, err_statuses = await _fetch_kpi_snapshot(client, admin_headers)
+            if before_snap is None:
+                status_str = ", ".join(f"{name}={code}" for name, code in err_statuses)
                 print(
-                    f"[ERROR] Không thể truy cập Admin KPI endpoints "
-                    f"(overview={before_ov_res.status_code}, throughput={before_tp_res.status_code}). "
-                    f"Vui lòng truyền --admin-token hợp lệ hoặc dùng --in-process."
+                    f"[ERROR] Không thể truy cập Admin KPI endpoints ({status_str}). "
+                    f"Vui lòng truyền --admin-token / --admin-username + --admin-password hoặc dùng --in-process."
                 )
                 return False
 
-            before_ov = before_ov_res.json()
-            before_tp = before_tp_res.json()
+            before_ov = before_snap["overview"]
+            before_tp = before_snap["throughput"]
+            before_infra = before_snap["infrastructure"]
+
             before_reqs = before_ov["throughput"]["total_requests_today"]
             before_rpm = before_ov["throughput"]["rpm_current"]
             before_tp_rpm = before_tp.get("current_rpm", 0)
             before_tokens = before_ov["tokens_and_cost"]["total_tokens_today"]
+            before_4xx = before_ov["reliability"].get("status_4xx_count_today", 0)
+            before_peak_sse = before_infra.get("peak_sse_sessions_today", 0)
 
             print(
-                f"[BEFORE] Total Requests Today: {before_reqs} | "
-                f"Overview RPM: {before_rpm} | Throughput 1h Live RPM: {before_tp_rpm} | "
-                f"Tokens: {before_tokens:,}"
+                f"[BEFORE] Requests Today: {before_reqs} | Live RPM: {before_tp_rpm} (Overview RPM: {before_rpm}) | "
+                f"Tokens: {before_tokens:,} | 4xx Today: {before_4xx} | Peak SSE: {before_peak_sse}"
             )
 
-            # 2. Kích hoạt 20 học sinh gửi câu hỏi đồng thời bằng asyncio.gather
+            # 2. Kích hoạt N học sinh gửi câu hỏi đồng thời bằng asyncio.gather
             t_batch_start = time.perf_counter()
             student_tasks = [
                 _simulate_one_student(client, idx, student_headers, endpoint, resolved_session_id)
@@ -312,17 +386,28 @@ async def run_load_simulation(
                 if drained_batch:
                     await _flush_events(None, drained_batch)
             else:
-                await asyncio.sleep(1.2)
+                await asyncio.sleep(1.3)
 
-            # 3. Đọc lại Admin KPI Overview & Throughput sau mô phỏng
-            after_ov = (await client.get("/admin/kpi/overview", headers=admin_headers)).json()
-            after_tp = (await client.get("/admin/kpi/throughput?range=1h", headers=admin_headers)).json()
+            # 3. Đọc lại snapshot KPI sau mô phỏng
+            after_snap, err_statuses = await _fetch_kpi_snapshot(client, admin_headers)
+            if after_snap is None:
+                status_str = ", ".join(f"{name}={code}" for name, code in err_statuses)
+                print(f"[ERROR] Lỗi đọc KPI sau mô phỏng ({status_str}).")
+                return False
+
+            after_ov = after_snap["overview"]
+            after_tp = after_snap["throughput"]
+            after_infra = after_snap["infrastructure"]
 
             after_reqs = after_ov["throughput"]["total_requests_today"]
             after_rpm = after_ov["throughput"]["rpm_current"]
             after_tp_rpm = after_tp.get("current_rpm", 0)
             after_tokens = after_ov["tokens_and_cost"]["total_tokens_today"]
             after_4xx = after_ov["reliability"].get("status_4xx_count_today", 0)
+            after_active_sse = after_infra.get("active_sse_sessions", 0)
+            after_peak_sse = after_infra.get("peak_sse_sessions_today", 0)
+            after_neon_active = after_infra.get("neon_connections_active", 0)
+            after_neon_max = after_infra.get("neon_connections_max", 20)
 
             latencies = [r.e2e_ms for r in student_results]
             ttfts = [r.ttft_ms for r in student_results if r.ttft_ms is not None]
@@ -334,27 +419,40 @@ async def run_load_simulation(
 
             delta_rpm = after_tp_rpm - before_tp_rpm
             delta_reqs = after_reqs - before_reqs
+            delta_tokens = after_tokens - before_tokens
+            delta_4xx = after_4xx - before_4xx
 
             print("-" * 72)
             print(f"[BATCH] Hoàn tất {students} luồng chat song song + {client_error_probes} 4xx probes trong {t_batch_ms}ms")
             print(f"  - Thành công (2xx): {ok_count}/{students}")
-            print(f"  - Lỗi Client (4xx): {err_4xx_count} (Dashboard recorded 4xx today: {after_4xx})")
+            print(f"  - Lỗi Client (4xx): {err_4xx_count} (Dashboard delta 4xx: +{delta_4xx}, today: {after_4xx})")
             print(f"  - Lỗi Server (5xx): {err_5xx_count}")
             print(
-                f"  - Độ trễ E2E: P50={_percentile(latencies, 50)}ms | "
+                f"  - Độ trễ Client E2E: P50={_percentile(latencies, 50)}ms | "
                 f"P95={_percentile(latencies, 95)}ms | P99={_percentile(latencies, 99)}ms"
             )
             if ttfts:
                 print(f"  - TTFT trung bình: {round(sum(ttfts) / len(ttfts), 1)}ms")
             print("-" * 72)
             print(
-                f"[AFTER ] Total Requests Today: {after_reqs} (delta: +{delta_reqs}) | "
-                f"Overview RPM: {after_rpm} | Throughput 1h Live RPM: {after_tp_rpm} (delta: +{delta_rpm}) | "
-                f"Tokens: {after_tokens:,}"
+                f"[AFTER ] Requests Today: {after_reqs} (delta: +{delta_reqs}) | "
+                f"Overview RPM: {after_rpm} | Live RPM: {after_tp_rpm} (delta: +{delta_rpm}) | "
+                f"Tokens: {after_tokens:,} (delta: +{delta_tokens:,})"
+            )
+            print(
+                f"[INFRA ] Active SSE sau kết thúc: {after_active_sse} | Peak SSE Today: {after_peak_sse} | "
+                f"Neon Pool: {after_neon_active}/{after_neon_max}"
             )
 
-            passed = ok_count == students and delta_rpm >= students and err_5xx_count == 0
-            print(f"[VERDICT] {'PASS - Dashboard nhảy số RPM real-time chính xác!' if passed else 'CHECK NEEDED'}")
+            passed = (
+                ok_count == students
+                and delta_rpm >= students
+                and delta_4xx >= client_error_probes
+                and err_5xx_count == 0
+                and after_active_sse == 0
+                and (not in_process or delta_tokens > 0)
+            )
+            print(f"[VERDICT] {'PASS - Dashboard nhảy số KPI real-time chính xác!' if passed else 'CHECK NEEDED'}")
             return passed
     finally:
         for p in reversed(patches):
@@ -371,6 +469,10 @@ def main() -> int:
     parser.add_argument("--in-process", action="store_true", help="Chạy trực tiếp qua ASGI trong memory không cần server riêng")
     parser.add_argument("--admin-token", default=os.getenv("ADMIN_JWT_TOKEN", ""), help="JWT token Admin")
     parser.add_argument("--student-token", default=os.getenv("STUDENT_JWT_TOKEN", ""), help="JWT token Student")
+    parser.add_argument("--admin-username", default=os.getenv("ADMIN_USERNAME", ""), help="Username/Email Admin để tự đăng nhập ở chế độ live")
+    parser.add_argument("--admin-password", default=os.getenv("ADMIN_PASSWORD", ""), help="Password Admin cho --admin-username")
+    parser.add_argument("--student-username", default=os.getenv("STUDENT_USERNAME", ""), help="Username/Email Student để tự đăng nhập ở chế độ live")
+    parser.add_argument("--student-password", default=os.getenv("STUDENT_PASSWORD", ""), help="Password Student cho --student-username")
     parser.add_argument("--session-id", default="", help="Session ID dùng chung (nếu muốn cố định)")
     parser.add_argument("--client-errors", type=int, default=2, help="Số probe lỗi 4xx kèm theo để kiểm tra AC-KPI-03")
     args = parser.parse_args()
@@ -383,6 +485,10 @@ def main() -> int:
             in_process=args.in_process,
             admin_token=args.admin_token,
             student_token=args.student_token,
+            admin_username=args.admin_username,
+            admin_password=args.admin_password,
+            student_username=args.student_username,
+            student_password=args.student_password,
             session_id=args.session_id,
             client_error_probes=args.client_errors,
         )

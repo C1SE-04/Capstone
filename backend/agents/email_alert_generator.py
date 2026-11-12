@@ -208,8 +208,12 @@ Chỉ xuất ra đúng định dạng JSON thuần túy theo cấu trúc:
             model_name=model_name,
             system_instruction=ACADEMIC_ALERT_SYSTEM_INSTRUCTION
         )
-        response = model.generate_content(
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(
+            model,
             prompt,
+            model_name,
+            "Email",
             generation_config={
                 "temperature": 0.2,
                 "top_p": 0.9,
@@ -286,8 +290,12 @@ Chỉ xuất ra đúng định dạng JSON thuần túy theo cấu trúc:
             model_name=model_name,
             system_instruction=SAFETY_ALERT_SYSTEM_INSTRUCTION
         )
-        response = model.generate_content(
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(
+            model,
             prompt,
+            model_name,
+            "Email",
             generation_config={
                 "temperature": 0.2,
                 "top_p": 0.9,

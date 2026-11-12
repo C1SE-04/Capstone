@@ -17,7 +17,6 @@ import csv
 import io
 import json
 import os
-import random
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 
@@ -123,6 +122,267 @@ def _calc_tokens_cost(prompt_tokens: int, completion_tokens: int, model_name: st
     return cost_usd, cost_vnd
 
 
+def _to_utc_hour(dt: datetime) -> datetime:
+    """Chuẩn hóa timestamp về đầu giờ UTC."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.replace(minute=0, second=0, microsecond=0)
+
+
+_SUBSYSTEM_SPECS = [
+    {
+        "id": "Chat",
+        "role_name": "Chat Socratic Chính",
+        "agent_title": "Gia Sư Socratic (Chat)",
+        "description": "Đối thoại sư phạm gợi mở 2-4 câu, bám sát sách giáo khoa Toán 4-9",
+        "cfg_key": "primary_model",
+        "color": "#C1762A",
+        "icon": "MessageSquare",
+    },
+    {
+        "id": "Classifier",
+        "role_name": "Phân Loại SGK & Tiêu Đề",
+        "agent_title": "Phân Loại Bài Toán & Đặt Tên",
+        "description": "Nhận diện chuyên đề SGK và đặt tên bài toán thân thiện",
+        "cfg_key": "classifier_model",
+        "color": "#8C4905",
+        "icon": "Layers",
+    },
+    {
+        "id": "Flashcard",
+        "role_name": "Sổ Tay & Flashcard",
+        "agent_title": "Sổ Tay & Thẻ Ghi Nhớ (Flashcard)",
+        "description": "Trích xuất công thức trọng tâm và tóm tắt bước giải vào sổ tay",
+        "cfg_key": "flashcard_model",
+        "color": "#2563EB",
+        "icon": "BookOpen",
+    },
+    {
+        "id": "ParentReport",
+        "role_name": "Báo Cáo Phụ Huynh",
+        "agent_title": "Báo Cáo Phụ Huynh (Parent Insights)",
+        "description": "Quét toàn bộ lịch sử tuần để đánh giá tính tự lập gửi phụ huynh",
+        "cfg_key": "parent_insight_model",
+        "color": "#10B981",
+        "icon": "GraduationCap",
+    },
+    {
+        "id": "Email",
+        "role_name": "Email Cảnh Báo PH",
+        "agent_title": "Email Cảnh Báo Phụ Huynh",
+        "description": "Soạn và gửi email cảnh báo học tập / an toàn tới phụ huynh",
+        "cfg_key": "email_model",
+        "color": "#F59E0B",
+        "icon": "ShieldAlert",
+    },
+    {
+        "id": "Fallback",
+        "role_name": "Dự Phòng Failover",
+        "agent_title": "Dự Phòng & Failover",
+        "description": "Mô hình dự phòng & Failover khi model chính gặp sự cố",
+        "cfg_key": "backup_model",
+        "color": "#6B7280",
+        "icon": "Cpu",
+    },
+]
+
+
+def _aggregate_subsystem_metrics(
+    db: Session,
+    start_dt: datetime,
+    live_snap: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Tổng hợp số liệu thực tế của 6 phân hệ từ bảng system_agent_metrics_hourly
+    cộng dồn phần live chưa flush trong bộ đệm. Không dùng dữ liệu giả lập.
+    """
+    rows = (
+        db.query(
+            models.SystemAgentMetricsHourly.agent_name,
+            models.SystemAgentMetricsHourly.model_name,
+            func.sum(models.SystemAgentMetricsHourly.request_count).label("reqs"),
+            func.sum(models.SystemAgentMetricsHourly.prompt_tokens).label("prompt_tok"),
+            func.sum(models.SystemAgentMetricsHourly.completion_tokens).label("comp_tok"),
+            func.sum(models.SystemAgentMetricsHourly.total_cost_usd).label("cost_usd"),
+            func.avg(models.SystemAgentMetricsHourly.avg_latency_ms).label("avg_lat"),
+        )
+        .filter(models.SystemAgentMetricsHourly.bucket_timestamp >= start_dt)
+        .group_by(
+            models.SystemAgentMetricsHourly.agent_name,
+            models.SystemAgentMetricsHourly.model_name,
+        )
+        .all()
+    )
+
+    cfg_models = _get_configured_models()
+    agg_by_agent: Dict[str, Dict[str, Any]] = {}
+
+    def _accumulate(agent_id: str, mod_name: str, reqs: int, p_tok: int, c_tok: int, cost_usd: float, avg_lat: int):
+        entry = agg_by_agent.setdefault(agent_id, {
+            "request_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "cost_usd": 0.0,
+            "lat_weighted_sum": 0,
+            "lat_count": 0,
+            "model_reqs": {},
+        })
+        entry["request_count"] += reqs
+        entry["prompt_tokens"] += p_tok
+        entry["completion_tokens"] += c_tok
+        entry["cost_usd"] += cost_usd
+        if avg_lat > 0 and reqs > 0:
+            entry["lat_weighted_sum"] += avg_lat * reqs
+            entry["lat_count"] += reqs
+        if mod_name and reqs > 0:
+            entry["model_reqs"][mod_name] = entry["model_reqs"].get(mod_name, 0) + reqs
+
+    for r in rows:
+        _accumulate(
+            r.agent_name,
+            r.model_name,
+            int(r.reqs or 0),
+            int(r.prompt_tok or 0),
+            int(r.comp_tok or 0),
+            float(r.cost_usd or 0.0),
+            int(r.avg_lat or 0),
+        )
+
+    for ag in live_snap.get("agent_stats", []):
+        _accumulate(
+            ag["agent_name"],
+            ag["model_name"],
+            int(ag.get("request_count", 0)),
+            int(ag.get("prompt_tokens", 0)),
+            int(ag.get("completion_tokens", 0)),
+            float(ag.get("total_cost_usd", 0.0)),
+            int(ag.get("avg_latency_ms", 0)),
+        )
+
+    raw_items: List[Dict[str, Any]] = []
+    model_breakdown: Dict[str, Dict[str, Any]] = {}
+
+    for spec in _SUBSYSTEM_SPECS:
+        ag_id = spec["id"]
+        assigned_model = cfg_models[spec["cfg_key"]]
+        ag_data = agg_by_agent.get(ag_id, {})
+
+        reqs = ag_data.get("request_count", 0)
+        p_tok = ag_data.get("prompt_tokens", 0)
+        c_tok = ag_data.get("completion_tokens", 0)
+        t_tok = p_tok + c_tok
+        c_usd = ag_data.get("cost_usd", 0.0)
+        if c_usd == 0.0 and t_tok > 0:
+            c_usd, _ = _calc_tokens_cost(p_tok, c_tok, assigned_model)
+        c_vnd = int(round(c_usd * USD_TO_VND_RATE))
+
+        model_reqs = ag_data.get("model_reqs", {})
+        if model_reqs:
+            used_model = max(model_reqs.items(), key=lambda kv: kv[1])[0]
+        else:
+            used_model = assigned_model
+
+        lat_count = ag_data.get("lat_count", 0)
+        avg_lat = int(round(ag_data["lat_weighted_sum"] / lat_count)) if lat_count > 0 else 0
+        pricing_info = MODEL_PRICING.get(used_model, MODEL_PRICING["default"])
+
+        raw_items.append({
+            "spec": spec,
+            "model_used": used_model,
+            "request_count": reqs,
+            "prompt_tokens": p_tok,
+            "completion_tokens": c_tok,
+            "total_tokens": t_tok,
+            "cost_usd": c_usd,
+            "cost_vnd": c_vnd,
+            "avg_latency_ms": avg_lat,
+            "pricing": pricing_info.get("pricing_label", "$0.075 / 1M prompt, $0.30 / 1M completion"),
+        })
+
+        mb = model_breakdown.setdefault(used_model, {
+            "name": used_model,
+            "roles": [],
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "tokens": 0,
+            "cost_usd": 0.0,
+            "cost_vnd": 0,
+            "percentage": 0.0,
+            "pricing": pricing_info.get("pricing_label", "$0.075 / 1M prompt, $0.30 / 1M completion"),
+        })
+        mb["roles"].append(spec["role_name"])
+        mb["prompt_tokens"] += p_tok
+        mb["completion_tokens"] += c_tok
+        mb["tokens"] += t_tok
+        mb["cost_usd"] = round(mb["cost_usd"] + c_usd, 6)
+        mb["cost_vnd"] = int(round(mb["cost_usd"] * USD_TO_VND_RATE))
+
+    total_reqs = sum(item["request_count"] for item in raw_items)
+    total_tokens = sum(item["total_tokens"] for item in raw_items)
+    total_prompt = sum(item["prompt_tokens"] for item in raw_items)
+    total_comp = sum(item["completion_tokens"] for item in raw_items)
+    total_cost_usd = sum(item["cost_usd"] for item in raw_items)
+
+    six_model_breakdown: List[Dict[str, Any]] = []
+    agents_list: List[Dict[str, Any]] = []
+
+    for item in raw_items:
+        spec = item["spec"]
+        req_pct = round((item["request_count"] / total_reqs) * 100, 1) if total_reqs > 0 else 0.0
+        tok_pct = round((item["total_tokens"] / total_tokens) * 100, 1) if total_tokens > 0 else 0.0
+        # Nếu chỉ có request HTTP hoặc token thực chưa phân biệt được, ưu tiên tok_pct khi có token
+        share_pct = tok_pct if total_tokens > 0 else req_pct
+
+        six_model_breakdown.append({
+            "role_id": spec["id"],
+            "role_name": spec["role_name"],
+            "model_name": item["model_used"],
+            "request_count": item["request_count"],
+            "prompt_tokens": item["prompt_tokens"],
+            "completion_tokens": item["completion_tokens"],
+            "total_tokens": item["total_tokens"],
+            "percentage": share_pct,
+            "cost_usd": round(item["cost_usd"], 4),
+            "cost_vnd": item["cost_vnd"],
+            "pricing": item["pricing"],
+            "color": spec["color"],
+        })
+
+        agents_list.append({
+            "id": spec["id"],
+            "name": spec["agent_title"],
+            "description": spec["description"],
+            "model_used": item["model_used"],
+            "request_count": item["request_count"],
+            "prompt_tokens": item["prompt_tokens"],
+            "completion_tokens": item["completion_tokens"],
+            "total_tokens": item["total_tokens"],
+            "cost_usd": round(item["cost_usd"], 4),
+            "cost_vnd": item["cost_vnd"],
+            "avg_latency_ms": item["avg_latency_ms"],
+            "request_percentage": req_pct,
+            "token_percentage": tok_pct,
+            "color": spec["color"],
+        })
+
+    for mb in model_breakdown.values():
+        mb["cost_usd"] = round(mb["cost_usd"], 4)
+        mb["percentage"] = round((mb["tokens"] / total_tokens) * 100, 1) if total_tokens > 0 else 0.0
+
+    return {
+        "six_model_breakdown": six_model_breakdown,
+        "model_breakdown": model_breakdown,
+        "agents": agents_list,
+        "total_requests": total_reqs,
+        "total_tokens": total_tokens,
+        "total_prompt_tokens": total_prompt,
+        "total_completion_tokens": total_comp,
+        "total_cost_usd": total_cost_usd,
+    }
+
+
 # ==============================================================================
 # 1. GET /overview : 4 Thẻ KPI Tổng Hợp Đầu Trang
 # ==============================================================================
@@ -157,43 +417,73 @@ async def get_kpi_overview(
     db_auth = sum(r.auth_requests for r in rows)
     db_other = sum(r.other_requests for r in rows)
 
-    tot_requests = (db_requests + live_snap["total_requests"]) or 1420
-    tot_chat = (db_chat + live_snap["chat_requests"]) or int(tot_requests * 0.55)
-    tot_eval = (db_eval + live_snap["eval_requests"]) or int(tot_requests * 0.20)
-    tot_auth = (db_auth + live_snap["auth_requests"]) or int(tot_requests * 0.12)
-    tot_other = max(0, tot_requests - tot_chat - tot_eval - tot_auth) if (db_requests + live_snap["total_requests"]) > 0 else int(tot_requests * 0.13)
+    tot_requests = db_requests + live_snap["total_requests"]
+    tot_chat = db_chat + live_snap["chat_requests"]
+    tot_eval = db_eval + live_snap["eval_requests"]
+    tot_auth = db_auth + live_snap["auth_requests"]
+    tot_other = db_other + live_snap["other_requests"]
+
+    # So sánh tăng trưởng thực tế với ngày hôm qua
+    start_of_yesterday = start_of_today - timedelta(days=1)
+    yesterday_requests = (
+        db.query(func.sum(models.SystemMetricsHourly.total_requests))
+        .filter(
+            models.SystemMetricsHourly.bucket_timestamp >= start_of_yesterday,
+            models.SystemMetricsHourly.bucket_timestamp < start_of_today,
+        )
+        .scalar()
+        or 0
+    )
+    if yesterday_requests > 0:
+        requests_growth_pct = round(((tot_requests - yesterday_requests) / yesterday_requests) * 100, 1)
+    else:
+        requests_growth_pct = 0.0
 
     db_prompt = sum(r.prompt_tokens for r in rows)
     db_comp = sum(r.completion_tokens for r in rows)
-    tot_prompt = (db_prompt + live_snap["prompt_tokens"]) or 920000
-    tot_completion = (db_comp + live_snap["completion_tokens"]) or 480000
+    tot_prompt = db_prompt + live_snap["prompt_tokens"]
+    tot_completion = db_comp + live_snap["completion_tokens"]
     tot_tokens = tot_prompt + tot_completion
 
-    tot_cost_usd = (sum(float(r.estimated_cost_usd or 0) for r in rows) + float(live_snap["estimated_cost_usd"])) or 0.312
+    tot_cost_usd = sum(float(r.estimated_cost_usd or 0) for r in rows) + float(live_snap["estimated_cost_usd"])
     tot_cost_vnd = int(round(tot_cost_usd * USD_TO_VND_RATE))
 
-    # Latency percentiles hôm nay
-    latencies = [r.p50_latency_ms for r in rows if r.p50_latency_ms > 0]
-    p50_ms = int(sum(latencies) / len(latencies)) if latencies else 540
+    # Latency percentiles thực tế hôm nay (DB + Live unsaved)
+    p50_list = [r.p50_latency_ms for r in rows if r.p50_latency_ms > 0]
     p95_list = [r.p95_latency_ms for r in rows if r.p95_latency_ms > 0]
-    p95_ms = int(sum(p95_list) / len(p95_list)) if p95_list else 1420
     p99_list = [r.p99_latency_ms for r in rows if r.p99_latency_ms > 0]
-    p99_ms = int(sum(p99_list) / len(p99_list)) if p99_list else 2250
     ttft_list = [r.avg_ttft_ms for r in rows if r.avg_ttft_ms > 0]
-    avg_ttft_ms = int(sum(ttft_list) / len(ttft_list)) if ttft_list else 420
-    avg_lat = int((p50_ms + p95_ms) / 2)
 
-    # Phân phối mã lỗi HTTP (Client 4xx, Quota 429, Server 5xx)
+    if live_snap.get("total_requests", 0) > 0:
+        if live_snap.get("p50_latency_ms", 0) > 0:
+            p50_list.append(live_snap["p50_latency_ms"])
+        if live_snap.get("p95_latency_ms", 0) > 0:
+            p95_list.append(live_snap["p95_latency_ms"])
+        if live_snap.get("p99_latency_ms", 0) > 0:
+            p99_list.append(live_snap["p99_latency_ms"])
+    if live_snap.get("avg_ttft_ms", 0) > 0:
+        ttft_list.append(live_snap["avg_ttft_ms"])
+
+    p50_ms = int(sum(p50_list) / len(p50_list)) if p50_list else 0
+    p95_ms = int(sum(p95_list) / len(p95_list)) if p95_list else 0
+    p99_ms = int(sum(p99_list) / len(p99_list)) if p99_list else 0
+    avg_ttft_ms = int(sum(ttft_list) / len(ttft_list)) if ttft_list else 0
+    avg_lat = int((p50_ms + p95_ms) / 2) if (p50_ms or p95_ms) else 0
+
+    # Phân phối mã lỗi HTTP thực tế (Client 4xx, Quota 429, Server 5xx)
     tot_4xx = sum(r.status_4xx_count for r in rows) + live_snap["status_4xx_count"]
     tot_5xx = sum(r.status_5xx_count for r in rows) + live_snap["status_5xx_count"]
     tot_429 = sum(r.gemini_429_count for r in rows) + live_snap["gemini_429_count"]
     tot_2xx = sum(r.status_2xx_count for r in rows) + live_snap["status_2xx_count"]
-    if tot_2xx == 0 and tot_requests > 0:
-        tot_2xx = max(0, tot_requests - tot_4xx - tot_5xx)
 
-    error_rate_pct = round((tot_5xx / max(tot_requests, 1)) * 100, 2)
-    client_error_rate_pct = round((tot_4xx / max(tot_requests, 1)) * 100, 2)
-    success_rate_pct = round((tot_2xx / max(tot_requests, 1)) * 100, 2)
+    if tot_requests > 0:
+        error_rate_pct = round((tot_5xx / tot_requests) * 100, 2)
+        client_error_rate_pct = round((tot_4xx / tot_requests) * 100, 2)
+        success_rate_pct = round((tot_2xx / tot_requests) * 100, 2)
+    else:
+        error_rate_pct = 0.0
+        client_error_rate_pct = 0.0
+        success_rate_pct = 0.0
 
     # 2. Đọc Live RPM & TPM từ Upstash Redis + bộ nhớ cục bộ cho phút hiện tại
     m_bucket = _minute_bucket(now)
@@ -218,7 +508,7 @@ async def get_kpi_overview(
 
     # Trạng thái tổng quan hệ thống
     system_health = "HEALTHY"
-    if error_rate_pct > 2.0 or tot_5xx > 20:
+    if (tot_requests >= 5 and error_rate_pct > 2.0) or tot_5xx > 20:
         system_health = "CRITICAL"
     elif p95_ms > 1800:
         system_health = "DEGRADED"
@@ -230,7 +520,7 @@ async def get_kpi_overview(
         "throughput": {
             "total_requests_today": tot_requests,
             "rpm_current": live_rpm,
-            "requests_growth_pct": 14.2,
+            "requests_growth_pct": requests_growth_pct,
             "chat_requests": tot_chat,
             "eval_requests": tot_eval,
             "auth_requests": tot_auth,
@@ -241,7 +531,7 @@ async def get_kpi_overview(
             "total_tokens_today": tot_tokens,
             "prompt_tokens_today": tot_prompt,
             "completion_tokens_today": tot_completion,
-            "tpm_current": live_tpm or (live_rpm * 380),
+            "tpm_current": live_tpm,
             "cost_usd_today": round(tot_cost_usd, 4),
             "cost_vnd_today": tot_cost_vnd,
             "cost_projection_month_usd": round(tot_cost_usd * 30, 2),
@@ -293,60 +583,68 @@ async def get_kpi_throughput(
     - Khi chọn range=7d hoặc 30d: trả về daily rollup.
     """
     now = datetime.now(timezone.utc)
+    live_snap = get_live_accumulator_snapshot()
 
-    # 1. Chế độ THEO PHÚT (60 phút gần nhất)
+    # 1. Chế độ THEO PHÚT (60 phút gần nhất) — 100% Real Redis + Live Minute Memory
     if range_param == "1h" or granularity == "minute":
         redis = _get_upstash_redis()
         items = []
-        cur_min_str = _minute_bucket(now)
+        minute_points = [now - timedelta(minutes=i) for i in range(59, -1, -1)]
+        minute_keys = [_minute_bucket(t_pt) for t_pt in minute_points]
 
-        # Đọc counter phút hiện tại từ Redis và bộ nhớ cục bộ
-        redis_cur_rpm = 0
+        # Đọc 60 phút từ Redis (1 lệnh mget cho lịch sử + get phút hiện tại)
+        redis_rpm_map: Dict[str, int] = {}
+        cur_min_str = minute_keys[-1]
         if redis:
             try:
-                val = await redis.get(f"rpm:{cur_min_str}")
-                redis_cur_rpm = int(val) if val else 0
+                val_cur = await redis.get(f"rpm:{cur_min_str}")
+                if isinstance(val_cur, (int, str)) and str(val_cur).isdigit():
+                    redis_rpm_map[cur_min_str] = int(val_cur)
+            except Exception:
+                pass
+            try:
+                if hasattr(redis, "mget"):
+                    hist_vals = await redis.mget(*[f"rpm:{k}" for k in minute_keys[:-1]])
+                    if isinstance(hist_vals, (list, tuple)):
+                        for k, v in zip(minute_keys[:-1], hist_vals):
+                            if isinstance(v, (int, str)) and str(v).isdigit():
+                                redis_rpm_map[k] = int(v)
             except Exception:
                 pass
 
-        mem_cur = get_live_minute_stats(cur_min_str)
-        live_cur_rpm = max(redis_cur_rpm, mem_cur["rpm"])
+        live_cur_rpm = max(
+            redis_rpm_map.get(cur_min_str, 0),
+            get_live_minute_stats(cur_min_str)["rpm"],
+        )
 
-        # Sinh chuỗi 60 phút
-        for i in range(59, -1, -1):
-            t_point = now - timedelta(minutes=i)
-            m_str = _minute_bucket(t_point)
+        # Sinh chuỗi 60 phút thực tế (0 ở các phút không có request)
+        for idx, t_point in enumerate(minute_points):
+            m_str = minute_keys[idx]
             disp_time = t_point.strftime("%H:%M")
             mem_m = get_live_minute_stats(m_str)
 
-            if i == 0:
-                # Phút hiện tại: lấy số thật từ Redis / in-memory live counter
-                rpm_val = live_cur_rpm
-            elif mem_m["rpm"] > 0:
-                rpm_val = mem_m["rpm"]
-            else:
-                # Các phút lịch sử trước lúc server chạy: giả lập trơn tru theo nhịp học tập
-                h = t_point.hour
-                base = 25 if (19 <= h <= 21) else (14 if 8 <= h <= 17 else 4)
-                rpm_val = max(1, base + ((i * 17 + h) % 9) - 3)
+            mem_rpm = mem_m.get("rpm", 0)
+            rpm_val = max(redis_rpm_map.get(m_str, 0), mem_rpm)
 
-            chat_r = int(rpm_val * 0.55)
-            eval_r = int(rpm_val * 0.20)
-            auth_r = int(rpm_val * 0.12)
-            other_r = max(0, rpm_val - chat_r - eval_r - auth_r)
+            chat_r = mem_m.get("chat", 0)
+            eval_r = mem_m.get("eval", 0)
+            auth_r = mem_m.get("auth", 0)
+            other_r = mem_m.get("other", 0)
+            if rpm_val > (chat_r + eval_r + auth_r + other_r):
+                other_r += rpm_val - (chat_r + eval_r + auth_r + other_r)
 
             items.append({
                 "timestamp": t_point.isoformat(),
                 "display_time": disp_time,
-                "is_current_minute": i == 0,
+                "is_current_minute": idx == len(minute_points) - 1,
                 "requests": rpm_val,
                 "chat_requests": chat_r,
                 "eval_requests": eval_r,
                 "auth_requests": auth_r,
                 "other_requests": other_r,
-                "errors_4xx": mem_m["err4xx"],
-                "errors_429": mem_m["err429"],
-                "errors_5xx": mem_m["err5xx"],
+                "errors_4xx": mem_m.get("err4xx", 0),
+                "errors_429": mem_m.get("err429", 0),
+                "errors_5xx": mem_m.get("err5xx", 0),
             })
 
         peak_rpm = max((x["requests"] for x in items), default=0)
@@ -359,10 +657,13 @@ async def get_kpi_throughput(
             "items": items,
         }
 
-    # 2. Chế độ THEO NGÀY (7d / 30d)
+    # 2. Chế độ THEO NGÀY (7d / 30d) — 100% DB + Live Hôm Nay
     if range_param in ("7d", "30d") or granularity == "day":
         days = 30 if range_param == "30d" else 7
-        start_date = now - timedelta(days=days)
+        today_date = now.date()
+        start_day = today_date - timedelta(days=days - 1)
+        start_dt = datetime.combine(start_day, datetime.min.time(), tzinfo=timezone.utc)
+
         rows = (
             db.query(
                 func.date_trunc("day", models.SystemMetricsHourly.bucket_timestamp).label("day_bucket"),
@@ -372,40 +673,48 @@ async def get_kpi_throughput(
                 func.sum(models.SystemMetricsHourly.auth_requests).label("tot_auth"),
                 func.sum(models.SystemMetricsHourly.other_requests).label("tot_other"),
             )
-            .filter(models.SystemMetricsHourly.bucket_timestamp >= start_date)
+            .filter(models.SystemMetricsHourly.bucket_timestamp >= start_dt)
             .group_by("day_bucket")
-            .order_by("day_bucket")
             .all()
         )
 
-        items = []
+        day_map: Dict[Any, Dict[str, int]] = {}
         for r in rows:
-            day_dt = r.day_bucket
-            items.append({
-                "timestamp": day_dt.isoformat(),
-                "display_time": day_dt.strftime("%d/%m"),
+            d_key = r.day_bucket.date()
+            day_map[d_key] = {
                 "requests": int(r.tot_reqs or 0),
                 "chat_requests": int(r.tot_chat or 0),
                 "eval_requests": int(r.tot_eval or 0),
                 "auth_requests": int(r.tot_auth or 0),
                 "other_requests": int(r.tot_other or 0),
-            })
+            }
 
-        # Nếu thiếu data thì fallback nạp 7 ngày
-        if len(items) < days:
-            items = []
-            for d in range(days - 1, -1, -1):
-                day_dt = now - timedelta(days=d)
-                reqs = random.randint(2800, 3600)
-                items.append({
-                    "timestamp": day_dt.isoformat(),
-                    "display_time": day_dt.strftime("%d/%m"),
-                    "requests": reqs,
-                    "chat_requests": int(reqs * 0.65),
-                    "eval_requests": int(reqs * 0.18),
-                    "auth_requests": int(reqs * 0.10),
-                    "other_requests": int(reqs * 0.07),
-                })
+        # Cộng dồn delta live chưa flush vào ngày hôm nay
+        today_entry = day_map.setdefault(today_date, {
+            "requests": 0, "chat_requests": 0, "eval_requests": 0, "auth_requests": 0, "other_requests": 0
+        })
+        today_entry["requests"] += live_snap["total_requests"]
+        today_entry["chat_requests"] += live_snap["chat_requests"]
+        today_entry["eval_requests"] += live_snap["eval_requests"]
+        today_entry["auth_requests"] += live_snap["auth_requests"]
+        today_entry["other_requests"] += live_snap["other_requests"]
+
+        items = []
+        for d in range(days - 1, -1, -1):
+            day_date = today_date - timedelta(days=d)
+            day_dt = datetime.combine(day_date, datetime.min.time(), tzinfo=timezone.utc)
+            stats = day_map.get(day_date, {
+                "requests": 0, "chat_requests": 0, "eval_requests": 0, "auth_requests": 0, "other_requests": 0
+            })
+            items.append({
+                "timestamp": day_dt.isoformat(),
+                "display_time": day_dt.strftime("%d/%m"),
+                "requests": stats["requests"],
+                "chat_requests": stats["chat_requests"],
+                "eval_requests": stats["eval_requests"],
+                "auth_requests": stats["auth_requests"],
+                "other_requests": stats["other_requests"],
+            })
 
         return {
             "range": range_param,
@@ -414,8 +723,9 @@ async def get_kpi_throughput(
             "items": items,
         }
 
-    # 3. Chế độ MẶC ĐỊNH: THEO GIỜ (24 giờ gần nhất)
-    start_24h = now - timedelta(hours=24)
+    # 3. Chế độ MẶC ĐỊNH: THEO GIỜ (24 giờ gần nhất) — 100% DB + Live Giờ Hiện Tại
+    cur_hour = _hour_bucket(now)
+    start_24h = cur_hour - timedelta(hours=23)
     rows = (
         db.query(models.SystemMetricsHourly)
         .filter(models.SystemMetricsHourly.bucket_timestamp >= start_24h)
@@ -423,16 +733,40 @@ async def get_kpi_throughput(
         .all()
     )
 
-    items = []
+    hour_map: Dict[datetime, Dict[str, int]] = {}
     for r in rows:
-        items.append({
-            "timestamp": r.bucket_timestamp.isoformat(),
-            "display_time": r.bucket_timestamp.strftime("%H:00"),
+        h_key = _to_utc_hour(r.bucket_timestamp)
+        hour_map[h_key] = {
             "requests": r.total_requests,
             "chat_requests": r.chat_requests,
             "eval_requests": r.eval_requests,
             "auth_requests": r.auth_requests,
             "other_requests": r.other_requests,
+        }
+
+    cur_entry = hour_map.setdefault(cur_hour, {
+        "requests": 0, "chat_requests": 0, "eval_requests": 0, "auth_requests": 0, "other_requests": 0
+    })
+    cur_entry["requests"] += live_snap["total_requests"]
+    cur_entry["chat_requests"] += live_snap["chat_requests"]
+    cur_entry["eval_requests"] += live_snap["eval_requests"]
+    cur_entry["auth_requests"] += live_snap["auth_requests"]
+    cur_entry["other_requests"] += live_snap["other_requests"]
+
+    items = []
+    for h_offset in range(23, -1, -1):
+        h_dt = cur_hour - timedelta(hours=h_offset)
+        stats = hour_map.get(h_dt, {
+            "requests": 0, "chat_requests": 0, "eval_requests": 0, "auth_requests": 0, "other_requests": 0
+        })
+        items.append({
+            "timestamp": h_dt.isoformat(),
+            "display_time": h_dt.strftime("%H:00"),
+            "requests": stats["requests"],
+            "chat_requests": stats["chat_requests"],
+            "eval_requests": stats["eval_requests"],
+            "auth_requests": stats["auth_requests"],
+            "other_requests": stats["other_requests"],
         })
 
     return {
@@ -460,7 +794,10 @@ def get_kpi_tokens(
         gemini-2.5-flash, gemini-2.0-flash, gemini-2.0-flash-lite, gemini-1.5-pro.
     """
     now = datetime.now(timezone.utc)
-    start_dt = now - timedelta(days=days)
+    today_date = now.date()
+    start_day = today_date - timedelta(days=days - 1)
+    start_dt = datetime.combine(start_day, datetime.min.time(), tzinfo=timezone.utc)
+    live_snap = get_live_accumulator_snapshot()
 
     rows = (
         db.query(
@@ -474,27 +811,52 @@ def get_kpi_tokens(
         )
         .filter(models.SystemMetricsHourly.bucket_timestamp >= start_dt)
         .group_by("day_bucket")
-        .order_by("day_bucket")
         .all()
     )
+
+    day_map: Dict[Any, Dict[str, Any]] = {}
+    for r in rows:
+        d_key = r.day_bucket.date()
+        day_map[d_key] = {
+            "prompt_tokens": int(r.prompt_tok or 0),
+            "completion_tokens": int(r.comp_tok or 0),
+            "cost_usd": float(r.cost_usd or 0.0),
+            "sessions_count": int(r.req_count or 0),
+            "latency_ms": int(r.avg_lat or 0),
+        }
+
+    # Cộng dồn phần live chưa flush vào ngày hôm nay
+    today_entry = day_map.setdefault(today_date, {
+        "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0, "sessions_count": 0, "latency_ms": 0
+    })
+    today_entry["prompt_tokens"] += live_snap["prompt_tokens"]
+    today_entry["completion_tokens"] += live_snap["completion_tokens"]
+    today_entry["cost_usd"] += float(live_snap["estimated_cost_usd"])
+    today_entry["sessions_count"] += live_snap["total_requests"]
+    if today_entry["latency_ms"] == 0 and live_snap.get("avg_latency_ms", 0) > 0:
+        today_entry["latency_ms"] = live_snap["avg_latency_ms"]
 
     items = []
     tot_prompt = 0
     tot_comp = 0
     tot_cost_usd = 0.0
 
-    for r in rows:
-        p = int(r.prompt_tok or 0)
-        c = int(r.comp_tok or 0)
+    for d in range(days - 1, -1, -1):
+        day_date = today_date - timedelta(days=d)
+        day_dt = datetime.combine(day_date, datetime.min.time(), tzinfo=timezone.utc)
+        entry = day_map.get(day_date, {
+            "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0, "sessions_count": 0, "latency_ms": 0
+        })
+        p = entry["prompt_tokens"]
+        c = entry["completion_tokens"]
         tot = p + c
-        c_usd = float(r.cost_usd or 0.0)
+        c_usd = entry["cost_usd"]
         c_vnd = int(round(c_usd * USD_TO_VND_RATE))
 
         tot_prompt += p
         tot_comp += c
         tot_cost_usd += c_usd
 
-        day_dt = r.day_bucket
         items.append({
             "date": day_dt.strftime("%Y-%m-%d"),
             "display_date": day_dt.strftime("%d/%m"),
@@ -503,76 +865,14 @@ def get_kpi_tokens(
             "total_tokens": tot,
             "cost_usd": round(c_usd, 4),
             "cost_vnd": c_vnd,
-            "sessions_count": int(r.req_count or 0),
-            "latency_ms": int(r.avg_lat or 800),
+            "sessions_count": entry["sessions_count"],
+            "latency_ms": entry["latency_ms"],
         })
 
-    # Phân bổ chi phí theo 6 Model / 6 Phân hệ thực tế từ SystemConfigService (T10.2.9 & Ý tưởng 13)
-    cfg_models = _get_configured_models()
-    total_tokens_all = (tot_prompt + tot_comp) or 1_850_000
-    total_prompt_all = tot_prompt or int(total_tokens_all * 0.65)
-    total_comp_all = tot_comp or (total_tokens_all - total_prompt_all)
-
-    six_roles_spec = [
-        ("Chat", "Chat Socratic Chính", cfg_models["primary_model"], 0.55, "#C1762A"),
-        ("Classifier", "Phân Loại SGK & Tiêu Đề", cfg_models["classifier_model"], 0.20, "#8C4905"),
-        ("Flashcard", "Sổ Tay & Flashcard", cfg_models["flashcard_model"], 0.12, "#2563EB"),
-        ("ParentReport", "Báo Cáo Phụ Huynh", cfg_models["parent_insight_model"], 0.08, "#10B981"),
-        ("Email", "Email Cảnh Báo PH", cfg_models["email_model"], 0.03, "#F59E0B"),
-        ("Fallback", "Dự Phòng Failover", cfg_models["backup_model"], 0.02, "#6B7280"),
-    ]
-
-    six_model_breakdown: List[Dict[str, Any]] = []
-    model_breakdown: Dict[str, Dict[str, Any]] = {}
-    computed_total_cost_usd = 0.0
-
-    for role_id, role_label, model_id, share, color in six_roles_spec:
-        role_prompt = int(total_prompt_all * share)
-        role_comp = int(total_comp_all * share)
-        role_tokens = role_prompt + role_comp
-        c_usd, c_vnd = _calc_tokens_cost(role_prompt, role_comp, model_id)
-        computed_total_cost_usd += c_usd
-        pricing_info = MODEL_PRICING.get(model_id, MODEL_PRICING["default"])
-
-        six_model_breakdown.append({
-            "role_id": role_id,
-            "role_name": role_label,
-            "model_name": model_id,
-            "prompt_tokens": role_prompt,
-            "completion_tokens": role_comp,
-            "total_tokens": role_tokens,
-            "percentage": round(share * 100, 1),
-            "cost_usd": round(c_usd, 4),
-            "cost_vnd": c_vnd,
-            "pricing": pricing_info.get("pricing_label", "$0.075 / 1M prompt, $0.30 / 1M completion"),
-            "color": color,
-        })
-
-        # Gom theo tên model duy nhất vào dictionary model_breakdown
-        if model_id not in model_breakdown:
-            model_breakdown[model_id] = {
-                "name": f"{model_id}",
-                "roles": [role_label],
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "tokens": 0,
-                "cost_usd": 0.0,
-                "cost_vnd": 0,
-                "percentage": 0.0,
-                "pricing": pricing_info.get("pricing_label", "$0.075 / 1M prompt, $0.30 / 1M completion"),
-            }
-        else:
-            model_breakdown[model_id]["roles"].append(role_label)
-
-        mb = model_breakdown[model_id]
-        mb["prompt_tokens"] += role_prompt
-        mb["completion_tokens"] += role_comp
-        mb["tokens"] += role_tokens
-        mb["cost_usd"] = round(mb["cost_usd"] + c_usd, 4)
-        mb["cost_vnd"] = int(round(mb["cost_usd"] * USD_TO_VND_RATE))
-        mb["percentage"] = round(mb["percentage"] + (share * 100), 1)
-
-    effective_total_cost_usd = tot_cost_usd if tot_cost_usd > 0 else computed_total_cost_usd
+    # Phân rã 6 phân hệ & model hoàn toàn từ dữ liệu thực (SystemAgentMetricsHourly + live)
+    sub_agg = _aggregate_subsystem_metrics(db, start_dt, live_snap)
+    total_tokens_all = tot_prompt + tot_comp
+    effective_total_cost_usd = tot_cost_usd if tot_cost_usd > 0 else sub_agg["total_cost_usd"]
 
     return {
         "days": days,
@@ -581,8 +881,8 @@ def get_kpi_tokens(
         "total_tokens": total_tokens_all,
         "total_cost_usd": round(effective_total_cost_usd, 4),
         "total_cost_vnd": int(round(effective_total_cost_usd * USD_TO_VND_RATE)),
-        "six_model_breakdown": six_model_breakdown,
-        "model_breakdown": model_breakdown,
+        "six_model_breakdown": sub_agg["six_model_breakdown"],
+        "model_breakdown": sub_agg["model_breakdown"],
         "items": items,
     }
 
@@ -604,7 +904,9 @@ def get_kpi_latency(
     - Đồng hồ TTFT (Time To First Token) chuyển màu xanh khi < 500ms.
     """
     now = datetime.now(timezone.utc)
-    start_24h = now - timedelta(hours=24)
+    cur_hour = _hour_bucket(now)
+    start_24h = cur_hour - timedelta(hours=23)
+    live_snap = get_live_accumulator_snapshot()
 
     rows = (
         db.query(models.SystemMetricsHourly)
@@ -613,37 +915,65 @@ def get_kpi_latency(
         .all()
     )
 
+    hour_map: Dict[datetime, Dict[str, int]] = {}
+    for r in rows:
+        h_key = _to_utc_hour(r.bucket_timestamp)
+        hour_map[h_key] = {
+            "avg_latency_ms": r.avg_latency_ms or 0,
+            "p50_latency_ms": r.p50_latency_ms or 0,
+            "p95_latency_ms": r.p95_latency_ms or 0,
+            "p99_latency_ms": r.p99_latency_ms or 0,
+            "avg_ttft_ms": r.avg_ttft_ms or 0,
+        }
+
+    # Hợp nhất độ trễ live chưa flush vào khung giờ hiện tại
+    if live_snap.get("total_requests", 0) > 0 or live_snap.get("avg_ttft_ms", 0) > 0:
+        cur_entry = hour_map.setdefault(cur_hour, {
+            "avg_latency_ms": 0, "p50_latency_ms": 0, "p95_latency_ms": 0, "p99_latency_ms": 0, "avg_ttft_ms": 0
+        })
+        for field in ("avg_latency_ms", "p50_latency_ms", "p95_latency_ms", "p99_latency_ms", "avg_ttft_ms"):
+            if live_snap.get(field, 0) > 0:
+                cur_entry[field] = live_snap[field]
+
     items = []
     p50_vals = []
     p95_vals = []
     p99_vals = []
     ttft_vals = []
 
-    for r in rows:
-        p50 = r.p50_latency_ms or 510
-        p95 = r.p95_latency_ms or 1420
-        p99 = r.p99_latency_ms or 2200
-        ttft = r.avg_ttft_ms or 420
+    for h_offset in range(23, -1, -1):
+        h_dt = cur_hour - timedelta(hours=h_offset)
+        entry = hour_map.get(h_dt, {
+            "avg_latency_ms": 0, "p50_latency_ms": 0, "p95_latency_ms": 0, "p99_latency_ms": 0, "avg_ttft_ms": 0
+        })
+        p50 = entry["p50_latency_ms"]
+        p95 = entry["p95_latency_ms"]
+        p99 = entry["p99_latency_ms"]
+        ttft = entry["avg_ttft_ms"]
 
-        p50_vals.append(p50)
-        p95_vals.append(p95)
-        p99_vals.append(p99)
-        ttft_vals.append(ttft)
+        if p50 > 0:
+            p50_vals.append(p50)
+        if p95 > 0:
+            p95_vals.append(p95)
+        if p99 > 0:
+            p99_vals.append(p99)
+        if ttft > 0:
+            ttft_vals.append(ttft)
 
         items.append({
-            "timestamp": r.bucket_timestamp.isoformat(),
-            "display_time": r.bucket_timestamp.strftime("%H:00"),
-            "avg_latency_ms": r.avg_latency_ms or int((p50 + p95) / 2),
+            "timestamp": h_dt.isoformat(),
+            "display_time": h_dt.strftime("%H:00"),
+            "avg_latency_ms": entry["avg_latency_ms"],
             "p50_latency_ms": p50,
             "p95_latency_ms": p95,
             "p99_latency_ms": p99,
             "avg_ttft_ms": ttft,
         })
 
-    overall_p50 = int(sum(p50_vals) / len(p50_vals)) if p50_vals else 520
-    overall_p95 = int(sum(p95_vals) / len(p95_vals)) if p95_vals else 1450
-    overall_p99 = int(sum(p99_vals) / len(p99_vals)) if p99_vals else 2280
-    current_ttft = int(sum(ttft_vals) / len(ttft_vals)) if ttft_vals else 415
+    overall_p50 = int(sum(p50_vals) / len(p50_vals)) if p50_vals else 0
+    overall_p95 = int(sum(p95_vals) / len(p95_vals)) if p95_vals else 0
+    overall_p99 = int(sum(p99_vals) / len(p99_vals)) if p99_vals else 0
+    current_ttft = int(sum(ttft_vals) / len(ttft_vals)) if ttft_vals else 0
 
     return {
         "range": "24h",
@@ -680,146 +1010,16 @@ def get_kpi_agents(
     """
     now = datetime.now(timezone.utc)
     start_24h = now - timedelta(hours=24)
+    live_snap = get_live_accumulator_snapshot()
 
-    # Đọc từ bảng system_agent_metrics_hourly
-    rows = (
-        db.query(
-            models.SystemAgentMetricsHourly.agent_name,
-            models.SystemAgentMetricsHourly.model_name,
-            func.sum(models.SystemAgentMetricsHourly.request_count).label("reqs"),
-            func.sum(models.SystemAgentMetricsHourly.prompt_tokens).label("prompt_tok"),
-            func.sum(models.SystemAgentMetricsHourly.completion_tokens).label("comp_tok"),
-            func.sum(models.SystemAgentMetricsHourly.total_cost_usd).label("cost_usd"),
-            func.avg(models.SystemAgentMetricsHourly.avg_latency_ms).label("avg_lat"),
-        )
-        .filter(models.SystemAgentMetricsHourly.bucket_timestamp >= start_24h)
-        .group_by(models.SystemAgentMetricsHourly.agent_name, models.SystemAgentMetricsHourly.model_name)
-        .all()
-    )
-
-    db_agents: Dict[str, Any] = {}
-    for r in rows:
-        db_agents[r.agent_name] = {
-            "model_name": r.model_name,
-            "request_count": int(r.reqs or 0),
-            "prompt_tokens": int(r.prompt_tok or 0),
-            "completion_tokens": int(r.comp_tok or 0),
-            "cost_usd": float(r.cost_usd or 0.0),
-            "avg_latency_ms": int(r.avg_lat or 300),
-        }
-
-    # Đọc 6 model hiện hành từ SystemConfigService (T10.2.9)
-    cfg_models = _get_configured_models()
-
-    # Định nghĩa 6 phân hệ chuẩn của SocraticKid (tổng = 100%)
-    agent_templates = [
-        {
-            "id": "Chat",
-            "name": "Gia Sư Socratic (Chat)",
-            "description": "Đối thoại sư phạm gợi mở 2-4 câu, bám sát sách giáo khoa Toán 4-9",
-            "default_model": cfg_models["primary_model"],  # gemini-3.8-flash (~55%)
-            "base_pct": 55.0,
-            "color": "#C1762A",
-            "icon": "MessageSquare",
-        },
-        {
-            "id": "Classifier",
-            "name": "Phân Loại Bài Toán & Đặt Tên",
-            "description": "Nhận diện chuyên đề SGK và đặt tên bài toán thân thiện",
-            "default_model": cfg_models["classifier_model"],  # gemini-3.1-flash-lite (~20%)
-            "base_pct": 20.0,
-            "color": "#8C4905",
-            "icon": "Layers",
-        },
-        {
-            "id": "Flashcard",
-            "name": "Sổ Tay & Thẻ Ghi Nhớ (Flashcard)",
-            "description": "Trích xuất công thức trọng tâm và tóm tắt bước giải vào sổ tay",
-            "default_model": cfg_models["flashcard_model"],  # gemini-3.5-flash-lite (~12%)
-            "base_pct": 12.0,
-            "color": "#2563EB",
-            "icon": "BookOpen",
-        },
-        {
-            "id": "ParentReport",
-            "name": "Báo Cáo Phụ Huynh (Parent Insights)",
-            "description": "Quét toàn bộ lịch sử tuần để đánh giá tính tự lập gửi phụ huynh",
-            "default_model": cfg_models["parent_insight_model"],  # gemini-3.5-flash (~8%)
-            "base_pct": 8.0,
-            "color": "#10B981",
-            "icon": "GraduationCap",
-        },
-        {
-            "id": "Email",
-            "name": "Email Cảnh Báo Phụ Huynh",
-            "description": "Soạn và gửi email cảnh báo học tập / an toàn tới phụ huynh",
-            "default_model": cfg_models["email_model"],  # gemini-3.1-flash-lite (~3%)
-            "base_pct": 3.0,
-            "color": "#F59E0B",
-            "icon": "ShieldAlert",
-        },
-        {
-            "id": "Fallback",
-            "name": "Dự Phòng & Failover",
-            "description": "Mô hình dự phòng & Local Heuristic khi Gemini chính quá tải",
-            "default_model": cfg_models["backup_model"],  # gemini-3.5-flash-lite (~2%)
-            "base_pct": 2.0,
-            "color": "#6B7280",
-            "icon": "Cpu",
-        },
-    ]
-
-    seed_reqs = sum(ag.get("request_count", 0) for ag in db_agents.values())
-    base_tot_reqs = max(seed_reqs, 1450)
-    seed_tokens = sum(ag.get("prompt_tokens", 0) + ag.get("completion_tokens", 0) for ag in db_agents.values())
-    base_tot_tokens = max(seed_tokens, 1850000)
-
-    raw_agents = []
-    for tmpl in agent_templates:
-        ag_id = tmpl["id"]
-        ag_db = db_agents.get(ag_id, {})
-
-        reqs = ag_db.get("request_count") or max(10, int(base_tot_reqs * (tmpl["base_pct"] / 100.0)))
-        p_tok = ag_db.get("prompt_tokens") or int(base_tot_tokens * (tmpl["base_pct"] / 100.0) * 0.65)
-        c_tok = ag_db.get("completion_tokens") or int(base_tot_tokens * (tmpl["base_pct"] / 100.0) * 0.35)
-        t_tok = p_tok + c_tok
-        used_model = tmpl["default_model"]
-        if ag_db.get("model_name") and ag_db.get("model_name") not in ("gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro"):
-            used_model = ag_db["model_name"]
-
-        cost_usd = ag_db.get("cost_usd") or round(_calc_tokens_cost(p_tok, c_tok, used_model)[0], 4)
-        cost_vnd = int(round(cost_usd * USD_TO_VND_RATE))
-        lat = ag_db.get("avg_latency_ms") or (780 if ag_id == "Chat" else (1180 if ag_id == "ParentReport" else 240))
-
-        raw_agents.append({
-            "id": ag_id,
-            "name": tmpl["name"],
-            "description": tmpl["description"],
-            "model_used": used_model,
-            "request_count": reqs,
-            "prompt_tokens": p_tok,
-            "completion_tokens": c_tok,
-            "total_tokens": t_tok,
-            "cost_usd": cost_usd,
-            "cost_vnd": cost_vnd,
-            "avg_latency_ms": lat,
-            "color": tmpl["color"],
-        })
-
-    actual_tot_reqs = sum(x["request_count"] for x in raw_agents) or 1
-    actual_tot_tokens = sum(x["total_tokens"] for x in raw_agents) or 1
-
-    agents_result = []
-    for item in raw_agents:
-        item["request_percentage"] = round((item["request_count"] / actual_tot_reqs) * 100, 1)
-        item["token_percentage"] = round((item["total_tokens"] / actual_tot_tokens) * 100, 1)
-        agents_result.append(item)
+    sub_agg = _aggregate_subsystem_metrics(db, start_24h, live_snap)
+    agents_result = sub_agg["agents"]
 
     return {
         "status": "success",
         "total_subsystems": len(agents_result),
-        "total_requests": actual_tot_reqs,
-        "total_tokens": actual_tot_tokens,
+        "total_requests": sub_agg["total_requests"],
+        "total_tokens": sub_agg["total_tokens"],
         "agents": agents_result,
     }
 
@@ -842,35 +1042,64 @@ def get_kpi_traffic_heatmap(
     day_labels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
     full_day_names = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"]
 
+    tz_vn = timezone(timedelta(hours=7))
+    now_utc = datetime.now(timezone.utc)
+    now_vn = now_utc.astimezone(tz_vn)
+    start_30d = now_utc - timedelta(days=30)
+
+    # Khởi tạo lưới 7x24 = 168 ô trống (0 request, 0 token)
+    grid: Dict[tuple, Dict[str, int]] = {
+        (d_idx, h): {"requests": 0, "tokens": 0}
+        for d_idx in range(7)
+        for h in range(24)
+    }
+
+    rows = (
+        db.query(models.SystemMetricsHourly)
+        .filter(models.SystemMetricsHourly.bucket_timestamp >= start_30d)
+        .all()
+    )
+    for r in rows:
+        ts_utc = r.bucket_timestamp
+        if ts_utc.tzinfo is None:
+            ts_utc = ts_utc.replace(tzinfo=timezone.utc)
+        ts_vn = ts_utc.astimezone(tz_vn)
+        slot = grid[(ts_vn.weekday(), ts_vn.hour)]
+        slot["requests"] += int(r.total_requests or 0)
+        slot["tokens"] += int(r.total_tokens or 0)
+
+    # Cộng dồn live delta chưa flush vào ô giờ Việt Nam hiện tại
+    live_snap = get_live_accumulator_snapshot()
+    cur_slot = grid[(now_vn.weekday(), now_vn.hour)]
+    cur_slot["requests"] += int(live_snap.get("total_requests", 0))
+    cur_slot["tokens"] += int(live_snap.get("total_tokens", 0))
+
+    max_reqs = max((slot["requests"] for slot in grid.values()), default=0)
+
     cells = []
-    peak_cell = {"day": "T4", "full_day": "Thứ Tư", "hour": 20, "requests": 0, "tokens": 0}
+    peak_cell = {"day": "T2", "full_day": "Thứ Hai", "hour": 0, "requests": 0, "tokens": 0}
 
     for d_idx in range(7):
         d_short = day_labels[d_idx]
         d_full = full_day_names[d_idx]
 
         for h in range(24):
-            # Tính toán mật độ theo hành vi học sinh:
-            # 19h - 21h tối ngày trong tuần: cao điểm làm bài tập
-            # 9h - 11h sáng Chủ nhật: ôn bài cuối tuần
-            # 0h - 5h sáng: ngủ nghỉ
-            if 19 <= h <= 21:
-                reqs = 180 + ((d_idx * 23 + h * 7) % 65)
-                intensity = 4  # Đỏ đậm
-            elif (8 <= h <= 11 and d_idx == 6) or (14 <= h <= 17 and d_idx < 5):
-                reqs = 110 + ((d_idx * 17 + h * 5) % 45)
-                intensity = 3  # Cam đậm
-            elif 8 <= h <= 18:
-                reqs = 60 + ((d_idx * 13 + h * 3) % 35)
-                intensity = 2  # Vàng cam
-            elif 6 <= h <= 7 or 22 <= h <= 23:
-                reqs = 25 + ((d_idx * 7 + h) % 15)
-                intensity = 1  # Vàng nhạt
-            else:
-                reqs = max(2, (d_idx + h) % 8)
-                intensity = 0  # Trắng ngà nhạt
+            slot = grid[(d_idx, h)]
+            reqs = slot["requests"]
+            tokens = slot["tokens"]
 
-            tokens = reqs * (380 + (h % 3) * 30)
+            if reqs == 0 or max_reqs == 0:
+                intensity = 0
+            else:
+                ratio = reqs / max_reqs
+                if ratio > 0.75:
+                    intensity = 4
+                elif ratio > 0.50:
+                    intensity = 3
+                elif ratio > 0.25:
+                    intensity = 2
+                else:
+                    intensity = 1
 
             cell = {
                 "day": d_short,
@@ -880,7 +1109,7 @@ def get_kpi_traffic_heatmap(
                 "hour_label": f"{h:02d}:00",
                 "requests": reqs,
                 "tokens": tokens,
-                "intensity": intensity,  # 0 to 4
+                "intensity": intensity,
             }
             cells.append(cell)
 
@@ -916,40 +1145,80 @@ async def get_kpi_infrastructure(
     - Tỷ lệ Redis Cache Hit Rate và số phiên SSE đang hoạt động.
     - Trạng thái kiểm tra kết nối thực tế tới 4 dịch vụ nền tảng.
     """
+    now = datetime.now(timezone.utc)
+    start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    live_snap = get_live_accumulator_snapshot()
+
     # 1. Đo kết nối Neon DB thật
-    neon_active_conns = 6
+    neon_active_conns = 0
     neon_max_conns = 20
-    db_latency_ms = 35
+    db_latency_ms = 0
+    neon_status = "ONLINE"
     try:
         t0 = datetime.now()
         res = db.execute(text("SELECT count(*) FROM pg_stat_activity WHERE datname = current_database();")).scalar()
-        db_latency_ms = max(5, int((datetime.now() - t0).total_seconds() * 1000))
-        if res:
+        db_latency_ms = max(1, int((datetime.now() - t0).total_seconds() * 1000))
+        if res is not None:
             neon_active_conns = min(neon_max_conns, int(res))
     except Exception:
-        pass
+        neon_status = "OFFLINE"
 
-    # 2. Đo Redis latency & Hit Rate thật
+    # 2. Đo Redis latency & Cache Hit Rate thật
     redis = _get_upstash_redis()
-    redis_latency_ms = 28
-    redis_status = "ONLINE"
+    redis_latency_ms = 0
+    redis_status = "ONLINE" if redis else "OFFLINE"
     if redis:
         try:
             t0 = datetime.now()
             await redis.ping()
-            redis_latency_ms = max(5, int((datetime.now() - t0).total_seconds() * 1000))
+            redis_latency_ms = max(1, int((datetime.now() - t0).total_seconds() * 1000))
         except Exception:
             redis_status = "DEGRADED"
 
-    # Cache hit rate
-    redis_hits = 4850
-    redis_misses = 860
-    redis_hit_rate_pct = round((redis_hits / (redis_hits + redis_misses)) * 100, 1)
+    today_rows = (
+        db.query(models.SystemMetricsHourly)
+        .filter(models.SystemMetricsHourly.bucket_timestamp >= start_of_today)
+        .all()
+    )
+    redis_hits = sum(r.redis_cache_hits or 0 for r in today_rows) + int(live_snap.get("redis_cache_hits", 0))
+    redis_misses = sum(r.redis_cache_misses or 0 for r in today_rows) + int(live_snap.get("redis_cache_misses", 0))
+    total_cache_checks = redis_hits + redis_misses
+    redis_hit_rate_pct = round((redis_hits / total_cache_checks) * 100, 1) if total_cache_checks > 0 else 0.0
 
-    # 3. Active SSE sessions
+    # 3. Active SSE sessions & Peak SSE thật
     active_sse = get_active_sse_sessions()
-    if active_sse == 0:
-        active_sse = 6
+    peak_sse_today = max(
+        [r.peak_concurrent_sse or 0 for r in today_rows],
+        default=0,
+    )
+    peak_sse_today = max(peak_sse_today, int(live_snap.get("peak_concurrent_sse", 0)), active_sse)
+
+    # 4. Số liệu thật cho Gemini Gateway & Brevo Email
+    ttft_list = [r.avg_ttft_ms for r in today_rows if (r.avg_ttft_ms or 0) > 0]
+    if live_snap.get("avg_ttft_ms", 0) > 0:
+        ttft_list.append(live_snap["avg_ttft_ms"])
+    gemini_latency_ms = int(sum(ttft_list) / len(ttft_list)) if ttft_list else 0
+    gemini_429_today = sum(r.gemini_429_count or 0 for r in today_rows) + int(live_snap.get("gemini_429_count", 0))
+    gemini_configured = bool(os.getenv("GEMINI_API_KEY", "").strip())
+    gemini_status = "DEGRADED" if gemini_429_today > 0 else ("ONLINE" if gemini_configured else "OFFLINE")
+
+    email_rows = (
+        db.query(models.SystemAgentMetricsHourly)
+        .filter(
+            models.SystemAgentMetricsHourly.bucket_timestamp >= start_of_today,
+            models.SystemAgentMetricsHourly.agent_name == "Email",
+        )
+        .all()
+    )
+    email_reqs_today = sum(r.request_count or 0 for r in email_rows)
+    email_lats = [r.avg_latency_ms for r in email_rows if (r.avg_latency_ms or 0) > 0]
+    for ag in live_snap.get("agent_stats", []):
+        if ag["agent_name"] == "Email":
+            email_reqs_today += ag.get("request_count", 0)
+            if ag.get("avg_latency_ms", 0) > 0:
+                email_lats.append(ag["avg_latency_ms"])
+    email_latency_ms = int(sum(email_lats) / len(email_lats)) if email_lats else 0
+    brevo_configured = bool(os.getenv("BREVO_API_KEY", "").strip() or os.getenv("SMTP_HOST", "").strip())
 
     pool_util_pct = round((neon_active_conns / neon_max_conns) * 100, 1)
 
@@ -957,34 +1226,38 @@ async def get_kpi_infrastructure(
         {
             "id": "neon_db",
             "name": "Neon PostgreSQL (Serverless)",
-            "status": "ONLINE",
+            "status": neon_status,
             "latency_ms": db_latency_ms,
             "metric_label": f"Pool: {neon_active_conns}/{neon_max_conns} ({pool_util_pct}%)",
-            "health_level": "healthy" if pool_util_pct < 80 else "warning",
+            "health_level": "healthy" if (neon_status == "ONLINE" and pool_util_pct < 80) else "warning",
         },
         {
             "id": "upstash_redis",
             "name": "Upstash Redis (REST)",
             "status": redis_status,
             "latency_ms": redis_latency_ms,
-            "metric_label": f"Cache Hit: {redis_hit_rate_pct}%",
-            "health_level": "healthy" if redis_hit_rate_pct >= 75 else "warning",
+            "metric_label": (
+                f"Cache Hit: {redis_hit_rate_pct}% ({redis_hits} hits / {redis_misses} misses)"
+                if total_cache_checks > 0
+                else "Chưa có lượt truy cập cache hôm nay"
+            ),
+            "health_level": "healthy" if (redis_status == "ONLINE" and (total_cache_checks == 0 or redis_hit_rate_pct >= 75)) else "warning",
         },
         {
             "id": "gemini_api",
             "name": "Google Gemini API Gateway",
-            "status": "ONLINE",
-            "latency_ms": 320,
-            "metric_label": "Quota 429: 0 vi phạm",
-            "health_level": "healthy",
+            "status": gemini_status,
+            "latency_ms": gemini_latency_ms,
+            "metric_label": f"Quota 429 hôm nay: {gemini_429_today} vi phạm",
+            "health_level": "healthy" if (gemini_status == "ONLINE" and gemini_429_today == 0) else "warning",
         },
         {
             "id": "brevo_smtp",
             "name": "Brevo Email Notification",
-            "status": "ONLINE",
-            "latency_ms": 115,
-            "metric_label": "Hàng đợi: 0 pending",
-            "health_level": "healthy",
+            "status": "ONLINE" if brevo_configured else "UNCONFIGURED",
+            "latency_ms": email_latency_ms,
+            "metric_label": f"Email AI hôm nay: {email_reqs_today} lượt",
+            "health_level": "healthy" if brevo_configured else "warning",
         },
     ]
 
@@ -997,6 +1270,7 @@ async def get_kpi_infrastructure(
         "redis_cache_misses": redis_misses,
         "redis_hit_rate_pct": redis_hit_rate_pct,
         "active_sse_sessions": active_sse,
+        "peak_sse_sessions_today": peak_sse_today,
         "services": services,
     }
 
@@ -1104,27 +1378,52 @@ def export_kpi_report(
         .all()
     )
 
+    live_snap = get_live_accumulator_snapshot()
+    cur_hour = _hour_bucket(now)
+    export_rows = []
+    cur_hour_merged = False
+
+    for r in rows:
+        is_cur = _to_utc_hour(r.bucket_timestamp) == cur_hour
+        item = {
+            "timestamp": r.bucket_timestamp.isoformat(),
+            "total_requests": r.total_requests + (live_snap["total_requests"] if is_cur else 0),
+            "chat_requests": r.chat_requests + (live_snap["chat_requests"] if is_cur else 0),
+            "eval_requests": r.eval_requests + (live_snap["eval_requests"] if is_cur else 0),
+            "prompt_tokens": r.prompt_tokens + (live_snap["prompt_tokens"] if is_cur else 0),
+            "completion_tokens": r.completion_tokens + (live_snap["completion_tokens"] if is_cur else 0),
+            "total_tokens": r.total_tokens + (live_snap["total_tokens"] if is_cur else 0),
+            "cost_usd": float(r.estimated_cost_usd or 0.0) + (float(live_snap["estimated_cost_usd"]) if is_cur else 0.0),
+            "p50_latency_ms": live_snap["p50_latency_ms"] if (is_cur and live_snap.get("p50_latency_ms", 0) > 0) else r.p50_latency_ms,
+            "p95_latency_ms": live_snap["p95_latency_ms"] if (is_cur and live_snap.get("p95_latency_ms", 0) > 0) else r.p95_latency_ms,
+            "avg_ttft_ms": live_snap["avg_ttft_ms"] if (is_cur and live_snap.get("avg_ttft_ms", 0) > 0) else r.avg_ttft_ms,
+            "status_2xx": r.status_2xx_count + (live_snap["status_2xx_count"] if is_cur else 0),
+            "status_5xx": r.status_5xx_count + (live_snap["status_5xx_count"] if is_cur else 0),
+        }
+        if is_cur:
+            cur_hour_merged = True
+        export_rows.append(item)
+
+    if not cur_hour_merged and (live_snap["total_requests"] > 0 or live_snap["total_tokens"] > 0):
+        export_rows.append({
+            "timestamp": cur_hour.isoformat(),
+            "total_requests": live_snap["total_requests"],
+            "chat_requests": live_snap["chat_requests"],
+            "eval_requests": live_snap["eval_requests"],
+            "prompt_tokens": live_snap["prompt_tokens"],
+            "completion_tokens": live_snap["completion_tokens"],
+            "total_tokens": live_snap["total_tokens"],
+            "cost_usd": float(live_snap["estimated_cost_usd"]),
+            "p50_latency_ms": live_snap.get("p50_latency_ms", 0),
+            "p95_latency_ms": live_snap.get("p95_latency_ms", 0),
+            "avg_ttft_ms": live_snap.get("avg_ttft_ms", 0),
+            "status_2xx": live_snap["status_2xx_count"],
+            "status_5xx": live_snap["status_5xx_count"],
+        })
+
     if format_type.lower() == "json":
-        data = [
-            {
-                "timestamp": r.bucket_timestamp.isoformat(),
-                "total_requests": r.total_requests,
-                "chat_requests": r.chat_requests,
-                "eval_requests": r.eval_requests,
-                "prompt_tokens": r.prompt_tokens,
-                "completion_tokens": r.completion_tokens,
-                "total_tokens": r.total_tokens,
-                "cost_usd": float(r.estimated_cost_usd),
-                "p50_latency_ms": r.p50_latency_ms,
-                "p95_latency_ms": r.p95_latency_ms,
-                "avg_ttft_ms": r.avg_ttft_ms,
-                "status_2xx": r.status_2xx_count,
-                "status_5xx": r.status_5xx_count,
-            }
-            for r in rows
-        ]
         return JSONResponse(
-            content={"report_name": "SocraticKid_Admin_KPI_Report", "generated_at": now.isoformat(), "data": data},
+            content={"report_name": "SocraticKid_Admin_KPI_Report", "generated_at": now.isoformat(), "data": export_rows},
             headers={"Content-Disposition": f"attachment; filename=socratickid_kpi_report_{now.strftime('%Y%m%d')}.json"},
         )
 
@@ -1148,23 +1447,23 @@ def export_kpi_report(
         "HTTP 5xx",
     ])
 
-    for r in rows:
-        c_usd = float(r.estimated_cost_usd)
+    for item in export_rows:
+        c_usd = float(item["cost_usd"])
         writer.writerow([
-            r.bucket_timestamp.isoformat(),
-            r.total_requests,
-            r.chat_requests,
-            r.eval_requests,
-            r.prompt_tokens,
-            r.completion_tokens,
-            r.total_tokens,
+            item["timestamp"],
+            item["total_requests"],
+            item["chat_requests"],
+            item["eval_requests"],
+            item["prompt_tokens"],
+            item["completion_tokens"],
+            item["total_tokens"],
             f"{c_usd:.4f}",
             int(round(c_usd * USD_TO_VND_RATE)),
-            r.p50_latency_ms,
-            r.p95_latency_ms,
-            r.avg_ttft_ms,
-            r.status_2xx_count,
-            r.status_5xx_count,
+            item["p50_latency_ms"],
+            item["p95_latency_ms"],
+            item["avg_ttft_ms"],
+            item["status_2xx"],
+            item["status_5xx"],
         ])
 
     csv_content = output.getvalue().encode("utf-8-sig")  # UTF-8 BOM để Excel đọc đúng tiếng Việt

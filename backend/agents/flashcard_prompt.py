@@ -97,7 +97,8 @@ Chỉ trả về JSON thuần túy theo cấu trúc:
             system_instruction=FLASHCARD_EXTRACTION_SYSTEM_INSTRUCTION,
             generation_config={"temperature": 0.2, "response_mime_type": "application/json"}
         )
-        response = model.generate_content(prompt)
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(model, prompt, model_name, "Flashcard")
         raw_text = response.text.strip()
 
         if raw_text.startswith("```json"):

@@ -162,7 +162,8 @@ def generate_parent_learning_insights(
             system_instruction=PARENT_INSIGHTS_SYSTEM_INSTRUCTION,
             generation_config=generation_config,
         )
-        response = model.generate_content(prompt_content)
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(model, prompt_content, model_name, "ParentReport")
         raw_text = response.text.strip()
 
         # Dọn dẹp markdown nếu có
