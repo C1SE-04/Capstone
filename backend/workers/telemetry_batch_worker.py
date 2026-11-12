@@ -109,9 +109,43 @@ class HourlyAccumulator:
 
         self.redis_cache_hits = 0
         self.redis_cache_misses = 0
+        self.peak_concurrent_sse = 0
 
         # Dict (agent_name, model_name) -> metrics
         self.agent_stats: Dict[tuple, Dict[str, Any]] = {}
+
+    def add_cache_event(self, hit: bool):
+        if hit:
+            self.redis_cache_hits += 1
+        else:
+            self.redis_cache_misses += 1
+
+    def observe_sse_session(self, active_sessions: int):
+        if active_sessions > self.peak_concurrent_sse:
+            self.peak_concurrent_sse = active_sessions
+
+    def add_failover_event(self, is_429: bool = False):
+        self.failover_count += 1
+        if is_429:
+            self.gemini_429_count += 1
+
+    def add_error_429_event(self):
+        self.gemini_429_count += 1
+
+    def snapshot_and_reset(self) -> "HourlyAccumulator":
+        snap = HourlyAccumulator()
+        for k, v in self.__dict__.items():
+            if k == "agent_stats":
+                snap.agent_stats = {
+                    ak: {**av, "latencies": list(av["latencies"])}
+                    for ak, av in v.items()
+                }
+            elif isinstance(v, list):
+                setattr(snap, k, list(v))
+            else:
+                setattr(snap, k, v)
+        self.reset()
+        return snap
 
     def add_http_event(self, event: dict):
         self.total_requests += 1
@@ -187,12 +221,29 @@ def get_live_minute_stats(minute_str: Optional[str] = None) -> Dict[str, int]:
     """Đọc số liệu RPM/TPM/Error của 1 phút từ bộ nhớ cục bộ."""
     key = minute_str or _minute_bucket()
     return _live_minute_counters.get(key, {
-        "rpm": 0, "tpm": 0, "err4xx": 0, "err429": 0, "err5xx": 0
+        "rpm": 0, "chat": 0, "eval": 0, "auth": 0, "other": 0,
+        "tpm": 0, "err4xx": 0, "err429": 0, "err5xx": 0,
     })
 
 
 def get_live_accumulator_snapshot() -> Dict[str, Any]:
-    """Trả về ảnh chụp nhanh các delta chưa flush xuống DB để Overview API cộng dồn tức thì."""
+    """Trả về ảnh chụp nhanh các delta chưa flush xuống DB để KPI API cộng dồn tức thì."""
+    lats = _accumulator.latencies
+    ttfts = _accumulator.ttfts
+    agent_stats_list = []
+    for (ag_name, mod_name), ag_data in _accumulator.agent_stats.items():
+        ag_lats = ag_data["latencies"]
+        agent_stats_list.append({
+            "agent_name": ag_name,
+            "model_name": mod_name,
+            "request_count": ag_data["request_count"],
+            "prompt_tokens": ag_data["prompt_tokens"],
+            "completion_tokens": ag_data["completion_tokens"],
+            "total_cost_usd": ag_data["total_cost_usd"],
+            "avg_latency_ms": int(sum(ag_lats) / len(ag_lats)) if ag_lats else 0,
+            "error_count": ag_data["error_count"],
+        })
+
     return {
         "total_requests": _accumulator.total_requests,
         "chat_requests": _accumulator.chat_requests,
@@ -203,11 +254,20 @@ def get_live_accumulator_snapshot() -> Dict[str, Any]:
         "completion_tokens": _accumulator.completion_tokens,
         "total_tokens": _accumulator.total_tokens,
         "estimated_cost_usd": _accumulator.estimated_cost_usd,
+        "avg_latency_ms": int(sum(lats) / len(lats)) if lats else 0,
+        "p50_latency_ms": _calc_percentile(lats, 50.0) if lats else 0,
+        "p95_latency_ms": _calc_percentile(lats, 95.0) if lats else 0,
+        "p99_latency_ms": _calc_percentile(lats, 99.0) if lats else 0,
+        "avg_ttft_ms": int(sum(ttfts) / len(ttfts)) if ttfts else 0,
         "status_2xx_count": _accumulator.status_2xx_count,
         "status_4xx_count": _accumulator.status_4xx_count,
         "status_5xx_count": _accumulator.status_5xx_count,
         "gemini_429_count": _accumulator.gemini_429_count,
         "failover_count": _accumulator.failover_count,
+        "redis_cache_hits": _accumulator.redis_cache_hits,
+        "redis_cache_misses": _accumulator.redis_cache_misses,
+        "peak_concurrent_sse": _accumulator.peak_concurrent_sse,
+        "agent_stats": agent_stats_list,
     }
 
 
@@ -225,17 +285,33 @@ async def _flush_events(redis: Optional[Redis], events: list[dict]) -> None:
     err5xx_key = f"errors:5xx:{minute}"
 
     rpm_delta = 0
+    group_deltas = {"chat": 0, "eval": 0, "auth": 0, "other": 0}
     tpm_delta = 0
     err4xx_delta = 0
     err429_delta = 0
     err5xx_delta = 0
 
     for ev in events:
-        if ev.get("type") == "token_usage":
+        ev_type = ev.get("type")
+        if ev_type == "token_usage":
             tpm_delta += ev.get("total_tokens", 0)
             _accumulator.add_token_event(ev)
+        elif ev_type == "cache_event":
+            _accumulator.add_cache_event(bool(ev.get("hit", False)))
+        elif ev_type == "sse_peak":
+            _accumulator.observe_sse_session(int(ev.get("active_sessions", 0) or 0))
+        elif ev_type == "failover":
+            _accumulator.add_failover_event(is_429=bool(ev.get("is_429", False)))
+        elif ev_type == "error_429":
+            err429_delta += 1
+            _accumulator.add_error_429_event()
         else:
             rpm_delta += 1
+            grp = ev.get("endpoint_group", "other")
+            if grp not in group_deltas:
+                grp = "other"
+            group_deltas[grp] += 1
+
             sc = ev.get("status_code", 200)
             if sc == 429:
                 err429_delta += 1
@@ -248,13 +324,18 @@ async def _flush_events(redis: Optional[Redis], events: list[dict]) -> None:
 
     # Cập nhật in-memory minute counter (giữ tối đa 90 phút gần nhất)
     if minute not in _live_minute_counters:
-        _live_minute_counters[minute] = {"rpm": 0, "tpm": 0, "err4xx": 0, "err429": 0, "err5xx": 0}
+        _live_minute_counters[minute] = {
+            "rpm": 0, "chat": 0, "eval": 0, "auth": 0, "other": 0,
+            "tpm": 0, "err4xx": 0, "err429": 0, "err5xx": 0,
+        }
         if len(_live_minute_counters) > 90:
             oldest_key = sorted(_live_minute_counters.keys())[0]
             _live_minute_counters.pop(oldest_key, None)
 
     bucket_mem = _live_minute_counters[minute]
     bucket_mem["rpm"] += rpm_delta
+    for grp_k, grp_v in group_deltas.items():
+        bucket_mem[grp_k] = bucket_mem.get(grp_k, 0) + grp_v
     bucket_mem["tpm"] += tpm_delta
     bucket_mem["err4xx"] += err4xx_delta
     bucket_mem["err429"] += err429_delta
@@ -291,11 +372,8 @@ def flush_metrics_to_db(db_session=None) -> Dict[str, Any]:
     Đồng thời kiểm tra ngưỡng SLA và cập nhật system_incidents_log.
     Hàm này có thể gọi trực tiếp trong test hoặc qua periodic worker.
     """
-    global _accumulator
-
-    # Snapshot số liệu hiện tại và reset accumulator cho batch tiếp theo
-    snap = _accumulator
-    _accumulator = HourlyAccumulator()
+    # Snapshot số liệu hiện tại và reset accumulator in-place để giữ nguyên singleton reference
+    snap = _accumulator.snapshot_and_reset()
 
     bucket_ts = _hour_bucket()
 
@@ -349,7 +427,8 @@ def flush_metrics_to_db(db_session=None) -> Dict[str, Any]:
                 gemini_429_count = system_metrics_hourly.gemini_429_count + EXCLUDED.gemini_429_count,
                 failover_count = system_metrics_hourly.failover_count + EXCLUDED.failover_count,
                 redis_cache_hits = system_metrics_hourly.redis_cache_hits + EXCLUDED.redis_cache_hits,
-                redis_cache_misses = system_metrics_hourly.redis_cache_misses + EXCLUDED.redis_cache_misses;
+                redis_cache_misses = system_metrics_hourly.redis_cache_misses + EXCLUDED.redis_cache_misses,
+                peak_concurrent_sse = GREATEST(system_metrics_hourly.peak_concurrent_sse, EXCLUDED.peak_concurrent_sse);
         """)
 
         db.execute(
@@ -377,7 +456,7 @@ def flush_metrics_to_db(db_session=None) -> Dict[str, Any]:
                 "failover_count": snap.failover_count,
                 "redis_cache_hits": snap.redis_cache_hits,
                 "redis_cache_misses": snap.redis_cache_misses,
-                "peak_concurrent_sse": 0,
+                "peak_concurrent_sse": snap.peak_concurrent_sse,
             },
         )
 
@@ -514,126 +593,18 @@ def _resolve_incident_if_active(db, incident_type: str):
 
 
 # ==============================================================================
-# HÀM SEEDER KHỞI TẠO DỮ LIỆU LỊCH SỬ NẾU DATABASE MỚI (COLD START)
+# REAL TELEMETRY ONLY — TẮT SEEDER DỮ LIỆU GIẢ LẬP
 # ==============================================================================
 def ensure_baseline_metrics(db=None):
     """
-    Khởi tạo 48 giờ dữ liệu lịch sử chân thực nếu bảng system_metrics_hourly còn trống,
-    để các biểu đồ Throughput, Token/Cost, Latency, Heatmap 7x24 trên Admin Dashboard
-    có dữ liệu mượt mà ngay từ lần mở đầu tiên.
+    Đã vô hiệu hóa synthetic baseline seeder để đảm bảo Dashboard chỉ hiển thị
+    100% số liệu thực tế đo được từ TelemetryMiddleware, Redis và Gemini SDK.
     """
-    should_close = False
-    if db is None:
-        db = SessionLocal()
-        should_close = True
-
-    try:
-        count = db.query(models.SystemMetricsHourly).count()
-        if count >= 24:
-            return  # Đã có đủ dữ liệu lịch sử
-
-        print("[TelemetryWorker] Đang khởi tạo dữ liệu baseline 48 giờ cho Admin KPI Dashboard...")
-        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-
-        import random
-
-        agents_list = [
-            ("Chat", "gemini-2.5-flash", 0.58),
-            ("Classifier", "gemini-2.0-flash-lite", 0.15),
-            ("Flashcard", "gemini-2.0-flash-lite", 0.10),
-            ("ParentReport", "gemini-1.5-pro", 0.07),
-            ("Email", "Brevo/SMTP", 0.06),
-            ("Fallback", "Local Heuristic / Fallback", 0.04),
-        ]
-
-        for h in range(48, 0, -1):
-            bucket_ts = now - timedelta(hours=h)
-
-            # Mô phỏng theo nhịp sinh hoạt học sinh: cao điểm 19h-21h, sáng 8h-11h
-            hour_of_day = bucket_ts.hour
-            if 19 <= hour_of_day <= 21:
-                base_reqs = random.randint(180, 260)
-            elif 8 <= hour_of_day <= 11 or 14 <= hour_of_day <= 17:
-                base_reqs = random.randint(90, 150)
-            elif 0 <= hour_of_day <= 5:
-                base_reqs = random.randint(5, 18)
-            else:
-                base_reqs = random.randint(45, 95)
-
-            chat_r = int(base_reqs * 0.65)
-            eval_r = int(base_reqs * 0.18)
-            auth_r = int(base_reqs * 0.10)
-            other_r = base_reqs - chat_r - eval_r - auth_r
-
-            p_tokens = chat_r * random.randint(280, 360) + eval_r * 150
-            c_tokens = chat_r * random.randint(140, 220) + eval_r * 80
-            tot_tokens = p_tokens + c_tokens
-            cost_usd = round((p_tokens / 1_000_000 * 0.075) + (c_tokens / 1_000_000 * 0.30), 6)
-
-            p50 = random.randint(480, 580)
-            p95 = random.randint(1250, 1550)
-            p99 = random.randint(1950, 2400)
-            avg_lat = int((p50 + p95) / 2)
-            ttft = random.randint(380, 470)
-
-            status_2xx = int(base_reqs * 0.985)
-            status_4xx = int(base_reqs * 0.012)
-            status_5xx = base_reqs - status_2xx - status_4xx
-
-            m_row = models.SystemMetricsHourly(
-                bucket_timestamp=bucket_ts,
-                total_requests=base_reqs,
-                chat_requests=chat_r,
-                eval_requests=eval_r,
-                auth_requests=auth_r,
-                other_requests=other_r,
-                prompt_tokens=p_tokens,
-                completion_tokens=c_tokens,
-                total_tokens=tot_tokens,
-                estimated_cost_usd=cost_usd,
-                avg_latency_ms=avg_lat,
-                p50_latency_ms=p50,
-                p95_latency_ms=p95,
-                p99_latency_ms=p99,
-                avg_ttft_ms=ttft,
-                status_2xx_count=status_2xx,
-                status_4xx_count=status_4xx,
-                status_5xx_count=status_5xx,
-                gemini_429_count=0,
-                failover_count=random.randint(0, 1),
-                redis_cache_hits=int(base_reqs * 0.84),
-                redis_cache_misses=int(base_reqs * 0.16),
-                peak_concurrent_sse=random.randint(6, 22),
-            )
-            db.merge(m_row)
-
-            # Seed agent metrics
-            for ag_name, mod_name, pct in agents_list:
-                ag_reqs = max(1, int(base_reqs * pct))
-                ag_p = int(p_tokens * pct)
-                ag_c = int(c_tokens * pct)
-                ag_cost = round(cost_usd * pct, 6)
-                ag_row = models.SystemAgentMetricsHourly(
-                    bucket_timestamp=bucket_ts,
-                    agent_name=ag_name,
-                    model_name=mod_name,
-                    request_count=ag_reqs,
-                    prompt_tokens=ag_p,
-                    completion_tokens=ag_c,
-                    total_cost_usd=ag_cost,
-                    avg_latency_ms=random.randint(220, 850),
-                    error_count=0,
-                )
-                db.merge(ag_row)
-
-        db.commit()
-        print("[TelemetryWorker] ✅ Khởi tạo dữ liệu baseline thành công.")
-    except Exception as e:
-        db.rollback()
-        print(f"[TelemetryWorker] Không thể seed dữ liệu baseline: {e}")
-    finally:
-        if should_close:
-            db.close()
+    return {
+        "status": "disabled",
+        "seeded_hours": 0,
+        "message": "Real telemetry mode active - synthetic baseline seeding disabled.",
+    }
 
 
 # ==============================================================================
@@ -645,13 +616,7 @@ async def start_telemetry_worker() -> None:
     2. Vòng lặp 60 giây: Ghi batch xuống Neon PostgreSQL (T10.2.4).
     """
     redis = _get_upstash_redis()
-    print("[TelemetryWorker] ✅ Đã khởi động Telemetry Batch Worker (Redis & 60s DB Aggregator).")
-
-    # Khởi tạo baseline nếu DB mới
-    try:
-        ensure_baseline_metrics()
-    except Exception as e:
-        print(f"[TelemetryWorker] Baseline init exception: {e}")
+    print("[TelemetryWorker] ✅ Đã khởi động Telemetry Batch Worker (100% Real Telemetry Mode).")
 
     last_db_flush_time = asyncio.get_event_loop().time()
 

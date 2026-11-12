@@ -9,7 +9,8 @@ import httpx
 from PIL import Image
 
 # US 10.2 (T10.2.2): Import telemetry wrappers để thu thập token và TTFT
-from middleware.gemini_telemetry import stream_with_telemetry, generate_with_telemetry
+from middleware.gemini_telemetry import stream_with_telemetry, generate_with_telemetry, _is_429_exception
+from middleware.telemetry_middleware import push_failover_event
 
 # Tên model đang dùng thực tế — đồng bộ với bảng giá trong gemini_telemetry.py
 _ACTIVE_MODEL_NAME = "gemini-3.5-flash-lite"
@@ -140,6 +141,7 @@ def agent_router(
 
     # US 10.3 (Task T10.3.3): Đọc cấu hình động từ SystemConfigService (Redis Cache -> Neon DB)
     active_model = _ACTIVE_MODEL_NAME
+    backup_model = os.getenv("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
     active_temperature = 0.35
     active_top_p = 0.90
     active_max_tokens = 512
@@ -147,6 +149,7 @@ def agent_router(
         from services.system_config_service import get_system_settings
         sys_config = get_system_settings()
         active_model = sys_config.get("primary_model") or os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+        backup_model = sys_config.get("backup_model") or os.getenv("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
         active_temperature = float(sys_config.get("temperature", 0.35))
         active_top_p = float(sys_config.get("top_p", 0.90))
         active_max_tokens = int(sys_config.get("max_output_tokens", 512))
@@ -157,15 +160,19 @@ def agent_router(
     if meta is not None:
         meta["model_used"] = active_model
 
-    model = genai.GenerativeModel(
-        model_name=active_model,
-        system_instruction=TEACHER_SYSTEM_INSTRUCTION,
-        generation_config=genai.GenerationConfig(
-            temperature=active_temperature,
-            top_p=active_top_p,
-            max_output_tokens=active_max_tokens,
+    def _build_gemini_model(model_name_str: str):
+        return genai.GenerativeModel(
+            model_name=model_name_str,
+            system_instruction=TEACHER_SYSTEM_INSTRUCTION,
+            generation_config=genai.GenerationConfig(
+                temperature=active_temperature,
+                top_p=active_top_p,
+                max_output_tokens=active_max_tokens,
+            )
         )
-    )
+
+    model = _build_gemini_model(active_model)
+    current_agent_label = "Chat"
     # US 10.4: Chuẩn hóa tên Agent để đối chiếu chuẩn xác với 4 nhãn cốt lõi
     clean_target_agent = target_agent.replace("_AGENT", "").strip().upper()
 
@@ -277,7 +284,19 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         while current_attempt <= max_retries:
             try:
                 # T10.2.2: Dùng generate_with_telemetry để thu thập token usage tự động
-                response = generate_with_telemetry(model, call_payload, active_model, "Chat")
+                try:
+                    response = generate_with_telemetry(model, call_payload, active_model, current_agent_label)
+                except Exception as primary_err:
+                    if backup_model and backup_model != active_model:
+                        push_failover_event(is_429=_is_429_exception(primary_err))
+                        active_model = backup_model
+                        current_agent_label = "Fallback"
+                        model = _build_gemini_model(active_model)
+                        if meta is not None:
+                            meta["model_used"] = active_model
+                        response = generate_with_telemetry(model, call_payload, active_model, "Fallback")
+                    else:
+                        raise
                 generated_text = response.text or ""
 
                 # US 10.4 (Task T10.4.1): Tách thẻ ẩn AUDIT_AGENT để không làm sai lệch đánh giá câu hỏi Socratic của Reviewer
@@ -349,12 +368,28 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         try:
             full_text_buffer = ""
             # T10.2.2: Dùng stream_with_telemetry để đo TTFT và thu thập token usage
-            for chunk_text in stream_with_telemetry(model, call_payload, active_model, "Chat"):
-                full_text_buffer += chunk_text
-                # Lọc tag comprehension khi stream
-                out = chunk_text.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
-                if out:
-                    yield out
+            try:
+                for chunk_text in stream_with_telemetry(model, call_payload, active_model, current_agent_label):
+                    full_text_buffer += chunk_text
+                    # Lọc tag comprehension khi stream
+                    out = chunk_text.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
+                    if out:
+                        yield out
+            except Exception as primary_err:
+                if not full_text_buffer and backup_model and backup_model != active_model:
+                    push_failover_event(is_429=_is_429_exception(primary_err))
+                    active_model = backup_model
+                    current_agent_label = "Fallback"
+                    model = _build_gemini_model(active_model)
+                    if meta is not None:
+                        meta["model_used"] = active_model
+                    for chunk_text in stream_with_telemetry(model, call_payload, active_model, "Fallback"):
+                        full_text_buffer += chunk_text
+                        out = chunk_text.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
+                        if out:
+                            yield out
+                else:
+                    raise
 
             # Phát hiện comprehension sau khi stream xong
             cleaned = (
