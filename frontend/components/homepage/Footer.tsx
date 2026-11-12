@@ -51,6 +51,17 @@ export default function Footer({ onOpenLegal }: FooterProps) {
   const handleLogoClick = (e: React.MouseEvent) => {
     e.preventDefault();
     window.scrollTo({ top: 0, behavior: "smooth" });
+    window.history.replaceState(null, "", window.location.pathname);
+  };
+
+  const handleSectionClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    const targetId = href.replace(/^#/, "");
+    const targetElement = document.getElementById(targetId);
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: "smooth" });
+    }
+    window.history.replaceState(null, "", href);
   };
 
   return (
@@ -93,18 +104,21 @@ export default function Footer({ onOpenLegal }: FooterProps) {
           </h4>
           <a
             href="#about"
+            onClick={(e) => handleSectionClick(e, "#about")}
             className="hover:text-white hover:translate-x-1 transition-all text-sm sm:text-base text-[#F7ECE1]/85"
           >
             Về chúng tôi (About Us)
           </a>
           <a
             href="#features"
+            onClick={(e) => handleSectionClick(e, "#features")}
             className="hover:text-white hover:translate-x-1 transition-all text-sm sm:text-base text-[#F7ECE1]/85"
           >
             Tính năng nổi bật (Features)
           </a>
           <a
             href="#how-it-works"
+            onClick={(e) => handleSectionClick(e, "#how-it-works")}
             className="hover:text-white hover:translate-x-1 transition-all text-sm sm:text-base text-[#F7ECE1]/85"
           >
             Hướng dẫn sử dụng (How it works)
@@ -118,6 +132,7 @@ export default function Footer({ onOpenLegal }: FooterProps) {
           </h4>
           <a
             href="#faq"
+            onClick={(e) => handleSectionClick(e, "#faq")}
             className="hover:text-white hover:translate-x-1 transition-all text-sm sm:text-base text-[#F7ECE1]/85 text-left"
           >
             Câu hỏi thường gặp (FAQ)

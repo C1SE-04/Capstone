@@ -10,7 +10,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User } from "lucide-react";
+import Link from "next/link";
+import { Send, Bot, User, ArrowLeft } from "lucide-react";
 import Lottie from "lottie-react";
 import { useRouter } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
@@ -376,13 +377,23 @@ export default function TryPage() {
     <div className="min-h-screen bg-[#F7ECE1] font-sans flex flex-col">
       {/* ── Header ── */}
       <header className="w-full px-6 py-4 flex items-center justify-between border-b border-[#C1762A]/10 bg-[#F7ECE1]/80 backdrop-blur-sm sticky top-0 z-10">
-        {/* Logo */}
-        <div
-          className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-xs cursor-pointer hover:opacity-85 transition-opacity"
-          onClick={() => router.push("/")}
+        {/* Quay lại Trang chủ & Logo */}
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-[#8C4905] hover:text-[#C1762A] group transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A] rounded-xl px-1.5 py-1"
+          title="Về Trang chủ"
+          aria-label="Về Trang chủ"
         >
-          <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
-        </div>
+          <div className="p-1 rounded-lg group-hover:bg-[#F1CCA6]/60 transition-colors">
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+          </div>
+          <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] border border-[#C1762A]/30 shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+            <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
+          </div>
+          <span className="hidden sm:inline font-extrabold text-[#C1762A] text-sm group-hover:text-[#8C4905] transition-colors">
+            SocraticKid
+          </span>
+        </Link>
 
         {/* Status label */}
         <span className="text-xs text-[#8C4905]/60 font-medium">

@@ -18,7 +18,33 @@ import time
 import asyncio
 from typing import Generator, Any, Optional
 
-from middleware.telemetry_middleware import telemetry_queue
+from middleware.telemetry_middleware import telemetry_queue, push_error_429_event
+
+
+def _is_429_exception(err: Exception) -> bool:
+    """Kiểm tra ngoại lệ có phải lỗi rate-limit / quota 429 từ Gemini hay không."""
+    if getattr(err, "code", None) == 429:
+        return True
+    err_str = str(err).lower()
+    return (
+        "429" in err_str
+        or "resource_exhausted" in err_str
+        or "resourceexhausted" in err_str
+        or "quota" in err_str
+    )
+
+
+def _is_429_exception(err: Exception) -> bool:
+    """Kiểm tra ngoại lệ có phải lỗi rate-limit / quota 429 từ Gemini hay không."""
+    if getattr(err, "code", None) == 429:
+        return True
+    err_str = str(err).lower()
+    return (
+        "429" in err_str
+        or "resource_exhausted" in err_str
+        or "resourceexhausted" in err_str
+        or "quota" in err_str
+    )
 
 
 # Giá tiền mỗi 1 triệu token theo bảng giá Gemini API thực tế (USD)
@@ -118,6 +144,7 @@ def stream_with_telemetry(
     call_payload: Any,
     model_name: str,
     agent_name: str,
+    **kwargs: Any,
 ) -> Generator[str, None, None]:
     """
     Wrapper cho model.generate_content(stream=True).
@@ -136,27 +163,32 @@ def stream_with_telemetry(
     prompt_tokens = 0
     completion_tokens = 0
 
-    response = model.generate_content(call_payload, stream=True)
-
-    for chunk in response:
-        # Đo TTFT tại chunk chữ đầu tiên có nội dung thực
-        if ttft_ms is None and chunk.text:
-            ttft_ms = int((time.perf_counter() - start_time) * 1000)
-
-        if chunk.text:
-            yield chunk.text
-
-    # Sau khi stream kết thúc, đọc usage_metadata
-    # Gemini SDK tích lũy metadata vào response.usage_metadata sau khi stream xong
     try:
-        meta = response.usage_metadata
-        if meta:
-            prompt_tokens = meta.prompt_token_count or 0
-            completion_tokens = meta.candidates_token_count or 0
-    except Exception:
-        pass
+        response = model.generate_content(call_payload, stream=True, **kwargs)
 
-    _push_token_event(prompt_tokens, completion_tokens, model_name, agent_name, ttft_ms)
+        for chunk in response:
+            # Đo TTFT tại chunk chữ đầu tiên có nội dung thực
+            if ttft_ms is None and chunk.text:
+                ttft_ms = int((time.perf_counter() - start_time) * 1000)
+
+            if chunk.text:
+                yield chunk.text
+
+        # Sau khi stream kết thúc, đọc usage_metadata
+        # Gemini SDK tích lũy metadata vào response.usage_metadata sau khi stream xong
+        try:
+            meta = response.usage_metadata
+            if meta:
+                prompt_tokens = meta.prompt_token_count or 0
+                completion_tokens = meta.candidates_token_count or 0
+        except Exception:
+            pass
+
+        _push_token_event(prompt_tokens, completion_tokens, model_name, agent_name, ttft_ms)
+    except Exception as err:
+        if _is_429_exception(err):
+            push_error_429_event()
+        raise
 
 
 def generate_with_telemetry(
@@ -164,6 +196,7 @@ def generate_with_telemetry(
     call_payload: Any,
     model_name: str,
     agent_name: str,
+    **kwargs: Any,
 ) -> Any:
     """
     Wrapper cho model.generate_content(stream=False).
@@ -175,7 +208,12 @@ def generate_with_telemetry(
         response = generate_with_telemetry(model, call_payload, model_name, "Chat")
         text = response.text
     """
-    response = model.generate_content(call_payload, stream=False)
+    try:
+        response = model.generate_content(call_payload, stream=False, **kwargs)
+    except Exception as err:
+        if _is_429_exception(err):
+            push_error_429_event()
+        raise
 
     prompt_tokens = 0
     completion_tokens = 0

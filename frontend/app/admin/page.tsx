@@ -293,124 +293,124 @@ const DEFAULT_OVERVIEW: OverviewData = {
   status: "success",
   timestamp: new Date().toISOString(),
   throughput: {
-    total_requests_today: 1420,
-    rpm_current: 24,
-    requests_growth_pct: 14.2,
-    chat_requests: 923,
-    eval_requests: 255,
-    auth_requests: 142,
-    other_requests: 100,
+    total_requests_today: 0,
+    rpm_current: 0,
+    requests_growth_pct: 0,
+    chat_requests: 0,
+    eval_requests: 0,
+    auth_requests: 0,
+    other_requests: 0,
   },
   tokens_and_cost: {
-    total_tokens_today: 1400000,
-    prompt_tokens_today: 920000,
-    completion_tokens_today: 480000,
-    tpm_current: 9120,
-    cost_usd_today: 0.312,
-    cost_vnd_today: 7940,
-    cost_projection_month_usd: 9.36,
-    cost_projection_month_vnd: 238212,
+    total_tokens_today: 0,
+    prompt_tokens_today: 0,
+    completion_tokens_today: 0,
+    tpm_current: 0,
+    cost_usd_today: 0,
+    cost_vnd_today: 0,
+    cost_projection_month_usd: 0,
+    cost_projection_month_vnd: 0,
   },
   latency_and_sla: {
-    avg_latency_ms: 980,
-    p50_latency_ms: 540,
-    p95_latency_ms: 1420,
-    p99_latency_ms: 2250,
-    current_ttft_ms: 420,
+    avg_latency_ms: 0,
+    p50_latency_ms: 0,
+    p95_latency_ms: 0,
+    p99_latency_ms: 0,
+    current_ttft_ms: 0,
     p50_status: "optimal",
     p95_status: "optimal",
     ttft_status: "optimal",
   },
   reliability: {
-    success_rate_pct: 99.7,
-    error_rate_pct: 0.1,
-    client_error_rate_pct: 0.2,
-    status_2xx_count_today: 1416,
-    status_4xx_count_today: 3,
-    status_5xx_count_today: 1,
+    success_rate_pct: 0,
+    error_rate_pct: 0,
+    client_error_rate_pct: 0,
+    status_2xx_count_today: 0,
+    status_4xx_count_today: 0,
+    status_5xx_count_today: 0,
     gemini_429_count_today: 0,
-    active_sse_sessions: 8,
+    active_sse_sessions: 0,
     system_health: "HEALTHY",
   },
 };
 
 const DEFAULT_SIX_MODELS: SixModelBreakdownItem[] = [
   {
-    role_id: "primary_model",
-    role_name: "Chat Socratic (Primary)",
+    role_id: "Chat",
+    role_name: "Chat Socratic Chính",
     model_name: "gemini-3.8-flash",
-    prompt_tokens: 520000,
-    completion_tokens: 250000,
-    total_tokens: 770000,
-    percentage: 55.0,
-    cost_usd: 0.184,
-    cost_vnd: 4683,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
     pricing: "$0.10 / $0.40 per 1M",
     color: "#C1762A",
   },
   {
-    role_id: "classifier_model",
-    role_name: "Phân Loại & Đặt Tên",
+    role_id: "Classifier",
+    role_name: "Phân Loại SGK & Tiêu Đề",
     model_name: "gemini-3.1-flash-lite",
-    prompt_tokens: 195000,
-    completion_tokens: 85000,
-    total_tokens: 280000,
-    percentage: 20.0,
-    cost_usd: 0.032,
-    cost_vnd: 814,
-    pricing: "$0.075 / $0.30 per 1M",
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    pricing: "$0.03 / $0.12 per 1M",
     color: "#8C4905",
   },
   {
-    role_id: "flashcard_model",
-    role_name: "Flashcard & Sổ Tay",
+    role_id: "Flashcard",
+    role_name: "Sổ Tay & Flashcard",
     model_name: "gemini-3.5-flash-lite",
-    prompt_tokens: 112000,
-    completion_tokens: 56000,
-    total_tokens: 168000,
-    percentage: 12.0,
-    cost_usd: 0.025,
-    cost_vnd: 636,
-    pricing: "$0.075 / $0.30 per 1M",
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    pricing: "$0.0375 / $0.15 per 1M",
     color: "#2563EB",
   },
   {
-    role_id: "parent_insight_model",
+    role_id: "ParentReport",
     role_name: "Báo Cáo Phụ Huynh",
     model_name: "gemini-3.5-flash",
-    prompt_tokens: 72000,
-    completion_tokens: 40000,
-    total_tokens: 112000,
-    percentage: 8.0,
-    cost_usd: 0.027,
-    cost_vnd: 687,
-    pricing: "$0.10 / $0.40 per 1M",
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    pricing: "$0.075 / $0.30 per 1M",
     color: "#10B981",
   },
   {
-    role_id: "email_model",
-    role_name: "Email Cảnh Báo",
+    role_id: "Email",
+    role_name: "Email Cảnh Báo PH",
     model_name: "gemini-3.1-flash-lite",
-    prompt_tokens: 28000,
-    completion_tokens: 14000,
-    total_tokens: 42000,
-    percentage: 3.0,
-    cost_usd: 0.006,
-    cost_vnd: 153,
-    pricing: "$0.075 / $0.30 per 1M",
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    pricing: "$0.03 / $0.12 per 1M",
     color: "#F59E0B",
   },
   {
-    role_id: "backup_model",
+    role_id: "Fallback",
     role_name: "Dự Phòng Failover",
     model_name: "gemini-3.5-flash-lite",
-    prompt_tokens: 18000,
-    completion_tokens: 10000,
-    total_tokens: 28000,
-    percentage: 2.0,
-    cost_usd: 0.004,
-    cost_vnd: 102,
-    pricing: "$0.075 / $0.30 per 1M",
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    pricing: "$0.0375 / $0.15 per 1M",
     color: "#6B7280",
   },
 ];
@@ -421,15 +421,15 @@ const DEFAULT_AGENTS: SubsystemAgent[] = [
     name: "Gia Sư Socratic (Chat)",
     description: "Đối thoại sư phạm gợi mở 2-4 câu, bám sát sách giáo khoa Toán 4-9",
     model_used: "gemini-3.8-flash",
-    request_count: 781,
-    request_percentage: 55.0,
-    prompt_tokens: 520000,
-    completion_tokens: 250000,
-    total_tokens: 770000,
-    token_percentage: 55.0,
-    cost_usd: 0.152,
-    cost_vnd: 3868,
-    avg_latency_ms: 680,
+    request_count: 0,
+    request_percentage: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    token_percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    avg_latency_ms: 0,
     color: "#C1762A",
   },
   {
@@ -437,15 +437,15 @@ const DEFAULT_AGENTS: SubsystemAgent[] = [
     name: "Phân Loại Bài Toán & Đặt Tên",
     description: "Nhận diện chuyên đề SGK và đặt tên bài toán thân thiện",
     model_used: "gemini-3.1-flash-lite",
-    request_count: 284,
-    request_percentage: 20.0,
-    prompt_tokens: 195000,
-    completion_tokens: 85000,
-    total_tokens: 280000,
-    token_percentage: 20.0,
-    cost_usd: 0.04,
-    cost_vnd: 1018,
-    avg_latency_ms: 260,
+    request_count: 0,
+    request_percentage: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    token_percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    avg_latency_ms: 0,
     color: "#8C4905",
   },
   {
@@ -453,15 +453,15 @@ const DEFAULT_AGENTS: SubsystemAgent[] = [
     name: "Sổ Tay & Thẻ Ghi Nhớ (Flashcard)",
     description: "Trích xuất công thức trọng tâm và tóm tắt bước giải vào sổ tay",
     model_used: "gemini-3.5-flash-lite",
-    request_count: 170,
-    request_percentage: 12.0,
-    prompt_tokens: 112000,
-    completion_tokens: 56000,
-    total_tokens: 168000,
-    token_percentage: 12.0,
-    cost_usd: 0.025,
-    cost_vnd: 636,
-    avg_latency_ms: 310,
+    request_count: 0,
+    request_percentage: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    token_percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    avg_latency_ms: 0,
     color: "#2563EB",
   },
   {
@@ -469,47 +469,47 @@ const DEFAULT_AGENTS: SubsystemAgent[] = [
     name: "Báo Cáo Phụ Huynh (Parent Insights)",
     description: "Quét toàn bộ lịch sử tuần để đánh giá tính tự lập gửi phụ huynh",
     model_used: "gemini-3.5-flash",
-    request_count: 114,
-    request_percentage: 8.0,
-    prompt_tokens: 72000,
-    completion_tokens: 40000,
-    total_tokens: 112000,
-    token_percentage: 8.0,
-    cost_usd: 0.023,
-    cost_vnd: 585,
-    avg_latency_ms: 920,
+    request_count: 0,
+    request_percentage: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    token_percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    avg_latency_ms: 0,
     color: "#10B981",
   },
   {
     id: "Email",
     name: "Email Cảnh Báo Phụ Huynh",
-    description: "Gửi thông báo cảnh báo học tập hoặc ngôn từ tiêu cực qua Brevo SMTP",
+    description: "Soạn và gửi email cảnh báo học tập / an toàn tới phụ huynh",
     model_used: "gemini-3.1-flash-lite",
-    request_count: 43,
-    request_percentage: 3.0,
-    prompt_tokens: 28000,
-    completion_tokens: 14000,
-    total_tokens: 42000,
-    token_percentage: 3.0,
-    cost_usd: 0.006,
-    cost_vnd: 153,
-    avg_latency_ms: 190,
+    request_count: 0,
+    request_percentage: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    token_percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    avg_latency_ms: 0,
     color: "#F59E0B",
   },
   {
     id: "Fallback",
     name: "Dự Phòng & Failover AI",
-    description: "Model dự phòng tự động chuyển đổi khi Primary Model quá tải hoặc timeout",
+    description: "Mô hình dự phòng & Failover khi model chính gặp sự cố",
     model_used: "gemini-3.5-flash-lite",
-    request_count: 28,
-    request_percentage: 2.0,
-    prompt_tokens: 18000,
-    completion_tokens: 10000,
-    total_tokens: 28000,
-    token_percentage: 2.0,
-    cost_usd: 0.004,
-    cost_vnd: 102,
-    avg_latency_ms: 140,
+    request_count: 0,
+    request_percentage: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    token_percentage: 0,
+    cost_usd: 0,
+    cost_vnd: 0,
+    avg_latency_ms: 0,
     color: "#6B7280",
   },
 ];
@@ -545,8 +545,8 @@ export default function AdminKpiDashboard() {
   const [agentsData, setAgentsData] = useState<AgentsResponse>({
     status: "success",
     total_subsystems: DEFAULT_AGENTS.length,
-    total_requests: 1420,
-    total_tokens: 1400000,
+    total_requests: 0,
+    total_tokens: 0,
     agents: DEFAULT_AGENTS,
   });
   const [heatmapData, setHeatmapData] = useState<HeatmapResponse | null>(null);
@@ -956,8 +956,18 @@ export default function AdminKpiDashboard() {
               <span className="text-3xl font-black text-[#8C4905] leading-none">
                 {overview.throughput.total_requests_today.toLocaleString("vi-VN")}
               </span>
-              <span className="text-xs font-bold text-emerald-600 flex items-center gap-0.5">
-                <TrendingUp className="w-3 h-3" /> +{overview.throughput.requests_growth_pct}%
+              <span
+                className={`text-xs font-bold flex items-center gap-0.5 ${
+                  overview.throughput.requests_growth_pct > 0
+                    ? "text-emerald-600"
+                    : overview.throughput.requests_growth_pct < 0
+                    ? "text-red-600"
+                    : "text-gray-500"
+                }`}
+              >
+                <TrendingUp className="w-3 h-3" />
+                {overview.throughput.requests_growth_pct > 0 ? "+" : ""}
+                {overview.throughput.requests_growth_pct}%
               </span>
             </div>
             <div className="mt-2 pt-2 border-t border-[#F1CCA6]/40 flex items-center justify-between text-[11px] text-[#7A3E04]">
@@ -987,7 +997,11 @@ export default function AdminKpiDashboard() {
             </p>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-black text-[#8C4905] leading-none">
-                {(overview.tokens_and_cost.total_tokens_today / 1_000_000).toFixed(2)}M
+                {overview.tokens_and_cost.total_tokens_today >= 1_000_000
+                  ? `${(overview.tokens_and_cost.total_tokens_today / 1_000_000).toFixed(2)}M`
+                  : overview.tokens_and_cost.total_tokens_today >= 1_000
+                  ? `${(overview.tokens_and_cost.total_tokens_today / 1_000).toFixed(1)}K`
+                  : overview.tokens_and_cost.total_tokens_today.toLocaleString("vi-VN")}
               </span>
               <span className="text-xs font-bold text-[#C1762A]">tokens hôm nay</span>
             </div>
@@ -1332,10 +1346,10 @@ export default function AdminKpiDashboard() {
           <span>
             {throughputRange === "1h"
               ? "⚡ Chế độ thời gian thực: Cập nhật RPM mỗi phút trực tiếp từ Upstash Redis (không cần tải lại trang)"
-              : `Thống kê tổng hợp: ${throughput?.total_requests.toLocaleString("vi-VN") || 0} requests`}
+              : `Thống kê tổng hợp: ${(throughput?.total_requests ?? 0).toLocaleString("vi-VN")} requests`}
           </span>
           <span className="font-bold text-[#8C4905]">
-            Đỉnh cao nhất: {throughput?.peak_rpm || overview.throughput.rpm_current} RPM
+            Đỉnh cao nhất: {throughput?.peak_rpm ?? overview.throughput.rpm_current} RPM
           </span>
         </div>
       </section>
@@ -1541,7 +1555,11 @@ export default function AdminKpiDashboard() {
                         fontSize={10}
                         stroke="#7A3E04"
                         tickLine={false}
-                        tickFormatter={(v) => `${(Number(v) / 1000).toFixed(0)}k`}
+                        tickFormatter={(v) =>
+                          Number(v) >= 1000
+                            ? `${(Number(v) / 1000).toFixed(1).replace(/\.0$/, "")}k`
+                            : String(v)
+                        }
                       />
                       <YAxis
                         type="category"
@@ -1938,7 +1956,9 @@ export default function AdminKpiDashboard() {
                   {/* Status Badge chuyển xanh khi < 500ms */}
                   <div
                     className={`mt-3 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1.5 border ${
-                      isGreen
+                      effectiveTtft === 0
+                        ? "bg-gray-50 text-gray-600 border-gray-200"
+                        : isGreen
                         ? "bg-emerald-50 text-emerald-700 border-emerald-300"
                         : isAmber
                         ? "bg-amber-50 text-amber-700 border-amber-300"
@@ -1947,10 +1967,18 @@ export default function AdminKpiDashboard() {
                   >
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        isGreen ? "bg-emerald-500" : isAmber ? "bg-amber-500" : "bg-red-500"
+                        effectiveTtft === 0
+                          ? "bg-gray-400"
+                          : isGreen
+                          ? "bg-emerald-500"
+                          : isAmber
+                          ? "bg-amber-500"
+                          : "bg-red-500"
                       }`}
                     />
-                    {isGreen
+                    {effectiveTtft === 0
+                      ? "CHƯA CÓ STREAM SSE"
+                      : isGreen
                       ? "TỐI ƯU (< 500ms)"
                       : isAmber
                       ? "TRUNG BÌNH (500–1200ms)"
@@ -1996,77 +2024,89 @@ export default function AdminKpiDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
           {/* Donut Chart (5/12) kèm nhãn trung tâm phân hệ đang lọc */}
           <div className="lg:col-span-5 h-[280px] w-full flex items-center justify-center relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={agentsData.agents}
-                  dataKey="request_count"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={65}
-                  outerRadius={105}
-                  paddingAngle={3}
-                  onClick={(entry: any) => setSelectedAgentId(entry?.id || entry?.payload?.id || "Chat")}
-                  cursor="pointer"
-                >
-                  {agentsData.agents.map((entry) => (
-                    <Cell
-                      key={`cell-${entry.id}`}
-                      fill={entry.color}
-                      stroke={entry.id === selectedAgentId ? "#1C1917" : "#FFF"}
-                      strokeWidth={entry.id === selectedAgentId ? 2.5 : 1}
+            {agentsData.total_requests > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={agentsData.agents}
+                      dataKey="request_count"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={105}
+                      paddingAngle={3}
+                      onClick={(entry: any) => setSelectedAgentId(entry?.id || entry?.payload?.id || "Chat")}
+                      cursor="pointer"
+                    >
+                      {agentsData.agents.map((entry) => (
+                        <Cell
+                          key={`cell-${entry.id}`}
+                          fill={entry.color}
+                          stroke={entry.id === selectedAgentId ? "#1C1917" : "#FFF"}
+                          strokeWidth={entry.id === selectedAgentId ? 2.5 : 1}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload || !payload.length) return null;
+                        const item = payload[0].payload as SubsystemAgent;
+                        return (
+                          <div className="bg-[#1C1917] text-white p-3 rounded-xl shadow-xl border border-white/20 text-xs min-w-[200px]">
+                            <div className="font-extrabold text-[#F1CCA6] mb-1">
+                              {item.name}
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex justify-between">
+                                <span>Model:</span>
+                                <span className="font-mono text-white/90">{item.model_used}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Lưu lượng:</span>
+                                <span>{item.request_count} reqs ({item.request_percentage}%)</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Tokens:</span>
+                                <span>{(item.total_tokens / 1000).toFixed(1)}k ({item.token_percentage}%)</span>
+                              </div>
+                              <div className="flex justify-between text-emerald-400 font-bold">
+                                <span>Chi phí:</span>
+                                <span>
+                                  {currencyMode === "USD"
+                                    ? `$${item.cost_usd.toFixed(4)}`
+                                    : `${item.cost_vnd.toLocaleString("vi-VN")} ₫`}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }}
                     />
-                  ))}
-                </Pie>
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload || !payload.length) return null;
-                    const item = payload[0].payload as SubsystemAgent;
-                    return (
-                      <div className="bg-[#1C1917] text-white p-3 rounded-xl shadow-xl border border-white/20 text-xs min-w-[200px]">
-                        <div className="font-extrabold text-[#F1CCA6] mb-1">
-                          {item.name}
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between">
-                            <span>Model:</span>
-                            <span className="font-mono text-white/90">{item.model_used}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Lưu lượng:</span>
-                            <span>{item.request_count} reqs ({item.request_percentage}%)</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Tokens:</span>
-                            <span>{(item.total_tokens / 1000).toFixed(0)}k ({item.token_percentage}%)</span>
-                          </div>
-                          <div className="flex justify-between text-emerald-400 font-bold">
-                            <span>Chi phí:</span>
-                            <span>
-                              {currencyMode === "USD"
-                                ? `$${item.cost_usd.toFixed(4)}`
-                                : `${item.cost_vnd.toLocaleString("vi-VN")} ₫`}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#7A3E04]">
-                {currentAgent.id}
-              </span>
-              <span className="text-2xl font-black text-[#8C4905] leading-tight">
-                {currentAgent.request_percentage}%
-              </span>
-              <span className="text-[10px] font-semibold text-gray-500">
-                {(currentAgent.total_tokens / 1000).toFixed(0)}k tok
-              </span>
-            </div>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#7A3E04]">
+                    {currentAgent.id}
+                  </span>
+                  <span className="text-2xl font-black text-[#8C4905] leading-tight">
+                    {currentAgent.request_percentage}%
+                  </span>
+                  <span className="text-[10px] font-semibold text-gray-500">
+                    {(currentAgent.total_tokens / 1000).toFixed(1)}k tok
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center text-center px-6 py-8 rounded-2xl border border-dashed border-[#F1CCA6] bg-[#FFFBF7] w-full h-full">
+                <Layers className="w-8 h-8 text-[#C1762A] mb-2" />
+                <p className="text-sm font-bold text-[#8C4905]">Chưa có lưu lượng phân hệ trong 24h qua</p>
+                <p className="text-xs text-[#7A3E04] mt-1">
+                  Biểu đồ Donut sẽ tự động cập nhật ngay khi có request thực tế đến các phân hệ AI
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Subsystems List & Detail Cards (7/12) */}
@@ -2242,10 +2282,10 @@ export default function AdminKpiDashboard() {
                       full_day: dayLabel,
                       day_index: dIdx,
                       hour: h,
-                      hour_label: `${h}:00`,
-                      requests: 12,
-                      tokens: 4500,
-                      intensity: 1,
+                      hour_label: `${h.toString().padStart(2, "0")}:00`,
+                      requests: 0,
+                      tokens: 0,
+                      intensity: 0,
                     };
 
                     // Intensity color map
@@ -2450,113 +2490,158 @@ export default function AdminKpiDashboard() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Neon DB Pool */}
-          <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6] shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#8C4905] flex items-center gap-1.5">
-                  <Database className="w-4 h-4 text-[#C1762A]" /> Neon DB Pool
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">
-                  ONLINE
-                </span>
-              </div>
-              <div className="text-xl font-black text-[#1C1917]">
-                {infraData?.neon_connections_active || 6}{" "}
-                <span className="text-xs font-semibold text-gray-500">
-                  / {infraData?.neon_connections_max || 20} kết nối
-                </span>
-              </div>
-              {/* Progress bar */}
-              <div className="w-full bg-[#F7ECE1] h-2 rounded-full mt-2 overflow-hidden">
-                <div
-                  className="bg-[#C1762A] h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${infraData?.neon_pool_utilization_pct || 30}%`,
-                  }}
-                />
-              </div>
-            </div>
-            <p className="text-[11px] text-[#7A3E04] mt-2 pt-2 border-t border-[#F1CCA6]/40">
-              Mức sử dụng: <strong>{infraData?.neon_pool_utilization_pct || 30}%</strong> (An toàn &lt; 80%)
-            </p>
-          </div>
+          {(() => {
+            const neonSvc = infraData?.services.find((s) => s.id === "neon_db");
+            const redisSvc = infraData?.services.find((s) => s.id === "upstash_redis");
+            const geminiSvc = infraData?.services.find((s) => s.id === "gemini_api");
+            const neonConns = infraData?.neon_connections_active ?? 0;
+            const neonMax = infraData?.neon_connections_max ?? 20;
+            const neonUtil = infraData?.neon_pool_utilization_pct ?? 0;
+            const redisHitRate = infraData?.redis_hit_rate_pct ?? 0;
+            const redisHits = infraData?.redis_cache_hits ?? 0;
+            const redisMisses = infraData?.redis_cache_misses ?? 0;
+            const activeSse = infraData?.active_sse_sessions ?? overview.reliability.active_sse_sessions;
+            const gemini429Count = overview.reliability.gemini_429_count_today ?? 0;
 
-          {/* Card 2: Upstash Redis Hit Rate */}
-          <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6] shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#8C4905] flex items-center gap-1.5">
-                  <Zap className="w-4 h-4 text-[#F59E0B]" /> Redis Cache Hit
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">
-                  ONLINE
-                </span>
-              </div>
-              <div className="text-xl font-black text-emerald-700">
-                {infraData?.redis_hit_rate_pct || 84.5}%
-              </div>
-              <div className="w-full bg-[#F7ECE1] h-2 rounded-full mt-2 overflow-hidden">
-                <div
-                  className="bg-emerald-600 h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${infraData?.redis_hit_rate_pct || 84.5}%`,
-                  }}
-                />
-              </div>
-            </div>
-            <p className="text-[11px] text-[#7A3E04] mt-2 pt-2 border-t border-[#F1CCA6]/40">
-              Hits: <strong>{infraData?.redis_cache_hits || 4850}</strong> • Misses:{" "}
-              {infraData?.redis_cache_misses || 860}
-            </p>
-          </div>
+            return (
+              <>
+                {/* Card 1: Neon DB Pool */}
+                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6] shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-[#8C4905] flex items-center gap-1.5">
+                        <Database className="w-4 h-4 text-[#C1762A]" /> Neon DB Pool
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          neonSvc?.status === "OFFLINE"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {neonSvc?.status ?? "ĐANG ĐO"}
+                      </span>
+                    </div>
+                    <div className="text-xl font-black text-[#1C1917]">
+                      {neonConns}{" "}
+                      <span className="text-xs font-semibold text-gray-500">
+                        / {neonMax} kết nối
+                      </span>
+                    </div>
+                    <div className="w-full bg-[#F7ECE1] h-2 rounded-full mt-2 overflow-hidden">
+                      <div
+                        className="bg-[#C1762A] h-full rounded-full transition-all duration-500"
+                        style={{ width: `${neonUtil}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-[#7A3E04] mt-2 pt-2 border-t border-[#F1CCA6]/40">
+                    Mức sử dụng: <strong>{neonUtil}%</strong> (An toàn &lt; 80%)
+                  </p>
+                </div>
 
-          {/* Card 3: Active SSE Sessions */}
-          <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6] shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#8C4905] flex items-center gap-1.5">
-                  <Activity className="w-4 h-4 text-[#2563EB]" /> SSE Streaming
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-[#2563EB]">
-                  ACTIVE
-                </span>
-              </div>
-              <div className="text-xl font-black text-[#1C1917]">
-                {infraData?.active_sse_sessions || overview.reliability.active_sse_sessions}{" "}
-                <span className="text-xs font-semibold text-gray-500">phiên</span>
-              </div>
-              <p className="text-[11px] text-[#7A3E04] mt-2">
-                Các luồng socket mở stream câu trả lời sư phạm Socratic cho học sinh
-              </p>
-            </div>
-            <p className="text-[11px] text-gray-500 pt-2 border-t border-[#F1CCA6]/40">
-              Không rò rỉ bộ nhớ streaming
-            </p>
-          </div>
+                {/* Card 2: Upstash Redis Hit Rate */}
+                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6] shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-[#8C4905] flex items-center gap-1.5">
+                        <Zap className="w-4 h-4 text-[#F59E0B]" /> Redis Cache Hit
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          redisSvc?.status === "OFFLINE"
+                            ? "bg-red-50 text-red-700"
+                            : redisSvc?.status === "DEGRADED"
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {redisSvc?.status ?? "ĐANG ĐO"}
+                      </span>
+                    </div>
+                    <div className="text-xl font-black text-emerald-700">
+                      {redisHitRate}%
+                    </div>
+                    <div className="w-full bg-[#F7ECE1] h-2 rounded-full mt-2 overflow-hidden">
+                      <div
+                        className="bg-emerald-600 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${redisHitRate}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-[#7A3E04] mt-2 pt-2 border-t border-[#F1CCA6]/40">
+                    Hits: <strong>{redisHits.toLocaleString("vi-VN")}</strong> • Misses:{" "}
+                    {redisMisses.toLocaleString("vi-VN")}
+                  </p>
+                </div>
 
-          {/* Card 4: Gemini API Quota */}
-          <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6] shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#8C4905] flex items-center gap-1.5">
-                  <Server className="w-4 h-4 text-emerald-600" /> Gemini API Gateway
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">
-                  HEALTHY
-                </span>
-              </div>
-              <div className="text-xl font-black text-emerald-700">
-                0 Vi Phạm
-              </div>
-              <p className="text-[11px] text-[#7A3E04] mt-2">
-                Mã lỗi HTTP 429 Rate Limit: 0 lần hôm nay
-              </p>
-            </div>
-            <p className="text-[11px] text-gray-500 pt-2 border-t border-[#F1CCA6]/40">
-              Độ trễ gateway: ~320ms
-            </p>
-          </div>
+                {/* Card 3: Active SSE Sessions */}
+                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6] shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-[#8C4905] flex items-center gap-1.5">
+                        <Activity className="w-4 h-4 text-[#2563EB]" /> SSE Streaming
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          activeSse > 0
+                            ? "bg-blue-50 text-[#2563EB]"
+                            : "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {activeSse > 0 ? "ACTIVE" : "IDLE"}
+                      </span>
+                    </div>
+                    <div className="text-xl font-black text-[#1C1917]">
+                      {activeSse}{" "}
+                      <span className="text-xs font-semibold text-gray-500">phiên</span>
+                    </div>
+                    <p className="text-[11px] text-[#7A3E04] mt-2">
+                      Các luồng socket đang mở stream câu trả lời sư phạm Socratic cho học sinh
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-gray-500 pt-2 border-t border-[#F1CCA6]/40">
+                    Đỉnh đồng thời hôm nay: {infraData?.services ? (infraData as any).peak_sse_sessions_today ?? activeSse : activeSse} phiên
+                  </p>
+                </div>
+
+                {/* Card 4: Gemini API Quota */}
+                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#F1CCA6] shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-[#8C4905] flex items-center gap-1.5">
+                        <Server className="w-4 h-4 text-emerald-600" /> Gemini API Gateway
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          gemini429Count > 0 || geminiSvc?.status === "OFFLINE"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {geminiSvc?.status ?? "ĐANG ĐO"}
+                      </span>
+                    </div>
+                    <div
+                      className={`text-xl font-black ${
+                        gemini429Count > 0 ? "text-red-600" : "text-emerald-700"
+                      }`}
+                    >
+                      {gemini429Count} Vi Phạm
+                    </div>
+                    <p className="text-[11px] text-[#7A3E04] mt-2">
+                      Mã lỗi HTTP 429 Rate Limit: {gemini429Count} lần hôm nay
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-gray-500 pt-2 border-t border-[#F1CCA6]/40">
+                    {geminiSvc?.latency_ms
+                      ? `TTFT trung bình hôm nay: ${geminiSvc.latency_ms}ms`
+                      : "Chưa có lượt gọi stream Gemini hôm nay"}
+                  </p>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </section>
 

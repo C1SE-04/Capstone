@@ -13,6 +13,18 @@ from rate_limit import check_guest_rate_limit
 router = APIRouter(tags=["Chat & AI"])
 
 from fastapi.responses import StreamingResponse
+from middleware.telemetry_middleware import increment_sse_session, decrement_sse_session
+from middleware.gemini_telemetry import generate_with_telemetry
+
+
+def _tracked_sse_stream(generator):
+    """Bọc StreamingResponse generator để đo chính xác số phiên SSE đang active."""
+    increment_sse_session()
+    try:
+        for chunk in generator:
+            yield chunk
+    finally:
+        decrement_sse_session()
 
 @router.post("/chat/orchestrator")
 def chat_with_orchestrator(
@@ -67,15 +79,17 @@ def chat_with_orchestrator(
                 effective_grade = user_in_db.grade
 
     return StreamingResponse(
-        orchestrator_bridge.process_query_with_orchestrator(
-            user_query=request.prompt, 
-            session_id=request.session_id, 
-            db=db, 
-            background_tasks=background_tasks,
-            problem_context=request.problem_context,
-            answer_status=request.answer_status,
-            grade_level=effective_grade,  # US 6.2: lấy lớp học chuẩn xác từ DB
-            attachment_url=request.attachment_url, # US 6.4: Truyền link ảnh Cloudinary từ request
+        _tracked_sse_stream(
+            orchestrator_bridge.process_query_with_orchestrator(
+                user_query=request.prompt, 
+                session_id=request.session_id, 
+                db=db, 
+                background_tasks=background_tasks,
+                problem_context=request.problem_context,
+                answer_status=request.answer_status,
+                grade_level=effective_grade,  # US 6.2: lấy lớp học chuẩn xác từ DB
+                attachment_url=request.attachment_url, # US 6.4: Truyền link ảnh Cloudinary từ request
+            )
         ),
         media_type="text/event-stream"
     )
@@ -89,7 +103,7 @@ def generate_gemini(request: schemas.GeminiRequest):
     genai.configure(api_key=api_key, transport="rest")
     try:
         model = genai.GenerativeModel("gemini-3.5-flash-lite")
-        response = model.generate_content(request.prompt)
+        response = generate_with_telemetry(model, request.prompt, "gemini-3.5-flash-lite", "Chat")
         return {"response": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

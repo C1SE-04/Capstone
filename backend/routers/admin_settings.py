@@ -257,7 +257,10 @@ def test_gemini_api_key():
 
         # Gửi test ping siêu nhẹ: sinh 1 từ duy nhất với model tốc độ cao
         model = genai.GenerativeModel("gemini-3.5-flash-lite")
-        _ = model.generate_content("Ping", generation_config={"max_output_tokens": 2})
+        from middleware.gemini_telemetry import generate_with_telemetry
+        _ = generate_with_telemetry(
+            model, "Ping", "gemini-3.5-flash-lite", "Fallback", generation_config={"max_output_tokens": 2}
+        )
 
         latency_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
 
@@ -466,7 +469,8 @@ Luôn xưng hô 'thầy - em' thân thiện, chuẩn mực."""
             },
         )
 
-        response = model.generate_content(body.prompt)
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(model, body.prompt, model_name, "Chat")
         latency_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
 
         # Đọc usage metadata nếu có
