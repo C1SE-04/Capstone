@@ -22,7 +22,6 @@ import {
   Activity,
   CheckCircle,
   WifiOff,
-  Database,
 } from "lucide-react";
 
 import {
@@ -487,14 +486,7 @@ function AdminErrorsPageInner() {
                 <h1 className="text-2xl font-black text-[#1C1917] tracking-tight">
                   Trung Tâm Quản Trị Báo Lỗi & Sự Cố (Incident Hub)
                 </h1>
-                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  <Database className="w-3 h-3" />
-                  Dữ Liệu Thật 100%
-                </span>
               </div>
-              <p className="text-xs md:text-sm text-[#78716C] mt-0.5">
-                Giám sát thời gian thực lỗi Crash 500, Gemini Timeout và phản ánh bài toán từ học sinh (US 9.5)
-              </p>
             </div>
           </div>
         </div>
