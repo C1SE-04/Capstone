@@ -57,7 +57,11 @@ import {
   PieChart,
   Pie,
 } from "recharts";
-import { cleanLatexForDisplay } from "@/lib/latex";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { cleanLatexForDisplay, preprocessLaTeX } from "@/lib/latex";
 import ActiveLearningTable from "@/components/admin/ActiveLearningTable";
 
 import {
@@ -1608,10 +1612,15 @@ function AdminSafetyContent() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 max-w-[280px]">
-                            <p className="text-xs text-stone-700 line-clamp-2 leading-relaxed">
-                              {item.student_question}
-                            </p>
+                          <td className="px-4 py-3.5 max-w-[300px] align-middle">
+                            <div className="text-xs text-stone-700 py-1 leading-normal overflow-visible break-words [&>p]:m-0 [&_.katex]:text-[#8C4905] [&_.katex-html]:overflow-visible">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkMath, remarkGfm]}
+                                rehypePlugins={[rehypeKatex]}
+                              >
+                                {preprocessLaTeX(item.student_question)}
+                              </ReactMarkdown>
+                            </div>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-col gap-1 items-start">
@@ -1764,13 +1773,18 @@ function AdminSafetyContent() {
                         </div>
                       )}
                       <div
-                        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed overflow-visible ${
                           msg.sender_type === "USER"
-                            ? "bg-[#C1762A] text-white rounded-tr-sm"
-                            : "bg-stone-100 text-stone-800 rounded-tl-sm"
+                            ? "bg-[#C1762A] text-white rounded-tr-sm [&_.katex]:text-white [&_.katex-html]:text-white [&>p]:m-0"
+                            : "bg-stone-100 text-stone-800 rounded-tl-sm [&_.katex]:text-[#8C4905] [&>p]:m-0"
                         }`}
                       >
-                        {msg.content}
+                        <ReactMarkdown
+                          remarkPlugins={[remarkMath, remarkGfm]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {preprocessLaTeX(msg.content)}
+                        </ReactMarkdown>
                         <div className={`text-[10px] mt-1 opacity-60 ${msg.sender_type === "USER" ? "text-right text-orange-100" : "text-stone-400"}`}>
                           {new Date(msg.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
                         </div>
