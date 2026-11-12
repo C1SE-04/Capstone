@@ -138,14 +138,25 @@ def _read_from_cache() -> Optional[Dict[str, Any]]:
         return None
 
     try:
+        from middleware.telemetry_middleware import push_cache_event
+    except Exception:
+        push_cache_event = None  # type: ignore
+
+    try:
         raw = client.get(CACHE_KEY)
         if raw:
+            if push_cache_event is not None:
+                push_cache_event(hit=True)
             if isinstance(raw, str):
                 return json.loads(raw)
             elif isinstance(raw, dict):
                 return raw
+        if push_cache_event is not None:
+            push_cache_event(hit=False)
     except Exception as err:
         # Lỗi mạng Redis -> ghi log nhẹ và fallback DB an toàn, không để crash hệ thống
+        if push_cache_event is not None:
+            push_cache_event(hit=False)
         print(f"[SystemConfigService] ⚠️ Lỗi đọc Redis Cache: {err} — Fallback sang DB.")
     return None
 
