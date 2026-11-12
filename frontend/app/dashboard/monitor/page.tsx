@@ -323,16 +323,16 @@ export default function MonitorPage() {
         </div>
 
         {/* Weekly Navigation Controls */}
-        <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-[#F1CCA6] shadow-sm self-start sm:self-auto">
+        <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-[#F1CCA6] shadow-xs self-start sm:self-auto">
           <button
             onClick={handlePrevWeek}
             aria-label="Tuần trước"
-            className="p-1 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 transition-all cursor-pointer"
+            className="p-1 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] active:scale-[0.95] transition-all duration-150 ease-out cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
           >
             <ChevronLeft size={18} />
           </button>
 
-          <div className="text-xs font-bold text-[#8C4905] min-w-[130px] text-center select-none">
+          <div className="text-xs font-bold text-[#8C4905] min-w-[130px] text-center select-none tabular-nums">
             {format(weekStart, "dd/MM")} - {format(weekEnd, "dd/MM/yyyy")}
             {isCurrentWeek && (
               <span className="block text-[10px] text-[#C1762A] font-medium">
@@ -345,10 +345,10 @@ export default function MonitorPage() {
             onClick={handleNextWeek}
             disabled={isCurrentWeek}
             aria-label="Tuần tiếp theo"
-            className={`p-1 rounded-lg transition-all ${
+            className={`p-1 rounded-lg transition-all duration-150 ease-out ${
               isCurrentWeek
                 ? "text-[#C1762A]/40 cursor-not-allowed"
-                : "text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 cursor-pointer"
+                : "text-[#8C4905] hover:bg-[#F7ECE1] active:scale-[0.95] cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
             }`}
           >
             <ChevronRight size={18} />

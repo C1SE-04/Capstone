@@ -377,7 +377,7 @@ export default function NotebookPage() {
               fetchBookmarks(currentPage, selectedPlaylistId);
             }}
             disabled={isLoading || isLoadingPlaylists}
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-white hover:bg-stone-50 border border-stone-200 transition-all cursor-pointer active:scale-95 shadow-2xs shrink-0"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-[#8C4905] bg-white hover:bg-[#F7ECE1] border border-[#F1CCA6] transition-all duration-150 ease-out cursor-pointer active:scale-[0.98] shadow-xs shrink-0 focus-visible:outline-2 focus-visible:outline-[#C1762A]"
             title="Đồng bộ dữ liệu"
           >
             <RefreshCw size={12} className={cn((isLoading || isLoadingPlaylists) && "animate-spin")} />
@@ -386,12 +386,12 @@ export default function NotebookPage() {
         </div>
 
         {/* Hàng 2: Ô tìm kiếm & Bộ lọc Chips (Tất cả / Tự lập 100đ / Có ảnh đề bài) */}
-        <div className="max-w-7xl mx-auto mt-2.5 pt-2.5 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="max-w-7xl mx-auto mt-2.5 pt-2.5 border-t border-[#F1CCA6]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           {/* Ô tìm kiếm: 100% chiều rộng trên mobile, không bị bóp nghẹt */}
           <div className="relative w-full sm:w-72 md:w-80">
             <Search
               size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A3E04]/50 pointer-events-none"
             />
             <input
               type="text"
@@ -401,7 +401,7 @@ export default function NotebookPage() {
                 setCurrentPage(1);
               }}
               placeholder="Tìm bài toán, đề bài, bí kíp..."
-              className="w-full pl-9 pr-7 py-1.5 bg-stone-50/80 sm:bg-white border border-stone-200 rounded-xl text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:bg-white focus:border-[#C1762A] focus:ring-1 focus:ring-[#C1762A]/20 transition-all shadow-2xs"
+              className="w-full pl-9 pr-7 py-1.5 bg-[#F7ECE1]/40 sm:bg-white border border-[#F1CCA6] rounded-xl text-xs text-[#1C1917] placeholder:text-[#7A3E04]/50 focus:outline-none focus:bg-white focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-all shadow-xs"
             />
             {searchQuery && (
               <button
@@ -410,7 +410,7 @@ export default function NotebookPage() {
                   setSearchQuery("");
                   setCurrentPage(1);
                 }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-0.5 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A3E04] hover:text-[#1C1917] p-0.5 cursor-pointer"
                 aria-label="Xóa tìm kiếm"
               >
                 <X size={12} />
@@ -426,10 +426,10 @@ export default function NotebookPage() {
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer touch-manipulation whitespace-nowrap",
+                "px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-150 ease-out shrink-0 cursor-pointer touch-manipulation whitespace-nowrap active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                 scoreFilter === "all"
-                  ? "bg-[#C1762A] text-white shadow-2xs"
-                  : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
+                  ? "bg-[#C1762A] text-white shadow-xs"
+                  : "bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1]"
               )}
             >
               Tất cả
@@ -440,10 +440,10 @@ export default function NotebookPage() {
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation whitespace-nowrap",
+                "px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all duration-150 ease-out shrink-0 cursor-pointer touch-manipulation whitespace-nowrap active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                 scoreFilter === "perfect"
-                  ? "bg-[#C1762A] text-white shadow-2xs"
-                  : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
+                  ? "bg-[#C1762A] text-white shadow-xs"
+                  : "bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1]"
               )}
             >
               <Award size={12} />
@@ -455,10 +455,10 @@ export default function NotebookPage() {
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer touch-manipulation whitespace-nowrap",
+                "px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all duration-150 ease-out shrink-0 cursor-pointer touch-manipulation whitespace-nowrap active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                 hasAttachmentOnly
-                  ? "bg-[#C1762A] text-white shadow-2xs"
-                  : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
+                  ? "bg-[#C1762A] text-white shadow-xs"
+                  : "bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1]"
               )}
             >
               <ImageIcon size={12} />
@@ -468,19 +468,19 @@ export default function NotebookPage() {
         </div>
 
         {/* Hàng 3: Danh sách Ngăn Lưu Trữ (Playlists) - Dạng Tabs Pill vuốt ngang sạch sẽ */}
-        <div className="max-w-7xl mx-auto mt-2 pt-2 border-t border-stone-100 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        <div className="max-w-7xl mx-auto mt-2 pt-2 border-t border-[#F1CCA6]/40 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           <button
             onClick={() => handleSelectPlaylist(null)}
             className={cn(
-              "px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5 whitespace-nowrap",
+              "px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all duration-150 ease-out cursor-pointer touch-manipulation flex items-center gap-1.5 whitespace-nowrap active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
               selectedPlaylistId === null
-                ? "bg-amber-100/80 text-[#8C4905] border border-amber-300 font-bold shadow-2xs"
-                : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
+                ? "bg-[#F1CCA6]/60 text-[#8C4905] border border-[#C1762A]/40 font-bold shadow-xs"
+                : "bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1]"
             )}
           >
-            <Star size={12} className={selectedPlaylistId === null ? "fill-[#8C4905] text-[#8C4905]" : "text-stone-400"} />
+            <Star size={12} className={selectedPlaylistId === null ? "fill-[#8C4905] text-[#8C4905]" : "text-[#7A3E04]/60"} />
             <span>Tất cả bài</span>
-            <span className="text-[10px] opacity-75 bg-black/5 px-1 rounded-md">
+            <span className="text-[10px] opacity-85 bg-[#C1762A]/10 px-1 rounded-md tabular-nums font-semibold">
               {totalAllCount > 0 ? totalAllCount : totalCount}
             </span>
           </button>
@@ -490,15 +490,15 @@ export default function NotebookPage() {
               key={`tab-${pl.id}`}
               onClick={() => handleSelectPlaylist(pl.id)}
               className={cn(
-                "px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer touch-manipulation flex items-center gap-1.5 whitespace-nowrap",
+                "px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all duration-150 ease-out cursor-pointer touch-manipulation flex items-center gap-1.5 whitespace-nowrap active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                 selectedPlaylistId === pl.id
-                  ? "bg-amber-100/80 text-[#8C4905] border border-amber-300 font-bold shadow-2xs"
-                  : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
+                  ? "bg-[#F1CCA6]/60 text-[#8C4905] border border-[#C1762A]/40 font-bold shadow-xs"
+                  : "bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1]"
               )}
             >
-              <Folder size={12} className={selectedPlaylistId === pl.id ? "text-[#8C4905]" : "text-stone-400"} />
+              <Folder size={12} className={selectedPlaylistId === pl.id ? "text-[#8C4905]" : "text-[#7A3E04]/60"} />
               <span>{pl.name}</span>
-              <span className="text-[10px] opacity-75 bg-black/5 px-1 rounded-md">
+              <span className="text-[10px] opacity-85 bg-[#C1762A]/10 px-1 rounded-md tabular-nums font-semibold">
                 {pl.item_count}
               </span>
             </button>
@@ -507,7 +507,7 @@ export default function NotebookPage() {
           {/* Nút thêm ngăn lưu trữ */}
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-2.5 py-1 rounded-xl text-xs font-semibold text-[#C1762A] hover:bg-amber-50 border border-dashed border-amber-300/80 shrink-0 transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap active:scale-95"
+            className="px-2.5 py-1 rounded-xl text-xs font-semibold text-[#C1762A] hover:bg-[#F7ECE1] border border-dashed border-[#C1762A]/60 shrink-0 transition-all duration-150 ease-out flex items-center gap-1 cursor-pointer whitespace-nowrap active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]"
             title="Tạo ngăn lưu trữ mới"
           >
             <Plus size={13} />
@@ -517,7 +517,7 @@ export default function NotebookPage() {
           {/* Nút xóa ngăn lưu trữ */}
           <button
             onClick={handleDeleteStorageClick}
-            className="px-2 py-1 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200/80 shrink-0 transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 ml-auto sm:ml-0"
+            className="px-2 py-1 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200/80 shrink-0 transition-all duration-150 ease-out flex items-center gap-1 cursor-pointer whitespace-nowrap active:scale-[0.98] ml-auto sm:ml-0"
             title="Xóa ngăn lưu trữ"
           >
             <Trash2 size={13} />
@@ -547,20 +547,20 @@ export default function NotebookPage() {
         {/* Lưới bài toán chính: Chiếm trọn không gian thoáng đãng */}
         <main className="flex-1 w-full min-w-0">
           {/* Header danh mục bài toán đang xem */}
-          <div className="mb-5 flex items-center justify-between pb-3 border-b border-stone-200/80">
+          <div className="mb-5 flex items-center justify-between pb-3 border-b border-[#F1CCA6]/60">
             <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-md bg-amber-50 text-[#C1762A] flex items-center justify-center">
+              <span className="w-6 h-6 rounded-md bg-[#F1CCA6]/40 text-[#C1762A] flex items-center justify-center">
                 {currentPlaylist ? <Folder size={13} /> : <Star size={13} />}
               </span>
-              <h2 className="text-sm font-bold text-stone-800">
+              <h2 className="text-sm font-bold text-[#1C1917]">
                 {currentPlaylist ? currentPlaylist.name : "Tất cả bài toán đã lưu"}
               </h2>
-              <span className="text-xs text-stone-400 font-medium">
+              <span className="text-xs text-[#7A3E04] font-medium tabular-nums">
                 ({totalCount} bài)
               </span>
             </div>
 
-            <span className="text-xs text-stone-400 font-medium">
+            <span className="text-xs text-[#7A3E04] font-medium tabular-nums">
               Trang {currentPage} / {totalPages}
             </span>
           </div>
@@ -571,29 +571,29 @@ export default function NotebookPage() {
               {[1, 2, 3, 4, 5, 6].map((i) => (
                 <div
                   key={i}
-                  className="bg-white rounded-xl p-5 border border-stone-200/80 shadow-2xs animate-pulse space-y-4"
+                  className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs animate-pulse space-y-4"
                 >
-                  <div className="h-5 bg-stone-100 rounded-lg w-2/3"></div>
-                  <div className="h-20 bg-stone-50 rounded-lg"></div>
-                  <div className="h-10 bg-stone-50 rounded-lg"></div>
+                  <div className="h-5 bg-[#F1CCA6]/40 rounded-lg w-2/3"></div>
+                  <div className="h-20 bg-[#F1CCA6]/20 rounded-lg"></div>
+                  <div className="h-10 bg-[#F1CCA6]/20 rounded-lg"></div>
                 </div>
               ))}
             </div>
           ) : apiError ? (
             /* Thông báo lỗi */
-            <div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-md mx-auto shadow-2xs my-10 space-y-3">
-              <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+            <div className="bg-white border border-[#F1CCA6] rounded-2xl p-8 text-center max-w-md mx-auto shadow-xs my-10 space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-amber-50 text-[#C1762A] flex items-center justify-center mx-auto border border-[#F1CCA6]">
                 <Layers size={24} />
               </div>
-              <h3 className="text-sm font-bold text-stone-900">
+              <h3 className="text-sm font-bold text-[#1C1917]">
                 Dịch vụ Sổ tay đang kết nối
               </h3>
-              <p className="text-xs text-stone-500 leading-relaxed">
+              <p className="text-xs text-[#7A3E04] leading-relaxed">
                 {apiError}
               </p>
               <button
                 onClick={() => fetchBookmarks(currentPage, selectedPlaylistId)}
-                className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#C1762A] text-white rounded-lg text-xs font-semibold hover:bg-[#8C4905] transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#C1762A] text-white rounded-xl text-xs font-semibold hover:bg-[#8C4905] active:scale-[0.98] transition-all duration-150 ease-out cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
               >
                 <RefreshCw size={12} />
                 <span>Thử kết nối lại</span>
@@ -603,20 +603,20 @@ export default function NotebookPage() {
             /* Empty States */
             selectedPlaylistId ? (
               // Empty state khi playlist được chọn chưa có bài
-              <div className="bg-white border border-stone-200 rounded-xl p-10 text-center max-w-sm mx-auto shadow-2xs my-8 space-y-3">
-                <div className="w-12 h-12 rounded-xl bg-stone-100 text-stone-500 flex items-center justify-center mx-auto">
+              <div className="bg-white border border-[#F1CCA6] rounded-2xl p-10 text-center max-w-sm mx-auto shadow-xs my-8 space-y-3">
+                <div className="w-12 h-12 rounded-xl bg-[#F7ECE1] text-[#C1762A] flex items-center justify-center mx-auto border border-[#F1CCA6]">
                   <Folder size={24} />
                 </div>
-                <h3 className="text-sm font-bold text-stone-900">
+                <h3 className="text-sm font-bold text-[#1C1917]">
                   Ngăn lưu trữ này đang trống
                 </h3>
-                <p className="text-xs text-stone-500 leading-relaxed">
+                <p className="text-xs text-[#7A3E04] leading-relaxed">
                   Chưa có bài toán nào trong ngăn lưu trữ &quot;{currentPlaylist?.name}&quot;. Hãy chọn thêm bài vào ngăn lưu trữ này khi lưu bài nhé!
                 </p>
                 <button
                   type="button"
                   onClick={() => handleSelectPlaylist(null)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-stone-800 hover:bg-stone-900 text-white rounded-lg text-xs font-semibold transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#C1762A] hover:bg-[#8C4905] text-white rounded-xl text-xs font-semibold active:scale-[0.98] transition-all duration-150 ease-out cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
                 >
                   <Star size={12} />
                   <span>Xem tất cả bài toán</span>
@@ -624,8 +624,8 @@ export default function NotebookPage() {
               </div>
             ) : searchQuery.trim() || scoreFilter !== "all" || hasAttachmentOnly ? (
               // Empty state khi lọc không khớp
-              <div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm mx-auto shadow-2xs my-8 space-y-2.5">
-                <p className="text-xs font-semibold text-stone-700">
+              <div className="bg-white border border-[#F1CCA6] rounded-2xl p-8 text-center max-w-sm mx-auto shadow-xs my-8 space-y-2.5">
+                <p className="text-xs font-semibold text-[#1C1917]">
                   Không tìm thấy bài toán nào phù hợp với bộ lọc.
                 </p>
                 <button
@@ -642,20 +642,20 @@ export default function NotebookPage() {
               </div>
             ) : (
               // Empty state sổ tay hoàn toàn trống
-              <div className="bg-white border border-stone-200 rounded-xl p-12 text-center max-w-md mx-auto shadow-2xs my-10 space-y-3.5">
-                <div className="w-14 h-14 rounded-xl bg-amber-50 text-[#C1762A] border border-amber-200/50 flex items-center justify-center mx-auto">
+              <div className="bg-white border border-[#F1CCA6] rounded-2xl p-12 text-center max-w-md mx-auto shadow-xs my-10 space-y-3.5">
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 text-[#C1762A] border border-[#F1CCA6] flex items-center justify-center mx-auto">
                   <Sparkles size={26} />
                 </div>
-                <h3 className="text-base font-bold text-stone-900">
+                <h3 className="text-base font-bold text-[#1C1917]">
                   Sổ tay của bạn đang trống
                 </h3>
-                <p className="text-xs text-stone-500 leading-relaxed">
+                <p className="text-xs text-[#7A3E04] leading-relaxed">
                   Khi giải xong một bài toán trong khung Chat và bấm &quot;Đã hiểu&quot;, hãy bấm
-                  <span className="font-semibold text-stone-800"> ⭐ &quot;Lưu vào Sổ tay&quot;</span> để tạo ngăn lưu trữ và lưu lại bí kíp tư duy nhé!
+                  <span className="font-semibold text-[#1C1917]"> ⭐ &quot;Lưu vào Sổ tay&quot;</span> để tạo ngăn lưu trữ và lưu lại bí kíp tư duy nhé!
                 </p>
                 <button
                   onClick={() => router.push("/dashboard/chat")}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#C1762A] hover:bg-[#8C4905] text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer mt-1"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#C1762A] hover:bg-[#8C4905] text-white rounded-xl text-xs font-bold active:scale-[0.98] transition-all duration-150 ease-out shadow-xs cursor-pointer mt-1 focus-visible:outline-2 focus-visible:outline-[#C1762A]"
                 >
                   <span>Đến khung Chat học bài ngay</span>
                   <ArrowRight size={13} />
@@ -696,22 +696,22 @@ export default function NotebookPage() {
             className="fixed inset-0 bg-black/35 backdrop-blur-xs transition-opacity"
             onClick={() => setIsDeleteModalOpen(false)}
           />
-          <div className="relative z-10 bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl border border-stone-200 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-stone-100">
+          <div className="relative z-10 bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl border border-[#F1CCA6] animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#F1CCA6]/40">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
                   <Trash2 size={16} />
                 </div>
-                <h3 className="text-sm font-bold text-stone-900">Xóa ngăn lưu trữ</h3>
+                <h3 className="text-sm font-bold text-[#1C1917]">Xóa ngăn lưu trữ</h3>
               </div>
               <button
                 onClick={() => setIsDeleteModalOpen(false)}
-                className="p-1 text-stone-400 hover:text-stone-700 rounded-lg cursor-pointer"
+                className="p-1 text-[#7A3E04] hover:text-[#1C1917] rounded-lg cursor-pointer"
               >
                 <X size={16} />
               </button>
             </div>
-            <p className="text-xs text-stone-500 mb-3">
+            <p className="text-xs text-[#7A3E04] mb-3">
               Chọn ngăn lưu trữ bạn muốn xóa (các bài toán đã lưu sẽ không bị mất mà vẫn nằm trong &quot;Tất cả bài&quot;):
             </p>
             <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 mb-4">
@@ -720,12 +720,12 @@ export default function NotebookPage() {
                 .map((pl) => (
                   <div
                     key={`del-${pl.id}`}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-stone-50 hover:bg-stone-100/80 border border-stone-200/80 transition-colors"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-[#F7ECE1]/40 hover:bg-[#F7ECE1] border border-[#F1CCA6] transition-colors"
                   >
                     <div className="flex items-center gap-2 truncate min-w-0">
                       <Folder size={14} className="text-[#C1762A] shrink-0" />
-                      <span className="text-xs font-semibold text-stone-800 truncate">{pl.name}</span>
-                      <span className="text-[11px] text-stone-400 shrink-0">({pl.item_count} bài)</span>
+                      <span className="text-xs font-semibold text-[#1C1917] truncate">{pl.name}</span>
+                      <span className="text-[11px] text-[#7A3E04] shrink-0 tabular-nums">({pl.item_count} bài)</span>
                     </div>
                     <button
                       onClick={() => {
@@ -736,7 +736,7 @@ export default function NotebookPage() {
                           }
                         }
                       }}
-                      className="px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer shrink-0 ml-2"
+                      className="px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-100 rounded-lg active:scale-[0.95] transition-all duration-150 ease-out cursor-pointer shrink-0 ml-2"
                     >
                       Xóa
                     </button>
@@ -746,7 +746,7 @@ export default function NotebookPage() {
             <div className="flex justify-end">
               <button
                 onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-xl cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-[#7A3E04] hover:bg-[#F7ECE1] rounded-xl active:scale-[0.98] transition-all duration-150 ease-out cursor-pointer"
               >
                 Đóng
               </button>

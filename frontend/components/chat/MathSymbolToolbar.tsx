@@ -337,8 +337,8 @@ export function MathSymbolToolbar({
           aria-label="Cuộn sang trái"
           className={cn(
             "absolute -left-1 z-20 w-8 h-8 rounded-full bg-white/95 text-[#8C4905] border border-[#F1CCA6]",
-            "shadow-md flex items-center justify-center transition-all duration-150 cursor-pointer",
-            "hover:bg-[#F7ECE1] hover:scale-110 active:scale-95 animate-in fade-in duration-200"
+            "shadow-xs flex items-center justify-center transition-all duration-150 ease-out cursor-pointer",
+            "hover:bg-[#F7ECE1] active:scale-[0.95] animate-in fade-in duration-200 focus-visible:outline-2 focus-visible:outline-[#C1762A]"
           )}
         >
           <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
@@ -377,7 +377,7 @@ export function MathSymbolToolbar({
               className={cn(
                 "min-w-[44px] h-[44px] px-2 rounded-2xl flex items-center justify-center shrink-0",
                 "bg-[#F7ECE1]/90 hover:bg-[#F1CCA6] text-[#8C4905] border border-[#F1CCA6] shadow-2xs",
-                "transition-all duration-150 active:scale-95 font-semibold",
+                "transition-all duration-150 ease-out active:scale-[0.96] font-semibold",
                 "hover:shadow-xs hover:border-[#C1762A]/50",
                 "disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100",
                 isDragging ? "cursor-grabbing" : "cursor-pointer"
@@ -397,8 +397,8 @@ export function MathSymbolToolbar({
           aria-label="Cuộn sang phải"
           className={cn(
             "absolute -right-1 z-20 w-8 h-8 rounded-full bg-white/95 text-[#8C4905] border border-[#F1CCA6]",
-            "shadow-md flex items-center justify-center transition-all duration-150 cursor-pointer",
-            "hover:bg-[#F7ECE1] hover:scale-110 active:scale-95 animate-in fade-in duration-200"
+            "shadow-xs flex items-center justify-center transition-all duration-150 ease-out cursor-pointer",
+            "hover:bg-[#F7ECE1] active:scale-[0.95] animate-in fade-in duration-200 focus-visible:outline-2 focus-visible:outline-[#C1762A]"
           )}
         >
           <ChevronRight className="w-5 h-5 stroke-[2.5]" />

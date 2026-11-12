@@ -41,18 +41,18 @@ export function NotebookPagination({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-5 px-1 select-none border-t border-stone-200 mt-6">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-5 px-1 select-none border-t border-[#F1CCA6]/60 mt-6">
       {/* Thông tin số lượng hiển thị */}
-      <p className="text-xs text-stone-500 font-medium">
+      <p className="text-xs text-[#7A3E04] font-medium">
         Hiển thị{" "}
-        <span className="font-semibold text-stone-800">
+        <span className="font-semibold text-[#1C1917] tabular-nums">
           {startIdx} - {endIdx}
         </span>{" "}
         trong{" "}
-        <span className="font-semibold text-stone-800">
-          {totalItems} bài toán
+        <span className="font-semibold text-[#1C1917] tabular-nums">
+          {totalItems}
         </span>{" "}
-        (tối đa {pageSize} bài/trang)
+        bài toán (tối đa {pageSize} bài/trang)
       </p>
 
       {/* Dãy nút chuyển trang */}
@@ -63,10 +63,10 @@ export function NotebookPagination({
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
           className={cn(
-            "inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer touch-manipulation",
+            "inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 ease-out cursor-pointer touch-manipulation focus-visible:outline-2 focus-visible:outline-[#C1762A]",
             currentPage <= 1
-              ? "opacity-35 cursor-not-allowed text-stone-400 bg-stone-100"
-              : "text-stone-700 bg-white hover:bg-stone-50 active:scale-95 border border-stone-200 shadow-2xs"
+              ? "opacity-35 cursor-not-allowed text-[#7A3E04]/60 bg-[#F7ECE1]/50 border border-[#F1CCA6]/40"
+              : "text-[#8C4905] bg-white hover:bg-[#F7ECE1] active:scale-[0.98] border border-[#F1CCA6] shadow-xs"
           )}
           aria-label="Trang trước"
         >
@@ -81,7 +81,7 @@ export function NotebookPagination({
               return (
                 <span
                   key={`ellipsis-${idx}`}
-                  className="w-7 h-7 flex items-center justify-center text-xs text-stone-400 font-bold"
+                  className="w-7 h-7 flex items-center justify-center text-xs text-[#7A3E04]/60 font-bold tabular-nums"
                 >
                   ...
                 </span>
@@ -97,10 +97,10 @@ export function NotebookPagination({
                 type="button"
                 onClick={() => onPageChange(pageNum)}
                 className={cn(
-                  "w-7 h-7 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer touch-manipulation flex items-center justify-center",
+                  "w-7 h-7 rounded-xl text-xs font-semibold transition-all duration-150 ease-out cursor-pointer touch-manipulation flex items-center justify-center tabular-nums focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                   isCurrent
-                    ? "bg-[#C1762A] text-white shadow-2xs font-bold"
-                    : "text-stone-700 bg-white hover:bg-stone-50 active:scale-95 border border-stone-200"
+                    ? "bg-[#C1762A] text-white shadow-xs font-bold"
+                    : "text-[#8C4905] bg-white hover:bg-[#F7ECE1] active:scale-[0.98] border border-[#F1CCA6]"
                 )}
                 aria-label={`Đến trang ${pageNum}`}
                 aria-current={isCurrent ? "page" : undefined}
@@ -117,10 +117,10 @@ export function NotebookPagination({
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
           className={cn(
-            "inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer touch-manipulation",
+            "inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 ease-out cursor-pointer touch-manipulation focus-visible:outline-2 focus-visible:outline-[#C1762A]",
             currentPage >= totalPages
-              ? "opacity-35 cursor-not-allowed text-stone-400 bg-stone-100"
-              : "text-stone-700 bg-white hover:bg-stone-50 active:scale-95 border border-stone-200 shadow-2xs"
+              ? "opacity-35 cursor-not-allowed text-[#7A3E04]/60 bg-[#F7ECE1]/50 border border-[#F1CCA6]/40"
+              : "text-[#8C4905] bg-white hover:bg-[#F7ECE1] active:scale-[0.98] border border-[#F1CCA6] shadow-xs"
           )}
           aria-label="Trang sau"
         >

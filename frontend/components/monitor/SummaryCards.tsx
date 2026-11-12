@@ -31,13 +31,13 @@ export function SummaryCards({ metrics, isLoading = false }: SummaryCardsProps) 
   return (
     <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       {/* THẺ 1: Tổng bài hoàn thành */}
-      <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+      <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
         <div className="flex items-start justify-between">
           <div className="w-11 h-11 rounded-xl bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] shadow-inner">
             <CheckCircle2 size={22} className="stroke-[2.2]" />
           </div>
-          <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-100">
-            <TrendingUp size={12} /> {metrics.completedChange || "+12%"}
+          <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-100">
+            <TrendingUp size={12} /> <span className="tabular-nums">{metrics.completedChange || "+12%"}</span>
           </span>
         </div>
         <div className="mt-4">
@@ -45,47 +45,47 @@ export function SummaryCards({ metrics, isLoading = false }: SummaryCardsProps) 
             Tổng bài hoàn thành
           </p>
           <p className="text-2xl font-black text-[#8C4905] leading-none">
-            {isLoading ? "..." : `${metrics.completedProblems} bài`}
+            <span className="tabular-nums">{isLoading ? "..." : metrics.completedProblems}</span>{" "}
+            <span className="text-base font-bold text-[#8C4905]">bài</span>
           </p>
-          <p className="text-xs text-[#C1762A]/70 mt-1.5">Các bài toán đã giải xong</p>
+          <p className="text-xs text-[#7A3E04] mt-1.5">Các bài toán đã giải xong</p>
         </div>
       </div>
 
-      {/* THẺ 2: Điểm Independence trung bình (CORE METRIC SPRINT 6) */}
-      <div className="bg-gradient-to-br from-[#FFFBF7] to-[#F7ECE1] rounded-2xl p-5 border-2 border-[#C1762A]/40 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between relative overflow-hidden">
-        <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-[#C1762A]/5 rounded-full blur-xl pointer-events-none" />
+      {/* THẺ 2: Điểm Independence trung bình */}
+      <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
         <div className="flex items-start justify-between">
-          <div className="w-11 h-11 rounded-xl bg-[#8C4905] flex items-center justify-center text-[#F7ECE1] shadow-md">
+          <div className="w-11 h-11 rounded-xl bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] shadow-inner">
             <Brain size={22} className="stroke-[2.2]" />
           </div>
-          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${badge.bg}`}>
+          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${badge.bg}`}>
             {badge.label}
           </span>
         </div>
         <div className="mt-4">
-          <p className="text-xs font-bold text-[#8C4905] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+          <p className="text-xs font-bold text-[#C1762A] uppercase tracking-wider mb-1">
             Điểm Tự Lực (Independence)
           </p>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-[#8C4905] leading-none">
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-[#8C4905] leading-none tabular-nums">
               {isLoading ? "..." : metrics.independenceScore}
             </span>
             <span className="text-sm font-bold text-[#C1762A]">/100</span>
           </div>
-          <p className="text-xs text-[#8C4905]/80 font-medium mt-1.5">
+          <p className="text-xs text-[#7A3E04] mt-1.5">
             {metrics.independenceLevel || "Ít phụ thuộc vào gợi ý"}
           </p>
         </div>
       </div>
 
       {/* THẺ 3: Chuỗi học liên tiếp (Streak) */}
-      <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+      <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
         <div className="flex items-start justify-between">
           <div className="w-11 h-11 rounded-xl bg-orange-100/80 flex items-center justify-center text-orange-600 shadow-inner">
             <Flame size={22} className="stroke-[2.2] fill-orange-500" />
           </div>
-          <span className="text-[11px] font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
-            Kỷ lục: {metrics.maxStreak ?? metrics.currentStreak} ngày
+          <span className="text-[11px] font-semibold text-orange-700 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">
+            Kỷ lục: <strong className="tabular-nums font-bold">{metrics.maxStreak ?? metrics.currentStreak}</strong> ngày
           </span>
         </div>
         <div className="mt-4">
@@ -93,20 +93,21 @@ export function SummaryCards({ metrics, isLoading = false }: SummaryCardsProps) 
             Chuỗi học liên tục
           </p>
           <p className="text-2xl font-black text-[#8C4905] leading-none">
-            {isLoading ? "..." : `${metrics.currentStreak} ngày`}
+            <span className="tabular-nums">{isLoading ? "..." : metrics.currentStreak}</span>{" "}
+            <span className="text-base font-bold text-[#8C4905]">ngày</span>
           </p>
-          <p className="text-xs text-[#C1762A]/70 mt-1.5">Duy trì tương tác mỗi ngày</p>
+          <p className="text-xs text-[#7A3E04] mt-1.5">Duy trì tương tác mỗi ngày</p>
         </div>
       </div>
 
       {/* THẺ 4: Tổng giờ học */}
-      <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+      <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
         <div className="flex items-start justify-between">
           <div className="w-11 h-11 rounded-xl bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] shadow-inner">
             <Clock size={22} className="stroke-[2.2]" />
           </div>
-          <span className="text-[11px] font-semibold text-[#8C4905] bg-[#F7ECE1] px-2 py-0.5 rounded-full border border-[#F1CCA6]">
-            ~{metrics.avgMinutesPerDay}p / ngày
+          <span className="text-[11px] font-semibold text-[#8C4905] bg-[#F7ECE1] px-2.5 py-0.5 rounded-full border border-[#F1CCA6]">
+            ~<strong className="tabular-nums font-bold">{metrics.avgMinutesPerDay}</strong>p / ngày
           </span>
         </div>
         <div className="mt-4">
@@ -114,9 +115,10 @@ export function SummaryCards({ metrics, isLoading = false }: SummaryCardsProps) 
             Tổng thời gian học
           </p>
           <p className="text-2xl font-black text-[#8C4905] leading-none">
-            {isLoading ? "..." : `${metrics.totalStudyHours} giờ`}
+            <span className="tabular-nums">{isLoading ? "..." : metrics.totalStudyHours}</span>{" "}
+            <span className="text-base font-bold text-[#8C4905]">giờ</span>
           </p>
-          <p className="text-xs text-[#C1762A]/70 mt-1.5">Chỉ tính thời gian hoạt động thực</p>
+          <p className="text-xs text-[#7A3E04] mt-1.5">Chỉ tính thời gian hoạt động thực</p>
         </div>
       </div>
     </section>

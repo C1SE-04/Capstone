@@ -182,7 +182,7 @@ export default function LeaderboardPage() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setShowMilestonesGuide(!showMilestonesGuide)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1]/60 transition-colors shadow-2xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1]/60 active:scale-[0.98] transition-all duration-150 ease-out shadow-xs cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
           >
             <Info size={16} className="text-[#C1762A]" />
             <span>7 Mốc Lửa</span>
@@ -191,7 +191,7 @@ export default function LeaderboardPage() {
           <button
             onClick={handleRefresh}
             disabled={isLoading || isRefreshing}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#C1762A] text-white hover:bg-[#8C4905] disabled:opacity-50 transition-all shadow-xs active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#C1762A] text-white hover:bg-[#8C4905] disabled:opacity-50 transition-all duration-150 ease-out shadow-xs active:scale-[0.98] cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
             title="Làm mới dữ liệu"
           >
             <RefreshCw
@@ -324,9 +324,9 @@ export default function LeaderboardPage() {
                 key={opt.label}
                 onClick={() => handleGradeChange(opt.value)}
                 className={cn(
-                  "px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 select-none cursor-pointer",
+                  "px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 ease-out select-none cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                   isActive
-                    ? "bg-[#C1762A] text-white shadow-xs scale-102"
+                    ? "bg-[#C1762A] text-white shadow-xs"
                     : "text-[#8C4905] hover:bg-[#F7ECE1] hover:text-[#8C4905]"
                 )}
               >

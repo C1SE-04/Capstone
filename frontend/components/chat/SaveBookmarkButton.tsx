@@ -32,8 +32,8 @@ export function SaveBookmarkButton({
         className={cn(
           "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 border cursor-pointer select-none",
           status === "saved"
-            ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-xs"
-            : "bg-white text-[#8C4905] border-[#F1CCA6] hover:bg-[#F1CCA6]/40 shadow-xs active:scale-95"
+            ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-xs active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]"
+            : "bg-white text-[#8C4905] border-[#F1CCA6] hover:bg-[#F1CCA6]/40 shadow-xs active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]"
         )}
         title={
           status === "saved"

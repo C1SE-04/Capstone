@@ -129,9 +129,9 @@ export function UnderstandingButtons({
           onClick={handleUnderstood}
           disabled={disableButtons}
           className={cn(
-            "inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200 shadow-sm",
-            "border-emerald-500/40 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-500 hover:scale-105 active:scale-95",
-            disableButtons && "opacity-50 cursor-not-allowed hover:scale-100"
+            "inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-150 ease-out shadow-xs active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#10B981]",
+            "border-[#10B981]/40 text-[#10B981] bg-[#ECFDF5] hover:bg-[#D1FAE5] hover:border-[#10B981]",
+            disableButtons && "opacity-50 cursor-not-allowed active:scale-100"
           )}
           title="Tôi đã hiểu bài"
         >
@@ -145,11 +145,11 @@ export function UnderstandingButtons({
           onClick={handleNotUnderstood}
           disabled={disableButtons}
           className={cn(
-            "inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200 shadow-sm",
+            "inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-150 ease-out shadow-xs active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
             notUnderstoodCount === 0
-              ? "border-[#C1762A]/40 text-[#8C4905] bg-[#F1CCA6]/40 hover:bg-[#F1CCA6]/80 hover:border-[#C1762A] hover:scale-105 active:scale-95"
-              : "border-amber-500/40 text-amber-700 bg-amber-50 hover:bg-amber-100 hover:border-amber-500 hover:scale-105 active:scale-95",
-            disableButtons && "opacity-50 cursor-not-allowed hover:scale-100"
+              ? "border-[#C1762A]/40 text-[#8C4905] bg-[#F1CCA6]/40 hover:bg-[#F1CCA6]/80 hover:border-[#C1762A]"
+              : "border-amber-500/40 text-amber-700 bg-amber-50 hover:bg-amber-100 hover:border-amber-500",
+            disableButtons && "opacity-50 cursor-not-allowed active:scale-100"
           )}
           title={
             notUnderstoodCount === 0
@@ -161,7 +161,7 @@ export function UnderstandingButtons({
           Chưa hiểu
           {/* Badge dem so lan nhan */}
           {notUnderstoodCount > 0 && (
-            <span className="ml-0.5 bg-amber-500/20 text-amber-700 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none">
+            <span className="ml-0.5 bg-amber-500/20 text-amber-700 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none tabular-nums">
               {notUnderstoodCount}
             </span>
           )}
@@ -217,9 +217,9 @@ export function UnderstandingButtons({
               disabled={isLoading || !inputValue.trim()}
               title="Gửi câu hỏi của bạn"
               className={cn(
-                "p-2 rounded-full flex items-center justify-center transition-all self-end mb-0.5 shadow-sm shrink-0",
+                "p-2 rounded-full flex items-center justify-center transition-all duration-150 ease-out self-end mb-0.5 shadow-xs shrink-0 focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                 inputValue.trim() && !isLoading
-                  ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 active:scale-95"
+                  ? "bg-[#C1762A] text-white hover:bg-[#8C4905] active:scale-[0.95] cursor-pointer"
                   : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed"
               )}
             >

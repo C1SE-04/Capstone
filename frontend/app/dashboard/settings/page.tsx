@@ -289,7 +289,7 @@ export default function SettingsPage() {
           value={selectedGrade ?? ""}
           onChange={handleGradeChange}
           disabled={isLoading}
-          className="w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 border border-transparent focus:outline-none focus:ring-2 focus:ring-[#F7AD62] cursor-pointer disabled:opacity-60 transition-shadow"
+          className="w-full px-4 py-3 rounded-xl bg-[#F7ECE1]/50 text-[#1C1917] border border-[#F1CCA6] focus:outline-none focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 cursor-pointer disabled:opacity-60 transition-all"
         >
           <option value="" disabled>-- Chọn khối lớp --</option>
           {GRADES.map((g) => (
@@ -298,20 +298,20 @@ export default function SettingsPage() {
         </select>
 
         {successMsg && (
-          <p className="mt-3 text-sm font-bold text-green-600 animate-in slide-in-from-top-1">{successMsg}</p>
+          <p className="mt-3 text-sm font-semibold text-[#10B981] animate-in slide-in-from-top-1">{successMsg}</p>
         )}
         {errorMsg && (
-          <p className="mt-3 text-sm font-bold text-[#EF4444] animate-in slide-in-from-top-1">{errorMsg}</p>
+          <p className="mt-3 text-sm font-semibold text-[#EF4444] animate-in slide-in-from-top-1">{errorMsg}</p>
         )}
       </div>
 
       {/* Liên kết với Phụ huynh */}
-      <div className="bg-white rounded-2xl shadow-sm border border-[#F1CCA6] p-6 mt-6 mb-6">
+      <div className="bg-white rounded-2xl shadow-xs border border-[#F1CCA6] p-6 mt-6 mb-6">
         <h2 className="text-lg font-bold text-[#8C4905] mb-1 flex items-center gap-2">
           <span className="w-1.5 h-6 bg-[#C1762A] rounded-full inline-block" />
           Liên kết với Phụ huynh
         </h2>
-        <p className="text-sm text-[#C1762A] mb-4 leading-relaxed">
+        <p className="text-sm text-[#7A3E04] mb-4 leading-relaxed">
           Tạo mã liên kết để bố mẹ có thể xem tiến độ học tập của bạn trên bảng điều khiển phụ huynh.
         </p>
 
@@ -319,15 +319,15 @@ export default function SettingsPage() {
           <div className="bg-[#F7ECE1] p-4 rounded-xl border border-[#F1CCA6] space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-[#8C4905] font-bold uppercase tracking-wider mb-1">Mã của bạn</p>
+                <p className="text-xs text-[#8C4905] font-semibold uppercase tracking-wider mb-1">Mã của bạn</p>
                 <p className="text-3xl font-black text-[#C1762A] tracking-[0.2em]">{pairingCode}</p>
               </div>
               <button
                 onClick={handleCopyCode}
-                className="px-4 py-2 bg-white text-[#8C4905] font-bold rounded-lg border border-[#F1CCA6] hover:bg-[#F7ECE1] transition-all shadow-sm cursor-pointer flex items-center gap-1.5 min-w-[80px] justify-center"
+                className="px-4 py-2 bg-white text-[#8C4905] font-semibold rounded-xl border border-[#F1CCA6] hover:bg-[#F7ECE1]/60 transition-all duration-150 ease-out active:scale-[0.95] focus-visible:outline-2 focus-visible:outline-[#C1762A] shadow-xs cursor-pointer flex items-center gap-1.5 min-w-[80px] justify-center"
               >
                 {copyFeedback ? (
-                  <span className="text-green-600 animate-in fade-in duration-200">✓ Đã copy</span>
+                  <span className="text-[#10B981] animate-in fade-in duration-200">✓ Đã copy</span>
                 ) : (
                   "Copy"
                 )}
@@ -342,7 +342,7 @@ export default function SettingsPage() {
                     style={{ width: `${(secondsLeft / maxSeconds) * 100}%` }}
                   />
                 </div>
-                <span className="text-xs font-bold text-[#C1762A] tabular-nums">
+                <span className="text-xs font-semibold text-[#C1762A] tabular-nums">
                   {formatCountdown(secondsLeft)}
                 </span>
               </div>
@@ -356,7 +356,7 @@ export default function SettingsPage() {
             id="get-pairing-code-btn"
             onClick={generatePairingCode}
             disabled={isGeneratingCode}
-            className="w-full py-3 rounded-xl bg-[#C1762A] text-white font-bold hover:bg-[#8C4905] shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 cursor-pointer flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl bg-[#C1762A] text-white font-semibold hover:bg-[#8C4905] shadow-xs transition-all duration-150 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
           >
             {isGeneratingCode ? (
               <>
@@ -376,21 +376,21 @@ export default function SettingsPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm animate-in zoom-in-95 duration-200 border border-[#F1CCA6]">
             <h3 className="text-xl font-bold text-[#8C4905] mb-3">Xác nhận đổi lớp</h3>
-            <p className="text-[#C1762A] mb-8 leading-relaxed">
-              Bạn đang chuyển sang <span className="font-black text-[#8C4905]">Lớp {pendingGrade}</span>. Hành trình học tập và tư duy của AI sẽ được đồng bộ hoá ngay lập tức.
+            <p className="text-[#1C1917] mb-8 leading-relaxed">
+              Bạn đang chuyển sang <span className="font-bold text-[#8C4905]">Lớp {pendingGrade}</span>. Hành trình học tập và tư duy của AI sẽ được đồng bộ hoá ngay lập tức.
             </p>
             <div className="flex gap-4">
               <button
                 onClick={handleCancel}
                 disabled={isLoading}
-                className="flex-1 py-2.5 rounded-xl border-2 border-[#F1CCA6] text-[#8C4905] font-bold hover:bg-[#F7ECE1] transition-colors disabled:opacity-60 cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl border border-[#F1CCA6] text-[#8C4905] font-semibold hover:bg-[#F7ECE1]/60 transition-all duration-150 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] disabled:opacity-60 cursor-pointer"
               >
                 Huỷ
               </button>
               <button
                 onClick={handleConfirm}
                 disabled={isLoading}
-                className="flex-1 py-2.5 rounded-xl bg-[#C1762A] text-white font-bold hover:bg-[#8C4905] shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 cursor-pointer flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 rounded-xl bg-[#C1762A] text-white font-semibold hover:bg-[#8C4905] shadow-xs transition-all duration-150 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
               >
                 {isLoading ? (
                   <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">

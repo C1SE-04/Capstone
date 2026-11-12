@@ -1,4 +1,4 @@
-﻿/**
+/**
  * File: components/chat/ChatInput.tsx
  * Mô tả: Component nhập liệu cho khung chat học sinh (SocraticKid) tích hợp MathLive chuẩn Google Math Solver (Cách 3).
  * Tính năng chính:
