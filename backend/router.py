@@ -234,6 +234,8 @@ def agent_router(
     if meta is not None:
         meta["model_used"] = active_model
 
+    print(f"[AI Runtime] Socratic Tutor dispatched with dynamic model: {active_model} | temp={active_temperature} | max_tokens={active_max_tokens}")
+
     def _build_gemini_model(model_name_str: str):
         return genai.GenerativeModel(
             model_name=model_name_str,
@@ -244,7 +246,6 @@ def agent_router(
                 max_output_tokens=active_max_tokens,
             )
         )
-
     model = _build_gemini_model(active_model)
     current_agent_label = "Chat"
     # US 10.4: Chuẩn hóa tên Agent để đối chiếu chuẩn xác với 4 nhãn cốt lõi
