@@ -231,6 +231,8 @@ def agent_router(
     if meta is not None:
         meta["model_used"] = active_model
 
+    print(f"[AI Runtime] Socratic Tutor dispatched with dynamic model: {active_model} | temp={active_temperature} | max_tokens={active_max_tokens}")
+
     model = genai.GenerativeModel(
         model_name=active_model,
         system_instruction=TEACHER_SYSTEM_INSTRUCTION,
