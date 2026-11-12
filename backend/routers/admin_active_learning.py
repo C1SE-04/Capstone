@@ -359,10 +359,11 @@ def approve_and_retrain(
             it.status = "APPROVED"
         db.commit()
 
+        approved_count = len(seen_pairs)
         return schemas.RetrainResponse(
             success=True,
-            message=f"Đã duyệt {len(new_rows)} mẫu câu mới, tái huấn luyện mô hình và nạp RAM thành công!",
-            retrained_count=len(new_rows),
+            message=f"Đã duyệt {approved_count} mẫu câu mới, tái huấn luyện mô hình và nạp RAM thành công!",
+            retrained_count=approved_count,
             total_samples=len(df),
         )
 
