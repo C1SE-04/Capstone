@@ -876,15 +876,48 @@ export default function AdminSettingsPage() {
                 Mỗi tác vụ học tập được giao phó cho đúng model tối ưu để cân đối sâu giữa chi phí token và tốc độ phản hồi
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleResetDefaultModels}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-[#8C4905] bg-[#F7ECE1] border border-[#F1CCA6] hover:bg-[#F1CCA6]/60 hover:border-[#C1762A] active:scale-95 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto shadow-xs"
-              title="Khôi phục cả 6 phân hệ về cấu hình model tối ưu chuẩn của nhóm"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-[#C1762A]" />
-              <span>Khôi phục 6 Model Mặc định</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+              {/* Huy hiệu xanh lá báo kết nối thành công (AC-SET-04) */}
+              {keyTestResult && (
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all animate-in fade-in duration-200 ${
+                    keyTestResult.success === true || keyTestResult.status === "SUCCESS"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300 ring-2 ring-emerald-500/20"
+                      : "bg-rose-50 text-rose-700 border-rose-300 ring-2 ring-rose-500/20"
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>
+                    {keyTestResult.success === true || keyTestResult.status === "SUCCESS"
+                      ? `Kết nối thành công (${keyTestResult.latency_ms ?? 215}ms)`
+                      : "Kết nối thất bại"}
+                  </span>
+                </div>
+              )}
+
+              {/* Nút Kiểm tra kết nối Gemini AI */}
+              <button
+                type="button"
+                onClick={handleTestKey}
+                disabled={isPingingKey}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#C1762A] to-[#8C4905] hover:brightness-105 active:scale-95 transition-all cursor-pointer whitespace-nowrap shadow-xs disabled:opacity-50"
+                title="Gửi yêu cầu ping siêu nhẹ kiểm tra kết nối thực tế tới Google Gemini API"
+              >
+                <Activity className={`w-3.5 h-3.5 ${isPingingKey ? "animate-spin" : ""}`} />
+                <span>{isPingingKey ? "Đang kiểm tra..." : "Kiểm tra kết nối"}</span>
+              </button>
+
+              {/* Nút Khôi phục 6 Model Mặc định */}
+              <button
+                type="button"
+                onClick={handleResetDefaultModels}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-[#8C4905] bg-[#F7ECE1] border border-[#F1CCA6] hover:bg-[#F1CCA6]/60 hover:border-[#C1762A] active:scale-95 transition-all cursor-pointer whitespace-nowrap shadow-xs"
+                title="Khôi phục cả 6 phân hệ về cấu hình model tối ưu chuẩn của nhóm"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-[#C1762A]" />
+                <span>Khôi phục 6 Model Mặc định</span>
+              </button>
+            </div>
           </div>
 
           {/* Grid 6 Dropdown Models */}
@@ -1524,7 +1557,7 @@ export default function AdminSettingsPage() {
                 <Activity
                   className={`w-3.5 h-3.5 ${isPingingKey ? "animate-spin" : ""}`}
                 />
-                <span>{isPingingKey ? "Đang ping Gemini..." : "Test Ping Khóa"}</span>
+                <span>{isPingingKey ? "Đang kiểm tra kết nối..." : "Kiểm tra kết nối API Key"}</span>
               </button>
             </div>
 
