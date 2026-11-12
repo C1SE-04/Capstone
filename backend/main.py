@@ -102,6 +102,8 @@ app.include_router(admin_kpi_metrics.router)
 from routers import admin_active_learning  # US 10.4 (Task T10.4.4): Admin Active Learning & Tái Huấn Luyện Mô Hình
 app.include_router(admin_active_learning.router)
 app.include_router(admin_active_learning.compat_router)
+from routers import admin_message_logs  # US 10.4 (Task T10.4.7): Nhật ký Tin nhắn
+app.include_router(admin_message_logs.router)
 
 
 

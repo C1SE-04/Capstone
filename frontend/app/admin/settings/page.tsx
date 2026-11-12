@@ -133,7 +133,7 @@ export interface KeyTestResult {
 
 // Cấu hình mặc định thế hệ Gemini mới nhất (Sprint 10 - Mặc định Gemini 3.8/3.5/3.1)
 const DEFAULT_SETTINGS: SystemSettingsState = {
-  primary_model: "gemini-3.8-flash",
+  primary_model: "gemini-3.5-flash-lite",
   parent_insight_model: "gemini-3.5-flash",
   classifier_model: "gemini-3.1-flash-lite",
   email_model: "gemini-3.1-flash-lite",
@@ -160,12 +160,20 @@ const DEFAULT_SETTINGS: SystemSettingsState = {
 // Danh mục mô hình Google khuyên dùng chuẩn bị sẵn
 const INITIAL_CURATED_MODELS: ModelOption[] = [
   {
+    id: "gemini-3.5-flash-lite",
+    name: "gemini-3.5-flash-lite",
+    display_name: "Gemini 3.5 Flash-Lite (Khuyên Dùng)",
+    description: "Trọng lượng nhẹ, phản hồi tức thì (~0.2s), tối ưu Chat Socratic, Flashcard & Dự phòng",
+    speed: "Cực nhanh (~0.2s)",
+    recommended_for: "Chat Socratic Chính & Dự Phòng (primary_model, backup_model)",
+  },
+  {
     id: "gemini-3.8-flash",
     name: "gemini-3.8-flash",
-    display_name: "Gemini 3.8 Flash (Khuyên Dùng)",
+    display_name: "Gemini 3.8 Flash",
     description: "Tối ưu sâu phương pháp Socratic, đo lường nhận thức và đọc ảnh đề bài",
     speed: "Siêu tốc (~0.3s)",
-    recommended_for: "Chat Socratic Chính (primary_model)",
+    recommended_for: "Chat Socratic Nâng Cao",
   },
   {
     id: "gemini-3.5-flash",
@@ -312,7 +320,7 @@ export default function AdminSettingsPage() {
   const [playgroundPrompt, setPlaygroundPrompt] = useState<string>(
     "Giải phương trình: 2x + 5 = 15. Hãy gợi mở bước đầu tiên cho học sinh lớp 7."
   );
-  const [playgroundModel, setPlaygroundModel] = useState<string>("gemini-3.8-flash");
+  const [playgroundModel, setPlaygroundModel] = useState<string>("gemini-3.5-flash-lite");
   const [playgroundResult, setPlaygroundResult] = useState<PlaygroundResult | null>(
     null
   );
@@ -346,7 +354,7 @@ export default function AdminSettingsPage() {
       if (res.ok) {
         const data = await res.json();
         setSettings({
-          primary_model: data.primary_model || "gemini-3.8-flash",
+          primary_model: data.primary_model || "gemini-3.5-flash-lite",
           parent_insight_model: data.parent_insight_model || "gemini-3.5-flash",
           classifier_model: data.classifier_model || "gemini-3.1-flash-lite",
           email_model: data.email_model || "gemini-3.1-flash-lite",
@@ -545,7 +553,7 @@ export default function AdminSettingsPage() {
   const handleResetDefaultModels = () => {
     setSettings((prev) => ({
       ...prev,
-      primary_model: "gemini-3.8-flash",
+      primary_model: "gemini-3.5-flash-lite",
       parent_insight_model: "gemini-3.5-flash",
       classifier_model: "gemini-3.1-flash-lite",
       email_model: "gemini-3.1-flash-lite",
@@ -910,7 +918,7 @@ export default function AdminSettingsPage() {
                 ))}
               </select>
               <p className="text-[11px] text-[#7A3E04] leading-relaxed">
-                🎯 Khuyến nghị: <strong className="text-[#8C4905]">gemini-3.8-flash</strong> — Tối ưu sư phạm gợi mở từng bước, không giải bài hộ.
+                🎯 Khuyến nghị: <strong className="text-[#8C4905]">gemini-3.5-flash-lite</strong> — Phản hồi siêu tốc, tối ưu sư phạm gợi mở từng bước, không giải bài hộ.
               </p>
             </div>
 

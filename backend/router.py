@@ -77,8 +77,9 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
      * Nếu học sinh hiểu sai bản chất/ngộ nhận toán học (ví dụ: 'nhân 2 phân số là nhân chéo', '2 âm nhân nhau ra âm') nhưng bị gán vai trò SCAFFOLDING -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: MISCONCEPTION -->
      * Nếu học sinh hỏi định nghĩa, lý thuyết, khái niệm (ví dụ: 'số hữu tỉ là gì ạ', 'định nghĩa hàm số') nhưng bị gán vai trò SCAFFOLDING -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: KNOWLEDGE_TRACING -->
      * Nếu học sinh xúc phạm, chửi thề, quấy rối, vô lễ nhưng bị gán học tập -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: SAFETY -->
-     * Nếu học sinh chỉ cần hướng dẫn từng bước bình thường nhưng bị gán nhầm sang SAFETY hoặc MISCONCEPTION -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: SCAFFOLDING -->
+     * Nếu học sinh đang THỰC SỰ HỎI BÀI TOÁN HOẶC ĐANG TÍNH TOÁN GIẢI TOÁN nhưng bị gán nhầm sang SAFETY hoặc MISCONCEPTION -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: SCAFFOLDING -->
    - NGUYÊN TẮC BẤT DI BẤT DỊCH CỦA THẺ ẨN (CHỐNG BẮT SAI & FALSE POSITIVE):
+     * VAI TRÒ SAFETY BAO GỒM CẢ CHÀO HỎI & NGOÀI LỀ: Khi học sinh CHÀO HỎI ('chào thầy', 'em chào thầy', 'hello', 'hi', 'thầy ơi', 'tạm biệt') hoặc trò chuyện ngoài bài học: Vai trò SAFETY là HOÀN TOÀN CHUẨN XÁC theo thiết kế hệ thống! TUYỆT ĐỐI KHÔNG coi đây là lỗi và TUYỆT ĐỐI KHÔNG gắn thẻ <!-- AUDIT_AGENT: SCAFFOLDING -->!
      * Nếu phân luồng đã CHUẨN XÁC: TUYỆT ĐỐI KHÔNG đính kèm bất kỳ thẻ ẩn nào.
      * TUYỆT ĐỐI KHÔNG gắn thẻ trùng với vai trò hiện tại (ví dụ: nếu vai trò hiện tại đã là SCAFFOLDING thì tuyệt đối không gắn thẻ SCAFFOLDING).
      * BẢO VỆ CÂU TRẢ LỜI NGẮN TRONG HỘI THOẠI: Khi học sinh trả lời ngắn gọn (như 'dạ', 'vâng', 'là 6', 'bằng 3', 'em chưa hiểu', 'tiếp theo làm gì') để đáp lại câu hỏi của Thầy: Đây là sự tiếp nối hoàn toàn tự nhiên của vai trò SCAFFOLDING, TUYỆT ĐỐI KHÔNG coi là sai lệch và TUYỆT ĐỐI KHÔNG gắn thẻ ẩn!
@@ -284,8 +285,9 @@ Chỉ đạo sư phạm từ Orchestrator: {task_description}
      * Học sinh hiểu sai kiến thức/ngộ nhận toán học nhưng vai trò là SCAFFOLDING -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: MISCONCEPTION -->
      * Học sinh hỏi khái niệm/định nghĩa lý thuyết nhưng vai trò là SCAFFOLDING -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: KNOWLEDGE_TRACING -->
      * Học sinh vi phạm thái độ, xưng hô mày tao, chửi thề nhưng vai trò là học tập -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: SAFETY -->
-     * Học sinh học tập bình thường nhưng vai trò là MISCONCEPTION/SAFETY -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: SCAFFOLDING -->
+     * Học sinh đang THỰC SỰ HỎI BÀI TOÁN HOẶC ĐANG TÍNH TOÁN GIẢI TOÁN nhưng vai trò là MISCONCEPTION/SAFETY -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: SCAFFOLDING -->
    - NGUYÊN TẮC CHỐNG BẮT SAI & FALSE POSITIVE:
+     * VAI TRÒ SAFETY BAO GỒM CẢ CHÀO HỎI & NGOÀI LỀ: Khi học sinh CHÀO HỎI ('chào thầy', 'em chào thầy', 'hello', 'hi', 'thầy ơi', 'tạm biệt') hoặc chuyện ngoài lề: Vai trò SAFETY là ĐÚNG 100%! TUYỆT ĐỐI KHÔNG coi là sai và TUYỆT ĐỐI KHÔNG gắn thẻ <!-- AUDIT_AGENT: SCAFFOLDING -->!
      * Nếu phân luồng ĐÃ CHUẨN XÁC: TUYỆT ĐỐI KHÔNG gắn thẻ này!
      * TUYỆT ĐỐI KHÔNG gắn thẻ trùng với vai trò hiện tại (ví dụ: vai trò là '{clean_target_agent}' thì không được gắn <!-- AUDIT_AGENT: {clean_target_agent} -->).
      * BẢO VỆ CÂU TRẢ LỜI NGẮN: Khi học sinh đáp lời ngắn gọn (như 'dạ', 'vâng', 'là 6', 'bằng 3', 'em chưa hiểu', 'tiếp theo làm gì'): Đây là sự tiếp nối hoàn toàn bình thường của SCAFFOLDING, TUYỆT ĐỐI KHÔNG gắn thẻ ẩn!

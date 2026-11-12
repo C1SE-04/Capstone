@@ -365,6 +365,8 @@ def approve_and_retrain(
             message=f"Đã duyệt {approved_count} mẫu câu mới, tái huấn luyện mô hình và nạp RAM thành công!",
             retrained_count=approved_count,
             total_samples=len(df),
+            approved_count=approved_count,
+            total_samples_trained=len(df),
         )
 
     except HTTPException:

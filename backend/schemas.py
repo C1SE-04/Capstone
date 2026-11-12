@@ -1367,6 +1367,8 @@ class RetrainResponse(BaseModel):
     message: str
     retrained_count: int
     total_samples: int
+    approved_count: Optional[int] = None
+    total_samples_trained: Optional[int] = None
 
 
 class RejectFeedbacksRequest(BaseModel):
@@ -1407,4 +1409,64 @@ class DeleteFeedbackResponse(BaseModel):
     success: bool = True
     message: str = "Đã xóa bản ghi thành công"
     deleted_id: int
+
+
+# ─── US 10.4 (T10.4.7): Nhật ký Tin nhắn ────────────────────────────────────
+
+class MessageLogItem(BaseModel):
+    """Một dòng trong bảng Nhật ký Tin nhắn."""
+    msg_id: str
+    student_question: str
+    msg_time: datetime
+    user_id: str
+    student_name: str
+    student_email: Optional[str] = None
+    grade: Optional[int] = None
+    session_id: str
+    session_title: Optional[str] = None
+    log_id: Optional[str] = None
+    target_agent: Optional[str] = None      # VD: "SCAFFOLDING_AGENT"
+    routing_reason: Optional[str] = None
+    notify_parent: Optional[bool] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MessageLogListResponse(BaseModel):
+    """Kết quả danh sách tin nhắn có phân trang."""
+    success: bool = True
+    total: int
+    page: int
+    page_size: int
+    items: List[MessageLogItem]
+
+
+class MessageLogStats(BaseModel):
+    """KPI cards cho trang Nhật ký Tin nhắn."""
+    total_today: int
+    total_all: int
+    agent_distribution: Dict[str, int]
+    parent_alerts_today: int
+    sessions_today: int = 0
+
+
+class MessageLogConversationItem(BaseModel):
+    """Một tin nhắn trong cuộc hội thoại chi tiết."""
+    msg_id: str
+    sender_type: str          # 'USER' | 'AI'
+    content: str
+    created_at: datetime
+    attachment_url: Optional[str] = None
+
+
+class MessageLogConversationResponse(BaseModel):
+    """Full cuộc hội thoại của 1 session."""
+    success: bool = True
+    session_id: str
+    session_title: Optional[str] = None
+    student_name: str
+    student_email: Optional[str] = None
+    grade: Optional[int] = None
+    messages: List[MessageLogConversationItem]
 

@@ -414,6 +414,11 @@ def process_query_with_orchestrator(
         except Exception:
             pass
 
+    # BẢO VỆ CHỐNG FALSE POSITIVE (CHÀO HỎI & NGOÀI LỀ):
+    # Câu chào hỏi / xã giao thuộc trách nhiệm của SAFETY theo kiến trúc hệ thống.
+    if is_greeting_or_offtopic and suggested_agent in ('SCAFFOLDING', 'SCAFFOLDING_AGENT'):
+        suggested_agent = None
+
     # US 10.4 (Task T10.4.2): Nếu phát hiện phân luồng sai -> Ghi nhận vào audit_feedback_logs
     if suggested_agent:
         if background_tasks:

@@ -37,6 +37,13 @@ import {
   Bot,
   Layers,
   Cpu,
+  FileText,
+  User,
+  Filter,
+  ExternalLink,
+  BookMarked,
+  GraduationCap,
+  AlertCircle,
 } from "lucide-react";
 import {
   BarChart,
@@ -64,6 +71,11 @@ import {
   AuditFeedbackItem,
   ActiveLearningStats,
   UpdateFeedbackPayload,
+  MessageLogItem,
+  MessageLogListResponse,
+  MessageLogStats,
+  ConversationMessage,
+  MessageLogConversationResponse,
 } from "@/types/admin";
 
 // ==============================================================================
@@ -483,7 +495,92 @@ function AdminSafetyContent() {
   );
 
   // --- US 10.4 (T10.4.5) Tabs & Active Learning State ---
-  const [activeTab, setActiveTab] = useState<"SAFETY" | "ACTIVE_LEARNING">("SAFETY");
+  const [activeTab, setActiveTab] = useState<"MESSAGE_LOGS" | "ACTIVE_LEARNING">("MESSAGE_LOGS");
+
+  // ── Message Logs State (Tab 1 mới) ──────────────────────────────────────────
+  const [mlItems, setMlItems] = useState<MessageLogItem[]>([]);
+  const [mlStats, setMlStats] = useState<MessageLogStats>({
+    total_today: 0, total_all: 0, agent_distribution: {}, parent_alerts_today: 0, sessions_today: 0,
+  });
+  const [mlTotal, setMlTotal] = useState(0);
+  const [mlPage, setMlPage] = useState(1);
+  const mlPageSize = 15;
+  const [mlAgentFilter, setMlAgentFilter] = useState("ALL");
+  const [mlSearch, setMlSearch] = useState("");
+  const [mlDateFrom, setMlDateFrom] = useState("");
+  const [mlDateTo, setMlDateTo] = useState("");
+  const [isMlLoading, setIsMlLoading] = useState(false);
+  // Modal chi tiết
+  const [mlSelectedMsg, setMlSelectedMsg] = useState<MessageLogItem | null>(null);
+  const [mlConversation, setMlConversation] = useState<ConversationMessage[]>([]);
+  const [mlConvMeta, setMlConvMeta] = useState<{title?: string; student?: string; grade?: number} | null>(null);
+  const [isMlConvLoading, setIsMlConvLoading] = useState(false);
+  const [mlModalOpen, setMlModalOpen] = useState(false);
+
+  const getAuthHeaders = useCallback((): Record<string, string> => {
+    const token = (session as { access_token?: string })?.access_token || "";
+    const h: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) h["Authorization"] = `Bearer ${token}`;
+    return h;
+  }, [session]);
+
+  const fetchMlData = useCallback(async (page = 1) => {
+    setIsMlLoading(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const qs = new URLSearchParams();
+      qs.set("page", String(page));
+      qs.set("page_size", String(mlPageSize));
+      if (mlAgentFilter !== "ALL") qs.set("agent", mlAgentFilter);
+      if (mlSearch.trim()) qs.set("search", mlSearch.trim());
+      if (mlDateFrom) qs.set("date_from", mlDateFrom);
+      if (mlDateTo) qs.set("date_to", mlDateTo);
+
+      const [listRes, statsRes] = await Promise.allSettled([
+        fetch(`${backendUrl}/api/admin/message-logs?${qs}`, { headers: getAuthHeaders() }),
+        fetch(`${backendUrl}/api/admin/message-logs/stats`, { headers: getAuthHeaders() }),
+      ]);
+
+      if (listRes.status === "fulfilled" && listRes.value.ok) {
+        const data: MessageLogListResponse = await listRes.value.json();
+        setMlItems(data.items || []);
+        setMlTotal(data.total || 0);
+        setMlPage(data.page || 1);
+      }
+      if (statsRes.status === "fulfilled" && statsRes.value.ok) {
+        const data: MessageLogStats = await statsRes.value.json();
+        setMlStats(data);
+      }
+    } catch (err) {
+      console.warn("[MessageLogs] fetch error:", err);
+    } finally {
+      setIsMlLoading(false);
+    }
+  }, [getAuthHeaders, mlAgentFilter, mlSearch, mlDateFrom, mlDateTo]);
+
+  const fetchMlConversation = useCallback(async (msgId: string) => {
+    setIsMlConvLoading(true);
+    setMlConversation([]);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/api/admin/message-logs/${msgId}/conversation`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data: MessageLogConversationResponse = await res.json();
+        setMlConversation(data.messages || []);
+        setMlConvMeta({ title: data.session_title, student: data.student_name, grade: data.grade });
+      }
+    } catch (err) {
+      console.warn("[MessageLogs] conversation fetch error:", err);
+    } finally {
+      setIsMlConvLoading(false);
+    }
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    if (activeTab === "MESSAGE_LOGS") fetchMlData(1);
+  }, [activeTab, mlAgentFilter, mlDateFrom, mlDateTo]);
+
+  // ── Active Learning State ────────────────────────────────────────────────────
   const [alFeedbacks, setAlFeedbacks] = useState<AuditFeedbackItem[]>(INITIAL_ACTIVE_LEARNING_ITEMS);
   const [alStats, setAlStats] = useState<ActiveLearningStats>(INITIAL_AL_STATS);
   const [isAlLoading, setIsAlLoading] = useState<boolean>(false);
@@ -558,8 +655,10 @@ function AdminSafetyContent() {
       }
 
       const result = await res.json();
+      const count = result.approved_count ?? result.retrained_count ?? selectedIds.length;
+      const total = result.total_samples_trained ?? result.total_samples ?? "7200+";
       showToast(
-        `Đã duyệt ${result.approved_count} mẫu và nạp RAM mô hình mới (${result.total_samples_trained} mẫu tri thức)!`,
+        `Đã duyệt ${count} mẫu và nạp RAM mô hình mới (${total} mẫu tri thức)!`,
         "success"
       );
       await fetchActiveLearningData();
@@ -1096,55 +1195,43 @@ function AdminSafetyContent() {
         </div>
       )}
 
-      {/* ── 2. Top Header Bar and Actions (Đồng bộ cùng hàng & chuẩn nhận diện) ── */}
+      {/* ── 2. Top Header Bar and Actions ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0 max-w-2xl">
           <div className="w-12 h-12 bg-[#C1762A] rounded-2xl flex items-center justify-center text-white shadow-md shrink-0">
-            {activeTab === "SAFETY" ? <ShieldAlert className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
+            {activeTab === "MESSAGE_LOGS" ? <FileText className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
           </div>
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
               Trung Tâm Giám Sát Agent
             </h1>
             <p className="text-sm text-[#7A3E04] mt-1 font-medium">
-              {activeTab === "SAFETY"
-                ? "Kiểm toán nhật ký vi phạm an toàn Safety Agent và trực quan hóa tỷ lệ học sinh bấm \"Chưa hiểu\" theo dạng bài"
+              {activeTab === "MESSAGE_LOGS"
+                ? "Nhật ký toàn bộ tin nhắn học sinh · agent được chọn · lý do điều phối · cảnh báo phụ huynh"
                 : "Kiểm duyệt câu hỏi học sinh bị phân loại nhầm agent, chuẩn hóa nhãn đúng và kích hoạt tái huấn luyện mô hình Active Learning"}
             </p>
           </div>
         </div>
 
-        {/* Action Buttons: 100% functional, cùng 1 hàng ngang đồng bộ */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap self-start md:self-auto">
           {/* Nút Làm mới */}
           <button
-            onClick={() => (activeTab === "SAFETY" ? fetchSafetyData() : fetchActiveLearningData())}
-            disabled={activeTab === "SAFETY" ? isRefreshing : isAlLoading}
+            onClick={() => activeTab === "MESSAGE_LOGS" ? fetchMlData(mlPage) : fetchActiveLearningData()}
+            disabled={activeTab === "MESSAGE_LOGS" ? isMlLoading : isAlLoading}
             className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#F7ECE1] hover:border-[#C1762A] active:scale-95 transition-all duration-150 cursor-pointer disabled:opacity-50 whitespace-nowrap"
             title="Làm mới dữ liệu từ server"
           >
             <RotateCcw
               size={15}
               className={
-                (activeTab === "SAFETY" ? isRefreshing : isAlLoading)
+                (activeTab === "MESSAGE_LOGS" ? isMlLoading : isAlLoading)
                   ? "animate-spin text-[#C1762A]"
                   : "text-[#C1762A]"
               }
             />
-            <span>{(activeTab === "SAFETY" ? isRefreshing : isAlLoading) ? "Đang tải..." : "Làm mới"}</span>
+            <span>{(activeTab === "MESSAGE_LOGS" ? isMlLoading : isAlLoading) ? "Đang tải..." : "Làm mới"}</span>
           </button>
-
-          {/* Nút Xuất CSV (chỉ hiện ở Tab Giám sát Safety) */}
-          {activeTab === "SAFETY" && (
-            <button
-              onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white text-[#8C4905] border border-[#F1CCA6] shadow-xs hover:bg-[#F7ECE1] hover:border-[#C1762A] active:scale-95 transition-all duration-150 cursor-pointer whitespace-nowrap"
-              title="Tải toàn bộ Audit Log dưới định dạng CSV"
-            >
-              <Download size={15} className="text-[#C1762A]" />
-              <span>Xuất Audit Log (CSV)</span>
-            </button>
-          )}
 
           {/* Nút Cài đặt Guardrail */}
           <Link
@@ -1158,26 +1245,26 @@ function AdminSafetyContent() {
         </div>
       </div>
 
-      {/* ── 2.1 Tab Switcher: Tab 1 Safety vs Tab 2 Active Learning (US 10.4) ── */}
+      {/* ── 2.1 Tab Switcher: Tab 1 Nhật Ký vs Tab 2 Active Learning ── */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[#F1CCA6] pb-3">
         <button
-          onClick={() => setActiveTab("SAFETY")}
+          onClick={() => setActiveTab("MESSAGE_LOGS")}
           className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all duration-150 cursor-pointer ${
-            activeTab === "SAFETY"
+            activeTab === "MESSAGE_LOGS"
               ? "bg-[#C1762A] text-white shadow-sm ring-2 ring-[#C1762A]/20"
               : "bg-white text-[#7A3E04] border border-[#F1CCA6] hover:bg-[#F7ECE1] hover:text-[#8C4905]"
           }`}
         >
-          <ShieldAlert size={16} />
-          <span>Tab 1: Giám Sát An Toàn (Safety Agent)</span>
+          <FileText size={16} />
+          <span>Tab 1: Nhật Ký Tin Nhắn</span>
           <span
             className={`px-2 py-0.5 rounded-full text-xs font-black ${
-              activeTab === "SAFETY"
+              activeTab === "MESSAGE_LOGS"
                 ? "bg-white text-[#C1762A]"
-                : "bg-red-50 text-red-700 border border-red-200"
+                : "bg-blue-50 text-blue-700 border border-blue-200"
             }`}
           >
-            {stats.total_alerts}
+            {mlStats.total_today}
           </span>
         </button>
 
@@ -1203,796 +1290,537 @@ function AdminSafetyContent() {
         </button>
       </div>
 
-      {/* ── TAB 1: GIÁM SÁT AN TOÀN (SAFETY) ── */}
-      {activeTab === "SAFETY" && (
-        <div className="space-y-8 animate-in fade-in duration-200">
-      {/* ── 3. 4 KPI Summary Cards (Đồng bộ ngôn ngữ thiết kế Admin Portal) ── */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Thẻ 1: Tổng cảnh báo vi phạm */}
-        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center text-red-600 shadow-inner">
-              <ShieldAlert size={22} className="stroke-[2.2]" />
-            </div>
-            <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-rose-100">
-              <TrendingUp size={12} /> {stats.total_alerts} sự cố
-            </span>
-          </div>
-          <div className="mt-4">
-            <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
-              Tổng Vi Phạm Safety
-            </p>
-            <p className="text-2xl font-black text-[#8C4905] leading-none">
-              {stats.total_alerts}
-            </p>
-            <p className="text-xs text-[#7A3E04] mt-2 flex items-center gap-1">
-              <span>Đã chặn triệt để:</span>
-              <strong className="text-red-600 font-bold">{stats.blocked_queries_count} câu chat</strong>
-            </p>
-          </div>
-        </div>
-
-        {/* Thẻ 2: Jailbreak Attempts */}
-        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-700 shadow-inner">
-              <Lock size={22} className="stroke-[2.2]" />
-            </div>
-            <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
-              100% Chặn thành công
-            </span>
-          </div>
-          <div className="mt-4">
-            <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
-              Cố Tình Bẻ Khóa (Jailbreak)
-            </p>
-            <p className="text-2xl font-black text-amber-900 leading-none">
-              {stats.jailbreak_attempts}
-            </p>
-            <p className="text-xs text-[#7A3E04] mt-2">
-              Prompt Injection & cố ý đòi đáp án
-            </p>
-          </div>
-        </div>
-
-        {/* Thẻ 3: Ngôn từ Toxic đã xử lý */}
-        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shadow-inner">
-              <AlertTriangle size={22} className="stroke-[2.2]" />
-            </div>
-            <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-100">
-              Đã lọc an toàn
-            </span>
-          </div>
-          <div className="mt-4">
-            <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
-              Ngôn Từ Thô Tục / Toxic
-            </p>
-            <p className="text-2xl font-black text-amber-900 leading-none">
-              {stats.toxic_language_count}
-            </p>
-            <p className="text-xs text-[#7A3E04] mt-2">
-              Cảnh báo & hướng dẫn giao tiếp lịch sự
-            </p>
-          </div>
-        </div>
-
-        {/* Thẻ 4: Tỷ lệ hiểu bài & Chưa hiểu */}
-        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
-              <Brain size={22} className="stroke-[2.2]" />
-            </div>
-            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-100">
-              {stats.comprehension_rate_percent}% Đã hiểu
-            </span>
-          </div>
-          <div className="mt-4">
-            <p className="text-xs font-bold text-[#7A3E04] uppercase tracking-wider mb-1">
-              Tỷ Lệ Bấm &quot;Chưa Hiểu&quot;
-            </p>
-            <p className="text-2xl font-black text-[#8C4905] leading-none">
-              {stats.not_understood_rate_percent}%
-            </p>
-            <p className="text-xs text-[#7A3E04] mt-2 flex items-center gap-1">
-              <span>Độ khó gợi ý TB:</span>
-              <strong className="text-emerald-700 font-bold">3.1 gợi ý/bài</strong>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 4. PHẦN 2: ĐÁNH GIÁ CHẤT LƯỢNG GỢI Ý SOCRATIC (Visual Analytics) ── */}
-      <section className="bg-white rounded-2xl border border-[#F1CCA6] shadow-xs p-6 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#F1CCA6]/60">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-[#F7ECE1] text-[#C1762A] flex items-center justify-center font-bold">
-                <BarChart3 size={18} />
+      {/* ── TAB 1: NHẬT KÝ TIN NHẮN ── */}
+      {activeTab === "MESSAGE_LOGS" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* KPI Cards */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Tổng hôm nay */}
+            <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-inner">
+                  <MessageSquare size={22} className="stroke-[2.2]" />
+                </div>
+                <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">Hôm nay</span>
               </div>
-              <h2 className="text-lg md:text-xl font-bold text-[#1C1917]">
-                Đánh Giá Chất Lượng Gợi Ý Socratic
-              </h2>
-            </div>
-            <p className="text-xs md:text-sm text-[#7A3E04] mt-1">
-              Trực quan hóa tỷ lệ học sinh bấm nút &quot;Chưa hiểu&quot; theo từng dạng bài để đánh giá độ khó và tính dễ hiểu của các câu hỏi gợi mở từ AI
-            </p>
-          </div>
-
-          {/* Interactive Chart View Controls: Rate % vs Count */}
-          <div className="flex items-center gap-2">
-            <div className="inline-flex p-1 bg-[#F7ECE1] rounded-xl border border-[#F1CCA6]">
-              <button
-                onClick={() => setChartMetric("rate")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  chartMetric === "rate"
-                    ? "bg-[#C1762A] text-white shadow-xs"
-                    : "text-[#8C4905] hover:text-[#1C1917]"
-                }`}
-              >
-                Tỷ lệ Chưa hiểu (%)
-              </button>
-              <button
-                onClick={() => setChartMetric("count")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  chartMetric === "count"
-                    ? "bg-[#C1762A] text-white shadow-xs"
-                    : "text-[#8C4905] hover:text-[#1C1917]"
-                }`}
-              >
-                Số lượt Chưa hiểu (Lượt)
-              </button>
+              <div className="mt-3">
+                <div className="text-3xl font-black text-[#8C4905]">{mlStats.total_today.toLocaleString()}</div>
+                <div className="text-xs font-semibold text-stone-500 mt-1 uppercase tracking-wide">Tổng Tin Nhắn Học Sinh</div>
+                <div className="text-xs text-stone-400 mt-0.5">Tổng: {mlStats.total_all.toLocaleString()} tin nhắn</div>
+              </div>
             </div>
 
-            {/* Grade Filter Dropdown for Chart */}
-            <select
-              value={chartGradeFilter}
-              onChange={(e) => setChartGradeFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl text-xs font-bold bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6] outline-none cursor-pointer hover:bg-white transition-colors"
-              title="Lọc biểu đồ theo khối lớp"
-            >
-              <option value="ALL">Tất cả các lớp</option>
-              <option value="4">Toán Lớp 4</option>
-              <option value="5">Toán Lớp 5</option>
-              <option value="7">Toán Lớp 7</option>
-              <option value="8">Toán Lớp 8</option>
-              <option value="9">Toán Lớp 9</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Charts Grid: Bar Chart + Pie Chart */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Bar Chart: Dạng bài vs Chưa hiểu */}
-          <div className="lg:col-span-2 bg-[#F7ECE1] rounded-2xl p-4 border border-[#F1CCA6]/60">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-[#8C4905] uppercase tracking-wider flex items-center gap-1.5">
-                <Brain size={14} className="text-[#C1762A]" />
-                {chartMetric === "rate"
-                  ? "Tỷ lệ bấm Chưa hiểu theo Dạng bài (%)"
-                  : "Tổng số lượt bấm Chưa hiểu theo Dạng bài"}
-              </span>
-              <span className="text-[11px] text-[#7A3E04]">
-                (Click vào cột để xem nhận xét sư phạm chi tiết)
-              </span>
-            </div>
-
-            <div className="w-full h-80">
-              {isMounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={filteredChartTopics}
-                    margin={{ top: 20, right: 20, left: -10, bottom: 45 }}
-                    onClick={(e: unknown) => {
-                      const chartEvent = e as {
-                        activePayload?: Array<{ payload: AdminDifficultTopicStat }>;
-                      };
-                      if (chartEvent?.activePayload?.[0]) {
-                        setSelectedTopicDetail(chartEvent.activePayload[0].payload);
-                      }
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1CCA6" vertical={false} />
-                    <XAxis
-                      dataKey="topic"
-                      angle={-20}
-                      textAnchor="end"
-                      interval={0}
-                      tick={{ fill: "#7A3E04", fontSize: 11, fontWeight: 500 }}
-                      height={60}
-                    />
-                    <YAxis
-                      domain={[0, chartMetric === "rate" ? 40 : "auto"]}
-                      tick={{ fill: "#7A3E04", fontSize: 11 }}
-                      unit={chartMetric === "rate" ? "%" : ""}
-                    />
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload || !payload.length) return null;
-                        const data = payload[0].payload as AdminDifficultTopicStat;
-                        return (
-                          <div className="bg-white p-3 rounded-xl shadow-lg border border-[#F1CCA6] text-xs space-y-1.5 max-w-xs">
-                            <p className="font-bold text-[#1C1917]">{data.topic}</p>
-                            <div className="flex items-center justify-between gap-4 pt-1 border-t border-[#F1CCA6]/50">
-                              <span className="text-[#7A3E04]">Tỷ lệ Chưa hiểu:</span>
-                              <strong className="text-amber-700 font-extrabold">
-                                {(100 - (data.comprehension_rate || 80)).toFixed(1)}%
-                              </strong>
-                            </div>
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="text-[#7A3E04]">Số lượt Chưa hiểu:</span>
-                              <strong className="text-[#8C4905] font-extrabold">
-                                {data.not_understood_count} lượt
-                              </strong>
-                            </div>
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="text-[#7A3E04]">Số gợi ý trung bình:</span>
-                              <strong className="text-emerald-700 font-extrabold">
-                                {data.average_hints} gợi ý/bài
-                              </strong>
-                            </div>
-                            <p className="text-[11px] text-stone-500 italic mt-1 pt-1 border-t border-stone-100">
-                              💡 {data.pedagogical_feedback}
-                            </p>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Bar
-                      dataKey={
-                        chartMetric === "rate"
-                          ? (d: AdminDifficultTopicStat) => +(100 - (d.comprehension_rate || 80)).toFixed(1)
-                          : "not_understood_count"
-                      }
-                      radius={[8, 8, 0, 0]}
-                      cursor="pointer"
-                    >
-                      {filteredChartTopics.map((entry, index) => {
-                        const notUnderstoodRate = 100 - (entry.comprehension_rate || 80);
-                        const fillColor =
-                          notUnderstoodRate > 25
-                            ? "#EF4444" // Đỏ: Tỷ lệ chưa hiểu cao
-                            : notUnderstoodRate > 18
-                            ? "#C1762A" // Cam: Trung bình
-                            : "#10B981"; // Xanh: Thấp
-                        return <Cell key={`cell-${index}`} fill={fillColor} />;
-                      })}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-sm text-[#7A3E04]">
-                  Đang tải biểu đồ...
+            {/* Card 2: Phiên học hôm nay */}
+            <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div className="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 shadow-inner">
+                  <GraduationCap size={22} className="stroke-[2.2]" />
                 </div>
-              )}
+                <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">Hôm nay</span>
+              </div>
+              <div className="mt-3">
+                <div className="text-3xl font-black text-[#8C4905]">{mlStats.sessions_today.toLocaleString()}</div>
+                <div className="text-xs font-semibold text-stone-500 mt-1 uppercase tracking-wide">Phiên Học</div>
+                <div className="text-xs text-stone-400 mt-0.5">Phiên khởi tạo trong ngày</div>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-semibold mt-2 text-[#7A3E04]">
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-[#EF4444]" /> Cần tối ưu prompt (&gt; 25% Chưa hiểu)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-[#C1762A]" /> Mức độ tiếp thu vừa phải (18 - 25%)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-[#10B981]" /> Hiểu bài tốt (&lt; 18%)
-              </span>
-            </div>
-          </div>
-
-          {/* Right Pie Chart: Breakdown Safety Incidents */}
-          <div className="bg-[#F7ECE1] rounded-2xl p-4 border border-[#F1CCA6]/60 flex flex-col justify-between">
-            <div>
-              <span className="text-xs font-bold text-[#8C4905] uppercase tracking-wider flex items-center gap-1.5 mb-2">
-                <PieChartIcon size={14} className="text-[#C1762A]" />
-                Phân Loại Vi Phạm Safety Agent
-              </span>
-              <p className="text-[11px] text-[#7A3E04]">
-                Tỷ trọng 4 nhóm hành vi vi phạm được Safety Agent can thiệp và bảo vệ
-              </p>
-            </div>
-
-            <div className="w-full h-56 my-auto">
-              {isMounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={VIOLATION_PIE_DATA}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={48}
-                      outerRadius={75}
-                      paddingAngle={4}
-                      dataKey="value"
-                    >
-                      {VIOLATION_PIE_DATA.map((entry, index) => (
-                        <Cell key={`pie-cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload || !payload.length) return null;
-                        const data = payload[0].payload;
-                        return (
-                          <div className="bg-white p-2 rounded-xl shadow border border-[#F1CCA6] text-xs">
-                            <p className="font-bold text-[#1C1917]">{data.name}</p>
-                            <p className="text-[#C1762A] font-bold">
-                              {data.value} vụ ({((data.value / 100) * 100).toFixed(0)}%)
-                            </p>
-                          </div>
-                        );
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5 text-xs">
-              {VIOLATION_PIE_DATA.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between text-[#7A3E04]">
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    {item.name}
-                  </span>
-                  <span className="font-bold text-[#1C1917]">{item.value}%</span>
+            {/* Card 3: Phân bổ Agent (top agent hôm nay) */}
+            <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center text-green-600 shadow-inner">
+                  <BarChart3 size={22} className="stroke-[2.2]" />
                 </div>
-              ))}
+                <span className="text-[11px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">Phân bổ</span>
+              </div>
+              <div className="mt-3">
+                <div className="text-3xl font-black text-[#8C4905]">
+                  {Object.values(mlStats.agent_distribution).reduce((a, b) => a + b, 0).toLocaleString()}
+                </div>
+                <div className="text-xs font-semibold text-stone-500 mt-1 uppercase tracking-wide">Tổng Log Agent</div>
+                <div className="text-xs text-stone-400 mt-0.5">
+                  Top: {Object.entries(mlStats.agent_distribution).sort(([,a],[,b]) => b-a)[0]?.[0]?.replace("_AGENT","") ?? "—"}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* AI Pedagogical Recommendations Block */}
-        <div className="bg-[#F7ECE1] rounded-2xl p-5 border border-[#F1CCA6] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F7ECE1] text-[#C1762A] flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Sparkles size={20} />
+            {/* Card 4: Cảnh báo phụ huynh */}
+            <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div className="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600 shadow-inner">
+                  <BellRing size={22} className="stroke-[2.2]" />
+                </div>
+                <span className="text-[11px] font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100">Hôm nay</span>
+              </div>
+              <div className="mt-3">
+                <div className="text-3xl font-black text-[#8C4905]">{mlStats.parent_alerts_today}</div>
+                <div className="text-xs font-semibold text-stone-500 mt-1 uppercase tracking-wide">Cảnh Báo Phụ Huynh</div>
+                <div className="text-xs text-stone-400 mt-0.5">Tin nhắn kích hoạt notify_parent</div>
+              </div>
             </div>
-            <div>
-              <h4 className="text-sm font-bold text-[#8C4905]">
-                Đề Xuất Tối Ưu Socratic Từ Hệ Thống Phân Tích AI
-              </h4>
-              <p className="text-xs text-[#7A3E04] mt-1 leading-relaxed">
-                Dạng bài <strong className="text-[#1C1917] font-bold">Giải toán Chuyển động đều</strong> và{" "}
-                <strong className="text-[#1C1917] font-bold">Phân số & Hỗn số (Lớp 5)</strong> có tỷ lệ học sinh bấm &quot;Chưa hiểu&quot; trên 24%.
-                Khuyến nghị: Tách nhỏ gợi ý Mức 2 thành 2 bước phụ và bổ sung câu hỏi dẫn dắt trực quan sơ đồ chuyển động.
-              </p>
-            </div>
-          </div>
+          </section>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => {
-                showToast("Đã lưu ghi chú đề xuất tối ưu Socratic vào phiên bản Prompt kế tiếp!", "success");
-              }}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F7ECE1] active:scale-95 transition-all shadow-xs cursor-pointer"
-            >
-              Áp dụng cấu hình prompt
-            </button>
-            <Link
-              href="/admin/content"
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#C1762A] text-white hover:bg-[#8C4905] active:scale-95 transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-            >
-              <BookOpen size={14} />
-              <span>Xem chủ đề Toán 5</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* Selected Topic Detailed Modal/Drawer info if clicked */}
-        {selectedTopicDetail && (
-          <div className="bg-white p-4 rounded-xl border border-amber-200 shadow-sm animate-in fade-in flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                  Lớp {selectedTopicDetail.grade}
+          {/* Agent distribution mini-bar (Nhấp để lọc nhanh) */}
+          {Object.keys(mlStats.agent_distribution).length > 0 && (
+            <div className="bg-white rounded-2xl p-4 border border-[#F1CCA6] shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
+                <span className="text-xs font-bold text-stone-500 uppercase tracking-widest">
+                  Phân Bổ Agent (Toàn Bộ)
                 </span>
-                <span className="text-sm font-bold text-[#1C1917]">{selectedTopicDetail.topic}</span>
+                <span className="text-[11px] text-stone-400">
+                  💡 Nhấp vào từng Agent bên dưới để lọc nhanh danh sách
+                </span>
               </div>
-              <p className="text-xs text-[#7A3E04]">
-                💡 <strong>Nhận xét sư phạm:</strong> {selectedTopicDetail.pedagogical_feedback}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Link
-                href="/admin/content"
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#C1762A] text-white hover:bg-[#8C4905] transition-colors"
-              >
-                Chỉnh sửa prompt chủ đề này
-              </Link>
-              <button
-                onClick={() => setSelectedTopicDetail(null)}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 transition-colors"
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* ── 5. PHẦN 1: BẢNG AUDIT LOG VI PHẠM SAFETY ── */}
-      <section className="bg-white rounded-2xl border border-[#F1CCA6] shadow-xs p-6 space-y-5">
-        {/* Section Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#F1CCA6]/60">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
-                <ShieldAlert size={18} />
-              </div>
-              <h2 className="text-lg md:text-xl font-bold text-[#1C1917]">
-                Nhật Ký Kiểm Toán Vi Phạm An Toàn (Safety Audit Log)
-              </h2>
-            </div>
-            <p className="text-xs md:text-sm text-[#7A3E04] mt-1">
-              Danh sách lưu vết các câu chat bị chặn bởi Safety Agent (toxic, ngôn từ không phù hợp hoặc jailbreak cố tình đòi đáp án thẳng)
-            </p>
-          </div>
-
-          <div className="text-xs text-[#7A3E04] font-semibold bg-[#F7ECE1] px-3 py-1.5 rounded-xl border border-[#F1CCA6]">
-            Hiển thị <strong className="text-[#8C4905]">{filteredLogs.length}</strong> / {logs.length} bản ghi
-          </div>
-        </div>
-
-        {/* Filter & Search Bar - US 8.5 Task T8.30: Thêm thanh search Email/UserID */}
-        <div className="space-y-3">
-          <div className="flex flex-col md:flex-row gap-3">
-            {/* Search Input */}
-            <div className="flex-1 relative">
-              <Search
-                size={16}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7A3E04]"
-              />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    fetchSafetyData(searchQuery);
-                  }
-                }}
-                placeholder="Tra cứu theo Email (vd: an.dinh@example.com), User ID (vd: std_1009), nội dung..."
-                className="w-full pl-10 pr-24 py-2.5 rounded-xl bg-[#F7ECE1] border border-[#F1CCA6] text-xs md:text-sm text-[#1C1917] placeholder:text-[#7A3E04] focus:outline-none focus:ring-2 focus:ring-[#C1762A]/30 focus:border-[#C1762A] transition-all"
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                {searchQuery && (
-                  <button
-                    onClick={() => {
-                      setSearchQuery("");
-                      fetchSafetyData("");
-                    }}
-                    className="p-1 text-stone-400 hover:text-stone-600 cursor-pointer"
-                    title="Xóa tìm kiếm"
-                  >
-                    <X size={15} />
-                  </button>
-                )}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Nút lọc Tất cả */}
                 <button
-                  onClick={() => fetchSafetyData(searchQuery)}
-                  className="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#C1762A] text-white hover:bg-[#8C4905] transition-colors cursor-pointer shadow-xs"
-                  title="Tìm kiếm"
+                  onClick={() => { setMlAgentFilter("ALL"); setMlPage(1); }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer shadow-xs active:scale-95 ${
+                    mlAgentFilter === "ALL"
+                      ? "bg-[#C1762A] text-white border-[#C1762A] ring-2 ring-[#C1762A]/20"
+                      : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                  }`}
+                  title="Hiển thị tất cả tin nhắn"
                 >
-                  Tìm
+                  Tất cả
+                  <span className={`font-black px-1.5 py-0.2 rounded-full text-[11px] ${
+                    mlAgentFilter === "ALL" ? "bg-white/20 text-white" : "bg-stone-100 text-stone-700"
+                  }`}>
+                    {Object.values(mlStats.agent_distribution).reduce((a, b) => a + b, 0).toLocaleString()}
+                  </span>
                 </button>
+
+                {Object.entries(mlStats.agent_distribution)
+                  .sort(([,a],[,b]) => b - a)
+                  .map(([agent, count]) => {
+                    const filterKey = (agent === "UNKNOWN_AGENT" || agent === "UNLOGGED")
+                      ? "UNLOGGED"
+                      : agent.replace("_AGENT","");
+                    const isSelected = mlAgentFilter === filterKey;
+                    const label = (agent === "UNKNOWN_AGENT" || agent === "UNLOGGED")
+                      ? "Chưa có log (tin cũ)"
+                      : agent.replace("_AGENT","");
+
+                    const badgeCls =
+                      agent === "SCAFFOLDING_AGENT"
+                        ? (isSelected ? "bg-green-600 text-white border-green-700 ring-2 ring-green-600/30" : "bg-green-100 text-green-700 border-green-200 hover:bg-green-200")
+                        : agent === "MISCONCEPTION_AGENT"
+                        ? (isSelected ? "bg-red-600 text-white border-red-700 ring-2 ring-red-600/30" : "bg-red-100 text-red-700 border-red-200 hover:bg-red-200")
+                        : agent === "SAFETY_AGENT"
+                        ? (isSelected ? "bg-orange-600 text-white border-orange-700 ring-2 ring-orange-600/30" : "bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200")
+                        : agent === "KNOWLEDGE_TRACING_AGENT"
+                        ? (isSelected ? "bg-purple-600 text-white border-purple-700 ring-2 ring-purple-600/30" : "bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200")
+                        : (isSelected ? "bg-stone-600 text-white border-stone-700 ring-2 ring-stone-600/30" : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200");
+
+                    return (
+                      <button
+                        key={agent}
+                        onClick={() => {
+                          setMlAgentFilter(isSelected ? "ALL" : filterKey);
+                          setMlPage(1);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer shadow-xs active:scale-95 ${badgeCls}`}
+                        title={`Bấm để lọc theo ${label}`}
+                      >
+                        {label}
+                        <span className={`font-black px-1.5 py-0.2 rounded-full text-[11px] ${
+                          isSelected ? "bg-white/20 text-white" : "bg-white/60"
+                        }`}>
+                          {count.toLocaleString()}
+                        </span>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
+          )}
 
-            {/* Filter: Loại vi phạm */}
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={violationFilter}
-                onChange={(e) => {
-                  setViolationFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer hover:bg-white transition-colors"
-                title="Lọc theo loại vi phạm"
-              >
-                <option value="ALL">Tất cả loại vi phạm</option>
-                <option value="JAILBREAK">Bẻ khóa (Jailbreak)</option>
-                <option value="TOXIC">Ngôn từ thô tục (Toxic)</option>
-                <option value="OFF_TOPIC">Đòi đáp án / Lạc đề</option>
-                <option value="SENSITIVE">Thông tin nhạy cảm</option>
-              </select>
-
-              {/* Filter: Mức độ nghiêm trọng */}
-              <select
-                value={severityFilter}
-                onChange={(e) => {
-                  setSeverityFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer hover:bg-white transition-colors"
-                title="Lọc theo mức độ nghiêm trọng"
-              >
-                <option value="ALL">Tất cả mức độ</option>
-                <option value="CRITICAL">Mức Critical (Nguy cấp)</option>
-                <option value="HIGH">Mức High (Cao)</option>
-                <option value="MEDIUM">Mức Medium (Vừa)</option>
-                <option value="LOW">Mức Low (Nhẹ)</option>
-              </select>
-
-              {/* Filter: Trạng thái */}
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer hover:bg-white transition-colors"
-                title="Lọc theo trạng thái xử lý"
-              >
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="PENDING">Chờ xử lý</option>
-                <option value="RESOLVED">Đã xử lý</option>
-                <option value="DISMISSED">Đã bỏ qua</option>
-              </select>
-
-              {/* Filter: Khối lớp */}
-              <select
-                value={gradeFilter}
-                onChange={(e) => {
-                  setGradeFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer hover:bg-white transition-colors"
-                title="Lọc theo khối lớp"
-              >
-                <option value="ALL">Tất cả các lớp</option>
-                <option value="4">Lớp 4</option>
-                <option value="5">Lớp 5</option>
-                <option value="6">Lớp 6</option>
-                <option value="7">Lớp 7</option>
-                <option value="8">Lớp 8</option>
-                <option value="9">Lớp 9</option>
-              </select>
-
-              {/* Reset Filter Button */}
-              {(searchQuery ||
-                violationFilter !== "ALL" ||
-                severityFilter !== "ALL" ||
-                statusFilter !== "ALL" ||
-                gradeFilter !== "ALL") && (
-                <button
-                  onClick={handleResetFilters}
-                  className="px-3 py-2.5 rounded-xl text-xs font-bold bg-[#FEF2F2] text-[#EF4444] border border-[#FECACA] hover:bg-[#FEE2E2] transition-colors cursor-pointer flex items-center gap-1.5"
-                  title="Đặt lại các bộ lọc"
+          {/* Filter Bar */}
+          <div className="bg-white rounded-2xl p-4 border border-[#F1CCA6] shadow-xs">
+            <div className="flex flex-wrap gap-3 items-end">
+              {/* Search */}
+              <div className="flex-1 min-w-[200px]">
+                <label className="text-xs font-semibold text-stone-500 mb-1 block">Tìm câu hỏi</label>
+                <div className="relative">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    type="text"
+                    value={mlSearch}
+                    onChange={(e) => setMlSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && fetchMlData(1)}
+                    placeholder="Nhập từ khóa... (Enter)"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#C1762A]/30 focus:border-[#C1762A]"
+                  />
+                </div>
+              </div>
+              {/* Agent filter */}
+              <div>
+                <label className="text-xs font-semibold text-stone-500 mb-1 block">Agent</label>
+                <select
+                  value={mlAgentFilter}
+                  onChange={(e) => { setMlAgentFilter(e.target.value); setMlPage(1); }}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#C1762A]/30 focus:border-[#C1762A] cursor-pointer"
                 >
-                  <RotateCcw size={13} />
-                  <span>Đặt lại</span>
+                  <option value="ALL">Tất cả Agent</option>
+                  <option value="SCAFFOLDING">Scaffolding (Giàn giáo)</option>
+                  <option value="MISCONCEPTION">Misconception (Ngộ nhận)</option>
+                  <option value="SAFETY">Safety (An toàn & Giao tiếp)</option>
+                  <option value="KNOWLEDGE_TRACING">Knowledge Tracing (Lý thuyết)</option>
+                  <option value="UNLOGGED">Chưa có log (Tin cũ)</option>
+                </select>
+              </div>
+              {/* Date from */}
+              <div>
+                <label className="text-xs font-semibold text-stone-500 mb-1 block">Từ ngày</label>
+                <input
+                  type="date"
+                  value={mlDateFrom}
+                  onChange={(e) => setMlDateFrom(e.target.value)}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#C1762A]/30 focus:border-[#C1762A]"
+                />
+              </div>
+              {/* Date to */}
+              <div>
+                <label className="text-xs font-semibold text-stone-500 mb-1 block">Đến ngày</label>
+                <input
+                  type="date"
+                  value={mlDateTo}
+                  onChange={(e) => setMlDateTo(e.target.value)}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#C1762A]/30 focus:border-[#C1762A]"
+                />
+              </div>
+              {/* Search button */}
+              <button
+                onClick={() => fetchMlData(1)}
+                disabled={isMlLoading}
+                className="px-4 py-2 rounded-xl bg-[#C1762A] text-white text-sm font-bold hover:brightness-105 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isMlLoading ? "Đang tải..." : "Tìm kiếm"}
+              </button>
+              {/* Reset */}
+              {(mlSearch || mlAgentFilter !== "ALL" || mlDateFrom || mlDateTo) && (
+                <button
+                  onClick={() => { setMlSearch(""); setMlAgentFilter("ALL"); setMlDateFrom(""); setMlDateTo(""); }}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-sm text-stone-500 hover:bg-stone-50 cursor-pointer"
+                >
+                  Đặt lại
                 </button>
               )}
             </div>
           </div>
-        </div>
 
-        {/* Audit Log Data Table */}
-        <div className="overflow-x-auto rounded-xl border border-[#F1CCA6]">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-[#F7ECE1] border-b border-[#F1CCA6] text-[#8C4905] font-extrabold uppercase tracking-wider text-[11px]">
-                <th className="py-3.5 px-4">Thời gian / Mã Log</th>
-                <th className="py-3.5 px-4">Học sinh & Lớp</th>
-                <th className="py-3.5 px-4 max-w-xs">Nội dung chat vi phạm</th>
-                <th className="py-3.5 px-4">Loại vi phạm & Mức độ</th>
-                <th className="py-3.5 px-4">Hành động & Agent</th>
-                <th className="py-3.5 px-4">Trạng thái</th>
-                <th className="py-3.5 px-4 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F1CCA6] bg-white">
-              {paginatedLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#7A3E04]">
-                    <ShieldCheck className="w-10 h-10 mx-auto text-emerald-500 mb-2" />
-                    <p className="font-bold text-sm text-[#1C1917]">Không tìm thấy bản ghi vi phạm nào</p>
-                    <p className="text-xs mt-1">Thử thay đổi từ khóa tìm kiếm hoặc điều chỉnh lại bộ lọc</p>
-                    <button
-                      onClick={handleResetFilters}
-                      className="mt-3 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#C1762A] text-white hover:bg-[#8C4905] transition-colors cursor-pointer"
-                    >
-                      Đặt lại bộ lọc
-                    </button>
-                  </td>
-                </tr>
-              ) : (
-                paginatedLogs.map((log) => {
-                  const dateObj = new Date(log.timestamp);
-                  const formattedTime = dateObj.toLocaleTimeString("vi-VN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  });
-                  const formattedDate = dateObj.toLocaleDateString("vi-VN", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                  });
+          {/* Table */}
+          <div className="bg-white rounded-2xl border border-[#F1CCA6] shadow-xs overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-[#F1CCA6] flex items-center justify-between">
+              <span className="text-sm font-bold text-[#8C4905]">
+                Danh Sách Tin Nhắn
+                {mlTotal > 0 && <span className="ml-2 text-stone-400 font-normal text-xs">({mlTotal.toLocaleString()} tin nhắn)</span>}
+              </span>
+              {isMlLoading && <span className="text-xs text-stone-400 animate-pulse">Đang tải dữ liệu...</span>}
+            </div>
 
-                  return (
-                    <tr
-                      key={log.id}
-                      className="hover:bg-[#FFFFFF] transition-colors cursor-pointer group"
-                      onClick={() => handleOpenDetailModal(log)}
-                    >
-                      {/* Cột 1: Thời gian & Mã log */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 text-[#1C1917] font-semibold">
-                          <Clock size={13} className="text-[#C1762A]" />
-                          <span>{formattedTime}</span>
-                          <span className="text-stone-400 font-normal">({formattedDate})</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-[11px] text-[#7A3E04] mt-0.5">
-                          <span className="font-mono">{log.id}</span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCopyId(log.id);
-                            }}
-                            className="text-stone-400 hover:text-[#C1762A] transition-colors"
-                            title="Sao chép mã sự cố"
-                          >
-                            <Copy size={11} />
-                          </button>
-                        </div>
-                      </td>
+            {/* Loading skeleton */}
+            {isMlLoading && mlItems.length === 0 && (
+              <div className="p-8 flex flex-col items-center gap-3">
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} className="w-full h-14 bg-stone-100 animate-pulse rounded-xl" />
+                ))}
+              </div>
+            )}
 
-                      {/* Cột 2: Học sinh */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="font-bold text-[#1C1917] flex items-center gap-1.5">
-                          <span>{log.student_name || "Học sinh"}</span>
-                          {log.student_grade && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6]">
-                              Lớp {log.student_grade}
-                            </span>
-                          )}
-                          {log.notify_parent && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-100 text-red-700 border border-red-200 flex items-center gap-0.5">
-                              <BellRing size={10} /> Email PH
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-[#7A3E04]">
-                          {log.student_email || log.email}
-                        </div>
-                        <div className="text-[10px] text-stone-400 font-mono">
-                          ID: {log.student_id || log.user_id}
-                        </div>
-                      </td>
+            {/* Empty state */}
+            {!isMlLoading && mlItems.length === 0 && (
+              <div className="p-12 flex flex-col items-center gap-3 text-stone-400">
+                <FileText size={40} className="opacity-30" />
+                <p className="text-sm font-medium">Không có tin nhắn nào phù hợp với bộ lọc</p>
+              </div>
+            )}
 
-                      {/* Cột 3: Nội dung câu chat */}
-                      <td className="py-3.5 px-4 max-w-xs">
-                        <div className="font-medium text-[#1C1917] line-clamp-2 bg-[#F7ECE1] p-2 rounded-lg border border-[#F1CCA6]/60 text-xs">
-                          &quot;{cleanLatexForDisplay(log.message_snippet)}&quot;
-                        </div>
-                        <div className="text-[11px] text-[#7A3E04] mt-1 line-clamp-1 italic">
-                          Lý do: {log.flagged_reason}
-                        </div>
-                      </td>
-
-                      {/* Cột 4: Loại vi phạm & Mức độ */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex flex-col gap-1.5 items-start">
-                          {getViolationBadge(log.violation_type)}
-                          <div>{getSeverityBadge(log.severity)}</div>
-                        </div>
-                      </td>
-
-                      {/* Cột 5: Hành động & Agent */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex flex-col gap-1 items-start">
-                          {getActionBadge(log.action_taken)}
-                          <span className="text-[11px] text-stone-500 font-mono">
-                            {log.target_agent}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Cột 6: Trạng thái */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {getStatusBadge(log.status)}
-                      </td>
-
-                      {/* Cột 7: Thao tác */}
-                      <td className="py-3.5 px-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Nút Xem chi tiết ngữ cảnh */}
-                          <button
-                            onClick={() => handleOpenDetailModal(log)}
-                            className="p-1.5 rounded-lg text-[#8C4905] bg-[#F7ECE1] hover:bg-[#F1CCA6] transition-colors cursor-pointer"
-                            title="Xem chi tiết ngữ cảnh hội thoại"
-                          >
-                            <Eye size={15} />
-                          </button>
-
-                          {/* Nút Giải quyết nhanh */}
-                          {log.status !== "RESOLVED" && (
-                            <button
-                              onClick={() => handleUpdateLogStatus(log.id, "RESOLVED")}
-                              className="p-1.5 rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors cursor-pointer"
-                              title="Đánh dấu đã xử lý"
-                            >
-                              <Check size={15} />
-                            </button>
-                          )}
-
-                          {/* Nút Gửi cảnh báo Phụ huynh */}
-                          <button
-                            onClick={() => handleSendParentAlert(log)}
-                            className="p-1.5 rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer"
-                            title="Gửi thông báo vi phạm cho phụ huynh"
-                          >
-                            <Mail size={15} />
-                          </button>
-                        </div>
-                      </td>
+            {/* Rows */}
+            {mlItems.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-stone-50 text-xs font-bold text-stone-500 uppercase tracking-widest">
+                      <th className="text-left px-5 py-3">Thời gian</th>
+                      <th className="text-left px-4 py-3">Học sinh</th>
+                      <th className="text-left px-4 py-3 max-w-xs">Câu hỏi</th>
+                      <th className="text-left px-4 py-3">Agent</th>
+                      <th className="text-left px-4 py-3">Phụ huynh</th>
+                      <th className="px-4 py-3"></th>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {mlItems.map((item) => {
+                      const agentCls =
+                        item.target_agent === "SCAFFOLDING_AGENT" ? "bg-green-100 text-green-700 border-green-200" :
+                        item.target_agent === "MISCONCEPTION_AGENT" ? "bg-red-100 text-red-700 border-red-200" :
+                        item.target_agent === "SAFETY_AGENT" ? "bg-orange-100 text-orange-700 border-orange-200" :
+                        item.target_agent === "KNOWLEDGE_TRACING_AGENT" ? "bg-purple-100 text-purple-700 border-purple-200" :
+                        "bg-gray-100 text-gray-500 border-gray-200";
+                      const agentLabel = item.target_agent
+                        ? item.target_agent.replace("_AGENT","")
+                        : "Chưa ghi log";
+                      const msgTime = new Date(item.msg_time);
+                      const timeStr = msgTime.toLocaleString("vi-VN", { hour12: false, hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
 
-        {/* Pagination & Page Size */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-          <div className="flex items-center gap-2 text-xs text-[#7A3E04]">
-            <span>Hiển thị</span>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="px-2 py-1 rounded-lg bg-[#F7ECE1] text-[#1C1917] border border-[#F1CCA6] outline-none cursor-pointer"
-            >
-              <option value={5}>5 bản ghi</option>
-              <option value={6}>6 bản ghi</option>
-              <option value={10}>10 bản ghi</option>
-              <option value={20}>20 bản ghi</option>
-            </select>
-            <span>trên mỗi trang (Tổng số {filteredLogs.length} kết quả)</span>
+                      // Trích trụ điều phối từ routing_reason
+                      let pillarBadge: { label: string; cls: string; title: string } | null = null;
+                      if (item.routing_reason) {
+                        const reason = item.routing_reason;
+                        if (reason.includes("Trụ1") || reason.includes("Trụ 1")) {
+                          pillarBadge = {
+                            label: "Trụ 1",
+                            cls: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100",
+                            title: `Trụ 1 (Quy tắc luật cứng / Regex): ${reason}`,
+                          };
+                        } else if (reason.includes("Trụ2") || reason.includes("Trụ 2")) {
+                          const pctMatch = reason.match(/(\d+(?:\.\d+)?%)/);
+                          const pct = pctMatch ? ` (${pctMatch[1]})` : "";
+                          pillarBadge = {
+                            label: `Trụ 2${pct}`,
+                            cls: "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100",
+                            title: `Trụ 2 (Mô hình học máy AI / ML): ${reason}`,
+                          };
+                        } else if (reason.includes("Trụ3") || reason.includes("Trụ 3")) {
+                          pillarBadge = {
+                            label: "Trụ 3",
+                            cls: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100",
+                            title: `Trụ 3 (Ngữ cảnh phiên học / Fallback): ${reason}`,
+                          };
+                        }
+                      }
+
+                      return (
+                        <tr key={item.msg_id} className="hover:bg-[#FFF8F0] transition-colors">
+                          <td className="px-5 py-3 text-xs text-stone-500 whitespace-nowrap">
+                            <Clock size={12} className="inline mr-1 opacity-60" />
+                            {timeStr}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] text-xs font-bold shrink-0">
+                                {item.student_name?.charAt(0)?.toUpperCase() ?? "?"}
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-stone-700">{item.student_name}</div>
+                                {item.grade && <div className="text-[11px] text-stone-400">Lớp {item.grade}</div>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 max-w-[280px]">
+                            <p className="text-xs text-stone-700 line-clamp-2 leading-relaxed">
+                              {item.student_question}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col gap-1 items-start">
+                              <button
+                                onClick={() => {
+                                  const key = item.target_agent ? item.target_agent.replace("_AGENT", "") : "UNLOGGED";
+                                  setMlAgentFilter(mlAgentFilter === key ? "ALL" : key);
+                                  setMlPage(1);
+                                }}
+                                title={`Nhấp để lọc danh sách theo ${agentLabel}`}
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border transition-all cursor-pointer hover:opacity-85 active:scale-95 ${agentCls}`}
+                              >
+                                {agentLabel}
+                              </button>
+                              {pillarBadge && (
+                                <span
+                                  title={pillarBadge.title}
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border transition-colors cursor-help ${pillarBadge.cls}`}
+                                >
+                                  {pillarBadge.label}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.notify_parent ? (
+                              <span className="inline-flex items-center gap-1 text-orange-600 text-xs font-semibold">
+                                <BellRing size={12} /> Có
+                              </span>
+                            ) : (
+                              <span className="text-xs text-stone-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => {
+                                setMlSelectedMsg(item);
+                                setMlModalOpen(true);
+                                fetchMlConversation(item.msg_id);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#F1CCA6] text-[#C1762A] text-xs font-bold hover:bg-[#F7ECE1] transition-colors cursor-pointer"
+                            >
+                              <Eye size={12} /> Xem
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {mlTotal > mlPageSize && (
+              <div className="px-5 py-3.5 border-t border-[#F1CCA6] flex items-center justify-between gap-2">
+                <span className="text-xs text-stone-400">
+                  Trang {mlPage} / {Math.ceil(mlTotal / mlPageSize)} · {mlTotal.toLocaleString()} tin nhắn
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => { const p = Math.max(1, mlPage - 1); setMlPage(p); fetchMlData(p); }}
+                    disabled={mlPage <= 1 || isMlLoading}
+                    className="p-2 rounded-xl border border-[#F1CCA6] text-[#8C4905] bg-white hover:bg-[#F7ECE1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  {Array.from({ length: Math.min(5, Math.ceil(mlTotal / mlPageSize)) }, (_, i) => {
+                    const totalPg = Math.ceil(mlTotal / mlPageSize);
+                    let pg = i + 1;
+                    if (totalPg > 5) {
+                      if (mlPage <= 3) pg = i + 1;
+                      else if (mlPage >= totalPg - 2) pg = totalPg - 4 + i;
+                      else pg = mlPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pg}
+                        onClick={() => { setMlPage(pg); fetchMlData(pg); }}
+                        className={`w-8 h-8 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                          pg === mlPage
+                            ? "bg-[#C1762A] text-white"
+                            : "border border-[#F1CCA6] text-[#8C4905] hover:bg-[#F7ECE1]"
+                        }`}
+                      >
+                        {pg}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => { const p = Math.min(Math.ceil(mlTotal / mlPageSize), mlPage + 1); setMlPage(p); fetchMlData(p); }}
+                    disabled={mlPage >= Math.ceil(mlTotal / mlPageSize) || isMlLoading}
+                    className="p-2 rounded-xl border border-[#F1CCA6] text-[#8C4905] bg-white hover:bg-[#F7ECE1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-              disabled={safeCurrentPage <= 1}
-              className="p-2 rounded-xl border border-[#F1CCA6] text-[#8C4905] bg-white hover:bg-[#F7ECE1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              title="Trang trước"
-            >
-              <ChevronLeft size={16} />
-            </button>
+          {/* Modal Chi Tiết Hội Thoại */}
+          {mlModalOpen && mlSelectedMsg && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col border border-[#F1CCA6]">
+                {/* Modal Header */}
+                <div className="px-6 py-4 border-b border-[#F1CCA6] flex items-center justify-between shrink-0">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <div className="w-8 h-8 rounded-full bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] text-sm font-bold">
+                        {mlSelectedMsg.student_name?.charAt(0)?.toUpperCase() ?? "?"}
+                      </div>
+                      <div>
+                        <span className="text-sm font-bold text-[#8C4905]">{mlSelectedMsg.student_name}</span>
+                        {mlSelectedMsg.grade && <span className="text-xs text-stone-400 ml-1.5">· Lớp {mlSelectedMsg.grade}</span>}
+                      </div>
+                    </div>
+                    <p className="text-xs text-stone-400 mt-0.5">
+                      {mlConvMeta?.title ? `📘 ${mlConvMeta.title}` : "Phiên học"}
+                      {" · "}
+                      {new Date(mlSelectedMsg.msg_time).toLocaleString("vi-VN")}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setMlModalOpen(false); setMlSelectedMsg(null); setMlConversation([]); }}
+                    className="p-2 rounded-xl hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
 
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-              <button
-                key={pageNum}
-                onClick={() => setCurrentPage(pageNum)}
-                className={`w-8 h-8 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  safeCurrentPage === pageNum
-                    ? "bg-[#C1762A] text-white shadow-xs"
-                    : "bg-white text-[#7A3E04] border border-[#F1CCA6] hover:bg-[#F7ECE1]"
-                }`}
-              >
-                {pageNum}
-              </button>
-            ))}
+                {/* Conversation body */}
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+                  {isMlConvLoading && (
+                    <div className="flex flex-col items-center gap-3 py-8">
+                      {[1,2,3].map(i => <div key={i} className="w-full h-12 bg-stone-100 animate-pulse rounded-xl" />)}
+                    </div>
+                  )}
+                  {!isMlConvLoading && mlConversation.length === 0 && (
+                    <div className="text-center py-8 text-stone-400 text-sm">Không có dữ liệu hội thoại</div>
+                  )}
+                  {mlConversation.map((msg) => (
+                    <div
+                      key={msg.msg_id}
+                      className={`flex gap-3 ${msg.sender_type === "USER" ? "justify-end" : "justify-start"}`}
+                    >
+                      {msg.sender_type !== "USER" && (
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#C1762A] to-[#8C4905] flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5">
+                          AI
+                        </div>
+                      )}
+                      <div
+                        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                          msg.sender_type === "USER"
+                            ? "bg-[#C1762A] text-white rounded-tr-sm"
+                            : "bg-stone-100 text-stone-800 rounded-tl-sm"
+                        }`}
+                      >
+                        {msg.content}
+                        <div className={`text-[10px] mt-1 opacity-60 ${msg.sender_type === "USER" ? "text-right text-orange-100" : "text-stone-400"}`}>
+                          {new Date(msg.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                      {msg.sender_type === "USER" && (
+                        <div className="w-8 h-8 rounded-full bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] text-xs font-bold shrink-0 mt-0.5">
+                          {mlSelectedMsg.student_name?.charAt(0)?.toUpperCase() ?? "?"}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
 
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-              disabled={safeCurrentPage >= totalPages}
-              className="p-2 rounded-xl border border-[#F1CCA6] text-[#8C4905] bg-white hover:bg-[#F7ECE1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              title="Trang sau"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
-      </section>
+                {/* Modal footer - agent info */}
+                <div className="px-6 py-3 border-t border-[#F1CCA6] shrink-0 flex flex-wrap items-center gap-2.5">
+                  {mlSelectedMsg.target_agent ? (
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
+                      mlSelectedMsg.target_agent === "SCAFFOLDING_AGENT" ? "bg-green-100 text-green-700 border-green-200" :
+                      mlSelectedMsg.target_agent === "MISCONCEPTION_AGENT" ? "bg-red-100 text-red-700 border-red-200" :
+                      mlSelectedMsg.target_agent === "SAFETY_AGENT" ? "bg-orange-100 text-orange-700 border-orange-200" :
+                      mlSelectedMsg.target_agent === "KNOWLEDGE_TRACING_AGENT" ? "bg-purple-100 text-purple-700 border-purple-200" :
+                      "bg-gray-100 text-gray-500"
+                    }`}>
+                      🤖 {mlSelectedMsg.target_agent === "UNKNOWN_AGENT" ? "Ngoài phạm vi" : mlSelectedMsg.target_agent.replace("_AGENT","")}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-stone-500 bg-stone-100 px-2.5 py-1 rounded-full border border-stone-200">
+                      Chưa có log điều phối
+                    </span>
+                  )}
+                  {mlSelectedMsg.routing_reason && (
+                    <span
+                      className="text-xs text-stone-600 bg-[#F7ECE1]/60 px-2.5 py-1 rounded-lg border border-[#F1CCA6] truncate max-w-sm"
+                      title={mlSelectedMsg.routing_reason}
+                    >
+                      📌 {mlSelectedMsg.routing_reason}
+                    </span>
+                  )}
+                  {mlSelectedMsg.notify_parent && (
+                    <span className="inline-flex items-center gap-1 text-orange-600 text-xs font-semibold">
+                      <BellRing size={12} /> Đã cảnh báo phụ huynh
+                    </span>
+                  )}
+                  <span className="text-xs text-stone-400 ml-auto">
+                    {mlConversation.length} tin nhắn trong phiên
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

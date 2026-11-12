@@ -255,3 +255,62 @@ export interface UpdateFeedbackPayload {
   suggested_agent?: string;
 }
 
+// ─── US 10.4 (T10.4.7): Nhật ký Tin nhắn ────────────────────────────────────
+
+export type AgentType =
+  | "SCAFFOLDING_AGENT"
+  | "MISCONCEPTION_AGENT"
+  | "SAFETY_AGENT"
+  | "KNOWLEDGE_TRACING_AGENT"
+  | "UNKNOWN_AGENT";
+
+export interface MessageLogItem {
+  msg_id: string;
+  student_question: string;
+  msg_time: string;         // ISO datetime string
+  user_id: string;
+  student_name: string;
+  student_email?: string;
+  grade?: number;
+  session_id: string;
+  session_title?: string;
+  log_id?: string;
+  target_agent?: AgentType | string;
+  routing_reason?: string;
+  notify_parent?: boolean;
+}
+
+export interface MessageLogListResponse {
+  success: boolean;
+  total: number;
+  page: number;
+  page_size: number;
+  items: MessageLogItem[];
+}
+
+export interface MessageLogStats {
+  total_today: number;
+  total_all: number;
+  agent_distribution: Record<string, number>;
+  parent_alerts_today: number;
+  sessions_today: number;
+}
+
+export interface ConversationMessage {
+  msg_id: string;
+  sender_type: string;
+  content: string;
+  created_at: string;
+  attachment_url?: string;
+}
+
+export interface MessageLogConversationResponse {
+  success: boolean;
+  session_id: string;
+  session_title?: string;
+  student_name: string;
+  student_email?: string;
+  grade?: number;
+  messages: ConversationMessage[];
+}
+
