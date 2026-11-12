@@ -1,11 +1,13 @@
 # database.py
 import os
+import pathlib
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Cú pháp: postgresql://<username>:<password>@<host>:<port>/<db_name>
 from dotenv import load_dotenv
-load_dotenv()
+_env_path = pathlib.Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_env_path)
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://neondb_owner:npg_LgvPyk9znt8p@ep-withered-forest-b37ql1e0-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require")
 

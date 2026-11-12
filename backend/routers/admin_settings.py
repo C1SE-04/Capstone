@@ -185,7 +185,7 @@ def list_available_models():
 
     try:
         import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key, transport="rest")
 
         models_list = []
         # Lấy danh sách model từ Google API
@@ -253,16 +253,17 @@ def test_gemini_api_key():
 
     try:
         import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key, transport="rest")
 
-        # Gửi test ping siêu nhẹ: sinh 1 từ duy nhất
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        # Gửi test ping siêu nhẹ: sinh 1 từ duy nhất với model tốc độ cao
+        model = genai.GenerativeModel("gemini-3.5-flash-lite")
         _ = model.generate_content("Ping", generation_config={"max_output_tokens": 2})
 
         latency_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
 
         return schemas.AdminTestKeyResponse(
             success=True,
+            status="SUCCESS",
             latency_ms=latency_ms,
             message=f"Kết nối thành công! Độ trễ: {latency_ms}ms - Sẵn sàng phục vụ",
             key_masked=masked_key,
@@ -272,6 +273,7 @@ def test_gemini_api_key():
         latency_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
         return schemas.AdminTestKeyResponse(
             success=False,
+            status="FAILED",
             latency_ms=latency_ms,
             message=f"Kết nối thất bại ({err})",
             key_masked=masked_key,
@@ -343,9 +345,9 @@ def get_system_health(db: Session = Depends(get_db)):
     if api_key:
         try:
             import google.generativeai as genai
-            genai.configure(api_key=api_key)
+            genai.configure(api_key=api_key, transport="rest")
             # Thử nhẹ list model limit
-            genai.get_model("models/gemini-2.0-flash")
+            genai.get_model("models/gemini-3.5-flash-lite")
             latency_ai = max(int((time.perf_counter() - t0) * 1000), 1)
             services["gemini_api"] = schemas.AdminHealthServiceDetail(
                 status="ONLINE",
@@ -453,7 +455,7 @@ Luôn xưng hô 'thầy - em' thân thiện, chuẩn mực."""
     start_time = time.perf_counter()
     try:
         import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key, transport="rest")
 
         model = genai.GenerativeModel(
             model_name=model_name,

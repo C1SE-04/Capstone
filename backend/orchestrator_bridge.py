@@ -247,9 +247,13 @@ def process_query_with_orchestrator(
         else:
             teaching_mode = get_teaching_mode(stats.consecutive_wrong_count, stats.hint_count)
 
-        # 4. Lấy lịch sử ngữ cảnh
-        chat_history = get_recent_chat_context(db, session_id, limit=5)
-        history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in chat_history])
+        # 4. Lấy lịch sử ngữ cảnh (loại trừ chính tin nhắn vừa lưu để xác định đúng ngữ cảnh trước đó)
+        chat_history = get_recent_chat_context(db, session_id, limit=6)
+        prev_messages = [
+            msg for msg in chat_history 
+            if not (msg["role"] == "user" and msg["parts"][0] == user_query)
+        ]
+        history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in prev_messages])
 
         # 4b. Lấy toàn bộ các ảnh bài toán mà học sinh đã gửi trong phiên học này (tối đa 3 ảnh gần nhất)
         session_images_query = (

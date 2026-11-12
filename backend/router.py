@@ -1,4 +1,12 @@
 import os
+import pathlib
+from dotenv import load_dotenv
+
+_env_path = pathlib.Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_env_path)
+if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
+
 import re
 import json
 import google.generativeai as genai
@@ -210,10 +218,11 @@ def agent_router(
         yield "Lỗi: Chưa cấu hình GEMINI_API_KEY"
         return
         
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=api_key, transport="rest")
 
     # US 10.3 (Task T10.3.3): Đọc cấu hình động từ SystemConfigService (Redis Cache -> Neon DB)
     active_model = _ACTIVE_MODEL_NAME
+    backup_model = "gemini-3.5-flash"
     active_temperature = 0.35
     active_top_p = 0.90
     active_max_tokens = 512
@@ -221,12 +230,14 @@ def agent_router(
         from services.system_config_service import get_system_settings
         sys_config = get_system_settings()
         active_model = sys_config.get("primary_model") or os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+        backup_model = sys_config.get("backup_model") or os.getenv("GEMINI_BACKUP_MODEL") or "gemini-3.5-flash"
         active_temperature = float(sys_config.get("temperature", 0.35))
         active_top_p = float(sys_config.get("top_p", 0.90))
         active_max_tokens = int(sys_config.get("max_output_tokens", 512))
     except Exception as err:
         print(f"[Router] Cảnh báo đọc SystemConfig: {err} — Dùng fallback.")
         active_model = os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+        backup_model = os.getenv("GEMINI_BACKUP_MODEL") or "gemini-3.5-flash"
 
     if meta is not None:
         meta["model_used"] = active_model
@@ -351,11 +362,30 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         while current_attempt <= max_retries:
             try:
                 # T10.2.2: Dùng generate_with_telemetry để thu thập token usage tự động
-                response = generate_with_telemetry(model, call_payload, active_model, "Chat")
+                try:
+                    response = generate_with_telemetry(model, call_payload, active_model, "Chat")
+                except Exception as primary_err:
+                    print(f"[Router] ⚠️ Model {active_model} gặp lỗi ({primary_err}). Kích hoạt Failover Cascade sang Backup Model: {backup_model}...")
+                    fallback_model = genai.GenerativeModel(
+                        model_name=backup_model,
+                        system_instruction=TEACHER_SYSTEM_INSTRUCTION,
+                        generation_config=genai.GenerationConfig(
+                            temperature=active_temperature,
+                            top_p=active_top_p,
+                            max_output_tokens=active_max_tokens,
+                        ),
+                    )
+                    response = generate_with_telemetry(fallback_model, call_payload, backup_model, "Chat")
+                    active_model = backup_model
+                    if meta is not None:
+                        meta["model_used"] = backup_model
+
                 generated_text = response.text or ""
 
                 # US 10.4 (Task T10.4.2): Bóc tách thẻ ẩn bằng hàm chuẩn hóa
                 clean_for_review, suggested_agent = extract_audit_tag(generated_text)
+                if meta is not None and suggested_agent:
+                    meta["suggested_agent"] = suggested_agent
 
                 has_comp_tag = (
                     "[COMPREHENSION_CHECK]" in generated_text
@@ -426,7 +456,21 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
         is_comprehension_detected = False
         try:
             full_text_buffer = ""
-            raw_stream = stream_with_telemetry(model, call_payload, active_model, "Chat")
+            try:
+                raw_stream = stream_with_telemetry(model, call_payload, active_model, "Chat")
+            except Exception as stream_err:
+                print(f"[Router] ⚠️ Stream {active_model} gặp lỗi ({stream_err}). Failover sang {backup_model}...")
+                fallback_model = genai.GenerativeModel(
+                    model_name=backup_model,
+                    system_instruction=TEACHER_SYSTEM_INSTRUCTION,
+                    generation_config=genai.GenerationConfig(
+                        temperature=active_temperature,
+                        top_p=active_top_p,
+                        max_output_tokens=active_max_tokens,
+                    ),
+                )
+                raw_stream = stream_with_telemetry(fallback_model, call_payload, backup_model, "Chat")
+                active_model = backup_model
 
             def _stream_and_record():
                 nonlocal full_text_buffer

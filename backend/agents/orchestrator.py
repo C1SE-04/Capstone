@@ -1457,8 +1457,8 @@ class OrchestratorAgent:
         # Trụ cột 2 - Dự đoán ML trước
         ml_res = self._ml_route(text_clean, problem_context)
 
-        # Ưu tiên An toàn ngôn từ (SAFETY): Kể cả tin nhắn đầu tiên, nếu vi phạm thì phải chuyển SAFETY ngay
-        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT"):
+        # Ưu tiên An toàn ngôn từ (SAFETY) & Ngộ nhận toán học (MISCONCEPTION - US 10.4): Kể cả tin nhắn đầu tiên
+        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT", "MISCONCEPTION", "MISCONCEPTION_AGENT"):
             return ml_res
 
         # Phễu "Bắt đầu phiên học mới"
@@ -1551,6 +1551,11 @@ class OrchestratorAgent:
         )
         if result is not None:
             return result
+
+        # Trụ cột 2 - Dự đoán ML trước
+        ml_res = self._ml_route(text_clean, problem_context)
+        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT", "MISCONCEPTION", "MISCONCEPTION_AGENT"):
+            return ml_res
 
         is_empty_history = (
             not history_text.strip()

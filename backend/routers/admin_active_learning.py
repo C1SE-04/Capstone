@@ -284,7 +284,9 @@ def approve_and_retrain(
             pair = (clean_query, suggested)
             if clean_query and pair not in seen_pairs:
                 seen_pairs.add(pair)
-                new_rows.append({"text": clean_query, "label": suggested})
+                # Boost x3 giúp tín hiệu câu mới vượt qua ngưỡng tin cậy 60% trên dataset 7,200+ mẫu
+                for _ in range(3):
+                    new_rows.append({"text": clean_query, "label": suggested})
 
         if not new_rows:
             raise HTTPException(

@@ -1,3 +1,12 @@
+import os
+import pathlib
+from dotenv import load_dotenv
+
+_env_path = pathlib.Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_env_path)
+if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
+
 import sys
 if hasattr(sys.stdout, "reconfigure"):
     try:

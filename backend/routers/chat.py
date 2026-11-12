@@ -86,7 +86,7 @@ def generate_gemini(request: schemas.GeminiRequest):
     if not api_key:
         raise HTTPException(status_code=500, detail="Gemini API Key not configured")
     
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=api_key, transport="rest")
     try:
         model = genai.GenerativeModel("gemini-3.5-flash-lite")
         response = model.generate_content(request.prompt)
@@ -100,7 +100,7 @@ def list_available_models():
     if not api_key:
         raise HTTPException(status_code=500, detail="Gemini API Key not configured")
     
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=api_key, transport="rest")
     try:
         models = [
             m.name for m in genai.list_models() 
