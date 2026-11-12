@@ -1022,6 +1022,7 @@ class AdminSystemSettingsUpdate(BaseModel):
 
 class AdminTestKeyResponse(BaseModel):
     success: bool
+    status: str = "SUCCESS"
     latency_ms: int
     message: str
     key_masked: str

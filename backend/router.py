@@ -1,4 +1,12 @@
 import os
+import pathlib
+from dotenv import load_dotenv
+
+_env_path = pathlib.Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_env_path)
+if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
+
 import re
 import json
 import google.generativeai as genai
@@ -211,7 +219,7 @@ def agent_router(
         yield "Lỗi: Chưa cấu hình GEMINI_API_KEY"
         return
         
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=api_key, transport="rest")
 
     # US 10.3 (Task T10.3.3): Đọc cấu hình động từ SystemConfigService (Redis Cache -> Neon DB)
     active_model = _ACTIVE_MODEL_NAME
@@ -230,6 +238,7 @@ def agent_router(
     except Exception as err:
         print(f"[Router] Cảnh báo đọc SystemConfig: {err} — Dùng fallback.")
         active_model = os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+        backup_model = os.getenv("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
 
     if meta is not None:
         meta["model_used"] = active_model
@@ -376,6 +385,8 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
 
                 # US 10.4 (Task T10.4.2): Bóc tách thẻ ẩn bằng hàm chuẩn hóa
                 clean_for_review, suggested_agent = extract_audit_tag(generated_text)
+                if meta is not None and suggested_agent:
+                    meta["suggested_agent"] = suggested_agent
 
                 has_comp_tag = (
                     "[COMPREHENSION_CHECK]" in generated_text

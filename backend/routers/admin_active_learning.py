@@ -284,7 +284,9 @@ def approve_and_retrain(
             pair = (clean_query, suggested)
             if clean_query and pair not in seen_pairs:
                 seen_pairs.add(pair)
-                new_rows.append({"text": clean_query, "label": suggested})
+                # Boost x3 giúp tín hiệu câu mới vượt qua ngưỡng tin cậy 60% trên dataset 7,200+ mẫu
+                for _ in range(3):
+                    new_rows.append({"text": clean_query, "label": suggested})
 
         if not new_rows:
             raise HTTPException(
@@ -357,10 +359,11 @@ def approve_and_retrain(
             it.status = "APPROVED"
         db.commit()
 
+        approved_count = len(seen_pairs)
         return schemas.RetrainResponse(
             success=True,
-            message=f"Đã duyệt {len(new_rows)} mẫu câu mới, tái huấn luyện mô hình và nạp RAM thành công!",
-            retrained_count=len(new_rows),
+            message=f"Đã duyệt {approved_count} mẫu câu mới, tái huấn luyện mô hình và nạp RAM thành công!",
+            retrained_count=approved_count,
             total_samples=len(df),
         )
 
