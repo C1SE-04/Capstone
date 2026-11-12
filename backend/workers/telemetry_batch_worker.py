@@ -163,7 +163,6 @@ class HourlyAccumulator:
         if 200 <= status < 300:
             self.status_2xx_count += 1
         elif status == 429:
-            self.status_4xx_count += 1
             self.gemini_429_count += 1
         elif 400 <= status < 500:
             self.status_4xx_count += 1
@@ -315,7 +314,6 @@ async def _flush_events(redis: Optional[Redis], events: list[dict]) -> None:
             sc = ev.get("status_code", 200)
             if sc == 429:
                 err429_delta += 1
-                err4xx_delta += 1
             elif 400 <= sc < 500:
                 err4xx_delta += 1
             elif sc >= 500:
