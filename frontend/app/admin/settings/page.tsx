@@ -1501,9 +1501,6 @@ export default function AdminSettingsPage() {
                       Bảo mật cao • Readonly
                     </span>
                   </h2>
-                  <p className="text-xs text-[#7A3E04]">
-                    Theo kiến trúc Sprint 10, khóa API được nạp trực tiếp qua biến môi trường server (.env), tuyệt đối không lưu vào Database
-                  </p>
                 </div>
               </div>
 
@@ -1775,9 +1772,6 @@ export default function AdminSettingsPage() {
                   <h2 className="text-base font-extrabold text-[#1C1917]">
                     Mô Phỏng Thời Gian Học Kỳ SGK Phục Vụ Nghiệm Thu
                   </h2>
-                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]">
-                    US 9.3 • AC-SET-08
-                  </span>
                 </div>
                 <p className="text-xs text-[#7A3E04]">
                   Giả lập mốc thời gian để Hội đồng nghiệm thu kiểm thử phản hồi thích ứng theo tiến độ chương trình học
