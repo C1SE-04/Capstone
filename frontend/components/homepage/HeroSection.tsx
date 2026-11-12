@@ -53,6 +53,7 @@ export default function HeroSection() {
     if (section) {
       section.scrollIntoView({ behavior: "smooth" });
     }
+    window.history.replaceState(null, "", "#about");
   };
 
   return (
