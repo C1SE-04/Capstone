@@ -65,6 +65,18 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
   const handleLogoClick = (e: React.MouseEvent) => {
     e.preventDefault();
     window.scrollTo({ top: 0, behavior: "smooth" });
+    window.history.replaceState(null, "", window.location.pathname);
+    setMobileMenuOpen(false);
+  };
+
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    const targetId = href.replace(/^#/, "");
+    const targetElement = document.getElementById(targetId);
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: "smooth" });
+    }
+    window.history.replaceState(null, "", href);
     setMobileMenuOpen(false);
   };
 
@@ -114,6 +126,7 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
             <a
               key={link.href}
               href={link.href}
+              onClick={(e) => handleNavClick(e, link.href)}
               className="hover:text-[#8C4905] transition-colors relative py-1 px-1 lg:px-2 focus-visible:outline-2 focus-visible:outline-[#C1762A] rounded-md whitespace-nowrap after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-[#8C4905] hover:after:w-full after:transition-all"
             >
               {link.label}
@@ -229,7 +242,7 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
               <a
                 key={link.href}
                 href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={(e) => handleNavClick(e, link.href)}
                 className="py-2 px-3 rounded-lg hover:bg-white/80 hover:text-[#8C4905] transition-colors"
               >
                 {link.label}
