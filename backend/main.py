@@ -7,6 +7,11 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
+try:
+    from sklearn.exceptions import InconsistentVersionWarning
+    warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+except Exception:
+    pass
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware

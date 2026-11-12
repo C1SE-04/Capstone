@@ -529,7 +529,8 @@ def ensure_baseline_metrics(db=None):
 
     try:
         count = db.query(models.SystemMetricsHourly).count()
-        if count >= 24:
+        agent_count = db.query(models.SystemAgentMetricsHourly).count()
+        if count >= 24 or agent_count >= 24:
             return  # Đã có đủ dữ liệu lịch sử
 
         print("[TelemetryWorker] Đang khởi tạo dữ liệu baseline 48 giờ cho Admin KPI Dashboard...")
@@ -628,9 +629,9 @@ def ensure_baseline_metrics(db=None):
 
         db.commit()
         print("[TelemetryWorker] Khởi tạo dữ liệu baseline thành công.")
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"[TelemetryWorker] Không thể seed dữ liệu baseline: {e}")
+        print("[TelemetryWorker] Dữ liệu baseline đã tồn tại, bỏ qua khởi tạo.")
     finally:
         if should_close:
             db.close()
