@@ -316,7 +316,7 @@ export function ChatWindow({
         <div className="absolute bottom-24 right-6 md:right-10 z-20 animate-in fade-in zoom-in-95 duration-200">
           <button
             onClick={() => scrollToBottom("smooth")}
-            className="flex items-center gap-1.5 bg-[#C1762A] hover:bg-[#8C4905] text-white px-3.5 py-2 rounded-full shadow-lg transition-all transform hover:scale-105 active:scale-95 text-xs font-semibold"
+            className="flex items-center gap-1.5 bg-[#C1762A] hover:bg-[#8C4905] text-white px-3.5 py-2 rounded-full shadow-sm transition-all duration-150 ease-out active:scale-[0.98] text-xs font-semibold cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
             title="Cuộn xuống tin nhắn mới nhất"
           >
             <ArrowDown size={15} />
@@ -338,7 +338,7 @@ export function ChatWindow({
         <div className="flex-1 min-w-0">
           {/* [T6.20/T6.21] ChatInput: nhận text + ảnh đính kèm từ người dùng */}
           <ChatInput
-            onSendMessage={(message, image) => handleSendMessage(message, image)}
+            onSendMessage={(message, image) => handleSendMessage(message, false, image)}
             isLoading={isTyping}
             isOffline={!isOnline}
           />

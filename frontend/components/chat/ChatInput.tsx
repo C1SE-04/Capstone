@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File: components/chat/ChatInput.tsx
  * Mô tả: Component nhập liệu cho khung chat học sinh (SocraticKid) tích hợp MathLive chuẩn Google Math Solver (Cách 3).
  * Tính năng chính:
@@ -164,6 +164,7 @@ export function ChatInput({
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const sheetContainerRef = useRef<HTMLDivElement>(null);
   const handleSendRef = useRef<() => void>(() => {});
+  const attachImageRef = useRef<(file: File) => void>(() => {});
   const isLoadingRef = useRef(isLoading);
 
   // Cập nhật trạng thái disabled / readOnly cho MathLive khi isLoading hoặc isOffline thay đổi
@@ -173,6 +174,16 @@ export function ChatInput({
     if (mf) {
       mf.disabled = Boolean(isLoading || isOffline);
       mf.readOnly = Boolean(isLoading || isOffline);
+      // Khi AI phản hồi xong, tự động focus lại ô nhập để học sinh tiếp tục gõ
+      if (!isLoading && !isOffline) {
+        setTimeout(() => {
+          try {
+            mf.focus();
+          } catch {
+            // bỏ qua nếu node chưa sẵn sàng
+          }
+        }, 80);
+      }
     }
   }, [isLoading, isOffline]);
 
@@ -188,6 +199,10 @@ export function ChatInput({
     // Đồng bộ trạng thái khóa ngay khi node được gắn
     node.disabled = Boolean(isLoadingRef.current || isOffline);
     node.readOnly = Boolean(isLoadingRef.current || isOffline);
+
+    // Tránh đăng ký nhiều lần event listeners nếu node được gắn lại
+    if (node._socraticInitialized) return;
+    node._socraticInitialized = true;
 
     // 1. Lắng nghe sự kiện gõ phím & cập nhật hasContent ĐỒNG BỘ ngay lập tức
     const updateContent = () => {
@@ -207,6 +222,36 @@ export function ChatInput({
         if (isLoadingRef.current) return;
         handleSendRef.current?.();
       }
+    });
+
+    // Fix lỗi paste:
+    // 1. Nếu paste file ảnh (chụp màn hình Snipping Tool, copy ảnh web) -> đính kèm ảnh
+    // 2. Nếu paste text: MathLive mặc định ở math mode làm mất dấu cách. Chuyển sang text mode để giữ nguyên khoảng trắng.
+    node.addEventListener("paste", (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.startsWith("image/")) {
+            const file = items[i].getAsFile();
+            if (file) {
+              e.preventDefault();
+              attachImageRef.current?.(file);
+              return;
+            }
+          }
+        }
+      }
+
+      const text = e.clipboardData?.getData("text/plain");
+      if (!text) return;
+      e.preventDefault();
+      // Dung insert() API cua MathLive voi mode text de giu space
+      if (typeof node.insert === "function") {
+        node.insert(text, { mode: "text" });
+      } else {
+        node.executeCommand(["insert", text]);
+      }
+      updateContent();
     });
 
     // @ts-ignore
@@ -342,6 +387,7 @@ export function ChatInput({
       return { file, previewUrl: URL.createObjectURL(file) };
     });
   }, []);
+  attachImageRef.current = attachImage;
 
   const removeAttachment = useCallback(() => {
     setErrorMessage(null);
@@ -610,6 +656,19 @@ export function ChatInput({
 
       {/* ── Vùng background bo góc chứa các nút và ô nhập liệu Trình giải toán Google (MathLive) ── */}
       <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isLoading || isOffline) return;
+          const files = e.dataTransfer?.files;
+          if (files && files.length > 0) {
+            attachImage(files[0]);
+          }
+        }}
         className={cn(
           "relative flex items-center gap-2 bg-[#F1CCA6]/40 p-2 pl-3 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-all",
           isOffline && "opacity-75 bg-[#F7ECE1] border-[#F1CCA6]",
@@ -664,12 +723,12 @@ export function ChatInput({
                   <button
                     id="chat-attach-camera-btn"
                     onClick={() => cameraInputRef.current?.click()}
-                    className="flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl border-2 border-[#C1762A]/20 hover:border-[#C1762A]/60 hover:bg-[#F1CCA6]/30 transition-all active:scale-95 cursor-pointer"
+                    className="flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl border border-[#F1CCA6] hover:border-[#C1762A] hover:bg-[#F7ECE1]/60 transition-all duration-150 ease-out active:scale-[0.98] cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
                   >
                     <div className="w-12 h-12 rounded-full bg-[#F1CCA6] flex items-center justify-center">
                       <Camera size={22} className="text-[#8C4905]" />
                     </div>
-                    <span className="text-sm font-medium text-[#8C4905]">
+                    <span className="text-sm font-semibold text-[#8C4905]">
                       Camera
                     </span>
                   </button>
@@ -677,12 +736,12 @@ export function ChatInput({
                   <button
                     id="chat-attach-library-btn"
                     onClick={() => libraryInputRef.current?.click()}
-                    className="flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl border-2 border-[#C1762A]/20 hover:border-[#C1762A]/60 hover:bg-[#F1CCA6]/30 transition-all active:scale-95 cursor-pointer"
+                    className="flex-1 flex flex-col items-center gap-2.5 py-5 px-4 rounded-2xl border border-[#F1CCA6] hover:border-[#C1762A] hover:bg-[#F7ECE1]/60 transition-all duration-150 ease-out active:scale-[0.98] cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
                   >
                     <div className="w-12 h-12 rounded-full bg-[#F1CCA6] flex items-center justify-center">
                       <ImageIcon size={22} className="text-[#8C4905]" />
                     </div>
-                    <span className="text-sm font-medium text-[#8C4905]">
+                    <span className="text-sm font-semibold text-[#8C4905]">
                       Thư viện
                     </span>
                   </button>
@@ -787,9 +846,9 @@ export function ChatInput({
           onClick={handleSend}
           disabled={!canSend || isLoading || isOffline}
           className={cn(
-            "p-2.5 rounded-full flex items-center justify-center transition-all self-center shadow-sm shrink-0",
+            "p-2.5 rounded-full flex items-center justify-center transition-all duration-150 ease-out self-center shadow-xs shrink-0 focus-visible:outline-2 focus-visible:outline-[#C1762A]",
             canSend && !isLoading && !isOffline
-              ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 active:scale-95 cursor-pointer"
+              ? "bg-[#C1762A] text-white hover:bg-[#8C4905] active:scale-[0.95] cursor-pointer"
               : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed opacity-60"
           )}
           title={

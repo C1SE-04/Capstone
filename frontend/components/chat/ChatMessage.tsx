@@ -92,8 +92,8 @@ export function ChatMessage({
                 ? "bg-red-50 text-red-900 border border-red-300 rounded-tr-sm"
                 : "bg-[#C1762A] text-white rounded-tr-sm"
               : message.emotion === "correct"
-              ? "bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 text-stone-900 rounded-tl-sm animate-in fade-in zoom-in-95 duration-500"
-              : "bg-white border border-[#F1CCA6] text-stone-900 rounded-tl-sm",
+              ? "bg-[#ECFDF5] border-2 border-[#10B981] text-[#1C1917] rounded-tl-sm animate-in fade-in zoom-in-95 duration-500"
+              : "bg-white border border-[#F1CCA6] text-[#1C1917] rounded-tl-sm",
             isSending && "opacity-80"
           )}
         >
@@ -162,7 +162,7 @@ export function ChatMessage({
             </div>
           ) : (
             // Tin nhắn của assistant: Cần render thành Markdown và Toán học.
-            <div className="markdown-prose prose-sm max-w-none text-stone-900 min-w-0 break-words overflow-visible
+            <div className="markdown-prose prose-sm max-w-none text-[#1C1917] min-w-0 break-words overflow-visible
               prose-p:leading-relaxed prose-p:mb-3 
               prose-pre:bg-[#F1CCA6]/30 prose-pre:text-[#8C4905] prose-pre:p-3 prose-pre:rounded-lg
               prose-code:text-[#8C4905] prose-code:bg-[#F1CCA6]/40 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
@@ -220,21 +220,24 @@ export function ChatMessage({
         {!isUser && (
           Boolean(message.isCongrats) ||
           (typeof message.id === "string" && message.id.startsWith("congrats-")) ||
-          (typeof message.content === "string" && (
-            message.content.trim().toLowerCase().startsWith("**giỏi lắm!**") ||
-            message.content.trim().toLowerCase().startsWith("**tuyệt vời!**") ||
-            message.content.trim().toLowerCase().startsWith("**xuất sắc!**") ||
-            message.content.trim().toLowerCase().startsWith("giỏi lắm!") ||
-            message.content.trim().toLowerCase().startsWith("tuyệt vời!") ||
-            message.content.trim().toLowerCase().startsWith("xuất sắc!")
-          ))
+          (typeof message.content === "string" && (() => {
+            const c = message.content.trim().replace(/^\*\*/g, "").toLowerCase();
+            return (
+              c.startsWith("giỏi lắm!") ||
+              c.startsWith("tuyệt vời!") ||
+              c.startsWith("xuất sắc!")
+            );
+          })())
         ) && (
           <SaveBookmarkButton
             sessionId={sessionId}
             messageCreatedAt={
               message.created_at ||
               (typeof message.id === "string" && message.id.startsWith("congrats-")
-                ? new Date(Number(message.id.replace("congrats-", ""))).toISOString()
+                ? (() => {
+                    const ts = Number(message.id.replace("congrats-", ""));
+                    return isNaN(ts) ? undefined : new Date(ts).toISOString();
+                  })()
                 : undefined)
             }
           />
