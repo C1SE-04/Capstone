@@ -61,12 +61,20 @@ def _get_masked_api_key() -> str:
 # Danh sách fallback các model Google chính thức khuyên dùng trong Sprint 10
 _OFFICIAL_CURATED_MODELS: List[Dict[str, str]] = [
     {
+        "id": "gemini-3.5-flash-lite",
+        "name": "gemini-3.5-flash-lite",
+        "display_name": "Gemini 3.5 Flash-Lite (Khuyên Dùng)",
+        "description": "Trọng lượng nhẹ, phản hồi tức thì (~0.2s), tối ưu sâu Chat Socratic, Flashcard & Dự phòng",
+        "speed": "Cực nhanh (~0.2s)",
+        "recommended_for": "Chat Socratic Chính & Dự Phòng (primary_model, backup_model)",
+    },
+    {
         "id": "gemini-3.8-flash",
         "name": "gemini-3.8-flash",
-        "display_name": "Gemini 3.8 Flash (Khuyên Dùng)",
+        "display_name": "Gemini 3.8 Flash",
         "description": "Thế hệ mới nhất, tối ưu sâu cho phương pháp gợi mở Socratic và đọc ảnh đề bài",
         "speed": "Siêu tốc (~0.3s)",
-        "recommended_for": "Chat Socratic Chính (primary_model)",
+        "recommended_for": "Chat Socratic Nâng Cao",
     },
     {
         "id": "gemini-3.5-flash",
@@ -125,7 +133,7 @@ def get_admin_settings(db: Session = Depends(get_db)):
     settings = get_system_settings(db=db)
     settings["api_key_masked"] = _get_masked_api_key()
     # Gán fallback backward compatibility
-    settings["model_name"] = settings.get("primary_model", "gemini-3.8-flash")
+    settings["model_name"] = settings.get("primary_model", "gemini-3.5-flash-lite")
     settings["rate_limit_per_minute"] = settings.get("student_rate_limit", 30)
     return schemas.AdminSystemSettings(**settings)
 
@@ -164,7 +172,7 @@ def update_admin_settings(
         db=db,
     )
     updated["api_key_masked"] = _get_masked_api_key()
-    updated["model_name"] = updated.get("primary_model", "gemini-3.8-flash")
+    updated["model_name"] = updated.get("primary_model", "gemini-3.5-flash-lite")
     updated["rate_limit_per_minute"] = updated.get("student_rate_limit", 30)
 
     return schemas.AdminSystemSettings(**updated)
@@ -430,7 +438,7 @@ def test_prompt_playground(
     settings = get_system_settings(db=db)
 
     # Áp dụng tham số tuỳ chỉnh hoặc fallback về cài đặt hiện hành
-    model_name = body.model_name or settings.get("primary_model", "gemini-3.8-flash")
+    model_name = body.model_name or settings.get("primary_model", "gemini-3.5-flash-lite")
     temperature = body.temperature if body.temperature is not None else float(settings.get("temperature", 0.35))
     max_tokens = body.max_tokens or int(settings.get("max_output_tokens", 512))
     strictness = body.socratic_strictness or settings.get("socratic_strictness", "BALANCED")
@@ -537,7 +545,7 @@ def rollback_setting_version(
             db=db,
         )
         restored["api_key_masked"] = _get_masked_api_key()
-        restored["model_name"] = restored.get("primary_model", "gemini-3.8-flash")
+        restored["model_name"] = restored.get("primary_model", "gemini-3.5-flash-lite")
         restored["rate_limit_per_minute"] = restored.get("student_rate_limit", 30)
 
         return schemas.AdminSystemSettings(**restored)
