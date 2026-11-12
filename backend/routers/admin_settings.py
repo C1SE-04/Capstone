@@ -101,12 +101,12 @@ _OFFICIAL_CURATED_MODELS: List[Dict[str, str]] = [
         "recommended_for": "Chat Socratic / Dự phòng cấp 2",
     },
     {
-        "id": "gemini-2.0-flash",
-        "name": "gemini-2.0-flash",
-        "display_name": "Gemini 2.0 Flash",
+        "id": "gemini-2.0-flash-lite",
+        "name": "gemini-2.0-flash-lite",
+        "display_name": "Gemini 2.0 Flash-Lite",
         "description": "Model đa phương thức thế hệ 2.0, độ phủ rộng và ổn định",
-        "speed": "Nhanh (~0.3s)",
-        "recommended_for": "Chat Socratic",
+        "speed": "Rất nhanh (~0.2s)",
+        "recommended_for": "Sub-Agent & Dự phòng",
     },
 ]
 

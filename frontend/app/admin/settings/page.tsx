@@ -34,6 +34,11 @@ import {
   Network,
 } from "lucide-react";
 import { authFetch } from "@/lib/authFetch";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { preprocessLaTeX } from "@/lib/latex";
 
 // =====================================================================
 // 1. INTERFACES & SCHEMAS (ĐỒNG BỘ BACKEND SCHEMAS - US 10.3)
@@ -94,25 +99,36 @@ export interface ServiceHealthItem {
 export interface AuditItem {
   id: string;
   changed_by: string;
-  action: string;
-  changed_at: string;
-  snapshot: Record<string, unknown>;
-  diff_summary: string;
+  action?: string;
+  changed_at?: string;
+  created_at?: string;
+  snapshot?: Record<string, unknown>;
+  previous_config?: Record<string, unknown>;
+  new_config?: Record<string, unknown>;
+  diff_summary?: string;
+  change_summary?: string;
 }
 
 export interface PlaygroundResult {
-  reply: string;
+  reply?: string;
+  response_text?: string;
   latency_ms: number;
-  tokens_used: number;
-  model_name: string;
-  tested_at: string;
+  tokens_used?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  model_name?: string;
+  model_used?: string;
+  socratic_strictness?: string;
+  tested_at?: string;
 }
 
 export interface KeyTestResult {
-  status: "SUCCESS" | "FAILED";
+  success?: boolean;
+  status?: string;
   latency_ms: number;
   message: string;
-  tested_at: string;
+  tested_at?: string;
+  key_masked?: string;
 }
 
 // Cấu hình mặc định thế hệ Gemini mới nhất (Sprint 10 - Mặc định Gemini 3.8/3.5/3.1)
@@ -389,15 +405,64 @@ export default function AdminSettingsPage() {
     }
   }, [BACKEND_URL]);
 
-  // Tải healthcheck thật
+  // Tải healthcheck thật (AC-SET-06)
   const refreshHealth = useCallback(async () => {
     setIsRefreshingHealth(true);
     try {
       const res = await authFetch(`${BACKEND_URL}/admin/settings/health`);
       if (res.ok) {
         const data = await res.json();
-        if (data.services && Array.isArray(data.services)) {
-          setHealthServices(data.services);
+        if (data.services) {
+          if (Array.isArray(data.services)) {
+            setHealthServices(data.services);
+          } else {
+            const serviceMetaMap: Record<
+              string,
+              { name: string; provider: string }
+            > = {
+              neon_postgresql: {
+                name: "Neon PostgreSQL",
+                provider: "Serverless Database (Neon Cloud)",
+              },
+              upstash_redis: {
+                name: "Upstash Redis",
+                provider: "Hot-Reload Cache & Rate Limiting",
+              },
+              gemini_api: {
+                name: "Google Gemini API Gateway",
+                provider: "LLM Pedagogical Inference Engine",
+              },
+              smtp_email: {
+                name: "Brevo SMTP Mailer",
+                provider: "Email Alert Sư Phạm & Safety Alert",
+              },
+            };
+
+            const serviceList: ServiceHealthItem[] = Object.entries(
+              data.services
+            ).map(([key, val]: [string, any]) => {
+              const meta = serviceMetaMap[key] || {
+                name: key,
+                provider: "Dịch vụ hệ thống",
+              };
+              const st = (val?.status || "").toLowerCase();
+              const status: "operational" | "degraded" | "down" =
+                st === "online" || st === "healthy" || st === "operational"
+                  ? "operational"
+                  : st === "degraded" || st === "standby"
+                  ? "degraded"
+                  : "down";
+              return {
+                id: key,
+                name: meta.name,
+                provider: meta.provider,
+                status,
+                latency_ms: val?.latency_ms || 0,
+                detail: val?.detail,
+              };
+            });
+            setHealthServices(serviceList);
+          }
           triggerToast("Đã cập nhật trạng thái Healthcheck thời gian thực!", "info");
         }
       } else {
@@ -504,7 +569,8 @@ export default function AdminSettingsPage() {
       if (res.ok) {
         const data: KeyTestResult = await res.json();
         setKeyTestResult(data);
-        if (data.status === "SUCCESS") {
+        const isSuccess = data.success === true || data.status === "SUCCESS";
+        if (isSuccess) {
           triggerToast(
             `Ping Gemini thành công! Độ trễ: ${data.latency_ms}ms`,
             "success"
@@ -537,14 +603,37 @@ export default function AdminSettingsPage() {
           model_name: playgroundModel,
           prompt: playgroundPrompt,
           temperature: settings.temperature,
+          socratic_strictness: settings.socratic_strictness,
         }),
       });
       if (res.ok) {
-        const data: PlaygroundResult = await res.json();
-        setPlaygroundResult(data);
+        const data = await res.json();
+        const replyText = data.response_text || data.reply || "";
+        const modelUsed = data.model_used || data.model_name || playgroundModel;
+        const totalTokens =
+          (data.prompt_tokens ?? 0) + (data.completion_tokens ?? 0) ||
+          data.tokens_used ||
+          0;
+
+        setPlaygroundResult({
+          response_text: replyText,
+          reply: replyText,
+          latency_ms: data.latency_ms || 0,
+          tokens_used: totalTokens,
+          prompt_tokens: data.prompt_tokens,
+          completion_tokens: data.completion_tokens,
+          model_used: modelUsed,
+          model_name: modelUsed,
+          socratic_strictness: data.socratic_strictness,
+          tested_at: new Date().toLocaleTimeString(),
+        });
         triggerToast("Phản hồi Socratic đã được sinh thành công!", "success");
       } else {
-        triggerToast("Lỗi khi chạy thử nghiệm Playground.", "error");
+        const errData = await res.json().catch(() => null);
+        triggerToast(
+          errData?.detail || "Lỗi khi chạy thử nghiệm Playground.",
+          "error"
+        );
       }
     } catch {
       triggerToast("Lỗi kết nối máy chủ Playground.", "error");
@@ -1448,14 +1537,14 @@ export default function AdminSettingsPage() {
               {keyTestResult && (
                 <div
                   className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 ${
-                    keyTestResult.status === "SUCCESS"
+                    keyTestResult.success === true || keyTestResult.status === "SUCCESS"
                       ? "bg-[#ECFDF5] text-[#10B981] border-[#A7F3D0]"
                       : "bg-[#FEF2F2] text-[#DC2626] border-[#FCA5A5]"
                   }`}
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
-                    {keyTestResult.message} • {keyTestResult.latency_ms}ms
+                    {keyTestResult.message}
                   </span>
                 </div>
               )}
@@ -1568,22 +1657,41 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
-            {/* Kết Quả Playground */}
+            {/* Kết Quả Playground (AC-SET-05) */}
             {playgroundResult && (
-              <div className="p-4 rounded-xl bg-[#F7ECE1]/40 border border-[#F1CCA6] space-y-3">
-                <div className="flex items-center justify-between text-xs text-[#7A3E04] pb-2 border-b border-[#F1CCA6]/40">
-                  <span className="font-bold text-[#8C4905]">
-                    Phản hồi từ {playgroundResult.model_name}:
+              <div className="p-5 rounded-2xl bg-[#F7ECE1]/50 border border-[#F1CCA6] space-y-3.5 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-[#7A3E04] pb-2.5 border-b border-[#F1CCA6]/60">
+                  <span className="font-extrabold text-[#8C4905] flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-[#C1762A]" />
+                    Phản hồi từ {playgroundResult.model_used || playgroundResult.model_name}:
                   </span>
-                  <div className="flex items-center gap-3 font-mono text-[11px]">
-                    <span>Độ trễ: {playgroundResult.latency_ms}ms</span>
+                  <div className="flex items-center gap-3 font-mono text-[11px] text-[#7A3E04]">
+                    <span>Độ trễ: <strong className="text-[#C1762A]">{playgroundResult.latency_ms}ms</strong></span>
                     <span>•</span>
-                    <span>Tokens: {playgroundResult.tokens_used}</span>
+                    <span>
+                      Tokens: <strong className="text-[#8C4905]">{playgroundResult.tokens_used || 0}</strong>
+                      {playgroundResult.prompt_tokens !== undefined && playgroundResult.completion_tokens !== undefined && (
+                        <span className="text-[#7A3E04]/70 ml-1">
+                          ({playgroundResult.prompt_tokens} in / {playgroundResult.completion_tokens} out)
+                        </span>
+                      )}
+                    </span>
                   </div>
                 </div>
-                <p className="text-xs md:text-sm text-[#1C1917] whitespace-pre-line leading-relaxed font-sans">
-                  {playgroundResult.reply}
-                </p>
+                <div className="text-xs md:text-sm text-[#1C1917] leading-relaxed font-sans bg-white p-4 rounded-xl border border-[#F1CCA6]/70 shadow-xs">
+                  <div className="markdown-prose prose-sm max-w-none text-[#1C1917] min-w-0 break-words overflow-visible [&_.katex]:text-[#1C1917] [&_.katex-html]:text-[#1C1917] [&>p]:mb-2 [&>p:last-child]:mb-0">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath, remarkGfm]}
+                      rehypePlugins={[rehypeKatex]}
+                    >
+                      {preprocessLaTeX(
+                        playgroundResult.response_text ||
+                          playgroundResult.reply ||
+                          "Không có nội dung phản hồi."
+                      )}
+                    </ReactMarkdown>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1750,13 +1858,13 @@ export default function AdminSettingsPage() {
                     {audits.map((item) => (
                       <tr key={item.id} className="hover:bg-[#F7ECE1]/40">
                         <td className="py-3 font-mono text-[11px] text-[#1C1917]">
-                          {item.changed_at}
+                          {item.created_at || item.changed_at}
                         </td>
                         <td className="py-3 font-semibold text-[#8C4905]">
                           {item.changed_by}
                         </td>
                         <td className="py-3 text-[#7A3E04] max-w-xs truncate">
-                          {item.diff_summary || "Cập nhật tham số hệ thống"}
+                          {item.change_summary || item.diff_summary || "Cập nhật tham số hệ thống"}
                         </td>
                         <td className="py-3 text-right">
                           <button
