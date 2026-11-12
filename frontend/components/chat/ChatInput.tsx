@@ -164,6 +164,7 @@ export function ChatInput({
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const sheetContainerRef = useRef<HTMLDivElement>(null);
   const handleSendRef = useRef<() => void>(() => {});
+  const attachImageRef = useRef<(file: File) => void>(() => {});
   const isLoadingRef = useRef(isLoading);
 
   // Cập nhật trạng thái disabled / readOnly cho MathLive khi isLoading hoặc isOffline thay đổi
@@ -173,6 +174,16 @@ export function ChatInput({
     if (mf) {
       mf.disabled = Boolean(isLoading || isOffline);
       mf.readOnly = Boolean(isLoading || isOffline);
+      // Khi AI phản hồi xong, tự động focus lại ô nhập để học sinh tiếp tục gõ
+      if (!isLoading && !isOffline) {
+        setTimeout(() => {
+          try {
+            mf.focus();
+          } catch {
+            // bỏ qua nếu node chưa sẵn sàng
+          }
+        }, 80);
+      }
     }
   }, [isLoading, isOffline]);
 
@@ -188,6 +199,10 @@ export function ChatInput({
     // Đồng bộ trạng thái khóa ngay khi node được gắn
     node.disabled = Boolean(isLoadingRef.current || isOffline);
     node.readOnly = Boolean(isLoadingRef.current || isOffline);
+
+    // Tránh đăng ký nhiều lần event listeners nếu node được gắn lại
+    if (node._socraticInitialized) return;
+    node._socraticInitialized = true;
 
     // 1. Lắng nghe sự kiện gõ phím & cập nhật hasContent ĐỒNG BỘ ngay lập tức
     const updateContent = () => {
@@ -209,10 +224,24 @@ export function ChatInput({
       }
     });
 
-    // Fix lỗi paste: khi paste text thường vào MathLive, chữ bị dính vào nhau
-    // do MathLive xử lý space như LaTeX. Ta chặn paste mặc định và
-    // insert thủ công dưới dạng text mode để giữ nguyên khoảng trắng.
+    // Fix lỗi paste:
+    // 1. Nếu paste file ảnh (chụp màn hình Snipping Tool, copy ảnh web) -> đính kèm ảnh
+    // 2. Nếu paste text: MathLive mặc định ở math mode làm mất dấu cách. Chuyển sang text mode để giữ nguyên khoảng trắng.
     node.addEventListener("paste", (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.startsWith("image/")) {
+            const file = items[i].getAsFile();
+            if (file) {
+              e.preventDefault();
+              attachImageRef.current?.(file);
+              return;
+            }
+          }
+        }
+      }
+
       const text = e.clipboardData?.getData("text/plain");
       if (!text) return;
       e.preventDefault();
@@ -358,6 +387,7 @@ export function ChatInput({
       return { file, previewUrl: URL.createObjectURL(file) };
     });
   }, []);
+  attachImageRef.current = attachImage;
 
   const removeAttachment = useCallback(() => {
     setErrorMessage(null);
@@ -626,6 +656,19 @@ export function ChatInput({
 
       {/* ── Vùng background bo góc chứa các nút và ô nhập liệu Trình giải toán Google (MathLive) ── */}
       <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isLoading || isOffline) return;
+          const files = e.dataTransfer?.files;
+          if (files && files.length > 0) {
+            attachImage(files[0]);
+          }
+        }}
         className={cn(
           "relative flex items-center gap-2 bg-[#F1CCA6]/40 p-2 pl-3 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-all",
           isOffline && "opacity-75 bg-[#F7ECE1] border-[#F1CCA6]",
