@@ -1068,7 +1068,13 @@ class OrchestratorAgent:
         Ví dụ: "4/2", "10:2", "3*5", "12+8", "10:2 = ?", "thầy ơi 4/2 bằng mấy ạ".
         Điều phối trực tiếp sang SCAFFOLDING với chỉ đạo Socratic sư phạm (chia kẹo / đồ vật).
         """
-        m = self._minimal_arithmetic_re.match(text_clean)
+        # Chuẩn hóa biểu thức LaTeX phân số \frac{a}{b} -> a/b và bỏ ký tự $ bao quanh
+        expr_target = text_clean
+        if "\\frac" in expr_target or "$" in expr_target:
+            expr_target = re.sub(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", r"\1/\2", expr_target)
+            expr_target = re.sub(r"\$([^\$]+)\$", r"\1", expr_target).strip()
+
+        m = self._minimal_arithmetic_re.match(expr_target)
         if not m:
             return None
 
