@@ -1027,7 +1027,9 @@ export default function AdminKpiDashboard() {
             </div>
             <span
               className={`text-[11px] font-black px-2 py-0.5 rounded-full border ${
-                effectiveTtft < 500
+                effectiveTtft === 0
+                  ? "bg-gray-50 text-gray-600 border-gray-200"
+                  : effectiveTtft < 500
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                   : effectiveTtft <= 1200
                   ? "bg-amber-50 text-amber-700 border-amber-200"
@@ -1135,7 +1137,7 @@ export default function AdminKpiDashboard() {
                 </strong>
               </span>
               <span>
-                Pool: <strong>{infraData?.neon_connections_active ?? 6}/20</strong>
+                Pool: <strong>{infraData?.neon_connections_active ?? 0}/20</strong>
               </span>
             </div>
           </div>
@@ -1318,8 +1320,15 @@ export default function AdminKpiDashboard() {
                   radius={[0, 0, 0, 0]}
                 />
                 <Bar
+                  dataKey="auth_requests"
+                  name="Xác thực Auth"
+                  stackId="a"
+                  fill="#2563EB"
+                  radius={[0, 0, 0, 0]}
+                />
+                <Bar
                   dataKey="other_requests"
-                  name="Auth & Khác"
+                  name="Khác"
                   stackId="a"
                   fill="#F59E0B"
                   radius={[4, 4, 0, 0]}
@@ -1845,7 +1854,8 @@ export default function AdminKpiDashboard() {
           const ttftClamped = Math.max(0, Math.min(effectiveTtft, 2000));
           const ratio = ttftClamped / 2000;
           const needleDeg = ratio * 180 - 90; // -90deg (0ms) -> 0deg (1000ms) -> +90deg (2000ms)
-          const isGreen = effectiveTtft < 500;
+          const isIdleTtft = effectiveTtft === 0;
+          const isGreen = effectiveTtft > 0 && effectiveTtft < 500;
           const isAmber = effectiveTtft >= 500 && effectiveTtft <= 1200;
 
           return (
@@ -1854,7 +1864,7 @@ export default function AdminKpiDashboard() {
                 <div className="flex items-center gap-2 border-b border-[#F1CCA6]/40 pb-3">
                   <span
                     className={`w-2 h-6 rounded-full inline-block ${
-                      isGreen ? "bg-emerald-500" : isAmber ? "bg-amber-500" : "bg-red-500"
+                      isIdleTtft ? "bg-gray-400" : isGreen ? "bg-emerald-500" : isAmber ? "bg-amber-500" : "bg-red-500"
                     }`}
                   />
                   <h3 className="text-base font-bold text-[#8C4905]">
@@ -1935,14 +1945,14 @@ export default function AdminKpiDashboard() {
                         cx="120"
                         cy="120"
                         r="3.5"
-                        fill={isGreen ? "#10B981" : isAmber ? "#F59E0B" : "#EF4444"}
+                        fill={isIdleTtft ? "#9CA3AF" : isGreen ? "#10B981" : isAmber ? "#F59E0B" : "#EF4444"}
                       />
                     </svg>
 
                     <div className="-mt-1 flex flex-col items-center text-center">
                       <span
                         className={`text-3xl font-black leading-none ${
-                          isGreen ? "text-emerald-600" : isAmber ? "text-amber-600" : "text-red-600"
+                          isIdleTtft ? "text-gray-600" : isGreen ? "text-emerald-600" : isAmber ? "text-amber-600" : "text-red-600"
                         }`}
                       >
                         {effectiveTtft} ms

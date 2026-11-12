@@ -111,14 +111,15 @@ class TelemetryMiddleware(BaseHTTPMiddleware):
         }
     """
 
-    # Các path hạ tầng không cần đo lường
+    # Các path hạ tầng và endpoint polling của chính Admin KPI Dashboard (tránh tự đếm mình khi auto-refresh)
     _SKIP_PATHS = {"/", "/docs", "/openapi.json", "/redoc", "/health"}
+    _SKIP_PREFIXES = ("/admin/kpi/", "/admin/metrics/")
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        # Bỏ qua preflight CORS và path hạ tầng
-        if request.method == "OPTIONS" or path in self._SKIP_PATHS:
+        # Bỏ qua preflight CORS, path hạ tầng và polling nội bộ KPI Dashboard
+        if request.method == "OPTIONS" or path in self._SKIP_PATHS or path.startswith(self._SKIP_PREFIXES):
             return await call_next(request)
 
         start_time = time.perf_counter()

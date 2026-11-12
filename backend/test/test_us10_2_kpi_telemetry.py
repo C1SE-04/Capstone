@@ -234,6 +234,14 @@ class TestT10_2_1_TelemetryMiddleware:
             await middleware.dispatch(mock_req_health, AsyncMock(return_value=MagicMock(status_code=200)))
             assert telemetry_queue.empty()
 
+            # Test Admin KPI polling endpoints không tự đếm chính mình
+            for kpi_path in ("/admin/kpi/overview", "/admin/kpi/throughput", "/admin/metrics/overview"):
+                mock_req_kpi = MagicMock()
+                mock_req_kpi.url.path = kpi_path
+                mock_req_kpi.method = "GET"
+                await middleware.dispatch(mock_req_kpi, AsyncMock(return_value=MagicMock(status_code=200)))
+                assert telemetry_queue.empty()
+
         asyncio.run(_run())
 
 
@@ -710,7 +718,8 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert res_csv.status_code == 200
         assert "text/csv" in res_csv.headers["content-type"]
         assert "attachment; filename=" in res_csv.headers["content-disposition"]
-        assert b"Tong Requests" in res_csv.content
+        for expected_col in (b"Tong Requests", b"P99 Latency (ms)", b"HTTP 4xx", b"HTTP 429", b"Peak Concurrent SSE"):
+            assert expected_col in res_csv.content
 
         res_json = client.get("/admin/kpi/export?format=json&days=7", headers=ADMIN_HEADERS)
         assert res_json.status_code == 200
@@ -804,6 +813,13 @@ class TestT10_2_5_AdminKpiMetricsAPI:
             generate_with_telemetry(mock_err_model, "Test", "gemini-3.8-flash", "Chat")
         ev_429 = telemetry_queue.get_nowait()
         assert ev_429["type"] == "error_429"
+
+        # Kiểm tra HTTP 429 tách biệt khỏi HTTP 4xx (không đếm đúp trong c4xx + c429)
+        _accumulator.reset()
+        _accumulator.add_http_event({"status_code": 422, "latency_ms": 20, "endpoint_group": "chat"})
+        _accumulator.add_http_event({"status_code": 429, "latency_ms": 15, "endpoint_group": "chat"})
+        assert _accumulator.status_4xx_count == 1
+        assert _accumulator.gemini_429_count == 1
 
 
 

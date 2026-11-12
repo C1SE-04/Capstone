@@ -478,7 +478,7 @@ async def get_kpi_overview(
 
     if tot_requests > 0:
         error_rate_pct = round((tot_5xx / tot_requests) * 100, 2)
-        client_error_rate_pct = round((tot_4xx / tot_requests) * 100, 2)
+        client_error_rate_pct = round(((tot_4xx + tot_429) / tot_requests) * 100, 2)
         success_rate_pct = round((tot_2xx / tot_requests) * 100, 2)
     else:
         error_rate_pct = 0.0
@@ -1390,15 +1390,24 @@ def export_kpi_report(
             "total_requests": r.total_requests + (live_snap["total_requests"] if is_cur else 0),
             "chat_requests": r.chat_requests + (live_snap["chat_requests"] if is_cur else 0),
             "eval_requests": r.eval_requests + (live_snap["eval_requests"] if is_cur else 0),
+            "auth_requests": r.auth_requests + (live_snap["auth_requests"] if is_cur else 0),
+            "other_requests": r.other_requests + (live_snap["other_requests"] if is_cur else 0),
             "prompt_tokens": r.prompt_tokens + (live_snap["prompt_tokens"] if is_cur else 0),
             "completion_tokens": r.completion_tokens + (live_snap["completion_tokens"] if is_cur else 0),
             "total_tokens": r.total_tokens + (live_snap["total_tokens"] if is_cur else 0),
             "cost_usd": float(r.estimated_cost_usd or 0.0) + (float(live_snap["estimated_cost_usd"]) if is_cur else 0.0),
             "p50_latency_ms": live_snap["p50_latency_ms"] if (is_cur and live_snap.get("p50_latency_ms", 0) > 0) else r.p50_latency_ms,
             "p95_latency_ms": live_snap["p95_latency_ms"] if (is_cur and live_snap.get("p95_latency_ms", 0) > 0) else r.p95_latency_ms,
+            "p99_latency_ms": live_snap["p99_latency_ms"] if (is_cur and live_snap.get("p99_latency_ms", 0) > 0) else r.p99_latency_ms,
             "avg_ttft_ms": live_snap["avg_ttft_ms"] if (is_cur and live_snap.get("avg_ttft_ms", 0) > 0) else r.avg_ttft_ms,
             "status_2xx": r.status_2xx_count + (live_snap["status_2xx_count"] if is_cur else 0),
+            "status_4xx": r.status_4xx_count + (live_snap["status_4xx_count"] if is_cur else 0),
+            "gemini_429": r.gemini_429_count + (live_snap["gemini_429_count"] if is_cur else 0),
             "status_5xx": r.status_5xx_count + (live_snap["status_5xx_count"] if is_cur else 0),
+            "failover_count": r.failover_count + (live_snap["failover_count"] if is_cur else 0),
+            "redis_cache_hits": r.redis_cache_hits + (live_snap["redis_cache_hits"] if is_cur else 0),
+            "redis_cache_misses": r.redis_cache_misses + (live_snap["redis_cache_misses"] if is_cur else 0),
+            "peak_concurrent_sse": max(r.peak_concurrent_sse or 0, live_snap["peak_concurrent_sse"] if is_cur else 0),
         }
         if is_cur:
             cur_hour_merged = True
@@ -1410,15 +1419,24 @@ def export_kpi_report(
             "total_requests": live_snap["total_requests"],
             "chat_requests": live_snap["chat_requests"],
             "eval_requests": live_snap["eval_requests"],
+            "auth_requests": live_snap["auth_requests"],
+            "other_requests": live_snap["other_requests"],
             "prompt_tokens": live_snap["prompt_tokens"],
             "completion_tokens": live_snap["completion_tokens"],
             "total_tokens": live_snap["total_tokens"],
             "cost_usd": float(live_snap["estimated_cost_usd"]),
             "p50_latency_ms": live_snap.get("p50_latency_ms", 0),
             "p95_latency_ms": live_snap.get("p95_latency_ms", 0),
+            "p99_latency_ms": live_snap.get("p99_latency_ms", 0),
             "avg_ttft_ms": live_snap.get("avg_ttft_ms", 0),
             "status_2xx": live_snap["status_2xx_count"],
+            "status_4xx": live_snap["status_4xx_count"],
+            "gemini_429": live_snap["gemini_429_count"],
             "status_5xx": live_snap["status_5xx_count"],
+            "failover_count": live_snap["failover_count"],
+            "redis_cache_hits": live_snap["redis_cache_hits"],
+            "redis_cache_misses": live_snap["redis_cache_misses"],
+            "peak_concurrent_sse": live_snap["peak_concurrent_sse"],
         })
 
     if format_type.lower() == "json":
@@ -1427,7 +1445,7 @@ def export_kpi_report(
             headers={"Content-Disposition": f"attachment; filename=socratickid_kpi_report_{now.strftime('%Y%m%d')}.json"},
         )
 
-    # Xuất định dạng CSV
+    # Xuất định dạng CSV đầy đủ toàn bộ chỉ số KPI
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
@@ -1435,6 +1453,8 @@ def export_kpi_report(
         "Tong Requests",
         "Chat Requests",
         "Eval Requests",
+        "Auth Requests",
+        "Other Requests",
         "Prompt Tokens",
         "Completion Tokens",
         "Tong Tokens",
@@ -1442,9 +1462,16 @@ def export_kpi_report(
         "Chi Phi VND (d)",
         "P50 Latency (ms)",
         "P95 Latency (ms)",
+        "P99 Latency (ms)",
         "TTFT (ms)",
         "HTTP 2xx",
+        "HTTP 4xx",
+        "HTTP 429",
         "HTTP 5xx",
+        "Failover Count",
+        "Redis Cache Hits",
+        "Redis Cache Misses",
+        "Peak Concurrent SSE",
     ])
 
     for item in export_rows:
@@ -1454,6 +1481,8 @@ def export_kpi_report(
             item["total_requests"],
             item["chat_requests"],
             item["eval_requests"],
+            item["auth_requests"],
+            item["other_requests"],
             item["prompt_tokens"],
             item["completion_tokens"],
             item["total_tokens"],
@@ -1461,9 +1490,16 @@ def export_kpi_report(
             int(round(c_usd * USD_TO_VND_RATE)),
             item["p50_latency_ms"],
             item["p95_latency_ms"],
+            item["p99_latency_ms"],
             item["avg_ttft_ms"],
             item["status_2xx"],
+            item["status_4xx"],
+            item["gemini_429"],
             item["status_5xx"],
+            item["failover_count"],
+            item["redis_cache_hits"],
+            item["redis_cache_misses"],
+            item["peak_concurrent_sse"],
         ])
 
     csv_content = output.getvalue().encode("utf-8-sig")  # UTF-8 BOM để Excel đọc đúng tiếng Việt
