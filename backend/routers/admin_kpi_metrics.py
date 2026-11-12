@@ -610,8 +610,9 @@ async def get_kpi_throughput(
         minute_points = [now - timedelta(minutes=i) for i in range(59, -1, -1)]
         minute_keys = [_minute_bucket(t_pt) for t_pt in minute_points]
 
-        # Đọc 60 phút từ Redis (1 lệnh mget cho lịch sử + get phút hiện tại)
+        # Đọc 60 phút từ Redis (1 lệnh mget cho lịch sử + get phút hiện tại + phân nhóm theo endpoint)
         redis_rpm_map: Dict[str, int] = {}
+        redis_grp_map: Dict[str, Dict[str, int]] = {}
         cur_min_str = minute_keys[-1]
         if redis:
             try:
@@ -629,6 +630,23 @@ async def get_kpi_throughput(
                                 redis_rpm_map[k] = int(v)
             except Exception:
                 pass
+            try:
+                active_mins = [k for k in minute_keys if redis_rpm_map.get(k, 0) > 0]
+                if active_mins and hasattr(redis, "mget"):
+                    groups = ("chat", "eval", "auth", "other")
+                    grp_keys = [f"rpm:{g}:{k}" for k in active_mins for g in groups]
+                    grp_vals = await redis.mget(*grp_keys)
+                    if isinstance(grp_vals, (list, tuple)):
+                        idx_g = 0
+                        for k in active_mins:
+                            bucket_g: Dict[str, int] = {}
+                            for g in groups:
+                                v = grp_vals[idx_g] if idx_g < len(grp_vals) else None
+                                bucket_g[g] = int(v) if isinstance(v, (int, str)) and str(v).isdigit() else 0
+                                idx_g += 1
+                            redis_grp_map[k] = bucket_g
+            except Exception:
+                pass
 
         live_cur_rpm = max(
             redis_rpm_map.get(cur_min_str, 0),
@@ -641,14 +659,15 @@ async def get_kpi_throughput(
             t_point_vn = _to_vn_time(t_point)
             disp_time = t_point_vn.strftime("%H:%M")
             mem_m = get_live_minute_stats(m_str)
+            r_grp = redis_grp_map.get(m_str, {})
 
             mem_rpm = mem_m.get("rpm", 0)
             rpm_val = max(redis_rpm_map.get(m_str, 0), mem_rpm)
 
-            chat_r = mem_m.get("chat", 0)
-            eval_r = mem_m.get("eval", 0)
-            auth_r = mem_m.get("auth", 0)
-            other_r = mem_m.get("other", 0)
+            chat_r = max(mem_m.get("chat", 0), r_grp.get("chat", 0))
+            eval_r = max(mem_m.get("eval", 0), r_grp.get("eval", 0))
+            auth_r = max(mem_m.get("auth", 0), r_grp.get("auth", 0))
+            other_r = max(mem_m.get("other", 0), r_grp.get("other", 0))
             if rpm_val > (chat_r + eval_r + auth_r + other_r):
                 other_r += rpm_val - (chat_r + eval_r + auth_r + other_r)
 

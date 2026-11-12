@@ -427,6 +427,9 @@ class TestT10_2_3_UpstashRedisCounters:
             # errors:5xx: 1 (có 1 request mã 500)
             call_dict = {c.args[0]: c.args[1] for c in mock_redis.incrby.call_args_list}
             assert call_dict[f"rpm:{minute}"] == 3
+            assert call_dict[f"rpm:chat:{minute}"] == 1
+            assert call_dict[f"rpm:eval:{minute}"] == 1
+            assert call_dict[f"rpm:other:{minute}"] == 1
             assert call_dict[f"tpm:{minute}"] == 1250
             assert call_dict[f"errors:5xx:{minute}"] == 1
 
@@ -652,6 +655,21 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert data_day["granularity"] == "day"
         assert len(data_day["items"]) == 7
         assert data_day["items"][-1]["display_time"] == now_vn.strftime("%d/%m")
+
+        # Đảm bảo khi RAM _live_minute_counters rỗng, đọc phân loại chat từ Redis rpm:chat:{minute}
+        cur_bucket = _minute_bucket()
+        fake_kv = {f"rpm:{cur_bucket}": "2", f"rpm:chat:{cur_bucket}": "2"}
+        mock_redis = AsyncMock()
+        mock_redis.get.side_effect = lambda k: fake_kv.get(k)
+        mock_redis.mget.side_effect = lambda *keys: [fake_kv.get(k) for k in keys]
+        with patch("routers.admin_kpi_metrics._get_upstash_redis", return_value=mock_redis), \
+             patch("routers.admin_kpi_metrics.get_live_minute_stats", return_value={"rpm": 0, "chat": 0, "eval": 0, "auth": 0, "other": 0, "tpm": 0, "err4xx": 0, "err429": 0, "err5xx": 0}):
+            res_redis_grp = client.get("/admin/kpi/throughput?range=1h&granularity=minute", headers=ADMIN_HEADERS)
+            assert res_redis_grp.status_code == 200
+            last_pt = res_redis_grp.json()["items"][-1]
+            assert last_pt["requests"] == 2
+            assert last_pt["chat_requests"] == 2
+            assert last_pt["other_requests"] == 0
 
     def test_05_get_tokens_breakdown(self):
         """Endpoint 3: GET /admin/kpi/tokens tính chính xác 6 phân hệ model AI từ sự kiện thật."""

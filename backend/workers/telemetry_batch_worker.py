@@ -346,6 +346,11 @@ async def _flush_events(redis: Optional[Redis], events: list[dict]) -> None:
         if rpm_delta > 0:
             await redis.incrby(rpm_key, rpm_delta)
             await redis.expire(rpm_key, _COUNTER_TTL_SECONDS)
+            for grp_k, grp_v in group_deltas.items():
+                if grp_v > 0:
+                    grp_key = f"rpm:{grp_k}:{minute}"
+                    await redis.incrby(grp_key, grp_v)
+                    await redis.expire(grp_key, _COUNTER_TTL_SECONDS)
 
         if tpm_delta > 0:
             await redis.incrby(tpm_key, tpm_delta)
