@@ -1,6 +1,6 @@
 # schemas.py
-from pydantic import BaseModel, EmailStr
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 # Dữ liệu gửi lên khi Đăng ký & Đăng nhập (schema cũ — giữ để không phá các endpoint cũ)
@@ -967,20 +967,112 @@ class AdminTopicListResponse(BaseModel):
 
 
 class AdminSystemSettings(BaseModel):
-    model_name: str = "gemini-1.5-flash"
-    backup_model: str = "gemini-1.5-pro"
-    temperature: float = 0.4
-    max_output_tokens: int = 1024
-    safety_threshold: str = "BLOCK_MEDIUM_AND_ABOVE"
-    rate_limit_per_minute: int = 30
+    id: str = "current"
+    primary_model: str = "gemini-3.8-flash"
+    parent_insight_model: str = "gemini-3.5-flash"
+    classifier_model: str = "gemini-3.1-flash-lite"
+    email_model: str = "gemini-3.1-flash-lite"
+    flashcard_model: str = "gemini-3.5-flash-lite"
+    backup_model: str = "gemini-3.5-flash-lite"
+    model_name: Optional[str] = "gemini-3.8-flash"  # Backward compatibility
+
+    temperature: float = 0.35
+    top_p: float = 0.90
+    max_output_tokens: int = 512
+    socratic_strictness: str = "BALANCED"
+    enable_math_reviewer: bool = True
     enable_vision_support: bool = True
-    system_version: str = "v1.4.0"
-    mock_curriculum_month: Optional[int] = None  # US 9.3 (T9.11/T9.11b): Mock tháng học kỳ
-    last_updated_at: str
-    last_updated_by: str
+    safety_threshold: str = "BLOCK_MEDIUM_AND_ABOVE"
+    enable_parent_alert: bool = True
+    guest_rate_limit: int = 10
+    student_rate_limit: int = 30
+    rate_limit_per_minute: int = 30  # Backward compatibility
+    mock_curriculum_month: Optional[int] = None
+    system_version: str = "v1.7.0"
+    environment: str = "Production (Neon + Vercel)"
+    api_key_masked: Optional[str] = None
+    last_updated_at: Optional[str] = None
+    last_updated_by: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class AdminSystemSettingsUpdate(BaseModel):
+    primary_model: Optional[str] = None
+    parent_insight_model: Optional[str] = None
+    classifier_model: Optional[str] = None
+    email_model: Optional[str] = None
+    flashcard_model: Optional[str] = None
+    backup_model: Optional[str] = None
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_output_tokens: Optional[int] = None
+    socratic_strictness: Optional[str] = None
+    enable_math_reviewer: Optional[bool] = None
+    enable_vision_support: Optional[bool] = None
+    safety_threshold: Optional[str] = None
+    enable_parent_alert: Optional[bool] = None
+    guest_rate_limit: Optional[int] = None
+    student_rate_limit: Optional[int] = None
+    mock_curriculum_month: Optional[int] = None
+    system_version: Optional[str] = None
+    environment: Optional[str] = None
+
+
+class AdminTestKeyResponse(BaseModel):
+    success: bool
+    status: str = "SUCCESS"
+    latency_ms: int
+    message: str
+    key_masked: str
+
+
+class AdminHealthServiceDetail(BaseModel):
+    status: str  # "ONLINE" | "STANDBY" | "DEGRADED" | "DOWN"
+    latency_ms: int
+    detail: str
+
+
+class AdminHealthResponse(BaseModel):
+    overall_status: str  # "HEALTHY" | "DEGRADED" | "DOWN"
+    timestamp: str
+    services: Dict[str, AdminHealthServiceDetail]
+
+
+class AdminPlaygroundRequest(BaseModel):
+    prompt: str
+    model_name: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    socratic_strictness: Optional[str] = None
+
+
+class AdminPlaygroundResponse(BaseModel):
+    response_text: str
+    latency_ms: int
+    prompt_tokens: int
+    completion_tokens: int
+    model_used: str
+    socratic_strictness: str
+
+
+class AdminModelOption(BaseModel):
+    id: str
+    name: str
+    display_name: str
+    description: str
+    speed: str
+    recommended_for: str
+
+
+class AdminAuditItemResponse(BaseModel):
+    id: str
+    changed_by: str
+    change_summary: str
+    previous_config: Dict[str, Any]
+    new_config: Dict[str, Any]
+    created_at: str
 
 
 # ========================================================
@@ -1232,3 +1324,149 @@ class SystemErrorsListResponse(BaseModel):
     limit: int
     total_pages: int
     items: list[SystemErrorItemResponse]
+
+
+# ==============================================================================
+# US 10.4 - Task T10.4.4: Active Learning & Retrain Schemas
+# ==============================================================================
+
+class AuditFeedbackLogItem(BaseModel):
+    """Schema biểu diễn một bản ghi phản hồi phân luồng chờ duyệt."""
+    id: int
+    user_query: str
+    predicted_agent: str
+    suggested_agent: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuditFeedbackListResponse(BaseModel):
+    """Phản hồi danh sách nhật ký phân luồng phục vụ Active Learning Hub."""
+    success: bool = True
+    total: int
+    pending_count: int
+    approved_count: int = 0
+    rejected_count: int = 0
+    items: List[AuditFeedbackLogItem]
+
+
+class RetrainRequest(BaseModel):
+    """Payload gửi lên từ Admin để duyệt và tái huấn luyện mô hình."""
+    feedback_ids: List[int] = Field(
+        default_factory=list,
+        description="Danh sách ID các bản ghi AuditFeedbackLog cần duyệt và đưa vào huấn luyện lại"
+    )
+
+
+class RetrainResponse(BaseModel):
+    """Kết quả phản hồi sau khi tái huấn luyện mô hình và Hot-Reload vào RAM."""
+    success: bool = True
+    message: str
+    retrained_count: int
+    total_samples: int
+    approved_count: Optional[int] = None
+    total_samples_trained: Optional[int] = None
+
+
+class RejectFeedbacksRequest(BaseModel):
+    """Payload từ chối hoặc bỏ qua các mẫu câu spam, lỗi cú pháp."""
+    feedback_ids: List[int] = Field(
+        default_factory=list,
+        description="Danh sách ID các bản ghi AuditFeedbackLog cần từ chối"
+    )
+
+
+class RejectFeedbacksResponse(BaseModel):
+    """Kết quả phản hồi sau khi từ chối các mẫu câu."""
+    success: bool = True
+    message: str
+    rejected_count: int
+
+
+class UpdateFeedbackRequest(BaseModel):
+    """Payload Admin chỉnh sửa trực tiếp câu hỏi hoặc nhãn đề xuất trước khi duyệt (T10.4.5 UI)."""
+    user_query: Optional[str] = Field(None, min_length=1, max_length=1000, description="Câu hỏi của học sinh đã sửa")
+    suggested_agent: Optional[str] = Field(None, description="Nhãn Agent đề xuất đã hiệu chỉnh")
+
+
+class ActiveLearningStatsResponse(BaseModel):
+    """Thống kê tổng quan phục vụ các thẻ KPI trên giao diện Giám Sát Agent (T10.4.5 UI)."""
+    success: bool = True
+    pending_count: int
+    approved_count: int
+    rejected_count: int
+    total_feedbacks: int
+    total_training_samples: int
+    last_model_update: Optional[str] = None
+    intents_distribution: Dict[str, int] = {}
+
+
+class DeleteFeedbackResponse(BaseModel):
+    """Kết quả phản hồi khi xóa một bản ghi phản hồi khỏi hệ thống."""
+    success: bool = True
+    message: str = "Đã xóa bản ghi thành công"
+    deleted_id: int
+
+
+# ─── US 10.4 (T10.4.7): Nhật ký Tin nhắn ────────────────────────────────────
+
+class MessageLogItem(BaseModel):
+    """Một dòng trong bảng Nhật ký Tin nhắn."""
+    msg_id: str
+    student_question: str
+    msg_time: datetime
+    user_id: str
+    student_name: str
+    student_email: Optional[str] = None
+    grade: Optional[int] = None
+    session_id: str
+    session_title: Optional[str] = None
+    log_id: Optional[str] = None
+    target_agent: Optional[str] = None      # VD: "SCAFFOLDING_AGENT"
+    routing_reason: Optional[str] = None
+    notify_parent: Optional[bool] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MessageLogListResponse(BaseModel):
+    """Kết quả danh sách tin nhắn có phân trang."""
+    success: bool = True
+    total: int
+    page: int
+    page_size: int
+    items: List[MessageLogItem]
+
+
+class MessageLogStats(BaseModel):
+    """KPI cards cho trang Nhật ký Tin nhắn."""
+    total_today: int
+    total_all: int
+    agent_distribution: Dict[str, int]
+    parent_alerts_today: int
+    sessions_today: int = 0
+
+
+class MessageLogConversationItem(BaseModel):
+    """Một tin nhắn trong cuộc hội thoại chi tiết."""
+    msg_id: str
+    sender_type: str          # 'USER' | 'AI'
+    content: str
+    created_at: datetime
+    attachment_url: Optional[str] = None
+
+
+class MessageLogConversationResponse(BaseModel):
+    """Full cuộc hội thoại của 1 session."""
+    success: bool = True
+    session_id: str
+    session_title: Optional[str] = None
+    student_name: str
+    student_email: Optional[str] = None
+    grade: Optional[int] = None
+    messages: List[MessageLogConversationItem]
+

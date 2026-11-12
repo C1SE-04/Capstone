@@ -1,6 +1,9 @@
 import json
+import os
+import time
 import re
 import pathlib
+import threading
 from fractions import Fraction
 from typing import Any, Optional, Tuple, TypedDict
 
@@ -665,23 +668,100 @@ class OrchestratorAgent:
             re.IGNORECASE,
         )
 
+        # Regex trích xuất phương trình đại số (toán học một ẩn, hỗ trợ cả 2 vế có biến)
+        # math_chars dùng khoảng trắng ngang [ \t] tránh nhảy dòng
+        math_chars = r"[\d\.\+\-\*\/:\^\(\) \t]"
+        math_var = r"(?:(?<=\d)[a-zA-Z]|(?<![a-zA-Z\d_])[a-zA-Z](?![a-zA-Z_]))"
+        math_expr = rf"(?:{math_chars}*(?:{math_var})?{math_chars}*)+"
+        self._equation_re = re.compile(
+            rf"(?:^|(?<=[\s,:]))("
+            rf"{math_expr}"
+            rf"="
+            rf"{math_expr}"
+            rf")",
+            re.IGNORECASE,
+        )
+
         # Regex biểu thức toán học
         self._math_expr_re = re.compile(
             r"[\d\s\+\-\*\/\(\)\^\.x]{3,}",
             re.IGNORECASE,
         )
 
-        # Load Local ML Model (Trụ 2)
+        # US 10.4 (Task T10.4.3): Khởi tạo hạ tầng Hot-Reloading & Atomic Swap cho Local ML Model (Trụ 2)
+        self._model_path = pathlib.Path(__file__).parent / "local_orchestrator.pkl"
+        self._last_loaded_mtime: float = 0.0
+        self._last_mtime_check_time: float = 0.0
+        self._mtime_check_interval: float = 1.0  # Giảm 99% system calls I/O
+        self._reload_lock = threading.Lock()
         self._local_model = None
-        _model_path = pathlib.Path(__file__).parent / "local_orchestrator.pkl"
-        if _model_path.exists():
+        self.reload_model(force=True)
+
+    def reload_model(self, force: bool = True) -> bool:
+        """
+        US 10.4 (Task T10.4.3): Hot-Reloading mô hình Machine Learning trên RAM (Zero Downtime).
+        Sử dụng kỹ thuật Atomic Swap, Double-Checked Lock & Pipeline Validation:
+        1. Double-Checked Lock: Nếu force=False, kiểm tra lại mtime bên trong lock để tránh reload lặp.
+        2. Kiểm tra kích thước file: st_size >= 512 bytes chống nạp file rỗng đang ghi dở.
+        3. Deserialize cách ly: Nạp file mới vào biến tạm (local variable).
+        4. Validation & Warm-up: Kiểm tra có predict_proba, classes_ và chạy thử mồi 1 câu.
+        5. Atomic Swap: Hoán đổi con trỏ self._local_model tức thì (0.0001ms).
+        6. Safe Fallback: Nếu bất kỳ bước nào lỗi, giữ nguyên mô hình cũ trên RAM.
+        """
+        with self._reload_lock:
+            if not self._model_path.exists():
+                print(f"[OrchestratorAgent] [WARN] File mô hình không tồn tại: {self._model_path}")
+                return False
+
             try:
-                self._local_model = joblib.load(_model_path)
-                print(f"[OrchestratorAgent] [OK] Local ML Model loaded ({_model_path.stat().st_size // 1024}KB)")
+                stat_info = self._model_path.stat()
+                current_mtime = stat_info.st_mtime
+
+                # Double-Checked Locking khi gọi từ watcher tự động
+                if not force and current_mtime <= self._last_loaded_mtime:
+                    return True
+
+                # Kiểm tra chống file đang được tạo/ghi dở (0 bytes hoặc quá nhỏ)
+                if stat_info.st_size < 512:
+                    print(f"[OrchestratorAgent] [WARN] File mô hình quá nhỏ ({stat_info.st_size} bytes), có thể đang ghi dở. Bỏ qua.")
+                    return False
+
+                # 1. Nạp vào biến tạm cục bộ (hoàn toàn cách ly, không ảnh hưởng self._local_model đang chạy)
+                new_pipeline = joblib.load(self._model_path)
+
+                # 2. Pipeline Validation (Kiểm tra interface chuẩn scikit-learn)
+                if not hasattr(new_pipeline, "predict_proba") or not hasattr(new_pipeline, "classes_"):
+                    raise ValueError("Mô hình không có phương thức predict_proba hoặc classes_ hợp lệ.")
+
+                # 3. Warm-up Sanity Check (Chạy thử mồi 1 câu xác nhận pipeline hoạt động trơn tru)
+                _ = new_pipeline.predict_proba(["kiểm tra khởi động"])[0]
+
+                # 4. Atomic Swap: Hoán đổi tham chiếu bộ nhớ RAM tức thì (0.0001ms)
+                self._local_model = new_pipeline
+                self._last_loaded_mtime = current_mtime
+                classes_str = ", ".join(new_pipeline.classes_)
+                print(f"[OrchestratorAgent] [HOT-RELOAD SUCCESS] Đã nạp mô hình mới vào RAM ({stat_info.st_size // 1024}KB, mtime={self._last_loaded_mtime:.2f}, classes=[{classes_str}])")
+                return True
             except Exception as e:
-                print(f"[OrchestratorAgent] [WARN] Khong load duoc ML Model: {e}")
-        else:
-            print(f"[OrchestratorAgent] [WARN] ML Model khong co — chay train_local_model.py truoc.")
+                print(f"[OrchestratorAgent] [ERROR] Lỗi khi nạp mô hình (giữ nguyên bản cũ trên RAM): {e}")
+                return False
+
+    def get_model_info(self) -> dict:
+        """
+        US 10.4: Cung cấp thông tin trạng thái mô hình hiện tại phục vụ API Retrain (T10.4.4)
+        và Dashboard Giám Sát Agent (T10.4.5).
+        """
+        file_exists = self._model_path.exists()
+        file_size_kb = round(self._model_path.stat().st_size / 1024, 2) if file_exists else 0.0
+        classes_list = list(self._local_model.classes_) if (self._local_model and hasattr(self._local_model, "classes_")) else []
+        return {
+            "is_loaded": self._local_model is not None,
+            "model_path": str(self._model_path),
+            "file_exists": file_exists,
+            "file_size_kb": file_size_kb,
+            "last_loaded_mtime": self._last_loaded_mtime,
+            "classes": classes_list,
+        }
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -727,18 +807,43 @@ class OrchestratorAgent:
             return None
 
     @staticmethod
+    def _normalize_math_expr(s: str) -> str:
+        """
+        Chuẩn hóa biểu thức toán học trước khi đưa vào SymPy:
+        - Thêm dấu nhân ngầm: 2x -> 2*x, 2(x+1) -> 2*(x+1), )( -> )*(, )x -> )*x, x( -> x*(
+        - Chuyển lũy thừa ^ -> **
+        - Chuyển phép chia : -> /
+        """
+        s = re.sub(r"(\d)\s*([a-zA-Z])", r"\1*\2", s)
+        s = re.sub(r"(\d)\s*\(", r"\1*(", s)
+        s = re.sub(r"\)\s*\(", r")*(", s)
+        s = re.sub(r"\)\s*([a-zA-Z\d])", r")*\1", s)
+        s = re.sub(r"([a-zA-Z])\s*\(", r"\1*(", s)
+        s = s.replace("^", "**")
+        s = s.replace(":", "/")
+        return s
+
+    @staticmethod
+    def _clean_extracted_equation(raw: str) -> str:
+        """Làm sạch phương trình thô trích xuất từ câu hỏi học sinh."""
+        raw = raw.strip()
+        raw = re.sub(r"^[a-zA-Z]\s*:\s*", "", raw)
+        raw = re.sub(r"^[^\d\(\+\-a-zA-Z]+", "", raw)
+        raw = re.sub(r"[^\d\)\w]+$", "", raw)
+        return raw.strip()
+
+    @staticmethod
     def _solve_simple_linear_equation(raw_eq: str) -> Optional[Tuple[str, Fraction, str]]:
         """
-        Giải phương trình bậc nhất một ẩn đơn giản (ví dụ: '2x + 3 = 5', '2x = 2', '3y - 9 = 0').
+        Giải phương trình bậc nhất một ẩn (ví dụ: '3x + 10 = 25', '2x - 4 = 10', '2(x+1) = 8', 'x/2 + 3 = 7').
         Trả về: (tên biến, nghiệm Fraction, phương trình chuẩn).
         """
         try:
             if "=" not in raw_eq:
                 return None
             lhs_str, rhs_str = raw_eq.split("=", 1)
-            # Thêm dấu nhân giữa số và biến chữ cái: 2x -> 2*x
-            lhs_norm = re.sub(r"(\d)\s*([a-zA-Z])", r"\1*\2", lhs_str)
-            rhs_norm = re.sub(r"(\d)\s*([a-zA-Z])", r"\1*\2", rhs_str)
+            lhs_norm = OrchestratorAgent._normalize_math_expr(lhs_str)
+            rhs_norm = OrchestratorAgent._normalize_math_expr(rhs_str)
 
             all_vars = set(re.findall(r"[a-zA-Z]", lhs_norm + rhs_norm))
             if len(all_vars) != 1:
@@ -768,125 +873,139 @@ class OrchestratorAgent:
         problem_context: Optional[dict] = None,
     ) -> Optional[RoutingResult]:
         """
-        Trụ cột 1 — Kiểm tra học sinh giải phương trình tuyến tính từ ngữ cảnh:
-        Ví dụ: Trong lịch sử có phương trình '2x + 3 = 5' (nghiệm đúng x = 1).
-        Học sinh nhắn: 'à là qua thành -3, đáp án x = 2'.
-        Nhận diện nghiệm sai (x = 2 != 1) -> Route MISCONCEPTION (emotion_flag='WRONG')
-        kèm phân tích sư phạm: chuyển vế đúng nhưng kết luận sai nghiệm do quên chia hệ số.
-        Nếu nghiệm đúng (x = 1 == 1) -> Route SCAFFOLDING (emotion_flag='CORRECT').
+        Trụ cột 1 — Nhận diện bài toán phương trình & điều phối Socratic chuẩn xác (Tối đa hóa phạm vi bao phủ):
+        1. Nhận diện phương trình bài toán từ tin nhắn hiện tại (original_message) hoặc ngữ cảnh (history_text, problem_context).
+        2. Nếu học sinh chỉ đưa ra đề bài / nhờ giải / hỏi bài (ví dụ: 'tính 3x + 10 = 25', 'giải 2x - 4 = 10', '3x + 10 = 25'):
+           -> Điều phối trực tiếp SCAFFOLDING (emotion_flag='GUIDING') để Thầy giáo dẫn dắt Socratic bước 1.
+        3. Nếu học sinh đưa ra nghiệm phỏng đoán:
+           - Nghiệm đúng (x = 5 == 5) -> SCAFFOLDING (emotion_flag='CORRECT').
+           - Nghiệm sai (x = 10 != 5) -> MISCONCEPTION (emotion_flag='WRONG').
         """
-        if not history_text and not problem_context:
-            return None
-
-        # Tập hợp văn bản để tìm phương trình gốc đang thảo luận
-        context_sources = []
-        if problem_context:
-            for k in ("problem_text", "problem", "title", "content"):
-                val = problem_context.get(k)
-                if val and isinstance(val, str):
-                    context_sources.append(val)
-        if history_text:
-            context_sources.append(history_text)
-
-        search_corpus = "\n".join(context_sources)
-        if not search_corpus.strip():
-            return None
-
-        # Regex tìm các biểu thức phương trình dạng có dấu '='
-        eq_pattern = re.compile(
-            r"(\b\d*\.?\d*\s*[a-zA-Z]\s*(?:[\+\-\*\/]\s*\d+\.?\d*)?\s*=\s*[+-]?\s*[\d\.\s\+\-\*\/]+)",
-            re.IGNORECASE,
-        )
-        eq_matches = eq_pattern.findall(search_corpus)
-        if not eq_matches:
-            return None
-
+        # 1. Quét tìm phương trình đại số trong tin nhắn hiện tại
+        eq_in_msg = self._equation_re.findall(original_message)
         solved_target = None
-        for raw in reversed(eq_matches):
-            res = self._solve_simple_linear_equation(raw)
+        eq_source = "msg"
+
+        for raw in reversed(eq_in_msg):
+            cleaned = self._clean_extracted_equation(raw)
+            res = self._solve_simple_linear_equation(cleaned)
             if res:
                 v_name, sol, eq_clean = res
-                # Ưu tiên phương trình có chứa phép tính hoặc hệ số (ví dụ 2x + 3 = 5, 2x = 2)
-                # thay vì phép gán tầm thường x = 2
                 is_trivial_assign = bool(re.match(rf"^{v_name}\s*=\s*-?\d+$", eq_clean.strip(), re.IGNORECASE))
-                if not is_trivial_assign or not solved_target:
+                if not is_trivial_assign:
                     solved_target = res
-                    if re.search(r"[\+\-\*\/]", eq_clean) or re.search(r"\d+[a-zA-Z]", eq_clean):
-                        break
+                    break
+                elif not solved_target:
+                    solved_target = res
+
+        # 2. Nếu tin nhắn hiện tại không chứa phương trình đầy đủ, tìm trong context & history
+        if not solved_target or bool(re.match(rf"^{solved_target[0]}\s*=\s*-?\d+$", solved_target[2].strip(), re.IGNORECASE)):
+            context_sources = []
+            if problem_context:
+                for k in ("problem_text", "problem", "title", "content"):
+                    val = problem_context.get(k)
+                    if val and isinstance(val, str):
+                        context_sources.append(val)
+            if history_text:
+                context_sources.append(history_text)
+
+            if context_sources:
+                search_corpus = "\n".join(context_sources)
+                eq_in_ctx = self._equation_re.findall(search_corpus)
+                for raw in reversed(eq_in_ctx):
+                    cleaned = self._clean_extracted_equation(raw)
+                    res = self._solve_simple_linear_equation(cleaned)
+                    if res:
+                        v_name, sol, eq_clean = res
+                        is_trivial_assign = bool(re.match(rf"^{v_name}\s*=\s*-?\d+$", eq_clean.strip(), re.IGNORECASE))
+                        if not is_trivial_assign:
+                            solved_target = res
+                            eq_source = "ctx"
+                            break
 
         if not solved_target:
             return None
 
         var_name, true_sol, eq_str = solved_target
 
-        # Tìm xem học sinh có đưa ra đề xuất nghiệm trong tin nhắn hiện tại không
+        # 3. Kiểm tra xem học sinh có đưa ra đề xuất nghiệm trong tin nhắn hiện tại không
         ans_pattern = re.compile(
-            rf"(?:(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua|tính ra|tinh ra|ra)\s*(?:là|la\s*)?)?{var_name}\s*=\s*(-?\d+(?:\.\d+)?(?:/\d+)?)|\b(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua)\s*(?:là|la\s*)?(-?\d+(?:\.\d+)?(?:/\d+)?)",
+            rf"(?:(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua|tính ra|tinh ra|ra)\s*(?:là|la\s*)?)?(?<![a-zA-Z\d_]){var_name}\s*=\s*(-?\d+(?:\.\d+)?(?:/\d+)?)|\b(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua)\s*(?:là|la\s*)?(-?\d+(?:\.\d+)?(?:/\d+)?)",
             re.IGNORECASE,
         )
-        m = ans_pattern.search(original_message)
-        if not m:
-            return None
 
-        cand_str = m.group(1) or m.group(2)
-        if not cand_str:
-            return None
+        msg_without_eq = original_message.replace(eq_str, " ") if eq_source == "msg" else original_message
+        m = ans_pattern.search(msg_without_eq)
 
-        try:
-            cand_frac, _ = self._extract_fraction(cand_str)
-        except Exception:
-            return None
+        cand_str = None
+        if m:
+            cand_str = m.group(1) or m.group(2)
+        elif eq_source == "msg":
+            m_guess = re.search(r"\b(?:ra|được|bằng)\s*(-?\d+(?:\.\d+)?(?:/\d+)?)\s*(?:hả|đúng|ạ|\?)", msg_without_eq, re.IGNORECASE)
+            if m_guess:
+                cand_str = m_guess.group(1)
 
-        if cand_frac is None:
-            return None
+        # A. NẾU HỌC SINH ĐOÁN NGHIỆM:
+        if cand_str:
+            try:
+                cand_frac, _ = self._extract_fraction(cand_str)
+            except Exception:
+                cand_frac = None
 
-        # So khớp nghiệm
-        if cand_frac == true_sol:
-            # Học sinh đoán đúng nghiệm!
-            task = (
-                f"Học sinh đã giải đúng phương trình '{eq_str}' và tìm ra {var_name} = {cand_str} (nghiệm đúng: {true_sol}). "
-                "Bạn là THẦY GIÁO: Khen ngợi học sinh đã giải chính xác phương trình, ghi nhận sự nỗ lực và chốt bài toán bằng cách gắn tag [COMPREHENSION_CHECK]."
-            )
-            return RoutingResult(
-                selected_agent="SCAFFOLDING",
-                task_description=task,
-                routing_scratchpad=f"[Trụ1] Linear equation CORRECT: {eq_str} -> {var_name}={true_sol}",
-                emotion_flag="CORRECT",
-            )
-        else:
-            # Học sinh đoán sai nghiệm!
-            has_transpose_step = any(s in original_message.lower() for s in (
-                "chuyển vế", "chuyen ve", "qua thành", "qua thanh", "đổi dấu", "doi dau",
-                "-3", "- 3", "= 2", "=2"
-            ))
+            if cand_frac is not None:
+                if cand_frac == true_sol:
+                    task = (
+                        f"Học sinh đã giải đúng phương trình '{eq_str}' và tìm ra {var_name} = {cand_str} (nghiệm đúng: {true_sol}). "
+                        "Bạn là THẦY GIÁO: Khen ngợi học sinh đã giải chính xác phương trình, ghi nhận sự nỗ lực và chốt bài toán bằng cách gắn tag [COMPREHENSION_CHECK]."
+                    )
+                    return RoutingResult(
+                        selected_agent="SCAFFOLDING",
+                        task_description=task,
+                        routing_scratchpad=f"[Trụ1] Linear equation CORRECT: {eq_str} -> {var_name}={true_sol}",
+                        emotion_flag="CORRECT",
+                    )
+                else:
+                    has_transpose_step = any(s in original_message.lower() for s in (
+                        "chuyển vế", "chuyen ve", "qua thành", "qua thanh", "đổi dấu", "doi dau",
+                        "-3", "- 3", "= 2", "=2"
+                    ))
+                    pedagogical_analysis = (
+                        f"Phân tích sư phạm: Học sinh đã thực hiện bước chuyển vế đúng nhưng ở bước cuối kết luận {var_name} = {cand_str} là SAI "
+                        f"(do quên chia cho hệ số của {var_name}, nghiệm đúng phải là {var_name} = {true_sol})."
+                        if has_transpose_step else
+                        f"Phân tích sư phạm: Học sinh đưa ra kết quả {var_name} = {cand_str} là SAI "
+                        f"(nghiệm đúng của phương trình '{eq_str}' phải là {var_name} = {true_sol})."
+                    )
+                    task = (
+                        f"Học sinh đang giải phương trình '{eq_str}'. {pedagogical_analysis} "
+                        "Bạn là THẦY GIÁO, điều phối sư phạm Socratic BẮT BUỘC: "
+                        "1. Nếu học sinh có bước chuyển vế đúng, hãy khen ngợi bước đó. "
+                        f"2. Nhẹ nhàng chỉ ra rằng kết quả {var_name} = {cand_str} chưa chính xác, yêu cầu học sinh quan sát lại hệ số của {var_name}. "
+                        "3. Đặt câu hỏi Socratic gợi mở bước chia cuối cùng để học sinh tự tính lại. "
+                        f"4. TUYỆT ĐỐI KHÔNG khen 'đáp án {var_name} = {cand_str} là hoàn toàn đúng'. "
+                        "5. TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK]."
+                    )
+                    return RoutingResult(
+                        selected_agent="MISCONCEPTION",
+                        task_description=task,
+                        routing_scratchpad=f"[Trụ1] Linear equation mismatch: {eq_str} -> true {var_name}={true_sol}, student guessed {cand_str}",
+                        emotion_flag="WRONG",
+                    )
 
-            pedagogical_analysis = ""
-            if has_transpose_step:
-                pedagogical_analysis = (
-                    f"Phân tích sư phạm: Học sinh đã thực hiện bước chuyển vế đúng nhưng ở bước cuối kết luận {var_name} = {cand_str} là SAI "
-                    f"(do quên chia cho hệ số của {var_name}, nghiệm đúng phải là {var_name} = {true_sol})."
-                )
-            else:
-                pedagogical_analysis = (
-                    f"Phân tích sư phạm: Học sinh đưa ra kết quả {var_name} = {cand_str} là SAI "
-                    f"(nghiệm đúng của phương trình '{eq_str}' phải là {var_name} = {true_sol})."
-                )
-
-            task = (
-                f"Học sinh đang giải phương trình '{eq_str}'. {pedagogical_analysis} "
-                "Bạn là THẦY GIÁO, điều phối sư phạm Socratic BẮT BUỘC: "
-                "1. Nếu học sinh có bước chuyển vế đúng, hãy khen ngợi bước đó. "
-                f"2. Nhẹ nhàng chỉ ra rằng kết quả {var_name} = {cand_str} chưa chính xác, yêu cầu học sinh quan sát lại hệ số của {var_name}. "
-                "3. Đặt câu hỏi Socratic gợi mở bước chia cuối cùng để học sinh tự tính lại. "
-                f"4. TUYỆT ĐỐI KHÔNG khen 'đáp án {var_name} = {cand_str} là hoàn toàn đúng'. "
-                "5. TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK]."
-            )
-            return RoutingResult(
-                selected_agent="MISCONCEPTION",
-                task_description=task,
-                routing_scratchpad=f"[Trụ1] Linear equation mismatch: {eq_str} -> true {var_name}={true_sol}, student guessed {cand_str}",
-                emotion_flag="WRONG",
-            )
+        # B. NẾU HỌC SINH RA ĐỀ / HỎI BÀI TOÁN PHƯƠNG TRÌNH (Chưa đưa ra nghiệm):
+        task_prompt = (
+            f"Học sinh vừa gửi bài toán phương trình: '{eq_str}' (Nghiệm đúng nội bộ: {var_name} = {true_sol}). "
+            "Bạn là THẦY GIÁO SOCRATIC, điều phối giàn giáo dẫn dắt BẮT BUỘC: "
+            f"1. TUYỆT ĐỐI KHÔNG giải hộ bài toán, TUYỆT ĐỐI KHÔNG tiết lộ đáp án {var_name} = {true_sol}. "
+            "2. Hướng dẫn học sinh bước đầu tiên (ví dụ: chuyển các số hạng tự do sang vế phải và đổi dấu, hoặc rút gọn hai vế). "
+            "3. Đặt DUY NHẤT 1 câu hỏi gợi mở ngắn gọn (1-2 câu), ấm áp để học sinh tự làm bước biến đổi đầu tiên."
+        )
+        return RoutingResult(
+            selected_agent="SCAFFOLDING",
+            task_description=task_prompt,
+            routing_scratchpad=f"[Trụ1] Linear equation problem prompt: '{eq_str}' (solution: {var_name}={true_sol}) -> Direct Socratic SCAFFOLDING",
+            emotion_flag="GUIDING",
+        )
 
     def _no_study_intent(self, text: str) -> bool:
         """Kiểm tra câu không chứa tín hiệu hỏi bài học."""
@@ -949,7 +1068,13 @@ class OrchestratorAgent:
         Ví dụ: "4/2", "10:2", "3*5", "12+8", "10:2 = ?", "thầy ơi 4/2 bằng mấy ạ".
         Điều phối trực tiếp sang SCAFFOLDING với chỉ đạo Socratic sư phạm (chia kẹo / đồ vật).
         """
-        m = self._minimal_arithmetic_re.match(text_clean)
+        # Chuẩn hóa biểu thức LaTeX phân số \frac{a}{b} -> a/b và bỏ ký tự $ bao quanh
+        expr_target = text_clean
+        if "\\frac" in expr_target or "$" in expr_target:
+            expr_target = re.sub(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", r"\1/\2", expr_target)
+            expr_target = re.sub(r"\$([^\$]+)\$", r"\1", expr_target).strip()
+
+        m = self._minimal_arithmetic_re.match(expr_target)
         if not m:
             return None
 
@@ -1311,6 +1436,19 @@ class OrchestratorAgent:
         Trụ cột 2 — Phân loại intent bằng Local ML Model (TF-IDF + Logistic Regression).
         Threshold: 60%.
         """
+        # US 10.4 (Task T10.4.3): Out-of-process File Watcher với I/O Throttling
+        # Tự động nạp lại mô hình nếu file trên đĩa được cập nhật từ tiến trình ngoài
+        now = time.time()
+        if now - self._last_mtime_check_time >= self._mtime_check_interval:
+            self._last_mtime_check_time = now
+            try:
+                if self._model_path.exists():
+                    current_mtime = self._model_path.stat().st_mtime
+                    if current_mtime > self._last_loaded_mtime:
+                        self.reload_model(force=False)
+            except Exception as e:
+                print(f"[OrchestratorAgent] Cảnh báo kiểm tra mtime mô hình: {e}")
+
         if self._local_model is None:
             return None
         try:
@@ -1378,8 +1516,8 @@ class OrchestratorAgent:
         # Trụ cột 2 - Dự đoán ML trước
         ml_res = self._ml_route(text_clean, problem_context)
 
-        # Ưu tiên An toàn ngôn từ (SAFETY): Kể cả tin nhắn đầu tiên, nếu vi phạm thì phải chuyển SAFETY ngay
-        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT"):
+        # Ưu tiên An toàn ngôn từ (SAFETY) & Ngộ nhận toán học (MISCONCEPTION - US 10.4): Kể cả tin nhắn đầu tiên
+        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT", "MISCONCEPTION", "MISCONCEPTION_AGENT"):
             return ml_res
 
         # Phễu "Bắt đầu phiên học mới"
@@ -1472,6 +1610,11 @@ class OrchestratorAgent:
         )
         if result is not None:
             return result
+
+        # Trụ cột 2 - Dự đoán ML trước
+        ml_res = self._ml_route(text_clean, problem_context)
+        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT", "MISCONCEPTION", "MISCONCEPTION_AGENT"):
+            return ml_res
 
         is_empty_history = (
             not history_text.strip()

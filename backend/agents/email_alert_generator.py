@@ -153,7 +153,14 @@ def generate_academic_alert_email(
         return _fallback_academic_alert(request_data, "Thiếu cấu hình GEMINI_API_KEY trong môi trường.")
 
     genai.configure(api_key=key)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+
+    # US 10.3 (Task T10.3.3): Đọc email_model động từ SystemConfigService
+    try:
+        from services.system_config_service import get_system_settings
+        sys_config = get_system_settings()
+        model_name = sys_config.get("email_model") or os.getenv("GEMINI_EMAIL_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    except Exception:
+        model_name = os.getenv("GEMINI_EMAIL_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
     # Format danh sách bài toán gần đây
     problems_lines = []
@@ -201,8 +208,12 @@ Chỉ xuất ra đúng định dạng JSON thuần túy theo cấu trúc:
             model_name=model_name,
             system_instruction=ACADEMIC_ALERT_SYSTEM_INSTRUCTION
         )
-        response = model.generate_content(
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(
+            model,
             prompt,
+            model_name,
+            "Email",
             generation_config={
                 "temperature": 0.2,
                 "top_p": 0.9,
@@ -231,7 +242,14 @@ def generate_safety_alert_email(
         return _fallback_safety_alert(request_data, "Thiếu cấu hình GEMINI_API_KEY trong môi trường.")
 
     genai.configure(api_key=key)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+
+    # US 10.3 (Task T10.3.3): Đọc email_model động từ SystemConfigService
+    try:
+        from services.system_config_service import get_system_settings
+        sys_config = get_system_settings()
+        model_name = sys_config.get("email_model") or os.getenv("GEMINI_EMAIL_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    except Exception:
+        model_name = os.getenv("GEMINI_EMAIL_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
     # Giữ nguyên văn tin nhắn của học sinh (không che mờ bằng dấu *)
     raw_message = request_data.original_message.strip() if request_data.original_message else ""
@@ -272,8 +290,12 @@ Chỉ xuất ra đúng định dạng JSON thuần túy theo cấu trúc:
             model_name=model_name,
             system_instruction=SAFETY_ALERT_SYSTEM_INSTRUCTION
         )
-        response = model.generate_content(
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(
+            model,
             prompt,
+            model_name,
+            "Email",
             generation_config={
                 "temperature": 0.2,
                 "top_p": 0.9,

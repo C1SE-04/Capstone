@@ -79,6 +79,79 @@ def save_orchestrator_log(
         print(f"Error saving orchestrator log: {e}")
 
 
+def save_audit_feedback_log(
+    db: Optional[Session] = None,
+    user_query: str = "",
+    predicted_agent: str = "",
+    suggested_agent: str = "",
+):
+    """
+    US 10.4 (Task T10.4.2):
+    Ghi nhận câu hỏi bị phân luồng sai vào bảng audit_feedback_logs ở trạng thái PENDING.
+    
+    Cải tiến kiểm soát chất lượng dữ liệu:
+    1. Kiểm tra rỗng và cắt tỉa whitespace.
+    2. Chống trùng lặp nhãn ban đầu (Anti-Echo Tagging).
+    3. Whitelist 4 nhãn Agent hợp lệ.
+    4. Chống spam bản ghi trùng lặp (Deduplication) khi câu hỏi đã có sẵn ở trạng thái PENDING.
+    5. An toàn luồng/kết nối DB: Tự động khởi tạo và đóng SessionLocal nếu db=None trong BackgroundTasks.
+    """
+    if not user_query or not user_query.strip():
+        return
+        
+    clean_query = user_query.strip()
+    clean_predicted = predicted_agent.replace("_AGENT", "").strip().upper()
+    clean_suggested = suggested_agent.replace("_AGENT", "").strip().upper()
+
+    # 1. Chống Echo Tagging
+    if clean_suggested == clean_predicted:
+        return
+
+    # 2. Whitelist 4 Agent hợp lệ
+    from router import VALID_AUDIT_AGENTS
+    if clean_suggested not in VALID_AUDIT_AGENTS:
+        return
+
+    should_close = False
+    session = db
+    if session is None:
+        from database import SessionLocal
+        session = SessionLocal()
+        should_close = True
+
+    try:
+        # 3. Chống trùng lặp bản ghi PENDING (Deduplication)
+        existing = (
+            session.query(models.AuditFeedbackLog)
+            .filter(
+                models.AuditFeedbackLog.user_query == clean_query,
+                models.AuditFeedbackLog.predicted_agent == clean_predicted,
+                models.AuditFeedbackLog.suggested_agent == clean_suggested,
+                models.AuditFeedbackLog.status == "PENDING",
+            )
+            .first()
+        )
+        if existing:
+            print(f"[ActiveLearning] [INFO] Đã tồn tại bản ghi PENDING cho câu hỏi: '{clean_query[:35]}...', bỏ qua trùng lặp.")
+            return
+
+        feedback_log = models.AuditFeedbackLog(
+            user_query=clean_query,
+            predicted_agent=clean_predicted,
+            suggested_agent=clean_suggested,
+            status="PENDING",
+        )
+        session.add(feedback_log)
+        session.commit()
+        print(f"[ActiveLearning] [SUCCESS] Đã ghi nhận câu hỏi phân luồng sai vào audit_feedback_logs: '{clean_query[:40]}' ({clean_predicted} -> {clean_suggested})")
+    except Exception as e:
+        session.rollback()
+        print(f"[ActiveLearning] Lỗi lưu audit_feedback_logs: {e}")
+    finally:
+        if should_close and session is not None:
+            session.close()
+
+
 def update_stats_on_answer(db: Session, session_id: str, answer_status: Optional[str]):
     """
     Cập nhật số lần trả lời sai liên tiếp và số lần hint.
@@ -174,9 +247,13 @@ def process_query_with_orchestrator(
         else:
             teaching_mode = get_teaching_mode(stats.consecutive_wrong_count, stats.hint_count)
 
-        # 4. Lấy lịch sử ngữ cảnh
-        chat_history = get_recent_chat_context(db, session_id, limit=5)
-        history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in chat_history])
+        # 4. Lấy lịch sử ngữ cảnh (loại trừ chính tin nhắn vừa lưu để xác định đúng ngữ cảnh trước đó)
+        chat_history = get_recent_chat_context(db, session_id, limit=6)
+        prev_messages = [
+            msg for msg in chat_history 
+            if not (msg["role"] == "user" and msg["parts"][0] == user_query)
+        ]
+        history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in prev_messages])
 
         # 4b. Lấy toàn bộ các ảnh bài toán mà học sinh đã gửi trong phiên học này (tối đa 3 ảnh gần nhất)
         session_images_query = (
@@ -299,7 +376,7 @@ def process_query_with_orchestrator(
 
     # Gọi AI stream với enriched_task_description và bộ sưu tập ảnh phiên học
     full_reply = ""
-    meta = {"has_comprehension": False}
+    meta = {"has_comprehension": False, "suggested_agent": None}
     for chunk in agent_router(
         target_agent,
         enriched_task_description,
@@ -314,9 +391,14 @@ def process_query_with_orchestrator(
         full_reply += chunk
         yield f"event: message\ndata: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
 
-    # Lưu phản hồi AI vào DB
-    if full_reply and session_id:
-        ai_msg = models.Message(session_id=session_id, sender_type="AGENT_TUTOR", content=full_reply)
+    # US 10.4 (Task T10.4.2): Bóc tách thẻ ẩn khỏi phản hồi trước khi lưu DB
+    from router import extract_audit_tag
+    clean_reply, extracted_agent = extract_audit_tag(full_reply)
+    suggested_agent = meta.get("suggested_agent") or extracted_agent
+
+    # Lưu phản hồi AI sạch vào DB Message (Học sinh & Phụ huynh không thấy thẻ ẩn)
+    if clean_reply and session_id:
+        ai_msg = models.Message(session_id=session_id, sender_type="AGENT_TUTOR", content=clean_reply)
         db.add(ai_msg)
         
         # Cập nhật updated_at của session
@@ -331,6 +413,24 @@ def process_query_with_orchestrator(
             update_session_active_interval(db, session_id)
         except Exception:
             pass
+
+    # BẢO VỆ CHỐNG FALSE POSITIVE (CHÀO HỎI & NGOÀI LỀ):
+    # Câu chào hỏi / xã giao thuộc trách nhiệm của SAFETY theo kiến trúc hệ thống.
+    if is_greeting_or_offtopic and suggested_agent in ('SCAFFOLDING', 'SCAFFOLDING_AGENT'):
+        suggested_agent = None
+
+    # US 10.4 (Task T10.4.2): Nếu phát hiện phân luồng sai -> Ghi nhận vào audit_feedback_logs
+    if suggested_agent:
+        if background_tasks:
+            background_tasks.add_task(
+                save_audit_feedback_log,
+                None,  # Để None để Background Task tự mở SessionLocal riêng, tránh lỗi closed session của FastAPI
+                user_query,
+                target_agent,
+                suggested_agent,
+            )
+        else:
+            save_audit_feedback_log(db, user_query, target_agent, suggested_agent)
 
     # Nếu Gemini nhận diện học sinh đã giải đúng bài toán:
     # 1. Chuyển emotion_flag thành CORRECT để con cú vỗ tay/vui vẻ

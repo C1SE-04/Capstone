@@ -360,7 +360,14 @@ class SystemErrorMiddleware(BaseHTTPMiddleware):
 # ==============================================================================
 # US 10.2 (Tasks T10.2.1 - T10.2.2): Telemetry & Observability Exports
 # ==============================================================================
-from middleware.telemetry_middleware import TelemetryMiddleware, telemetry_queue
+from middleware.telemetry_middleware import (
+    TelemetryMiddleware,
+    telemetry_queue,
+    increment_sse_session,
+    decrement_sse_session,
+    get_active_sse_sessions,
+)
 from middleware.gemini_telemetry import stream_with_telemetry, generate_with_telemetry
+
 
 

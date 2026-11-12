@@ -102,7 +102,14 @@ def classify_problem(
         )
 
     genai.configure(api_key=key)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+
+    # US 10.3 (Task T10.3.3): Đọc classifier_model động từ SystemConfigService
+    try:
+        from services.system_config_service import get_system_settings
+        sys_config = get_system_settings()
+        model_name = sys_config.get("classifier_model") or os.getenv("GEMINI_CLASSIFIER_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    except Exception:
+        model_name = os.getenv("GEMINI_CLASSIFIER_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
     formatted_history = (
         _format_history_for_gemini(history_problems)
@@ -158,7 +165,8 @@ Chỉ trả về JSON thuần túy theo cấu trúc:
             system_instruction=PROBLEM_CLASSIFICATION_SYSTEM_INSTRUCTION,
             generation_config={"temperature": 0.1, "response_mime_type": "application/json"}
         )
-        response = model.generate_content(prompt)
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(model, prompt, model_name, "Classifier")
         raw_text = response.text.strip()
 
         if raw_text.startswith("```json"):

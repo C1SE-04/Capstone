@@ -233,7 +233,7 @@ class TestAdminMockRouter(unittest.TestCase):
         res_get = client.get("/admin/mock/settings")
         self.assertEqual(res_get.status_code, 200)
         settings = res_get.json()
-        self.assertEqual(settings["model_name"], "gemini-1.5-flash")
+        self.assertEqual(settings["model_name"], "gemini-3.8-flash")  # T10.4.6: đồng bộ với MOCK_SETTINGS thực tế
         self.assertEqual(settings["system_version"], "v1.4.0")
 
         # 2. Cập nhật nhiệt độ temperature

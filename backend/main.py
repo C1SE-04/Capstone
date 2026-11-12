@@ -1,3 +1,12 @@
+import os
+import pathlib
+from dotenv import load_dotenv
+
+_env_path = pathlib.Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_env_path)
+if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
+
 import sys
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -7,6 +16,11 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
+try:
+    from sklearn.exceptions import InconsistentVersionWarning
+    warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+except Exception:
+    pass
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -80,6 +94,16 @@ app.include_router(admin_mock.router)
 app.include_router(admin_mock.admin_router)  # US 8.5 (Task T8.29B): API Admin Logs GET /admin/logs
 from routers import admin_errors  # US 9.5 (Tasks T9.16-T9.18): Quan tri su co & bao loi Incident Hub
 app.include_router(admin_errors.router)
+from routers import admin_settings  # US 10.3 (Task T10.3.2): Quan tri cai dat Admin Settings Hub
+app.include_router(admin_settings.router)
+app.include_router(admin_settings.mock_compat_router)
+from routers import admin_kpi_metrics  # US 10.2 (Task T10.2.5): Admin System KPI & Observability Hub
+app.include_router(admin_kpi_metrics.router)
+from routers import admin_active_learning  # US 10.4 (Task T10.4.4): Admin Active Learning & Tái Huấn Luyện Mô Hình
+app.include_router(admin_active_learning.router)
+app.include_router(admin_active_learning.compat_router)
+from routers import admin_message_logs  # US 10.4 (Task T10.4.7): Nhật ký Tin nhắn
+app.include_router(admin_message_logs.router)
 
 
 
@@ -133,9 +157,8 @@ async def startup_event():
     try:
         redis = await get_redis()
         await redis.ping()  # Kiểm tra kết nối thực sự
-        # print("✅ Redis kết nối thành công!")
     except Exception as e:
-        print(f"⚠️  Redis không khả dụng: {e}. Rate-limit sẽ bỏ qua (fail-open).")
+        print(f"[WARNING] Redis không khả dụng: {e}. Rate-limit sẽ bỏ qua (fail-open).")
     # 2. Khởi động task dọn dẹp Guest session
     asyncio.create_task(schedule_guest_cleanup())
     # 3. Đảm bảo tài khoản ADMIN duy nhất luôn sẵn sàng
@@ -143,22 +166,21 @@ async def startup_event():
         from scripts.init_admin import ensure_single_admin
         ensure_single_admin()
     except Exception as e:
-        print(f"⚠️ Không thể khởi tạo Admin: {e}")
+        print(f"[WARNING] Không thể khởi tạo Admin: {e}")
     # 4. US 8.1 (Task T8.7): Khởi động Background Worker gửi Email Cảnh Báo Phụ Huynh trong 5 phút
     try:
         from workers.alert_email_worker import schedule_alert_email_worker
         asyncio.create_task(schedule_alert_email_worker(interval_seconds=20))
     except Exception as e:
-        print(f"⚠️ Không thể khởi động Alert Email Worker: {e}")
+        print(f"[WARNING] Không thể khởi động Alert Email Worker: {e}")
     # 5. US 10.2 (T10.2.3): Khởi động Telemetry Batch Worker — gom event và cập nhật Redis counters
     try:
         from workers.telemetry_batch_worker import start_telemetry_worker
         asyncio.create_task(start_telemetry_worker())
     except Exception as e:
-        print(f"⚠️ Không thể khởi động Telemetry Batch Worker: {e}")
+        print(f"[WARNING] Không thể khởi động Telemetry Batch Worker: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     # Đóng kết nối Redis khi server dừng
     await close_redis()
-    # print("🔴 Redis đã đóng kết nối.")

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Mail, Clock, Copy, Check, Sparkles } from "lucide-react";
+import { Mail, Clock, Copy, Check } from "lucide-react";
 
 interface FooterProps {
   onOpenLegal: (type: "terms" | "privacy") => void;
@@ -42,10 +42,6 @@ export default function Footer({ onOpenLegal }: FooterProps) {
     } catch {
       showToast("Không thể sao chép, vui lòng copy thủ công.");
     }
-  };
-
-  const handleSocialClick = (platform: string) => {
-    showToast(`Kênh ${platform} chính thức của SocraticKid sẽ sớm ra mắt!`);
   };
 
   const handleLogoClick = (e: React.MouseEvent) => {
@@ -193,43 +189,10 @@ export default function Footer({ onOpenLegal }: FooterProps) {
             <Clock className="w-4 h-4 shrink-0 text-[#F1CCA6]" />
             <span>Hỗ trợ trực tuyến: 08:00 - 21:00 hàng ngày</span>
           </div>
-
-          {/* 3 Icon MXH: Sử dụng button thay vì href="#" chống giật trang */}
-          <div className="pt-2">
-            <span className="text-xs font-semibold opacity-80 block mb-2">
-              Kênh truyền thông:
-            </span>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => handleSocialClick("Facebook")}
-                className="w-10 h-10 rounded-xl bg-white/15 hover:bg-white/30 flex items-center justify-center transition-all duration-150 ease-out hover:scale-105 active:scale-[0.95] cursor-pointer focus-visible:outline-2 focus-visible:outline-white"
-                aria-label="Kênh Facebook SocraticKid"
-              >
-                <img src="/facebook.svg" alt="Facebook" className="w-5 h-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSocialClick("TikTok")}
-                className="w-10 h-10 rounded-xl bg-white/15 hover:bg-white/30 flex items-center justify-center transition-all duration-150 ease-out hover:scale-105 active:scale-[0.95] cursor-pointer focus-visible:outline-2 focus-visible:outline-white"
-                aria-label="Kênh TikTok SocraticKid"
-              >
-                <img src="/tiktok.svg" alt="TikTok" className="w-5 h-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSocialClick("YouTube")}
-                className="w-10 h-10 rounded-xl bg-white/15 hover:bg-white/30 flex items-center justify-center transition-all duration-150 ease-out hover:scale-105 active:scale-[0.95] cursor-pointer focus-visible:outline-2 focus-visible:outline-white"
-                aria-label="Kênh YouTube SocraticKid"
-              >
-                <img src="/youtube.svg" alt="YouTube" className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Toast thông báo nổi khi sao chép hoặc click MXH */}
+      {/* Toast thông báo nổi khi sao chép */}
       {toastMessage && (
         <div
           role="status"
