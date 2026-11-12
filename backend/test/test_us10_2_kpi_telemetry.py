@@ -625,19 +625,33 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert after["latency_and_sla"]["p50_status"] in ("optimal", "high")
 
     def test_04_get_throughput_minute_and_hourly(self):
-        """Endpoint 2: GET /admin/kpi/throughput trả 60 phút thật (0 khi rỗng) và 24 giờ thật."""
+        """Endpoint 2: GET /admin/kpi/throughput trả 60 phút thật (0 khi rỗng), 24 giờ và daily theo giờ VN (UTC+7)."""
+        from datetime import datetime, timezone, timedelta
+        now_vn = datetime.now(timezone(timedelta(hours=7)))
+
         res_min = client.get("/admin/kpi/throughput?range=1h&granularity=minute", headers=ADMIN_HEADERS)
         assert res_min.status_code == 200
         data_min = res_min.json()
         assert data_min["granularity"] == "minute"
         assert len(data_min["items"]) == 60
         assert "display_time" in data_min["items"][0]
+        assert data_min["items"][-1]["timestamp"].endswith("+07:00")
+        assert data_min["items"][-1]["display_time"] == now_vn.strftime("%H:%M")
 
         res_hour = client.get("/admin/kpi/throughput?range=24h", headers=ADMIN_HEADERS)
         assert res_hour.status_code == 200
         data_hour = res_hour.json()
         assert data_hour["granularity"] == "hour"
         assert len(data_hour["items"]) == 24
+        assert data_hour["items"][-1]["timestamp"].endswith("+07:00")
+        assert data_hour["items"][-1]["display_time"] == now_vn.strftime("%H:00")
+
+        res_day = client.get("/admin/kpi/throughput?range=7d", headers=ADMIN_HEADERS)
+        assert res_day.status_code == 200
+        data_day = res_day.json()
+        assert data_day["granularity"] == "day"
+        assert len(data_day["items"]) == 7
+        assert data_day["items"][-1]["display_time"] == now_vn.strftime("%d/%m")
 
     def test_05_get_tokens_breakdown(self):
         """Endpoint 3: GET /admin/kpi/tokens tính chính xác 6 phân hệ model AI từ sự kiện thật."""
@@ -657,7 +671,9 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert chat_item["total_tokens"] >= 700
 
     def test_06_get_latency_percentiles(self):
-        """Endpoint 4: GET /admin/kpi/latency trả về 24 điểm giờ thật và đồng hồ TTFT."""
+        """Endpoint 4: GET /admin/kpi/latency trả về 24 điểm giờ thật theo giờ VN (UTC+7) và đồng hồ TTFT."""
+        from datetime import datetime, timezone, timedelta
+        now_vn = datetime.now(timezone(timedelta(hours=7)))
         _seed_live_sample_events()
         res = client.get("/admin/kpi/latency?range=24h", headers=ADMIN_HEADERS)
         assert res.status_code == 200
@@ -668,6 +684,8 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert "current_ttft_ms" in data
         assert data["ttft_status"] in ("green", "yellow", "red")
         assert len(data["items"]) == 24
+        assert data["items"][-1]["timestamp"].endswith("+07:00")
+        assert data["items"][-1]["display_time"] == now_vn.strftime("%H:00")
 
     def test_07_get_agents_distribution(self):
         """Endpoint 5: GET /admin/kpi/agents phân bổ thật 6 phân hệ (Chat..Fallback)."""
@@ -718,7 +736,7 @@ class TestT10_2_5_AdminKpiMetricsAPI:
         assert res_csv.status_code == 200
         assert "text/csv" in res_csv.headers["content-type"]
         assert "attachment; filename=" in res_csv.headers["content-disposition"]
-        for expected_col in (b"Tong Requests", b"P99 Latency (ms)", b"HTTP 4xx", b"HTTP 429", b"Peak Concurrent SSE"):
+        for expected_col in (b"Timestamp (UTC+7)", b"Tong Requests", b"P99 Latency (ms)", b"HTTP 4xx", b"HTTP 429", b"Peak Concurrent SSE"):
             assert expected_col in res_csv.content
 
         res_json = client.get("/admin/kpi/export?format=json&days=7", headers=ADMIN_HEADERS)

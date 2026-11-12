@@ -122,6 +122,24 @@ def _calc_tokens_cost(prompt_tokens: int, completion_tokens: int, model_name: st
     return cost_usd, cost_vnd
 
 
+TZ_VN = timezone(timedelta(hours=7))
+
+
+def _to_vn_time(dt: datetime) -> datetime:
+    """Chuyển đổi datetime (naive UTC hoặc aware) sang giờ Việt Nam (UTC+7)."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(TZ_VN)
+
+
+def _vn_day_start_utc(days_ago: int = 0) -> tuple[datetime, Any]:
+    """Trả về (mốc 00:00 giờ VN dưới dạng UTC, ngày theo giờ VN) cách đây days_ago ngày."""
+    now_vn = _to_vn_time(datetime.now(timezone.utc))
+    target_vn_date = now_vn.date() - timedelta(days=days_ago)
+    start_vn = datetime.combine(target_vn_date, datetime.min.time(), tzinfo=TZ_VN)
+    return start_vn.astimezone(timezone.utc), target_vn_date
+
+
 def _to_utc_hour(dt: datetime) -> datetime:
     """Chuẩn hóa timestamp về đầu giờ UTC."""
     if dt.tzinfo is None:
@@ -401,9 +419,9 @@ async def get_kpi_overview(
       4. Độ tin cậy & Hạ tầng (Tỷ lệ thành công %, Lỗi 2xx/4xx/429/5xx, Active SSE)
     """
     now = datetime.now(timezone.utc)
-    start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_today, _ = _vn_day_start_utc(0)
 
-    # 1. Đọc số liệu tích lũy hôm nay từ DB + live unsaved delta trong bộ đệm
+    # 1. Đọc số liệu tích lũy hôm nay theo giờ VN (00:00 UTC+7) + live unsaved delta trong bộ đệm
     rows = (
         db.query(models.SystemMetricsHourly)
         .filter(models.SystemMetricsHourly.bucket_timestamp >= start_of_today)
@@ -423,8 +441,8 @@ async def get_kpi_overview(
     tot_auth = db_auth + live_snap["auth_requests"]
     tot_other = db_other + live_snap["other_requests"]
 
-    # So sánh tăng trưởng thực tế với ngày hôm qua
-    start_of_yesterday = start_of_today - timedelta(days=1)
+    # So sánh tăng trưởng thực tế với ngày hôm qua theo giờ VN
+    start_of_yesterday, _ = _vn_day_start_utc(1)
     yesterday_requests = (
         db.query(func.sum(models.SystemMetricsHourly.total_requests))
         .filter(
@@ -617,10 +635,11 @@ async def get_kpi_throughput(
             get_live_minute_stats(cur_min_str)["rpm"],
         )
 
-        # Sinh chuỗi 60 phút thực tế (0 ở các phút không có request)
+        # Sinh chuỗi 60 phút thực tế theo giờ Việt Nam (UTC+7)
         for idx, t_point in enumerate(minute_points):
             m_str = minute_keys[idx]
-            disp_time = t_point.strftime("%H:%M")
+            t_point_vn = _to_vn_time(t_point)
+            disp_time = t_point_vn.strftime("%H:%M")
             mem_m = get_live_minute_stats(m_str)
 
             mem_rpm = mem_m.get("rpm", 0)
@@ -634,7 +653,7 @@ async def get_kpi_throughput(
                 other_r += rpm_val - (chat_r + eval_r + auth_r + other_r)
 
             items.append({
-                "timestamp": t_point.isoformat(),
+                "timestamp": t_point_vn.isoformat(),
                 "display_time": disp_time,
                 "is_current_minute": idx == len(minute_points) - 1,
                 "requests": rpm_val,
@@ -657,40 +676,32 @@ async def get_kpi_throughput(
             "items": items,
         }
 
-    # 2. Chế độ THEO NGÀY (7d / 30d) — 100% DB + Live Hôm Nay
+    # 2. Chế độ THEO NGÀY (7d / 30d) — gom theo ngày giờ Việt Nam (UTC+7)
     if range_param in ("7d", "30d") or granularity == "day":
         days = 30 if range_param == "30d" else 7
-        today_date = now.date()
-        start_day = today_date - timedelta(days=days - 1)
-        start_dt = datetime.combine(start_day, datetime.min.time(), tzinfo=timezone.utc)
+        start_dt, _ = _vn_day_start_utc(days - 1)
+        _, today_vn_date = _vn_day_start_utc(0)
 
         rows = (
-            db.query(
-                func.date_trunc("day", models.SystemMetricsHourly.bucket_timestamp).label("day_bucket"),
-                func.sum(models.SystemMetricsHourly.total_requests).label("tot_reqs"),
-                func.sum(models.SystemMetricsHourly.chat_requests).label("tot_chat"),
-                func.sum(models.SystemMetricsHourly.eval_requests).label("tot_eval"),
-                func.sum(models.SystemMetricsHourly.auth_requests).label("tot_auth"),
-                func.sum(models.SystemMetricsHourly.other_requests).label("tot_other"),
-            )
+            db.query(models.SystemMetricsHourly)
             .filter(models.SystemMetricsHourly.bucket_timestamp >= start_dt)
-            .group_by("day_bucket")
             .all()
         )
 
         day_map: Dict[Any, Dict[str, int]] = {}
         for r in rows:
-            d_key = r.day_bucket.date()
-            day_map[d_key] = {
-                "requests": int(r.tot_reqs or 0),
-                "chat_requests": int(r.tot_chat or 0),
-                "eval_requests": int(r.tot_eval or 0),
-                "auth_requests": int(r.tot_auth or 0),
-                "other_requests": int(r.tot_other or 0),
-            }
+            d_key = _to_vn_time(r.bucket_timestamp).date()
+            bucket = day_map.setdefault(d_key, {
+                "requests": 0, "chat_requests": 0, "eval_requests": 0, "auth_requests": 0, "other_requests": 0
+            })
+            bucket["requests"] += int(r.total_requests or 0)
+            bucket["chat_requests"] += int(r.chat_requests or 0)
+            bucket["eval_requests"] += int(r.eval_requests or 0)
+            bucket["auth_requests"] += int(r.auth_requests or 0)
+            bucket["other_requests"] += int(r.other_requests or 0)
 
-        # Cộng dồn delta live chưa flush vào ngày hôm nay
-        today_entry = day_map.setdefault(today_date, {
+        # Cộng dồn delta live chưa flush vào ngày hôm nay theo giờ VN
+        today_entry = day_map.setdefault(today_vn_date, {
             "requests": 0, "chat_requests": 0, "eval_requests": 0, "auth_requests": 0, "other_requests": 0
         })
         today_entry["requests"] += live_snap["total_requests"]
@@ -701,8 +712,8 @@ async def get_kpi_throughput(
 
         items = []
         for d in range(days - 1, -1, -1):
-            day_date = today_date - timedelta(days=d)
-            day_dt = datetime.combine(day_date, datetime.min.time(), tzinfo=timezone.utc)
+            day_date = today_vn_date - timedelta(days=d)
+            day_dt = datetime.combine(day_date, datetime.min.time(), tzinfo=TZ_VN)
             stats = day_map.get(day_date, {
                 "requests": 0, "chat_requests": 0, "eval_requests": 0, "auth_requests": 0, "other_requests": 0
             })
@@ -723,7 +734,7 @@ async def get_kpi_throughput(
             "items": items,
         }
 
-    # 3. Chế độ MẶC ĐỊNH: THEO GIỜ (24 giờ gần nhất) — 100% DB + Live Giờ Hiện Tại
+    # 3. Chế độ MẶC ĐỊNH: THEO GIỜ (24 giờ gần nhất) — hiển thị theo giờ Việt Nam (UTC+7)
     cur_hour = _hour_bucket(now)
     start_24h = cur_hour - timedelta(hours=23)
     rows = (
@@ -756,12 +767,13 @@ async def get_kpi_throughput(
     items = []
     for h_offset in range(23, -1, -1):
         h_dt = cur_hour - timedelta(hours=h_offset)
+        h_dt_vn = _to_vn_time(h_dt)
         stats = hour_map.get(h_dt, {
             "requests": 0, "chat_requests": 0, "eval_requests": 0, "auth_requests": 0, "other_requests": 0
         })
         items.append({
-            "timestamp": h_dt.isoformat(),
-            "display_time": h_dt.strftime("%H:00"),
+            "timestamp": h_dt_vn.isoformat(),
+            "display_time": h_dt_vn.strftime("%H:00"),
             "requests": stats["requests"],
             "chat_requests": stats["chat_requests"],
             "eval_requests": stats["eval_requests"],
@@ -793,48 +805,39 @@ def get_kpi_tokens(
     - Tính chi phí USD và quy đổi VND theo bảng giá 4 model AI thực tế:
         gemini-2.5-flash, gemini-2.0-flash, gemini-2.0-flash-lite, gemini-1.5-pro.
     """
-    now = datetime.now(timezone.utc)
-    today_date = now.date()
-    start_day = today_date - timedelta(days=days - 1)
-    start_dt = datetime.combine(start_day, datetime.min.time(), tzinfo=timezone.utc)
+    start_dt, _ = _vn_day_start_utc(days - 1)
+    _, today_vn_date = _vn_day_start_utc(0)
     live_snap = get_live_accumulator_snapshot()
 
     rows = (
-        db.query(
-            func.date_trunc("day", models.SystemMetricsHourly.bucket_timestamp).label("day_bucket"),
-            func.sum(models.SystemMetricsHourly.prompt_tokens).label("prompt_tok"),
-            func.sum(models.SystemMetricsHourly.completion_tokens).label("comp_tok"),
-            func.sum(models.SystemMetricsHourly.total_tokens).label("tot_tok"),
-            func.sum(models.SystemMetricsHourly.estimated_cost_usd).label("cost_usd"),
-            func.sum(models.SystemMetricsHourly.total_requests).label("req_count"),
-            func.avg(models.SystemMetricsHourly.avg_latency_ms).label("avg_lat"),
-        )
+        db.query(models.SystemMetricsHourly)
         .filter(models.SystemMetricsHourly.bucket_timestamp >= start_dt)
-        .group_by("day_bucket")
         .all()
     )
 
     day_map: Dict[Any, Dict[str, Any]] = {}
     for r in rows:
-        d_key = r.day_bucket.date()
-        day_map[d_key] = {
-            "prompt_tokens": int(r.prompt_tok or 0),
-            "completion_tokens": int(r.comp_tok or 0),
-            "cost_usd": float(r.cost_usd or 0.0),
-            "sessions_count": int(r.req_count or 0),
-            "latency_ms": int(r.avg_lat or 0),
-        }
+        d_key = _to_vn_time(r.bucket_timestamp).date()
+        bucket = day_map.setdefault(d_key, {
+            "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0, "sessions_count": 0, "latencies": []
+        })
+        bucket["prompt_tokens"] += int(r.prompt_tokens or 0)
+        bucket["completion_tokens"] += int(r.completion_tokens or 0)
+        bucket["cost_usd"] += float(r.estimated_cost_usd or 0.0)
+        bucket["sessions_count"] += int(r.total_requests or 0)
+        if r.avg_latency_ms is not None and r.avg_latency_ms > 0:
+            bucket["latencies"].append(int(r.avg_latency_ms))
 
-    # Cộng dồn phần live chưa flush vào ngày hôm nay
-    today_entry = day_map.setdefault(today_date, {
-        "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0, "sessions_count": 0, "latency_ms": 0
+    # Cộng dồn phần live chưa flush vào ngày hôm nay theo giờ VN
+    today_entry = day_map.setdefault(today_vn_date, {
+        "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0, "sessions_count": 0, "latencies": []
     })
     today_entry["prompt_tokens"] += live_snap["prompt_tokens"]
     today_entry["completion_tokens"] += live_snap["completion_tokens"]
     today_entry["cost_usd"] += float(live_snap["estimated_cost_usd"])
     today_entry["sessions_count"] += live_snap["total_requests"]
-    if today_entry["latency_ms"] == 0 and live_snap.get("avg_latency_ms", 0) > 0:
-        today_entry["latency_ms"] = live_snap["avg_latency_ms"]
+    if not today_entry["latencies"] and live_snap.get("avg_latency_ms", 0) > 0:
+        today_entry["latencies"].append(int(live_snap["avg_latency_ms"]))
 
     items = []
     tot_prompt = 0
@@ -842,16 +845,18 @@ def get_kpi_tokens(
     tot_cost_usd = 0.0
 
     for d in range(days - 1, -1, -1):
-        day_date = today_date - timedelta(days=d)
-        day_dt = datetime.combine(day_date, datetime.min.time(), tzinfo=timezone.utc)
+        day_date = today_vn_date - timedelta(days=d)
+        day_dt = datetime.combine(day_date, datetime.min.time(), tzinfo=TZ_VN)
         entry = day_map.get(day_date, {
-            "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0, "sessions_count": 0, "latency_ms": 0
+            "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0, "sessions_count": 0, "latencies": []
         })
         p = entry["prompt_tokens"]
         c = entry["completion_tokens"]
         tot = p + c
         c_usd = entry["cost_usd"]
         c_vnd = int(round(c_usd * USD_TO_VND_RATE))
+        lats = entry["latencies"]
+        avg_lat_day = int(sum(lats) / len(lats)) if lats else 0
 
         tot_prompt += p
         tot_comp += c
@@ -866,7 +871,7 @@ def get_kpi_tokens(
             "cost_usd": round(c_usd, 4),
             "cost_vnd": c_vnd,
             "sessions_count": entry["sessions_count"],
-            "latency_ms": entry["latency_ms"],
+            "latency_ms": avg_lat_day,
         })
 
     # Phân rã 6 phân hệ & model hoàn toàn từ dữ liệu thực (SystemAgentMetricsHourly + live)
@@ -943,6 +948,7 @@ def get_kpi_latency(
 
     for h_offset in range(23, -1, -1):
         h_dt = cur_hour - timedelta(hours=h_offset)
+        h_dt_vn = _to_vn_time(h_dt)
         entry = hour_map.get(h_dt, {
             "avg_latency_ms": 0, "p50_latency_ms": 0, "p95_latency_ms": 0, "p99_latency_ms": 0, "avg_ttft_ms": 0
         })
@@ -961,8 +967,8 @@ def get_kpi_latency(
             ttft_vals.append(ttft)
 
         items.append({
-            "timestamp": h_dt.isoformat(),
-            "display_time": h_dt.strftime("%H:00"),
+            "timestamp": h_dt_vn.isoformat(),
+            "display_time": h_dt_vn.strftime("%H:00"),
             "avg_latency_ms": entry["avg_latency_ms"],
             "p50_latency_ms": p50,
             "p95_latency_ms": p95,
@@ -1042,9 +1048,8 @@ def get_kpi_traffic_heatmap(
     day_labels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
     full_day_names = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"]
 
-    tz_vn = timezone(timedelta(hours=7))
     now_utc = datetime.now(timezone.utc)
-    now_vn = now_utc.astimezone(tz_vn)
+    now_vn = _to_vn_time(now_utc)
     start_30d = now_utc - timedelta(days=30)
 
     # Khởi tạo lưới 7x24 = 168 ô trống (0 request, 0 token)
@@ -1060,10 +1065,7 @@ def get_kpi_traffic_heatmap(
         .all()
     )
     for r in rows:
-        ts_utc = r.bucket_timestamp
-        if ts_utc.tzinfo is None:
-            ts_utc = ts_utc.replace(tzinfo=timezone.utc)
-        ts_vn = ts_utc.astimezone(tz_vn)
+        ts_vn = _to_vn_time(r.bucket_timestamp)
         slot = grid[(ts_vn.weekday(), ts_vn.hour)]
         slot["requests"] += int(r.total_requests or 0)
         slot["tokens"] += int(r.total_tokens or 0)
@@ -1146,7 +1148,7 @@ async def get_kpi_infrastructure(
     - Trạng thái kiểm tra kết nối thực tế tới 4 dịch vụ nền tảng.
     """
     now = datetime.now(timezone.utc)
-    start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_today, _ = _vn_day_start_utc(0)
     live_snap = get_live_accumulator_snapshot()
 
     # 1. Đo kết nối Neon DB thật
@@ -1316,7 +1318,7 @@ def get_kpi_incidents(
             "threshold_value": float(top_inc.threshold_value),
             "actual_value": float(top_inc.actual_value),
             "message": top_inc.message,
-            "triggered_at": top_inc.triggered_at.isoformat(),
+            "triggered_at": _to_vn_time(top_inc.triggered_at).isoformat(),
         }
 
     return {
@@ -1334,7 +1336,7 @@ def get_kpi_incidents(
                 "actual_value": float(inc.actual_value),
                 "message": inc.message,
                 "status": inc.status,
-                "triggered_at": inc.triggered_at.isoformat(),
+                "triggered_at": _to_vn_time(inc.triggered_at).isoformat(),
             }
             for inc in active_records
         ],
@@ -1345,7 +1347,7 @@ def get_kpi_incidents(
                 "severity": inc.severity,
                 "metric_name": inc.metric_name,
                 "message": inc.message,
-                "resolved_at": inc.resolved_at.isoformat() if inc.resolved_at else None,
+                "resolved_at": _to_vn_time(inc.resolved_at).isoformat() if inc.resolved_at else None,
             }
             for inc in recent_resolved
         ],
@@ -1386,7 +1388,7 @@ def export_kpi_report(
     for r in rows:
         is_cur = _to_utc_hour(r.bucket_timestamp) == cur_hour
         item = {
-            "timestamp": r.bucket_timestamp.isoformat(),
+            "timestamp": _to_vn_time(r.bucket_timestamp).isoformat(),
             "total_requests": r.total_requests + (live_snap["total_requests"] if is_cur else 0),
             "chat_requests": r.chat_requests + (live_snap["chat_requests"] if is_cur else 0),
             "eval_requests": r.eval_requests + (live_snap["eval_requests"] if is_cur else 0),
@@ -1415,7 +1417,7 @@ def export_kpi_report(
 
     if not cur_hour_merged and (live_snap["total_requests"] > 0 or live_snap["total_tokens"] > 0):
         export_rows.append({
-            "timestamp": cur_hour.isoformat(),
+            "timestamp": _to_vn_time(cur_hour).isoformat(),
             "total_requests": live_snap["total_requests"],
             "chat_requests": live_snap["chat_requests"],
             "eval_requests": live_snap["eval_requests"],
@@ -1439,17 +1441,18 @@ def export_kpi_report(
             "peak_concurrent_sse": live_snap["peak_concurrent_sse"],
         })
 
+    now_vn = _to_vn_time(now)
     if format_type.lower() == "json":
         return JSONResponse(
-            content={"report_name": "SocraticKid_Admin_KPI_Report", "generated_at": now.isoformat(), "data": export_rows},
-            headers={"Content-Disposition": f"attachment; filename=socratickid_kpi_report_{now.strftime('%Y%m%d')}.json"},
+            content={"report_name": "SocraticKid_Admin_KPI_Report", "generated_at": now_vn.isoformat(), "data": export_rows},
+            headers={"Content-Disposition": f"attachment; filename=socratickid_kpi_report_{now_vn.strftime('%Y%m%d')}.json"},
         )
 
-    # Xuất định dạng CSV đầy đủ toàn bộ chỉ số KPI
+    # Xuất định dạng CSV đầy đủ toàn bộ chỉ số KPI theo giờ VN (UTC+7)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Timestamp (UTC)",
+        "Timestamp (UTC+7)",
         "Tong Requests",
         "Chat Requests",
         "Eval Requests",
@@ -1503,7 +1506,7 @@ def export_kpi_report(
         ])
 
     csv_content = output.getvalue().encode("utf-8-sig")  # UTF-8 BOM để Excel đọc đúng tiếng Việt
-    filename = f"socratickid_admin_kpi_report_{now.strftime('%Y%m%d_%H%M')}.csv"
+    filename = f"socratickid_admin_kpi_report_{now_vn.strftime('%Y%m%d_%H%M')}.csv"
 
     return Response(
         content=csv_content,
