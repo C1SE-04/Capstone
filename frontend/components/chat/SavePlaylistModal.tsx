@@ -380,7 +380,7 @@ export function SavePlaylistModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 text-stone-500 hover:text-stone-800 active:scale-95 text-sm font-semibold transition-[transform,color] duration-150 cursor-pointer touch-manipulation"
+            className="px-5 py-2.5 text-[#7A3E04] hover:text-[#8C4905] active:scale-[0.98] text-sm font-semibold transition-all duration-150 ease-out cursor-pointer touch-manipulation focus-visible:outline-2 focus-visible:outline-[#C1762A]"
           >
             Hủy
           </button>
@@ -388,7 +388,7 @@ export function SavePlaylistModal({
             type="button"
             onClick={handleSaveBookmark}
             disabled={isSaving}
-            className="px-6 py-2.5 bg-[#C1762A] hover:bg-[#8C4905] active:scale-[0.97] text-white text-sm font-bold rounded-2xl shadow-md shadow-amber-900/10 cursor-pointer transition-[transform,background-color,box-shadow] duration-150 flex items-center gap-2 touch-manipulation"
+            className="px-6 py-2.5 bg-[#C1762A] hover:bg-[#8C4905] active:scale-[0.98] text-white text-sm font-bold rounded-xl shadow-xs cursor-pointer transition-all duration-150 ease-out flex items-center gap-2 touch-manipulation focus-visible:outline-2 focus-visible:outline-[#C1762A]"
           >
             {isSaving && <Loader2 size={15} className="animate-spin" />}
             Lưu bài

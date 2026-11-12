@@ -286,81 +286,80 @@ export default function AdminPage() {
       {/* ── 2. 4 KPI Summary Cards (Cùng ngôn ngữ với SummaryCards của Phụ Huynh) ── */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Thẻ 1: Tổng người dùng */}
-        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-start justify-between">
             <div className="w-11 h-11 rounded-xl bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] shadow-inner">
               <Users size={22} className="stroke-[2.2]" />
             </div>
-            <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-100">
-              <TrendingUp size={12} /> +14.2%
+            <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-100">
+              <TrendingUp size={12} /> <span className="tabular-nums">+14.2%</span>
             </span>
           </div>
           <div className="mt-4">
             <p className="text-xs font-bold text-[#C1762A] uppercase tracking-wider mb-1">
               Tổng người dùng
             </p>
-            <p className="text-2xl font-black text-[#8C4905] leading-none">
+            <p className="text-2xl font-black text-[#8C4905] leading-none tabular-nums">
               48
             </p>
-            <p className="text-xs text-[#C1762A]/70 mt-1.5 font-medium">36 Học sinh • 12 Phụ huynh</p>
+            <p className="text-xs text-[#7A3E04] mt-1.5 font-medium">36 Học sinh • 12 Phụ huynh</p>
           </div>
         </div>
 
         {/* Thẻ 2: Core Metric: Học sinh DAU */}
-        <div className="bg-gradient-to-br from-[#FFFBF7] to-[#F7ECE1] rounded-2xl p-5 border-2 border-[#C1762A]/40 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-[#C1762A]/5 rounded-full blur-xl pointer-events-none" />
+        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-start justify-between">
-            <div className="w-11 h-11 rounded-xl bg-[#8C4905] flex items-center justify-center text-[#F7ECE1] shadow-md">
+            <div className="w-11 h-11 rounded-xl bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] shadow-inner">
               <GraduationCap size={22} className="stroke-[2.2]" />
             </div>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
               Tích cực
             </span>
           </div>
           <div className="mt-4">
-            <p className="text-xs font-bold text-[#8C4905] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <p className="text-xs font-bold text-[#C1762A] uppercase tracking-wider mb-1 flex items-center gap-1.5">
               Học Sinh Active (DAU)
             </p>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-3xl font-black text-[#8C4905] leading-none">
+              <span className="text-2xl font-black text-[#8C4905] leading-none tabular-nums">
                 18
               </span>
-              <span className="text-xs font-bold text-[#10B981]">+8.6% hôm nay</span>
+              <span className="text-xs font-bold text-[#10B981] tabular-nums">+8.6% hôm nay</span>
             </div>
-            <p className="text-xs text-[#8C4905]/80 font-medium mt-1.5">
+            <p className="text-xs text-[#7A3E04] font-medium mt-1.5">
               MAU: 32 học sinh gắn kết
             </p>
           </div>
         </div>
 
         {/* Thẻ 3: Phiên Chat Socratic */}
-        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-start justify-between">
             <div className="w-11 h-11 rounded-xl bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] shadow-inner">
               <MessageSquare size={22} className="stroke-[2.2]" />
             </div>
-            <span className="text-[11px] font-semibold text-[#8C4905] bg-[#F7ECE1] px-2 py-0.5 rounded-full border border-[#F1CCA6]">
-              Tự hiểu: 82.4%
+            <span className="text-[11px] font-semibold text-[#8C4905] bg-[#F7ECE1] px-2.5 py-0.5 rounded-full border border-[#F1CCA6]">
+              Tự hiểu: <span className="tabular-nums font-bold">82.4%</span>
             </span>
           </div>
           <div className="mt-4">
             <p className="text-xs font-bold text-[#C1762A] uppercase tracking-wider mb-1">
               Phiên Đối Thoại AI
             </p>
-            <p className="text-2xl font-black text-[#8C4905] leading-none">
+            <p className="text-2xl font-black text-[#8C4905] leading-none tabular-nums">
               46
             </p>
-            <p className="text-xs text-[#C1762A]/70 mt-1.5 font-medium">Trung bình 18.5 phút / bài toán</p>
+            <p className="text-xs text-[#7A3E04] mt-1.5 font-medium">Trung bình 18.5 phút / bài toán</p>
           </div>
         </div>
 
         {/* Thẻ 4: Điểm Tự Lập Toàn Hệ Thống */}
-        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+        <div className="bg-white rounded-2xl p-5 border border-[#F1CCA6] shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-start justify-between">
             <div className="w-11 h-11 rounded-xl bg-[#F7ECE1] flex items-center justify-center text-[#C1762A] shadow-inner">
               <Brain size={22} className="stroke-[2.2]" />
             </div>
-            <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
               Mục tiêu &gt; 80đ
             </span>
           </div>
@@ -369,18 +368,18 @@ export default function AdminPage() {
               Điểm Tự Lập Trung Bình
             </p>
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-black text-[#8C4905] leading-none">
+              <span className="text-2xl font-black text-[#8C4905] leading-none tabular-nums">
                 84.6
               </span>
               <span className="text-xs font-bold text-[#C1762A]">/100</span>
             </div>
-            <p className="text-xs text-[#C1762A]/70 mt-1.5 font-medium">+4.2đ sau tinh chỉnh Socratic</p>
+            <p className="text-xs text-[#7A3E04] mt-1.5 font-medium">+4.2đ sau tinh chỉnh Socratic</p>
           </div>
         </div>
       </section>
 
       {/* ── 3. [MỚI - Task 8.31 / US 8.5] Biểu Đồ Hiệu Năng AI: Total Tokens & Latency Theo Ngày ── */}
-      <section className="bg-white rounded-2xl border border-[#F1CCA6] p-5 md:p-6 shadow-sm space-y-5">
+      <section className="bg-white rounded-2xl border border-[#F1CCA6] p-5 md:p-6 shadow-xs space-y-5">
         {/* Header biểu đồ & Bộ lọc thời gian */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -400,7 +399,7 @@ export default function AdminPage() {
               <button
                 key={days}
                 onClick={() => setTimeRange(days)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ease-out active:scale-[0.98] cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A] ${
                   timeRange === days
                     ? "bg-[#C1762A] text-white shadow-xs"
                     : "text-[#7A3E04] hover:text-[#1C1917] hover:bg-[#F7ECE1]"
@@ -422,7 +421,7 @@ export default function AdminPage() {
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#C1762A]">
                 Tổng Token Tiêu Thụ ({timeRange}d)
               </div>
-              <div className="text-lg font-black text-[#8C4905] leading-snug">
+              <div className="text-lg font-black text-[#8C4905] leading-snug tabular-nums">
                 {(chartSummary.totalTokens / 1_000_000).toFixed(2)}M Tokens
               </div>
             </div>
@@ -436,9 +435,9 @@ export default function AdminPage() {
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#2B78C5]">
                 Độ Trễ Trung Bình (Latency)
               </div>
-              <div className="text-lg font-black text-[#2B78C5] leading-snug">
+              <div className="text-lg font-black text-[#2B78C5] leading-snug tabular-nums">
                 {chartSummary.avgLatency.toLocaleString("vi-VN")} ms
-                <span className="text-xs font-semibold text-emerald-600 ml-1.5">
+                <span className="text-xs font-semibold text-emerald-600 ml-1.5 tabular-nums">
                   (~{(chartSummary.avgLatency / 1000).toFixed(2)}s)
                 </span>
               </div>
@@ -453,7 +452,7 @@ export default function AdminPage() {
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#8C4905]">
                 Chi Phí Quy Đổi Ước Tính
               </div>
-              <div className="text-lg font-black text-[#10B981] leading-snug">
+              <div className="text-lg font-black text-[#10B981] leading-snug tabular-nums">
                 ${chartSummary.totalCost.toFixed(2)} USD
               </div>
             </div>

@@ -1123,7 +1123,7 @@ export default function ChatPage() {
             {/* Nút Bảng xếp hạng (Icon cái cúp 🏆) */}
             <button
               onClick={() => router.push("/dashboard/leaderboard")}
-              className="flex items-center justify-center h-[34px] w-[34px] rounded-xl bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F1CCA6]/40 hover:text-[#C1762A] transition-all shadow-2xs cursor-pointer group active:scale-95"
+              className="flex items-center justify-center h-[34px] w-[34px] rounded-xl bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F1CCA6]/40 hover:text-[#C1762A] transition-all duration-150 ease-out shadow-xs cursor-pointer group active:scale-[0.95] focus-visible:outline-2 focus-visible:outline-[#C1762A]"
               title="Xem Bảng xếp hạng (Streak Leaderboard)"
               aria-label="Xem Bảng xếp hạng"
             >
@@ -1133,9 +1133,9 @@ export default function ChatPage() {
             <button
               onClick={() => setIsRightSidebarOpen((prev) => !prev)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all border cursor-pointer",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 ease-out border cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                 isRightSidebarOpen
-                  ? "bg-[#C1762A] text-white border-[#C1762A] shadow-sm"
+                  ? "bg-[#C1762A] text-white border-[#C1762A] shadow-xs"
                   : "bg-white text-[#8C4905] border-[#F1CCA6] hover:bg-[#F1CCA6]/40"
               )}
               title="Đóng / mở thanh ảnh bài tập bên phải"

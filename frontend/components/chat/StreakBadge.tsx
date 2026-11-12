@@ -551,10 +551,10 @@ export function StreakBadge({
           boxShadow: tier ? `0 2px 10px ${tier.glowColor}` : undefined,
         }}
         className={cn(
-          "group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 border select-none cursor-pointer active:scale-95",
+          "group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-150 ease-out border select-none cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
           tier
             ? `${tier.bgBadge} ${tier.borderBadge} ${tier.hoverBg}`
-            : "bg-white text-stone-400 border-stone-200 hover:border-stone-300 hover:text-stone-600 shadow-xs",
+            : "bg-white text-[#7A3E04]/60 border-[#F1CCA6] hover:border-[#C1762A] hover:text-[#8C4905] shadow-xs",
           className
         )}
       >

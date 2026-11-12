@@ -390,10 +390,10 @@ export default function OnboardingPage() {
                   setParentEmailError(null);
                   setGeneralError(null);
                 }}
-                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                className={`relative p-5 rounded-2xl border-2 text-left transition-all duration-150 ease-out cursor-pointer flex flex-col justify-between active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] ${
                   role === "STUDENT"
-                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
-                    : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
+                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-xs ring-2 ring-[#C1762A]/20"
+                    : "border-[#F1CCA6] bg-white hover:border-[#C1762A] hover:bg-[#F7ECE1]/40"
                 }`}
               >
                 {role === "STUDENT" && (
@@ -425,10 +425,10 @@ export default function OnboardingPage() {
                   setRole("MONITOR");
                   setGeneralError(null);
                 }}
-                className={`relative p-5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                className={`relative p-5 rounded-2xl border-2 text-left transition-all duration-150 ease-out cursor-pointer flex flex-col justify-between active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] ${
                   role === "MONITOR"
-                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-sm ring-2 ring-[#C1762A]/20"
-                    : "border-stone-200 bg-white hover:border-[#F1CCA6] hover:bg-stone-50/50"
+                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-xs ring-2 ring-[#C1762A]/20"
+                    : "border-[#F1CCA6] bg-white hover:border-[#C1762A] hover:bg-[#F7ECE1]/40"
                 }`}
               >
                 {role === "MONITOR" && (
@@ -475,10 +475,10 @@ export default function OnboardingPage() {
                         setSelectedGrade(item.grade);
                         setGeneralError(null);
                       }}
-                      className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                      className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all duration-150 ease-out cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] ${
                         isSelected
-                          ? "border-[#C1762A] bg-[#C1762A] text-white shadow-sm scale-102"
-                          : "border-stone-200 bg-white text-[#8C4905] hover:border-[#F1CCA6] hover:bg-stone-50"
+                          ? "border-[#C1762A] bg-[#C1762A] text-white shadow-xs"
+                          : "border-[#F1CCA6] bg-white text-[#8C4905] hover:border-[#C1762A] hover:bg-[#F7ECE1]"
                       }`}
                     >
                       <span className="font-extrabold text-base">

@@ -214,7 +214,7 @@ export default function MonitorSettingsPage() {
       <div className="flex items-center gap-3 mb-8">
         <button
           onClick={() => router.back()}
-          className="p-2 rounded-xl hover:bg-[#F7AD62]/20 text-[#8C4905] transition-colors cursor-pointer"
+          className="p-2 rounded-xl hover:bg-[#F7ECE1] text-[#8C4905] transition-all duration-150 ease-out active:scale-[0.95] focus-visible:outline-2 focus-visible:outline-[#C1762A] cursor-pointer"
           title="Quay lại"
         >
           <ArrowLeft size={20} />
@@ -341,7 +341,7 @@ export default function MonitorSettingsPage() {
               </div>
             )}
             {errorMsg && (
-              <div className="flex items-center gap-2 text-sm font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3 animate-in slide-in-from-top-1">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#EF4444] bg-[#FEF2F2] border border-[#EF4444]/30 rounded-xl px-4 py-3 animate-in slide-in-from-top-1">
                 <AlertCircle size={16} />
                 {errorMsg}
               </div>
@@ -350,7 +350,7 @@ export default function MonitorSettingsPage() {
             <button
               type="submit"
               disabled={isSubmitting || !notifEmail.trim()}
-              className="w-full py-3.5 rounded-xl bg-[#C1762A] text-white font-bold hover:bg-[#8C4905] shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-xl bg-[#C1762A] text-white font-semibold hover:bg-[#8C4905] shadow-xs transition-all duration-150 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <>

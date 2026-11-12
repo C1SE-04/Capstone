@@ -71,19 +71,19 @@ export function PlaylistSidebar({
   };
 
   return (
-    <aside className="w-72 shrink-0 bg-white rounded-xl border border-stone-200/90 p-4 shadow-xs flex flex-col justify-between gap-4 animate-in slide-in-from-left duration-200">
+    <aside className="w-72 shrink-0 bg-white rounded-2xl border border-[#F1CCA6] p-4 shadow-xs flex flex-col justify-between gap-4 animate-in slide-in-from-left duration-200">
       <div className="space-y-3">
         {/* Header sidebar */}
-        <div className="flex items-center justify-between pb-3 border-b border-stone-100 px-1">
-          <div className="flex items-center gap-2 text-stone-800">
-            <span className="w-7 h-7 rounded-lg bg-amber-50 text-[#C1762A] border border-amber-200/50 flex items-center justify-center shrink-0">
+        <div className="flex items-center justify-between pb-3 border-b border-[#F1CCA6]/40 px-1">
+          <div className="flex items-center gap-2 text-[#1C1917]">
+            <span className="w-7 h-7 rounded-lg bg-amber-50 text-[#C1762A] border border-[#F1CCA6] flex items-center justify-center shrink-0">
               <ListMusic size={15} />
             </span>
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-stone-800">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[#8C4905]">
                 Ngăn Lưu Trữ
               </h2>
-              <p className="text-[11px] text-stone-400">
+              <p className="text-[11px] text-[#7A3E04] tabular-nums font-medium">
                 {playlists.length} danh mục
               </p>
             </div>
@@ -93,7 +93,7 @@ export function PlaylistSidebar({
             <button
               type="button"
               onClick={() => setShowCreateBox((prev) => !prev)}
-              className="w-7 h-7 rounded-lg hover:bg-stone-100 text-stone-500 hover:text-stone-800 active:scale-95 flex items-center justify-center transition-all cursor-pointer"
+              className="w-7 h-7 rounded-lg hover:bg-[#F7ECE1] text-[#7A3E04] hover:text-[#1C1917] active:scale-[0.95] flex items-center justify-center transition-all duration-150 ease-out cursor-pointer"
               title="Tạo ngăn lưu trữ mới"
               aria-label="Tạo ngăn lưu trữ mới"
             >
@@ -104,7 +104,7 @@ export function PlaylistSidebar({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-7 h-7 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-700 active:scale-95 flex items-center justify-center transition-all cursor-pointer"
+                className="w-7 h-7 rounded-lg hover:bg-[#F7ECE1] text-[#7A3E04] hover:text-[#1C1917] active:scale-[0.95] flex items-center justify-center transition-all duration-150 ease-out cursor-pointer"
                 title="Thu gọn sidebar"
                 aria-label="Thu gọn"
               >
@@ -116,8 +116,8 @@ export function PlaylistSidebar({
 
         {/* Khung tạo nhanh ngăn lưu trữ mới */}
         {showCreateBox && (
-          <div className="p-2.5 rounded-lg bg-stone-50 border border-stone-200 shadow-2xs space-y-2 animate-in fade-in duration-150">
-            <label className="block text-[11px] font-semibold text-stone-700">
+          <div className="p-2.5 rounded-xl bg-[#F7ECE1]/40 border border-[#F1CCA6] shadow-xs space-y-2 animate-in fade-in duration-150">
+            <label className="block text-[11px] font-semibold text-[#8C4905]">
               Tên ngăn lưu trữ mới
             </label>
             <div className="flex items-center gap-1.5">
@@ -135,13 +135,13 @@ export function PlaylistSidebar({
                 }}
                 autoFocus
                 placeholder="VD: Ôn thi HK1..."
-                className="flex-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-[#C1762A] focus:ring-1 focus:ring-[#C1762A]/20 transition-all"
+                className="flex-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#F1CCA6] text-xs text-[#1C1917] placeholder:text-[#7A3E04]/50 focus:outline-none focus:border-[#C1762A] focus:ring-1 focus:ring-[#C1762A]/20 transition-all"
               />
               <button
                 type="button"
                 onClick={handleCreate}
                 disabled={isCreating || !newPlaylistName.trim()}
-                className="px-2.5 py-1.5 bg-[#C1762A] hover:bg-[#8C4905] active:scale-95 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-xs"
+                className="px-2.5 py-1.5 bg-[#C1762A] hover:bg-[#8C4905] active:scale-[0.95] disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all duration-150 ease-out flex items-center justify-center shrink-0 cursor-pointer shadow-xs focus-visible:outline-2 focus-visible:outline-[#C1762A]"
               >
                 {isCreating ? <Loader2 size={12} className="animate-spin" /> : <Check size={13} />}
               </button>
@@ -156,10 +156,10 @@ export function PlaylistSidebar({
             type="button"
             onClick={() => onSelectPlaylist(null)}
             className={cn(
-              "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 text-left group cursor-pointer",
+              "w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all duration-150 ease-out text-left group cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
               selectedPlaylistId === null
-                ? "bg-amber-50 text-[#8C4905] font-bold border border-amber-200/80"
-                : "text-stone-700 hover:bg-stone-50 hover:text-stone-900"
+                ? "bg-[#F1CCA6]/40 text-[#8C4905] font-bold border border-[#C1762A]/40"
+                : "text-[#1C1917] hover:bg-[#F7ECE1]/60"
             )}
           >
             <div className="flex items-center gap-2 truncate">
@@ -168,7 +168,7 @@ export function PlaylistSidebar({
                   "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
                   selectedPlaylistId === null
                     ? "bg-[#C1762A] text-white"
-                    : "bg-stone-100 text-stone-500 group-hover:text-stone-700"
+                    : "bg-[#F7ECE1] text-[#8C4905] group-hover:text-[#C1762A]"
                 )}
               >
                 <BookMarked size={13} />
@@ -178,10 +178,10 @@ export function PlaylistSidebar({
 
             <span
               className={cn(
-                "text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 transition-colors",
+                "text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 transition-colors tabular-nums",
                 selectedPlaylistId === null
-                  ? "bg-amber-200/60 text-[#8C4905]"
-                  : "bg-stone-100 text-stone-500"
+                  ? "bg-[#C1762A]/20 text-[#8C4905]"
+                  : "bg-[#F7ECE1] text-[#7A3E04]"
               )}
             >
               {totalBookmarksCount}
@@ -190,7 +190,7 @@ export function PlaylistSidebar({
 
           {/* Các playlist của học sinh */}
           {isLoading && playlists.length === 0 ? (
-            <div className="py-6 flex flex-col items-center justify-center gap-2 text-stone-400 text-xs">
+            <div className="py-6 flex flex-col items-center justify-center gap-2 text-[#7A3E04] text-xs">
               <Loader2 size={16} className="animate-spin text-[#C1762A]" />
               <span>Đang tải...</span>
             </div>
@@ -204,10 +204,10 @@ export function PlaylistSidebar({
                   key={pl.id}
                   onClick={() => onSelectPlaylist(pl.id)}
                   className={cn(
-                    "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 text-left group cursor-pointer select-none",
+                    "w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all duration-150 ease-out text-left group cursor-pointer select-none active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                     isActive
-                      ? "bg-amber-50 text-[#8C4905] font-bold border border-amber-200/80"
-                      : "text-stone-700 hover:bg-stone-50 hover:text-stone-900"
+                      ? "bg-[#F1CCA6]/40 text-[#8C4905] font-bold border border-[#C1762A]/40"
+                      : "text-[#1C1917] hover:bg-[#F7ECE1]/60"
                   )}
                 >
                   <div className="flex items-center gap-2 truncate min-w-0">
@@ -216,7 +216,7 @@ export function PlaylistSidebar({
                         "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
                         isActive
                           ? "bg-[#C1762A] text-white"
-                          : "bg-stone-100 text-stone-500 group-hover:text-stone-700"
+                          : "bg-[#F7ECE1] text-[#8C4905] group-hover:text-[#C1762A]"
                       )}
                     >
                       {pl.is_default ? <Star size={12} className="fill-current" /> : <Folder size={12} />}
@@ -229,10 +229,10 @@ export function PlaylistSidebar({
                   <div className="flex items-center gap-1 shrink-0 ml-1.5">
                     <span
                       className={cn(
-                        "text-[11px] font-bold px-2 py-0.5 rounded-full transition-colors",
+                        "text-[11px] font-bold px-2 py-0.5 rounded-full transition-colors tabular-nums",
                         isActive
-                          ? "bg-amber-200/60 text-[#8C4905]"
-                          : "bg-stone-100 text-stone-500"
+                          ? "bg-[#C1762A]/20 text-[#8C4905]"
+                          : "bg-[#F7ECE1] text-[#7A3E04]"
                       )}
                     >
                       {pl.item_count}
@@ -243,7 +243,7 @@ export function PlaylistSidebar({
                         type="button"
                         onClick={(e) => handleDelete(e, pl)}
                         disabled={isDeleting}
-                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-[#7A3E04] hover:text-red-600 hover:bg-red-50 rounded transition-all"
                         title="Xóa ngăn lưu trữ này"
                         aria-label="Xóa ngăn lưu trữ"
                       >

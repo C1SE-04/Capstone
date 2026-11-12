@@ -54,17 +54,17 @@ export function LeaderboardPodium({ topThree }: LeaderboardPodiumProps) {
         podiumBg: "bg-gradient-to-b from-amber-400 via-amber-300 to-amber-200",
         label: "Hạng 1",
         labelColor: "bg-amber-600 text-white",
-        medalIcon: <Crown className="text-amber-500 fill-amber-400 w-8 h-8 md:w-9 md:h-9 -top-6 animate-bounce" />,
+        medalIcon: <Crown className="text-amber-500 fill-amber-400 w-8 h-8 md:w-9 md:h-9 -top-6" />,
       },
       second: {
         height: "h-32 md:h-38",
         order: "order-1",
         avatarSize: "w-16 h-16 md:w-20 md:h-20",
-        border: "border-4 border-slate-300 ring-2 ring-slate-200 shadow-md",
-        podiumBg: "bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200",
+        border: "border-4 border-[#D6D3D1] ring-2 ring-[#E7E5E4] shadow-md",
+        podiumBg: "bg-gradient-to-b from-[#F5F5F4] via-[#E7E5E4] to-[#D6D3D1]",
         label: "Hạng 2",
-        labelColor: "bg-slate-600 text-white",
-        medalIcon: <Award className="text-slate-500 w-6 h-6 -top-4" />,
+        labelColor: "bg-[#78716C] text-white",
+        medalIcon: <Award className="text-[#78716C] w-6 h-6 -top-4" />,
       },
       third: {
         height: "h-24 md:h-30",
@@ -114,7 +114,7 @@ export function LeaderboardPodium({ topThree }: LeaderboardPodiumProps) {
                 Lớp {item.grade}
               </span>
             ) : null}
-            <span className={cn("text-[11px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1", milestone.badgeBg, milestone.textColor)}>
+            <span className={cn("text-[11px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 tabular-nums", milestone.badgeBg, milestone.textColor)}>
               <MilestoneFlameIcon record={record} className="w-3.5 h-3.5" />
               <span>{record} ngày</span>
             </span>
@@ -143,7 +143,7 @@ export function LeaderboardPodium({ topThree }: LeaderboardPodiumProps) {
           <div className="flex flex-col items-center justify-center my-auto">
             <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-xs px-2.5 py-1 rounded-xl shadow-xs">
               <Trophy size={18} className="text-amber-500 fill-amber-400 shrink-0" />
-              <span className="font-black text-base md:text-lg text-[#8C4905]">
+              <span className="font-black text-base md:text-lg text-[#8C4905] tabular-nums">
                 {record}
               </span>
               <span className="text-[11px] font-semibold text-stone-600 hidden sm:inline">ngày</span>
@@ -151,7 +151,7 @@ export function LeaderboardPodium({ topThree }: LeaderboardPodiumProps) {
             <span className="text-[11px] font-bold text-[#8C4905]/80 mt-1 italic hidden md:inline">
               {milestone.name}
             </span>
-            <div className="flex items-center gap-1 mt-0.5 text-[10px] font-semibold text-stone-600">
+            <div className="flex items-center gap-1 mt-0.5 text-[10px] font-semibold text-stone-600 tabular-nums">
               <Flame size={12} className={cn("fill-current", item.streak_days > 0 ? "text-orange-500" : "text-stone-400")} />
               <span>Chuỗi: {item.streak_days}d</span>
             </div>

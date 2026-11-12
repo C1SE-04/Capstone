@@ -60,8 +60,8 @@ export function LeaderboardTable({ items, searchQuery }: LeaderboardTableProps) 
     }
     if (rank === 2) {
       return (
-        <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-800 font-black flex items-center justify-center shadow-xs ring-2 ring-slate-300">
-          <Award size={18} className="text-slate-700" />
+        <div className="w-8 h-8 rounded-full bg-[#E7E5E4] text-[#44403C] font-black flex items-center justify-center shadow-xs ring-2 ring-[#D6D3D1]">
+          <Award size={18} className="text-[#57534E]" />
         </div>
       );
     }
@@ -74,13 +74,13 @@ export function LeaderboardTable({ items, searchQuery }: LeaderboardTableProps) 
     }
     if (rank <= 10) {
       return (
-        <div className="w-8 h-8 rounded-full bg-[#F1CCA6]/60 text-[#8C4905] font-black text-sm flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full bg-[#F1CCA6]/60 text-[#8C4905] font-black text-sm flex items-center justify-center tabular-nums">
           #{rank}
         </div>
       );
     }
     return (
-      <div className="w-8 h-8 rounded-full text-stone-400 font-bold text-sm flex items-center justify-center">
+      <div className="w-8 h-8 rounded-full text-[#7A3E04]/60 font-bold text-sm flex items-center justify-center tabular-nums">
         {rank}
       </div>
     );

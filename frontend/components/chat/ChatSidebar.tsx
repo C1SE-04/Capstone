@@ -93,7 +93,7 @@ export function ChatSidebar({
 
           <button
             onClick={onNewChat}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-white text-[#8C4905] rounded-2xl font-bold shadow-sm hover:shadow transition-all border border-[#F1CCA6] cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 py-3 bg-white text-[#8C4905] rounded-xl font-bold shadow-xs hover:border-[#C1762A] transition-all duration-150 ease-out active:scale-[0.98] border border-[#F1CCA6] focus-visible:outline-2 focus-visible:outline-[#C1762A] cursor-pointer"
           >
             <Plus size={18} />
             New chat
@@ -101,7 +101,7 @@ export function ChatSidebar({
 
           <button
             onClick={() => router.push("/dashboard/notebook")}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#F7ECE1]/90 hover:bg-[#F7ECE1] text-[#8C4905] rounded-2xl font-bold text-xs shadow-xs transition-all border border-[#F1CCA6] cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#F7ECE1]/90 hover:bg-[#F7ECE1] text-[#8C4905] rounded-xl font-semibold text-xs shadow-xs transition-all duration-150 ease-out active:scale-[0.98] border border-[#F1CCA6] focus-visible:outline-2 focus-visible:outline-[#C1762A] cursor-pointer"
             title="Xem Sổ tay bài toán yêu thích"
           >
             <BookMarked size={15} className="text-[#C1762A]" />

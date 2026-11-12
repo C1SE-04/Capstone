@@ -106,7 +106,7 @@ export function ChatRightSidebar({
               {onUploadClick && (
                 <button
                   onClick={onUploadClick}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#C1762A] hover:bg-[#8C4905] text-white text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#C1762A] hover:bg-[#8C4905] text-white text-xs font-semibold shadow-xs transition-all duration-150 ease-out active:scale-[0.98] cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
                 >
                   <Plus size={15} />
                   Gửi ảnh đề bài ngay

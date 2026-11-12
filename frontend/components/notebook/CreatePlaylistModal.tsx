@@ -50,14 +50,14 @@ export function CreatePlaylistModal({
       />
 
       {/* Modal Dialog */}
-      <div className="relative z-10 bg-white rounded-xl p-6 max-w-sm w-full shadow-xl border border-stone-200 animate-in fade-in zoom-in-95 duration-150 text-left">
+      <div className="relative z-10 bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl border border-[#F1CCA6] animate-in fade-in zoom-in-95 duration-150 text-left">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-amber-50 text-[#C1762A] flex items-center justify-center border border-amber-200/60">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-[#C1762A] flex items-center justify-center border border-[#F1CCA6]">
               <FolderPlus size={18} />
             </div>
-            <h3 className="text-base font-bold text-stone-900">
+            <h3 className="text-base font-bold text-[#1C1917]">
               Tạo ngăn lưu trữ mới
             </h3>
           </div>
@@ -65,7 +65,7 @@ export function CreatePlaylistModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-7 h-7 rounded-lg hover:bg-stone-100 flex items-center justify-center text-stone-400 hover:text-stone-700 transition-colors cursor-pointer"
+            className="w-7 h-7 rounded-lg hover:bg-[#F7ECE1] flex items-center justify-center text-[#7A3E04] hover:text-[#1C1917] transition-colors cursor-pointer"
             aria-label="Đóng"
           >
             <X size={16} />
@@ -75,7 +75,7 @@ export function CreatePlaylistModal({
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-stone-600 mb-1.5">
+            <label className="block text-xs font-semibold text-[#8C4905] mb-1.5">
               Tên ngăn lưu trữ
             </label>
             <input
@@ -87,10 +87,10 @@ export function CreatePlaylistModal({
               }}
               placeholder="Ví dụ: Ôn thi HK1, Hình học..."
               autoFocus
-              className="w-full px-3.5 py-2.5 rounded-xl bg-stone-50 border border-stone-200 text-stone-800 text-sm focus:outline-none focus:bg-white focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-all placeholder:text-stone-400"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7ECE1]/30 border border-[#F1CCA6] text-[#1C1917] text-sm focus:outline-none focus:bg-white focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-all placeholder:text-[#7A3E04]/50"
             />
             {error && (
-              <p className="mt-1.5 text-xs text-red-600 font-medium">{error}</p>
+              <p className="mt-1.5 text-xs text-[#EF4444] font-medium">{error}</p>
             )}
           </div>
 
@@ -99,14 +99,14 @@ export function CreatePlaylistModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-[#7A3E04] hover:text-[#1C1917] hover:bg-[#F7ECE1] rounded-xl transition-colors cursor-pointer"
             >
               Hủy
             </button>
             <button
               type="submit"
               disabled={isSubmitting || !name.trim()}
-              className="px-4 py-2 bg-[#C1762A] hover:bg-[#8C4905] active:scale-95 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 bg-[#C1762A] hover:bg-[#8C4905] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all duration-150 ease-out shadow-xs flex items-center gap-1.5 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
             >
               {isSubmitting && <Loader2 size={13} className="animate-spin" />}
               <span>Tạo ngăn lưu trữ</span>
