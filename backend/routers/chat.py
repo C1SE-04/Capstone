@@ -1,7 +1,10 @@
 import os
+import time
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 import google.generativeai as genai
 from sqlalchemy.orm import Session
+import redis.asyncio as aioredis
+from redis_client import get_redis
 
 import models
 import schemas
@@ -9,6 +12,8 @@ import agents.orchestrator as orchestrator
 import orchestrator_bridge
 from database import get_db
 from rate_limit import check_guest_rate_limit
+from services.rate_limiter_service import RateLimiterService
+import services.system_config_service as system_config_service
 
 router = APIRouter(tags=["Chat & AI"])
 
@@ -17,20 +22,32 @@ from middleware.telemetry_middleware import increment_sse_session, decrement_sse
 from middleware.gemini_telemetry import generate_with_telemetry
 
 
-def _tracked_sse_stream(generator):
-    """Bọc StreamingResponse generator để đo chính xác số phiên SSE đang active."""
+def _tracked_sse_stream(generator, session_id: str | None = None):
+    """
+    Bọc StreamingResponse generator:
+      1. Đo chính xác số phiên SSE active qua TelemetryMiddleware.
+      2. Ghi nhận mốc kết thúc stream (Stream DONE) để kích hoạt Socratic Cool-Down 5s cho câu kế tiếp.
+    """
     increment_sse_session()
     try:
         for chunk in generator:
             yield chunk
     finally:
         decrement_sse_session()
+        if session_id:
+            try:
+                # Ghi nhận mốc AI kết thúc câu trả lời vào Redis / Memory
+                RateLimiterService.record_ai_completion_sync(session_id)
+            except Exception:
+                pass
+
 
 @router.post("/chat/orchestrator")
-def chat_with_orchestrator(
+async def chat_with_orchestrator(
     request: schemas.GeminiRequest, 
     background_tasks: BackgroundTasks, 
     db: Session = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
     _: None = Depends(check_guest_rate_limit),  # Task: Rate-limit 10 câu/24h cho Guest
 ):
     existing_session = None
@@ -67,6 +84,71 @@ def chat_with_orchestrator(
                 status_code=404,
                 detail=f"Session '{request.session_id}' không tồn tại. Hãy tạo session qua POST /sessions trước."
             )
+
+        student_user_id = existing_session.user_id or "anonymous-student"
+
+        # ── 1. TASK #359 (T11.1.2): SOCRATIC COOL-DOWN (Tối thiểu 5s từ khi AI trả lời xong) ──
+        is_cool, retry_after, delta_t = await RateLimiterService.check_socratic_cooldown(
+            redis_client=redis,
+            session_id=request.session_id,
+            cooldown_seconds=5.0,
+        )
+        if not is_cool:
+            raise RateLimiterService.create_429_exception(
+                reason="SOCRATIC_COOL_DOWN",
+                message=(
+                    "Thầy Socratic nhận thấy em đang gửi câu hỏi rất nhanh. "
+                    "Hãy dành ít nhất 5 giây để quan sát hình vẽ và đọc kỹ gợi ý của thầy trước khi hỏi tiếp nhé!"
+                ),
+                limit=1,
+                remaining=0,
+                retry_after=retry_after,
+                reset_at=int(time.time() + retry_after),
+            )
+
+        # ── 2. TASK #358 (T11.1.1): DYNAMIC STUDENT RATE LIMIT THEO ADMIN SETTINGS ──
+        sys_settings = system_config_service.get_system_settings(db)
+        student_limit = int(sys_settings.get("student_rate_limit", 30))
+
+        is_allowed, info = await RateLimiterService.check_sliding_window(
+            redis_client=redis,
+            key=f"ratelimit:student:{student_user_id}:chat",
+            limit=student_limit,
+            window_seconds=60,
+        )
+        if not is_allowed:
+            raise RateLimiterService.create_429_exception(
+                reason="STUDENT_LIMIT",
+                message=(
+                    f"Em đang gửi câu hỏi quá nhanh (vượt quá giới hạn {student_limit} câu/phút). "
+                    f"Vui lòng đợi {info['retry_after']} giây trước khi gửi câu tiếp theo nhé!"
+                ),
+                limit=student_limit,
+                remaining=0,
+                retry_after=info["retry_after"],
+                reset_at=info["reset_at"],
+            )
+
+        # ── 3. BẢO VỆ QUOTA TOÀN HỆ THỐNG (GLOBAL GEMINI LIMIT) ──
+        global_rpm_limit = int(sys_settings.get("global_gemini_rpm_limit", os.getenv("GLOBAL_GEMINI_RPM_LIMIT", "60")))
+        is_global_ok, g_info = await RateLimiterService.check_sliding_window(
+            redis_client=redis,
+            key="ratelimit:global:gemini_chat",
+            limit=global_rpm_limit,
+            window_seconds=60,
+        )
+        if not is_global_ok:
+            raise RateLimiterService.create_429_exception(
+                reason="GLOBAL_SYSTEM_LIMIT",
+                message=(
+                    "Hệ thống gia sư AI đang có nhiều bạn cùng đặt câu hỏi. "
+                    f"Thầy Socratic đang xử lý, em vui lòng đợi khoảng {g_info['retry_after']} giây nhé!"
+                ),
+                limit=global_rpm_limit,
+                remaining=0,
+                retry_after=g_info["retry_after"],
+                reset_at=g_info["reset_at"],
+            )
     # -------------------------------------------
     
 
@@ -89,7 +171,8 @@ def chat_with_orchestrator(
                 answer_status=request.answer_status,
                 grade_level=effective_grade,  # US 6.2: lấy lớp học chuẩn xác từ DB
                 attachment_url=request.attachment_url, # US 6.4: Truyền link ảnh Cloudinary từ request
-            )
+            ),
+            session_id=request.session_id,
         ),
         media_type="text/event-stream"
     )

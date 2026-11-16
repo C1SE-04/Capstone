@@ -13,10 +13,12 @@ Cơ chế hoạt động:
     6. Nếu Redis không khả dụng: cho qua bình thường (fail-open) — tránh block user vì lỗi hạ tầng.
 """
 
+import time
 import logging
 from fastapi import Depends, HTTPException, Request
 import redis.asyncio as aioredis
 from redis_client import get_redis
+from services.rate_limiter_service import RateLimiterService
 
 logger = logging.getLogger(__name__)
 
@@ -80,19 +82,29 @@ async def check_guest_rate_limit(
             hours_left = ttl // 3600
             minutes_left = (ttl % 3600) // 60
 
+            reset_at = int(time.time() + ttl)
             raise HTTPException(
                 status_code=429,
                 detail={
                     "error": "rate_limit_exceeded",
+                    "reason": "GUEST_LIMIT",
                     "message": (
                         f"Bạn đã sử dụng hết {GUEST_MAX_REQUESTS} câu hỏi miễn phí trong 24 giờ. "
                         f"Vui lòng đăng ký tài khoản để tiếp tục học không giới hạn, "
                         f"hoặc thử lại sau {hours_left} giờ {minutes_left} phút."
                     ),
                     "limit": GUEST_MAX_REQUESTS,
+                    "remaining": 0,
                     "current_count": current_count - 1,  # số thực tế đã dùng
                     "retry_after_seconds": ttl,
-                }
+                    "reset_at": reset_at,
+                },
+                headers=RateLimiterService.build_rate_limit_headers(
+                    limit=GUEST_MAX_REQUESTS,
+                    remaining=0,
+                    retry_after=ttl,
+                    reset_at=reset_at,
+                ),
             )
 
         logger.info(
