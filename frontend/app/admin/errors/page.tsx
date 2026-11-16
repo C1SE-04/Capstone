@@ -32,6 +32,7 @@ import {
   SystemErrorStatus,
 } from "@/types/admin";
 import ErrorDetailDrawer from "@/components/admin/ErrorDetailDrawer";
+import { markErrorAsRead } from "@/lib/adminNotificationStorage";
 
 // ==============================================================================
 // 1. DỮ LIỆU MẪU DỰ PHÒNG THỬ NGHIỆM KHI BACKEND CHƯA CHẠY (DEMO PREVIEW)
@@ -271,6 +272,11 @@ function AdminErrorsPageInner() {
     );
   }, [searchParams]);
 
+  // US 11.3 - Task T11.3.6: Nhận diện mã sự cố từ Deep Link (?error_id=... hoặc ?id=...)
+  const targetErrorId = useMemo(() => {
+    return searchParams.get("error_id") || searchParams.get("id") || "";
+  }, [searchParams]);
+
   // Khởi tạo state dữ liệu rỗng (100% dữ liệu thật từ Backend)
   const [errorsList, setErrorsList] = useState<SystemErrorItem[]>([]);
   const [totalItems, setTotalItems] = useState<number>(0);
@@ -382,14 +388,83 @@ function AdminErrorsPageInner() {
     showToast("Đã nạp 3 dữ liệu sự cố mẫu để xem trước giao diện!");
   };
 
+  // US 11.3 - Task T11.3.6: Deep Linking tự động mở Drawer khi có query param ?error_id=...
+  useEffect(() => {
+    if (!targetErrorId) return;
+
+    let isSubscribed = true;
+
+    const openTargetError = async () => {
+      // 1. Tìm trong danh sách trang hiện tại trước
+      const matched = errorsList.find(
+        (e) => e.id === targetErrorId || e.error_code === targetErrorId
+      );
+      if (matched) {
+        setSelectedError(matched);
+        setIsDrawerOpen(true);
+        markErrorAsRead(matched.id);
+        return;
+      }
+
+      // 2. Tìm trong danh sách DEMO preview nếu đang xem dữ liệu demo
+      const matchedDemo = DEMO_PREVIEW_ERRORS.find(
+        (e) => e.id === targetErrorId || e.error_code === targetErrorId
+      );
+      if (matchedDemo) {
+        setSelectedError(matchedDemo);
+        setIsDrawerOpen(true);
+        markErrorAsRead(matchedDemo.id);
+        return;
+      }
+
+      // 3. Nếu không có trong trang hiện tại, gọi API GET /admin/errors/{error_id} lấy chi tiết
+      try {
+        const backendUrl =
+          process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+        const token = (session as { access_token?: string })?.access_token || "";
+        const res = await fetch(`${backendUrl}/admin/errors/${targetErrorId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (res.ok && isSubscribed) {
+          const detailItem: SystemErrorItem = await res.json();
+          setSelectedError(detailItem);
+          setIsDrawerOpen(true);
+          markErrorAsRead(detailItem.id);
+        }
+      } catch (err) {
+        console.warn("[AdminErrors] Không thể tải chi tiết sự cố theo deep link:", err);
+      }
+    };
+
+    openTargetError();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [targetErrorId, errorsList, session]);
+
   const handleOpenDrawer = (item: SystemErrorItem) => {
     setSelectedError(item);
     setIsDrawerOpen(true);
+    markErrorAsRead(item.id);
   };
 
   const handleCloseDrawer = () => {
     setIsDrawerOpen(false);
     setSelectedError(null);
+    // Dọn dẹp query param error_id trên URL sau khi đóng Drawer mà không reload trang
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("error_id") || url.searchParams.has("id")) {
+        url.searchParams.delete("error_id");
+        url.searchParams.delete("id");
+        const nextUrl = url.pathname + (url.search ? url.search : "");
+        window.history.replaceState(null, "", nextUrl);
+      }
+    }
   };
 
   // Đánh dấu đã xử lý (AC 9.5.6: PATCH /admin/errors/{id}/resolve)
