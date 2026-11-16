@@ -29,6 +29,13 @@ export default function Home() {
     }
   }, [session, router]);
 
+  // Nếu truy cập URL có hash #contact, tự động chuyển hướng sang trang /contact
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#contact") {
+      router.replace("/contact");
+    }
+  }, [router]);
+
   return (
     <div className="min-h-screen bg-[#F7ECE1] font-sans flex flex-col selection:bg-[#C1762A]/20 selection:text-[#8C4905] w-full overflow-x-hidden min-w-0">
       {/* 1. Header cố định */}

@@ -62,8 +62,7 @@ export default function Footer({ onOpenLegal }: FooterProps) {
 
   return (
     <footer
-      id="contact"
-      className="w-full bg-[#C1762A] text-[#F7ECE1] py-14 px-6 sm:px-8 mt-auto scroll-mt-24 border-t-4 border-[#8C4905]/40"
+      className="w-full bg-[#C1762A] text-[#F7ECE1] py-14 px-6 sm:px-8 mt-auto border-t-4 border-[#8C4905]/40"
     >
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-10">
         {/* Cột 1: Thương hiệu & Slogan */}
@@ -119,6 +118,12 @@ export default function Footer({ onOpenLegal }: FooterProps) {
           >
             Hướng dẫn sử dụng (How it works)
           </a>
+          <Link
+            href="/contact"
+            className="hover:text-white hover:translate-x-1 transition-all text-sm sm:text-base text-[#F7ECE1]/85"
+          >
+            Liên hệ & Góp ý (Contact)
+          </Link>
         </div>
 
         {/* Cột 3: Hỗ trợ & Chính sách */}

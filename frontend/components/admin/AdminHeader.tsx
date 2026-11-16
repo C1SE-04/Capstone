@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search, Bell, Plus, Sparkles, CheckCircle2 } from "lucide-react";
+import { Menu, Search, Bell, Plus } from "lucide-react";
 import Breadcrumbs from "./Breadcrumbs";
+import NotificationDropdown from "./NotificationDropdown";
 
 interface AdminHeaderProps {
   onOpenMobileSidebar?: () => void;
@@ -13,13 +14,13 @@ interface AdminHeaderProps {
 export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
   const pathname = usePathname();
   const [searchValue, setSearchValue] = useState("");
-  const [showNotificationToast, setShowNotificationToast] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(3);
 
   const isContentTab = pathname?.startsWith("/admin/content");
 
   const handleNotificationClick = () => {
-    setShowNotificationToast(true);
-    setTimeout(() => setShowNotificationToast(false), 3500);
+    setIsNotificationOpen((prev) => !prev);
   };
 
   return (
@@ -28,6 +29,7 @@ export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
       <div className="flex items-center gap-3">
         {onOpenMobileSidebar && (
           <button
+            type="button"
             onClick={onOpenMobileSidebar}
             className="lg:hidden p-2 -ml-1 rounded-xl text-[#8C4905] hover:bg-[#F7ECE1] transition-colors"
             aria-label="Mở thanh điều hướng"
@@ -40,7 +42,6 @@ export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
 
       {/* ── Bên phải: Công cụ quản trị, Tìm kiếm, Thông báo ── */}
       <div className="flex items-center gap-2 md:gap-3.5">
-
         {/* Search Input */}
         <div className="relative hidden md:block">
           <Search className="w-4 h-4 text-[#C1762A] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -53,40 +54,33 @@ export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
           />
         </div>
 
-        {/* Notification Bell */}
+        {/* Notification Bell & Dropdown */}
         <div className="relative">
           <button
+            type="button"
             onClick={handleNotificationClick}
-            title="Xem cảnh báo an toàn & thông báo"
-            className="relative p-2 rounded-xl border border-[#F1CCA6] text-[#8C4905] hover:bg-[#F7ECE1] transition-all cursor-pointer"
-            aria-label="Thông báo"
+            title="Xem cảnh báo an toàn & thông báo sự cố"
+            aria-label="Thông báo sự cố"
+            aria-expanded={isNotificationOpen}
+            className="relative p-2 rounded-xl border border-[#F1CCA6] text-[#8C4905] hover:bg-[#F7ECE1] transition-all cursor-pointer focus:outline-hidden"
           >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#EF4444] ring-2 ring-white" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#EF4444] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white animate-pulse">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
 
-          {/* Toast thông báo popup nhanh */}
-          {showNotificationToast && (
-            <div className="absolute right-0 top-12 w-72 bg-white rounded-xl shadow-lg border border-[#F1CCA6] p-3 z-50 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
-              <div className="flex items-start gap-2.5">
-                <div className="p-1 rounded-full bg-[#FEF2F2] text-[#EF4444] shrink-0">
-                  <Bell className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="font-bold text-[#1C1917]">3 Cảnh báo Safety chưa duyệt</div>
-                  <div className="text-[#7A3E04] mt-0.5">
-                    Hệ thống phát hiện câu hỏi cần kiểm tra tại mục Giám sát Safety AI.
-                  </div>
-                  <Link
-                    href="/admin/safety"
-                    className="inline-block mt-1.5 text-[#C1762A] hover:underline font-semibold"
-                  >
-                    Đi tới Safety AI →
-                  </Link>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Dropdown Menu thông báo */}
+          <NotificationDropdown
+            isOpen={isNotificationOpen}
+            onClose={() => setIsNotificationOpen(false)}
+            onMarkAllAsRead={() => setUnreadCount(0)}
+            onNotificationClick={() =>
+              setUnreadCount((prev) => Math.max(0, prev - 1))
+            }
+          />
         </div>
 
         {/* Nút Hành động nhanh: + Thêm Học Liệu (Chỉ hiện trong tab Học liệu) */}
