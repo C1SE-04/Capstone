@@ -80,6 +80,7 @@ export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
             onNotificationClick={() =>
               setUnreadCount((prev) => Math.max(0, prev - 1))
             }
+            onUnreadCountChange={setUnreadCount}
           />
         </div>
 

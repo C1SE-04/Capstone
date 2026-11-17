@@ -12,6 +12,7 @@ import HowItWorksSection from "@/components/homepage/HowItWorksSection";
 import FaqAccordion from "@/components/homepage/FaqAccordion";
 import Footer from "@/components/homepage/Footer";
 import LegalModal, { LegalModalType } from "@/components/homepage/LegalModal";
+import { HelpCircle } from "lucide-react";
 
 export default function Home() {
   const { data: session } = useSession();
@@ -60,9 +61,12 @@ export default function Home() {
           className="w-full py-16 sm:py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto scroll-mt-24"
         >
           <div className="max-w-3xl mb-12 sm:mb-16">
-            <span className="text-xs uppercase tracking-wider font-bold text-[#C1762A] bg-[#F1CCA6]/40 py-1.5 px-3.5 rounded-full border border-[#C1762A]/20 mb-3 inline-block">
-              Giải Đáp Thắc Mắc
-            </span>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-[#F1CCA6] shadow-xs mb-3">
+              <HelpCircle className="w-3.5 h-3.5 text-[#C1762A]" />
+              <span className="text-xs uppercase font-extrabold text-[#8C4905] tracking-wider">
+                Giải Đáp Thắc Mắc
+              </span>
+            </div>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#1C1917] tracking-tight mb-4">
               Câu Hỏi Thường Gặp (FAQ)
             </h2>
