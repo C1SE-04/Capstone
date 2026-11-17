@@ -170,6 +170,18 @@ export type SystemErrorSeverity = "CRITICAL" | "WARNING" | "INFO" | string;
 
 export type SystemErrorStatus = "OPEN" | "RESOLVED" | string;
 
+// US 11.2 (Task T11.2.6 & T11.2.7): Schema dữ liệu chẩn đoán nguyên nhân gốc rễ và gợi ý sửa lỗi từ Gemini AI
+export interface AiDiagnosisData {
+  root_cause?: string | null;
+  resolution_summary?: string | null;
+  fix_steps?: string[] | null;
+  code_patch?: string | null;
+  file_path?: string | null;
+  line_number?: number | null;
+  confidence_score?: number | null;
+  model_used?: string | null;
+}
+
 export interface SystemErrorItem {
   id: string;
   error_code: string;
@@ -187,6 +199,8 @@ export interface SystemErrorItem {
   resolved_by?: string | null;
   resolved_note?: string | null;
   created_at: string;
+  ai_diagnosis?: AiDiagnosisData | null;
+  ai_diagnosed_at?: string | null;
 }
 
 export interface SystemErrorsListResponse {
