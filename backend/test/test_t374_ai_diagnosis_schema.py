@@ -33,7 +33,7 @@ def test_t374_schema_serialization_dict():
         "file_path": "backend/services/score.py",
         "line_number": 42,
         "confidence_score": 0.95,
-        "model_used": "gemini-2.5-pro",
+        "model_used": "gemini-3.5-flash",
     }
 
     item = schemas.SystemErrorItemResponse(
@@ -71,7 +71,7 @@ def test_t374_schema_serialization_typed_model():
         file_path="backend/database.py",
         line_number=18,
         confidence_score=0.9,
-        model_used="gemini-2.5-pro",
+        model_used="gemini-3.5-flash",
     )
 
     item = schemas.SystemErrorItemResponse(

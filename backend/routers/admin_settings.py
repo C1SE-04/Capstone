@@ -58,7 +58,7 @@ def _get_masked_api_key() -> str:
     return f"••••••••{key[-4:]}"
 
 
-# Danh sách fallback các model Google chính thức khuyên dùng trong Sprint 10
+# Danh sách fallback các model Google chính thức khuyên dùng trong Sprint 10 & 11
 _OFFICIAL_CURATED_MODELS: List[Dict[str, str]] = [
     {
         "id": "gemini-3.5-flash-lite",
@@ -82,7 +82,7 @@ _OFFICIAL_CURATED_MODELS: List[Dict[str, str]] = [
         "display_name": "Gemini 3.5 Flash",
         "description": "Cân bằng hoàn hảo tốc độ và năng lực phân tích tổng hợp lịch sử học tập dài hạn",
         "speed": "Rất nhanh (~0.4s)",
-        "recommended_for": "Báo Cáo Phụ Huynh (parent_insight_model)",
+        "recommended_for": "Báo Cáo Phụ Huynh & Chẩn Đoán Lỗi RCA (parent_insight_model)",
     },
     {
         "id": "gemini-3.1-flash-lite",
@@ -91,30 +91,6 @@ _OFFICIAL_CURATED_MODELS: List[Dict[str, str]] = [
         "description": "Tối ưu chi phí token tới 60%, phản hồi tức thì cho các tác vụ phân loại ngắn",
         "speed": "Tức thì (~0.15s)",
         "recommended_for": "Phân Loại SGK & Email (classifier_model, email_model)",
-    },
-    {
-        "id": "gemini-3.5-flash-lite",
-        "name": "gemini-3.5-flash-lite",
-        "display_name": "Gemini 3.5 Flash-Lite",
-        "description": "Nhẹ, ổn định cao, thích hợp làm trạm dự phòng khẩn cấp khi gặp sự cố rate limit",
-        "speed": "Cực nhanh (~0.2s)",
-        "recommended_for": "Flashcard & Dự Phòng (flashcard_model, backup_model)",
-    },
-    {
-        "id": "gemini-2.5-flash",
-        "name": "gemini-2.5-flash",
-        "display_name": "Gemini 2.5 Flash (LTS)",
-        "description": "Phiên bản ổn định cao, nhận diện hình học và chữ viết tay học sinh chuẩn xác",
-        "speed": "Rất nhanh (~0.35s)",
-        "recommended_for": "Chat Socratic / Dự phòng cấp 2",
-    },
-    {
-        "id": "gemini-2.0-flash-lite",
-        "name": "gemini-2.0-flash-lite",
-        "display_name": "Gemini 2.0 Flash-Lite",
-        "description": "Model đa phương thức thế hệ 2.0, độ phủ rộng và ổn định",
-        "speed": "Rất nhanh (~0.2s)",
-        "recommended_for": "Sub-Agent & Dự phòng",
     },
 ]
 
