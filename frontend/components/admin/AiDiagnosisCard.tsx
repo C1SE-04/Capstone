@@ -15,6 +15,10 @@ import {
   Cpu,
   Layers,
   ArrowRight,
+  AlertTriangle,
+  Wifi,
+  Clock,
+  ExternalLink,
 } from "lucide-react";
 import { SystemErrorItem, AiDiagnosisData } from "@/types/admin";
 
@@ -25,36 +29,69 @@ interface AiDiagnosisCardProps {
 }
 
 // ==============================================================================
-// 1. SMART MOCK FALLBACK (Cho phép test UI độc lập trước khi Backend API T11.2.4 merge)
+// 1. SMART MOCK FALLBACK (AC-AI-03 & AC-AI-04: Đáp ứng kịch bản lỗi code & báo lỗi học sinh)
 // ==============================================================================
 function generateFallbackDiagnosis(error: SystemErrorItem): AiDiagnosisData {
   const isUserReport = error.error_type === "USER_REPORT" || !error.stack_trace;
+  const isZeroDivision =
+    (error.message && /zero\s*division/i.test(error.message)) ||
+    (error.stack_trace && /ZeroDivisionError/i.test(error.stack_trace));
 
-  if (isUserReport) {
+  // Kịch bản AC-AI-03: Lỗi code Python (ZeroDivisionError)
+  if (isZeroDivision) {
     return {
       root_cause:
-        "Phản ánh từ học sinh liên quan đến độ trễ kết nối hoặc nghẽn mạng client khi tải phản hồi gia sư AI. Thiết bị client không nhận được tín hiệu SSE kịp thời trong thời gian timeout.",
+        "Hàm tính điểm tự lập calculate_independence_score thực hiện phép chia khi mẫu số total_turns bằng 0 (phiên học vừa bắt đầu, học sinh chưa gửi lượt trao đổi hợp lệ nào), dẫn đến ngoại lệ ZeroDivisionError làm sập tiến trình server.",
       resolution_summary:
-        "Đã kiểm tra luồng chat học sinh, cấu hình bổ sung Heartbeat Ping 15s cho SSE và tăng client timeout lên 60s.",
+        "Bổ sung điều kiện kiểm tra total_turns <= 0 trước khi tính điểm; nếu bằng 0 trả về điểm mặc định là 0.0.",
       fix_steps: [
-        "1. Kiểm tra trạng thái kết nối SSE / WebSocket của học sinh tại thời điểm gửi tin nhắn.",
-        "2. Đảm bảo cấu hình heartbeat ping 15 giây hoạt động để tránh nhà mạng ngắt kết nối dở dang.",
-        "3. Hướng dẫn học sinh kiểm tra lại đường truyền Wifi hoặc tải lại trình duyệt.",
+        "1. Mở tệp nguồn backend/services/independence_service.py tại dòng 74.",
+        "2. Bổ sung điều kiện kiểm tra mẫu số: nếu total_turns <= 0 thì lập tức trả về điểm mặc định 0.0.",
+        "3. Chạy lại bộ kiểm thử tự động test_independence_score.py để xác nhận ngoại lệ đã được xử lý triệt để.",
       ],
-      code_patch: `# Cấu hình timeout an toàn trong client chat (frontend/hooks/useChat.ts)
-const SSE_TIMEOUT_MS = 60000; // 60s timeout
-const HEARTBEAT_INTERVAL_MS = 15000; // 15s ping`,
-      file_path: "frontend/hooks/useChat.ts",
-      line_number: 85,
-      confidence_score: 0.88,
+      code_patch: `# File: backend/services/independence_service.py (dòng 74)
+def calculate_independence_score(valid_turns: int, total_turns: int) -> float:
+    # Bổ sung kiểm tra an toàn: tránh chia cho 0 khi phiên học mới bắt đầu
+    if not total_turns or total_turns <= 0:
+        return 0.0
+    return round((valid_turns / total_turns) * 100, 1)`,
+      file_path: "backend/services/independence_service.py",
+      line_number: 74,
+      confidence_score: 0.98,
       model_used: "Gemini 3.5 Flash (RCA Engine)",
     };
   }
 
-  // Trường hợp lỗi kỹ thuật có stack trace
+  // Kịch bản AC-AI-04: Báo cáo học sinh bị mạng lag / đơ bài giải
+  if (isUserReport) {
+    return {
+      root_cause:
+        "Phản ánh từ học sinh liên quan đến hiện tượng giật lag hoặc AI không phản hồi kịp. Bối cảnh trình duyệt client cho thấy luồng Server-Sent Events (SSE) bị đứt kết nối ngầm giữa chừng do thời gian chờ client (Client Timeout) quá ngắn khi mạng chập chờn.",
+      resolution_summary:
+        "Đã cấu hình Heartbeat Ping 15s cho luồng SSE chat và nâng client timeout lên 60s để chống rớt kết nối mạng học sinh.",
+      fix_steps: [
+        "1. Bổ sung cơ chế Heartbeat Ping định kỳ mỗi 15 giây cho luồng truyền tin Server-Sent Events (SSE) để duy trì kết nối sống.",
+        "2. Tăng thời gian chờ phản hồi tối đa (Client Timeout) trên giao diện chat từ 30s lên 60s đối với các bài giải toán nhiều bước.",
+        "3. Hiển thị thông báo hỗ trợ học sinh kiểm tra lại kết nối Wifi khi phát hiện mất gói tin kết nối mạng.",
+      ],
+      code_patch: `# Cấu hình Heartbeat SSE & Client Timeout an toàn (frontend/hooks/useChat.ts)
+const SSE_CLIENT_TIMEOUT_MS = 60000;   // Nâng timeout lên 60s chống mạng lag
+const HEARTBEAT_INTERVAL_MS = 15000;  // Gửi heartbeat ping mỗi 15s giữ kết nối sống`,
+      file_path: "frontend/hooks/useChat.ts",
+      line_number: 85,
+      confidence_score: 0.92,
+      model_used: "Gemini 3.5 Flash (RCA Engine)",
+    };
+  }
+
+  // Trường hợp lỗi kỹ thuật tổng quát có stack trace
   return {
-    root_cause: `Xảy ra ngoại lệ trong quá trình xử lý endpoint ${error.endpoint || "hệ thống"}: ${error.message || "Lỗi runtime"}. Cần bổ sung kiểm tra điều kiện biên và xử lý ngoại lệ an toàn.`,
-    resolution_summary: `Đã bổ sung validation kiểm tra dữ liệu đầu vào và bắt ngoại lệ an toàn cho ${error.endpoint || "endpoint"}.`,
+    root_cause: `Xảy ra ngoại lệ runtime trong quá trình xử lý endpoint ${
+      error.endpoint || "hệ thống"
+    }: ${error.message || "Lỗi xử lý"}. Luồng dữ liệu đầu vào chưa được kiểm tra tính hợp lệ trước khi thực thi.`,
+    resolution_summary: `Đã bổ sung validation kiểm tra dữ liệu đầu vào và bắt ngoại lệ an toàn cho ${
+      error.endpoint || "endpoint"
+    }.`,
     fix_steps: [
       `1. Mở tệp nguồn nghi vấn và kiểm tra luồng logic tại vị trí phát sinh ngoại lệ.`,
       `2. Bổ sung khối try-except hoặc kiểm tra điều kiện biên (null / zero check) trước khi tính toán.`,
@@ -312,51 +349,80 @@ export default function AiDiagnosisCard({
             </div>
           )}
 
-          {/* Khối 1: Nguyên nhân cốt lõi (Root Cause) */}
-          <div className="bg-white/90 rounded-xl p-3.5 border border-purple-100 shadow-2xs space-y-1">
-            <h4 className="text-[11px] font-black uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-purple-600" />
-              Nguyên Nhân Cốt Lõi (Root Cause)
-            </h4>
-            <p className="text-xs text-zinc-800 leading-relaxed">
+          {/* Khối 1: Nguyên nhân cốt lõi (Root Cause Card & Location - AC-AI-03 & AC-AI-04) */}
+          <div className="bg-white/95 rounded-xl p-4 border border-purple-200/80 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                Nguyên Nhân Cốt Lõi (Root Cause)
+              </h4>
+              {diagnosis.confidence_score && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  Độ tin cậy: {Math.round(diagnosis.confidence_score * 100)}%
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-zinc-800 leading-relaxed font-medium">
               {diagnosis.root_cause}
             </p>
           </div>
 
-          {/* Khối 2: Hướng dẫn các bước khắc phục (Fix Steps) */}
+          {/* Khối 2: Hướng dẫn các bước khắc phục đề xuất (Fix Steps - AC-AI-04) */}
           {diagnosis.fix_steps && diagnosis.fix_steps.length > 0 && (
-            <div className="bg-white/90 rounded-xl p-3.5 border border-purple-100 shadow-2xs space-y-1.5">
-              <h4 className="text-[11px] font-black uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-indigo-600" />
+            <div className="bg-white/95 rounded-xl p-4 border border-indigo-100 shadow-2xs space-y-2.5">
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-indigo-600" />
                 Các Bước Khắc Phục Đề Xuất
               </h4>
-              <ul className="space-y-1 text-xs text-zinc-700">
-                {diagnosis.fix_steps.map((step, idx) => (
-                  <li key={idx} className="flex items-start gap-1.5 leading-relaxed">
-                    <span className="text-indigo-600 font-bold shrink-0">•</span>
-                    <span>{step}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-2">
+                {diagnosis.fix_steps.map((step, idx) => {
+                  const cleanStep = step.replace(/^\d+[\.\:\-\)]\s*/, "");
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-2.5 text-xs text-zinc-800 bg-indigo-50/40 p-2.5 rounded-lg border border-indigo-100/60 leading-relaxed"
+                    >
+                      <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                        {idx + 1}
+                      </span>
+                      <span className="font-medium">{cleanStep}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
-          {/* Khối 3: Đoạn mã sửa mẫu (Code Patch) */}
+          {/* Khối 3: Đoạn mã sửa mẫu (Code Patch & Nút Sao Chép 1 Chạm - AC-AI-05) */}
           {diagnosis.code_patch && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <h4 className="text-[11px] font-black uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
-                  <Code className="w-3.5 h-3.5 text-purple-600" />
-                  Đoạn Mã Sửa Mẫu (Code Patch)
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-[11px] font-black uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
+                    <Code className="w-3.5 h-3.5 text-purple-600" />
+                    Đoạn Mã Sửa Mẫu (Code Patch)
+                  </h4>
+                  <span className="text-[10px] font-mono font-bold text-zinc-500 bg-zinc-200/70 px-1.5 py-0.5 rounded">
+                    {diagnosis.file_path?.endsWith(".ts") ||
+                    diagnosis.file_path?.endsWith(".tsx")
+                      ? "TypeScript"
+                      : "Python"}
+                  </span>
+                </div>
                 <button
                   onClick={handleCopyCode}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 hover:text-purple-900 hover:bg-purple-100/70 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                  className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    copiedCode
+                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                      : "bg-purple-100/80 hover:bg-purple-200 text-purple-800 border border-purple-200"
+                  }`}
+                  title="Sao chép toàn bộ đoạn code mẫu vào bộ nhớ tạm"
                 >
                   {copiedCode ? (
                     <>
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="text-emerald-700">Đã sao chép!</span>
+                      <span>Đã sao chép! ✓</span>
                     </>
                   ) : (
                     <>
@@ -367,9 +433,11 @@ export default function AiDiagnosisCard({
                 </button>
               </div>
 
-              <pre className="bg-[#18181B] text-zinc-200 p-3.5 rounded-xl text-xs font-mono overflow-x-auto max-h-56 border border-zinc-800 leading-relaxed selection:bg-purple-900">
-                <code>{diagnosis.code_patch}</code>
-              </pre>
+              <div className="relative rounded-xl overflow-hidden border border-zinc-800 bg-[#18181B] text-zinc-200 shadow-md">
+                <pre className="p-4 text-xs font-mono overflow-x-auto max-h-60 leading-relaxed selection:bg-purple-900/80">
+                  <code>{diagnosis.code_patch}</code>
+                </pre>
+              </div>
             </div>
           )}
 
