@@ -15,7 +15,7 @@ const NAV_LINKS = [
   { label: "Tính năng", href: "#features" },
   { label: "Hướng dẫn", href: "#how-it-works" },
   { label: "Hỏi đáp", href: "#faq" },
-  { label: "Liên hệ", href: "#contact" },
+  { label: "Liên hệ", href: "/contact" },
 ];
 
 export default function Navbar({ onOpenAuth }: NavbarProps) {
@@ -70,7 +70,18 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
   };
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (href.startsWith("/")) {
+      e.preventDefault();
+      router.push(href);
+      setMobileMenuOpen(false);
+      return;
+    }
     e.preventDefault();
+    if (window.location.pathname !== "/") {
+      router.push(`/${href}`);
+      setMobileMenuOpen(false);
+      return;
+    }
     const targetId = href.replace(/^#/, "");
     const targetElement = document.getElementById(targetId);
     if (targetElement) {
