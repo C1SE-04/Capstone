@@ -2,10 +2,14 @@ import uuid
 import random
 import string
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from fastapi.security import OAuth2PasswordRequestForm
+import redis.asyncio as aioredis
+from redis_client import get_redis
+from services.rate_limiter_service import RateLimiterService
 
 import models, schemas, auth, dependencies
 from database import get_db
@@ -258,15 +262,39 @@ def register_monitor(user_data: schemas.AuthInput, db: Session = Depends(get_db)
 from sqlalchemy import func
 
 @router.post("/login", response_model=schemas.TokenResponse)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis)
+):
     """
     US 9.1 (T9.1): Đăng nhập bằng username HOẶC email (tương thích ngược với user cũ).
-    - User mới: đăng nhập bằng username.
-    - User cũ (trước US 9.1): vẫn đăng nhập bằng email thành công.
+    US 11.1 - Task #360: Phòng thủ Brute-force 3 lớp:
+    - Lớp 1: Khóa 15 phút theo cặp (Username + Client IP) nếu sai 5 lần liên tiếp.
+    - Lớp 2: Khóa 30 phút theo IP nếu quét sai trên 20 tài khoản khác nhau.
+    - Lớp 3: Theo dõi Username đa IP, áp dụng progressive delay nếu nghi ngờ xoay proxy.
     """
     normalized = form_data.username.lower().strip()
+    client_ip = RateLimiterService.extract_client_ip(request)
 
-    # Trước tiên dò query cả username lẫn email cùng lúc (OR)
+    # 1. KIỂM TRA TẠM KHÓA TRƯỚC (Bảo vệ CPU băm bcrypt)
+    is_locked, lock_info = await RateLimiterService.check_login_lockout(
+        redis_client=redis,
+        username=normalized,
+        client_ip=client_ip
+    )
+    if is_locked and lock_info:
+        raise RateLimiterService.create_429_exception(
+            reason=lock_info["reason"],
+            message=lock_info["message"],
+            limit=RateLimiterService.MAX_LOGIN_ATTEMPTS,
+            remaining=0,
+            retry_after=lock_info["retry_after"],
+            reset_at=lock_info["reset_at"],
+        )
+
+    # 2. Trước tiên dò query cả username lẫn email cùng lúc (OR)
     user = (
         db.query(models.User)
         .filter(
@@ -278,10 +306,55 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         .first()
     )
 
-    if not user or not user.hashed_password or not auth.verify_password(form_data.password, user.hashed_password):
+    is_valid_user = (
+        user is not None
+        and bool(user.hashed_password)
+        and auth.verify_password(form_data.password, user.hashed_password)
+    )
+
+    if not is_valid_user:
+        # Ghi nhận lần nhập sai mật khẩu (Task #360)
+        failure_info = await RateLimiterService.record_login_failure(
+            redis_client=redis,
+            username=normalized,
+            client_ip=client_ip
+        )
+
+        # Lớp 3: Nếu phát hiện dấu hiệu brute-force từ nhiều IP lạ, áp dụng delay lũy tiến
+        if failure_info.get("progressive_delay"):
+            await asyncio.sleep(2.0)
+
+        if failure_info.get("is_locked"):
+            raise RateLimiterService.create_429_exception(
+                reason=failure_info["reason"],
+                message=failure_info["message"],
+                limit=RateLimiterService.MAX_LOGIN_ATTEMPTS,
+                remaining=0,
+                retry_after=failure_info["retry_after"],
+                reset_at=failure_info["reset_at"],
+            )
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Tên tài khoản/email hoặc mật khẩu không đúng"
+            detail={
+                "error": "invalid_credentials",
+                "message": failure_info["message"],
+                "remaining_attempts": failure_info["remaining_attempts"],
+            }
+        )
+
+    # 3. ĐĂNG NHẬP THÀNH CÔNG: Xóa lịch sử thử sai của cặp (Username + IP)
+    actual_username = user.username.lower() if user.username else normalized
+    await RateLimiterService.clear_login_failures(
+        redis_client=redis,
+        username=actual_username,
+        client_ip=client_ip
+    )
+    if actual_username != normalized:
+        await RateLimiterService.clear_login_failures(
+            redis_client=redis,
+            username=normalized,
+            client_ip=client_ip
         )
 
     raw_refresh_token = auth.create_refresh_token()

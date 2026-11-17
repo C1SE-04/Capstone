@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from main import app
 from database import get_db, SessionLocal
 import models
+import auth
 from services.rate_limiter_service import RateLimiterService
 
 
@@ -287,3 +288,136 @@ def test_chat_orchestrator_socratic_cooldown_enforced(test_student_and_session):
         assert data["detail"]["reason"] == "SOCRATIC_COOL_DOWN"
         assert "5 giây" in data["detail"]["message"]
         assert int(res.headers.get("Retry-After", "0")) > 0
+
+
+# ==============================================================================
+# 4. UNIT & INTEGRATION TESTS CHO ANTI-BRUTE-FORCE LOGIN (TASK #360)
+# ==============================================================================
+
+@pytest.fixture
+def test_auth_user():
+    """Tạo user kiểm thử đăng nhập trong database."""
+    db = SessionLocal()
+    user_id = f"user-brute-{uuid.uuid4().hex[:6]}"
+    username = f"brute_target_{uuid.uuid4().hex[:6]}"
+    password = "SuperSecretPassword123"
+
+    user = models.User(
+        id=user_id,
+        email=f"{username}@socratickid.local",
+        username=username,
+        hashed_password=auth.hash_password(password),
+        role="STUDENT"
+    )
+    db.add(user)
+    db.commit()
+    db.close()
+
+    RateLimiterService.reset_in_memory_state()
+
+    yield {"user_id": user_id, "username": username, "password": password}
+
+    # Dọn dẹp sau test
+    db = SessionLocal()
+    db.query(models.User).filter(models.User.id == user_id).delete()
+    db.commit()
+    db.close()
+    RateLimiterService.reset_in_memory_state()
+
+
+def test_anti_brute_force_lockout_and_ip_isolation(test_auth_user):
+    """
+    T11.1.3 Integration Test:
+    - Thử sai 5 lần liên tiếp từ IP máy A (192.168.10.1):
+      + Lần 1-4: trả về 401 với số lần thử còn lại (4 -> 1).
+      + Lần 5: trả về 429 và tạm khóa tài khoản trên IP máy A trong 15 phút.
+      + Lần 6: Nhập ĐÚNG mật khẩu trên máy A vẫn bị chặn (429).
+    - Nhưng trên máy B (IP khác 192.168.20.2):
+      + Nhập ĐÚNG mật khẩu -> Đăng nhập thành công 200 (không bị khóa oan).
+    """
+    client = TestClient(app)
+    username = test_auth_user["username"]
+    correct_pwd = test_auth_user["password"]
+    wrong_pwd = "IncorrectPassword999"
+
+    ip_a = "192.168.10.1"
+    ip_b = "192.168.20.2"
+
+    # Lần 1 đến 4: Sai mật khẩu -> 401 kèm số lần còn lại
+    for attempt in range(1, 5):
+        res = client.post(
+            "/login",
+            data={"username": username, "password": wrong_pwd},
+            headers={"X-Real-IP": ip_a}
+        )
+        assert res.status_code == 401, f"Attempt {attempt} phải trả về 401"
+        detail = res.json()["detail"]
+        expected_remaining = 5 - attempt
+        assert detail["remaining_attempts"] == expected_remaining
+        assert f"còn {expected_remaining} lần thử" in detail["message"]
+
+    # Lần 5: Nhập sai mật khẩu lần 5 -> Tạm khóa với HTTP 429
+    res5 = client.post(
+        "/login",
+        data={"username": username, "password": wrong_pwd},
+        headers={"X-Real-IP": ip_a}
+    )
+    assert res5.status_code == 429
+    detail5 = res5.json()["detail"]
+    assert detail5["error"] == "rate_limit_exceeded"
+    assert detail5["reason"] == "AUTH_BRUTE_FORCE"
+    assert "tạm thời bị khóa" in detail5["message"]
+    assert res5.headers.get("Retry-After") is not None
+    assert int(res5.headers.get("Retry-After")) > 0
+
+    # Lần 6 trên máy A: Dù nhập ĐÚNG mật khẩu vẫn bị chặn với mã 429 vì đang trong thời gian khóa
+    res6 = client.post(
+        "/login",
+        data={"username": username, "password": correct_pwd},
+        headers={"X-Real-IP": ip_a}
+    )
+    assert res6.status_code == 429
+    detail6 = res6.json()["detail"]
+    assert detail6["reason"] == "AUTH_BRUTE_FORCE"
+
+    # Trên máy B (IP khác): Nhập ĐÚNG mật khẩu -> Thành công 200 (Học sinh thật không bị khóa oan!)
+    res_b = client.post(
+        "/login",
+        data={"username": username, "password": correct_pwd},
+        headers={"X-Real-IP": ip_b}
+    )
+    assert res_b.status_code == 200
+    token_data = res_b.json()
+    assert "access_token" in token_data
+    assert token_data["username"] == username
+
+
+def test_login_success_resets_attempt_count(test_auth_user):
+    """
+    T11.1.3 Integration Test:
+    Đăng nhập sai 2 lần -> Đăng nhập đúng thành công -> Bộ đếm lỗi được xóa về 0.
+    """
+    client = TestClient(app)
+    username = test_auth_user["username"]
+    correct_pwd = test_auth_user["password"]
+    wrong_pwd = "WrongPassword123"
+    client_ip = "192.168.30.99"
+
+    # Thử sai 2 lần
+    res1 = client.post("/login", data={"username": username, "password": wrong_pwd}, headers={"X-Real-IP": client_ip})
+    assert res1.status_code == 401
+    assert res1.json()["detail"]["remaining_attempts"] == 4
+
+    res2 = client.post("/login", data={"username": username, "password": wrong_pwd}, headers={"X-Real-IP": client_ip})
+    assert res2.status_code == 401
+    assert res2.json()["detail"]["remaining_attempts"] == 3
+
+    # Đăng nhập ĐÚNG -> Thành công 200
+    res_ok = client.post("/login", data={"username": username, "password": correct_pwd}, headers={"X-Real-IP": client_ip})
+    assert res_ok.status_code == 200
+
+    # Thử sai lần nữa -> Bộ đếm đã reset nên remaining_attempts phải quay lại 4 (thay vì 2)
+    res_after = client.post("/login", data={"username": username, "password": wrong_pwd}, headers={"X-Real-IP": client_ip})
+    assert res_after.status_code == 401
+    assert res_after.json()["detail"]["remaining_attempts"] == 4
+

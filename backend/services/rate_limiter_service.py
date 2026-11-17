@@ -29,7 +29,7 @@ from typing import Dict, Any, Tuple, Optional
 from collections import defaultdict
 import threading
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,8 @@ class _InMemorySlidingWindow:
         self._lock = threading.Lock()
         self._history: Dict[str, list] = defaultdict(list)
         self._cooldowns: Dict[str, float] = {}
+        self._login_failures: Dict[str, Tuple[int, float]] = {}  # key -> (count, expire_at)
+        self._lockouts: Dict[str, float] = {}                    # key -> expire_at
 
     def check_and_add(self, key: str, limit: int, window_seconds: int = 60) -> Tuple[bool, int, int]:
         now = time.time()
@@ -78,10 +80,43 @@ class _InMemorySlidingWindow:
         with self._lock:
             return self._cooldowns.get(session_id)
 
+    def get_lockout(self, key: str) -> Optional[int]:
+        now = time.time()
+        with self._lock:
+            expire_at = self._lockouts.get(key)
+            if expire_at and expire_at > now:
+                return max(1, math.ceil(expire_at - now))
+            elif expire_at:
+                del self._lockouts[key]
+            return None
+
+    def set_lockout(self, key: str, duration_seconds: int) -> None:
+        with self._lock:
+            self._lockouts[key] = time.time() + duration_seconds
+
+    def record_failure(self, key: str, window_seconds: int = 900) -> int:
+        now = time.time()
+        with self._lock:
+            curr = self._login_failures.get(key)
+            if curr and curr[1] > now:
+                new_count = curr[0] + 1
+                self._login_failures[key] = (new_count, curr[1])
+                return new_count
+            else:
+                self._login_failures[key] = (1, now + window_seconds)
+                return 1
+
+    def clear_key(self, key: str) -> None:
+        with self._lock:
+            self._login_failures.pop(key, None)
+            self._lockouts.pop(key, None)
+
     def reset(self) -> None:
         with self._lock:
             self._history.clear()
             self._cooldowns.clear()
+            self._login_failures.clear()
+            self._lockouts.clear()
 
 
 _fallback_memory_limiter = _InMemorySlidingWindow()
@@ -358,6 +393,245 @@ class RateLimiterService:
                 client.set(key, str(now_ts), ex=ttl_seconds)
         except Exception as err:
             logger.debug(f"[RateLimiter] Sync record cool-down fallback to RAM: {err}")
+
+    # --------------------------------------------------------------------------
+    # 4. CHỐNG TẤN CÔNG DÒ MẬT KHẨU ĐA TẦNG (ANTI-BRUTE-FORCE 3 LỚP) - TASK #360
+    # --------------------------------------------------------------------------
+    MAX_LOGIN_ATTEMPTS = 5             # Tối đa 5 lần thử sai theo (Username + IP)
+    LOGIN_LOCKOUT_SECONDS = 900        # Tạm khóa 15 phút (900s)
+    MAX_FAILED_LOGINS_PER_IP = 20      # Tối đa 20 lần thử sai từ 1 IP trên toàn hệ thống
+    IP_LOCKOUT_SECONDS = 1800          # Tạm khóa IP 30 phút (1800s)
+    MULTI_IP_FAILURE_THRESHOLD = 10    # Ngưỡng phát hiện botnet xoay IP
+
+    @staticmethod
+    def extract_client_ip(request: Optional[Request]) -> str:
+        """
+        Trích xuất client IP an toàn từ Request headers (X-Real-IP, X-Forwarded-For) hoặc TCP host.
+        Khắc phục triệt để lỗ hổng IP Spoofing qua reverse proxy.
+        """
+        if not request:
+            return "127.0.0.1"
+
+        x_real_ip = request.headers.get("X-Real-IP")
+        if x_real_ip and x_real_ip.strip():
+            return x_real_ip.strip()
+
+        x_forwarded_for = request.headers.get("X-Forwarded-For")
+        if x_forwarded_for and x_forwarded_for.strip():
+            first_ip = x_forwarded_for.split(",")[0].strip()
+            if first_ip:
+                return first_ip
+
+        if request.client and request.client.host:
+            return request.client.host
+
+        return "127.0.0.1"
+
+    @classmethod
+    async def check_login_lockout(
+        cls,
+        redis_client: Any,
+        username: str,
+        client_ip: str,
+    ) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """
+        Kiểm tra xem máy hoặc tài khoản có đang trong thời gian bị tạm khóa hay không.
+        Kiểm tra 2 cấp:
+        - Cấp 1: Toàn bộ IP có bị khóa do càn quét nhiều tài khoản không (auth:lockout_ip:{client_ip})
+        - Cấp 2: Cặp (Username + IP) có bị khóa không (auth:lockout:{username}:{client_ip})
+
+        Returns:
+            Tuple[bool, Optional[Dict[str, Any]]]: (is_locked, lockout_info)
+        """
+        now_ts = time.time()
+        normalized_user = username.lower().strip()
+        ip_lock_key = f"auth:lockout_ip:{client_ip}"
+        user_ip_lock_key = f"auth:lockout:{normalized_user}:{client_ip}"
+
+        try:
+            if redis_client is not None:
+                # 1. Kiểm tra khóa IP toàn cục
+                ip_ttl = await redis_client.ttl(ip_lock_key)
+                if ip_ttl and ip_ttl > 0:
+                    minutes = math.ceil(ip_ttl / 60)
+                    return True, {
+                        "reason": "IP_LOCKOUT",
+                        "message": (
+                            f"Địa chỉ mạng này tạm thời bị khóa do có quá nhiều lần đăng nhập thất bại. "
+                            f"Vui lòng thử lại sau {minutes} phút ({ip_ttl} giây)."
+                        ),
+                        "retry_after": ip_ttl,
+                        "reset_at": int(now_ts + ip_ttl),
+                    }
+
+                # 2. Kiểm tra khóa cặp (Username + IP)
+                user_ip_ttl = await redis_client.ttl(user_ip_lock_key)
+                if user_ip_ttl and user_ip_ttl > 0:
+                    minutes = math.ceil(user_ip_ttl / 60)
+                    return True, {
+                        "reason": "AUTH_BRUTE_FORCE",
+                        "message": (
+                            f"Tài khoản '{username}' tạm thời bị khóa trên thiết bị này do nhập sai mật khẩu 5 lần. "
+                            f"Vui lòng thử lại sau {minutes} phút ({user_ip_ttl} giây)."
+                        ),
+                        "retry_after": user_ip_ttl,
+                        "reset_at": int(now_ts + user_ip_ttl),
+                    }
+        except Exception as e:
+            logger.warning(f"[RateLimiter] Lỗi đọc Redis lockout ({e}), kiểm tra RAM fallback")
+
+        # Fallback RAM (Fail-Closed cho Auth để đảm bảo an ninh máy chủ)
+        ip_ram_ttl = _fallback_memory_limiter.get_lockout(ip_lock_key)
+        if ip_ram_ttl is not None and ip_ram_ttl > 0:
+            return True, {
+                "reason": "IP_LOCKOUT",
+                "message": f"Địa chỉ mạng tạm thời bị khóa. Vui lòng thử lại sau {ip_ram_ttl} giây.",
+                "retry_after": ip_ram_ttl,
+                "reset_at": int(now_ts + ip_ram_ttl),
+            }
+
+        user_ram_ttl = _fallback_memory_limiter.get_lockout(user_ip_lock_key)
+        if user_ram_ttl is not None and user_ram_ttl > 0:
+            return True, {
+                "reason": "AUTH_BRUTE_FORCE",
+                "message": f"Tài khoản '{username}' tạm thời bị khóa. Vui lòng thử lại sau {user_ram_ttl} giây.",
+                "retry_after": user_ram_ttl,
+                "reset_at": int(now_ts + user_ram_ttl),
+            }
+
+        return False, None
+
+    @classmethod
+    async def record_login_failure(
+        cls,
+        redis_client: Any,
+        username: str,
+        client_ip: str,
+    ) -> Dict[str, Any]:
+        """
+        Ghi nhận một lần đăng nhập sai và cập nhật bộ đếm phòng thủ 3 lớp.
+        Returns:
+            Dict: {is_locked, reason, message, remaining_attempts, retry_after, reset_at, progressive_delay}
+        """
+        now_ts = time.time()
+        normalized_user = username.lower().strip()
+        ip_fail_key = f"auth:failed_ip:{client_ip}"
+        ip_lock_key = f"auth:lockout_ip:{client_ip}"
+        user_ip_fail_key = f"auth:failed:{normalized_user}:{client_ip}"
+        user_ip_lock_key = f"auth:lockout:{normalized_user}:{client_ip}"
+        user_global_fail_key = f"auth:failed_user:{normalized_user}"
+
+        try:
+            if redis_client is not None:
+                # Lớp 2: Kiểm tra tổng số lần sai từ IP này trên mọi tài khoản
+                ip_fails = await redis_client.incr(ip_fail_key)
+                if ip_fails == 1:
+                    await redis_client.expire(ip_fail_key, cls.LOGIN_LOCKOUT_SECONDS)
+                if ip_fails >= cls.MAX_FAILED_LOGINS_PER_IP:
+                    await redis_client.set(ip_lock_key, "1", ex=cls.IP_LOCKOUT_SECONDS)
+                    return {
+                        "is_locked": True,
+                        "reason": "IP_LOCKOUT",
+                        "message": (
+                            f"Địa chỉ IP của bạn đã bị khóa trong {cls.IP_LOCKOUT_SECONDS // 60} phút "
+                            f"do có hơn {cls.MAX_FAILED_LOGINS_PER_IP} lần đăng nhập sai."
+                        ),
+                        "retry_after": cls.IP_LOCKOUT_SECONDS,
+                        "reset_at": int(now_ts + cls.IP_LOCKOUT_SECONDS),
+                        "remaining_attempts": 0,
+                        "progressive_delay": False,
+                    }
+
+                # Lớp 3: Theo dõi số lần sai của tài khoản này từ mọi IP (không khóa cứng, phát hiện xoay proxy)
+                user_global_fails = await redis_client.incr(user_global_fail_key)
+                if user_global_fails == 1:
+                    await redis_client.expire(user_global_fail_key, 600)
+                apply_progressive_delay = (user_global_fails >= cls.MULTI_IP_FAILURE_THRESHOLD)
+
+                # Lớp 1: Đếm số lần sai theo cặp (Username + IP)
+                user_ip_fails = await redis_client.incr(user_ip_fail_key)
+                if user_ip_fails == 1:
+                    await redis_client.expire(user_ip_fail_key, cls.LOGIN_LOCKOUT_SECONDS)
+
+                if user_ip_fails >= cls.MAX_LOGIN_ATTEMPTS:
+                    await redis_client.set(user_ip_lock_key, "1", ex=cls.LOGIN_LOCKOUT_SECONDS)
+                    _fallback_memory_limiter.set_lockout(user_ip_lock_key, cls.LOGIN_LOCKOUT_SECONDS)
+                    return {
+                        "is_locked": True,
+                        "reason": "AUTH_BRUTE_FORCE",
+                        "message": (
+                            f"Bạn đã nhập sai mật khẩu {cls.MAX_LOGIN_ATTEMPTS} lần liên tiếp. "
+                            f"Tài khoản tạm thời bị khóa trong {cls.LOGIN_LOCKOUT_SECONDS // 60} phút."
+                        ),
+                        "retry_after": cls.LOGIN_LOCKOUT_SECONDS,
+                        "reset_at": int(now_ts + cls.LOGIN_LOCKOUT_SECONDS),
+                        "remaining_attempts": 0,
+                        "progressive_delay": apply_progressive_delay,
+                    }
+                else:
+                    remaining = cls.MAX_LOGIN_ATTEMPTS - user_ip_fails
+                    return {
+                        "is_locked": False,
+                        "reason": "INVALID_CREDENTIALS",
+                        "message": (
+                            f"Tên tài khoản/email hoặc mật khẩu không đúng. "
+                            f"Bạn còn {remaining} lần thử trước khi bị tạm khóa 15 phút."
+                        ),
+                        "remaining_attempts": remaining,
+                        "retry_after": 0,
+                        "reset_at": 0,
+                        "progressive_delay": apply_progressive_delay,
+                    }
+        except Exception as e:
+            logger.warning(f"[RateLimiter] Lỗi ghi nhận thất bại vào Redis ({e}), chuyển sang RAM fallback")
+
+        # Fallback RAM
+        ram_fails = _fallback_memory_limiter.record_failure(user_ip_fail_key, cls.LOGIN_LOCKOUT_SECONDS)
+        if ram_fails >= cls.MAX_LOGIN_ATTEMPTS:
+            _fallback_memory_limiter.set_lockout(user_ip_lock_key, cls.LOGIN_LOCKOUT_SECONDS)
+            return {
+                "is_locked": True,
+                "reason": "AUTH_BRUTE_FORCE",
+                "message": f"Bạn đã nhập sai mật khẩu 5 lần. Tài khoản tạm khóa 15 phút.",
+                "retry_after": cls.LOGIN_LOCKOUT_SECONDS,
+                "reset_at": int(now_ts + cls.LOGIN_LOCKOUT_SECONDS),
+                "remaining_attempts": 0,
+                "progressive_delay": False,
+            }
+        else:
+            remaining = cls.MAX_LOGIN_ATTEMPTS - ram_fails
+            return {
+                "is_locked": False,
+                "reason": "INVALID_CREDENTIALS",
+                "message": f"Tên tài khoản hoặc mật khẩu không đúng. Còn {remaining} lần thử.",
+                "remaining_attempts": remaining,
+                "retry_after": 0,
+                "reset_at": 0,
+                "progressive_delay": False,
+            }
+
+    @classmethod
+    async def clear_login_failures(
+        cls,
+        redis_client: Any,
+        username: str,
+        client_ip: str,
+    ) -> None:
+        """
+        Xóa sạch lịch sử thử sai của cặp (Username + IP) khi đăng nhập thành công.
+        """
+        normalized_user = username.lower().strip()
+        user_ip_fail_key = f"auth:failed:{normalized_user}:{client_ip}"
+        user_ip_lock_key = f"auth:lockout:{normalized_user}:{client_ip}"
+
+        try:
+            if redis_client is not None:
+                await redis_client.delete(user_ip_fail_key, user_ip_lock_key)
+        except Exception as e:
+            logger.warning(f"[RateLimiter] Lỗi xóa key sau login thành công: {e}")
+
+        _fallback_memory_limiter.clear_key(user_ip_fail_key)
+        _fallback_memory_limiter.clear_key(user_ip_lock_key)
 
     @classmethod
     def reset_in_memory_state(cls) -> None:
