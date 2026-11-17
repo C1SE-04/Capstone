@@ -60,6 +60,8 @@ def _map_system_error_response(record: models.SystemError) -> schemas.SystemErro
         resolved_by=record.resolved_by,
         resolved_note=record.resolved_note,
         created_at=record.created_at,
+        ai_diagnosis=record.ai_diagnosis,
+        ai_diagnosed_at=record.ai_diagnosed_at,
     )
 
 

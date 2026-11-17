@@ -674,6 +674,10 @@ class SystemError(Base):
     resolved_note = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
+    # US 11.3 (Task T374): Mở rộng lưu trữ chẩn đoán AI Root Cause Analysis
+    ai_diagnosis = Column(JSON, nullable=True)
+    ai_diagnosed_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
     __table_args__ = (
         Index("ix_system_errors_status_created", "status", "created_at"),
         Index("ix_system_errors_type_created", "error_type", "created_at"),
