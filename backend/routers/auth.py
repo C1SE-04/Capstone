@@ -23,7 +23,7 @@ router = APIRouter(tags=["Auth"])
 OTP_EXPIRE_MINUTES = 5         # Mã OTP hết hạn sau 5 phút
 OTP_RATE_LIMIT_SECONDS = 60    # Không gửi lại trong vòng 60 giây
 OTP_MAX_ATTEMPTS = 5           # Tối đa 5 lần nhập sai
-VALID_OTP_PURPOSES = {"PARENT_REGISTER", "PARENT_CHANGE_EMAIL"}
+VALID_OTP_PURPOSES = {"PARENT_REGISTER", "PARENT_CHANGE_EMAIL", "PARENT_RESET_PASSWORD"}
 
 
 def _generate_otp_code() -> str:
@@ -131,6 +131,9 @@ def _send_otp_email(to_email: str, otp_code: str, purpose: str):
     if purpose == "PARENT_CHANGE_EMAIL":
         subject = "[SocraticKid] Xác nhận đổi email nhận thông báo"
         instruction = "xác nhận đổi địa chỉ email nhận thông báo"
+    elif purpose == "PARENT_RESET_PASSWORD":
+        subject = "[SocraticKid] Mã OTP khôi phục mật khẩu Phụ huynh"
+        instruction = "đặt lại mật khẩu cho tài khoản Phụ huynh"
     else:
         subject = "[SocraticKid] Mã xác nhận tài khoản Phụ huynh"
         instruction = "hoàn tất kích hoạt tài khoản Phụ huynh"
@@ -730,6 +733,79 @@ def request_otp(
     return {
         "success": True,
         "message": f"Mã OTP đã được gửi đến {email}. Hiệu lực trong {OTP_EXPIRE_MINUTES} phút.",
+        "rate_limit_seconds": OTP_RATE_LIMIT_SECONDS,
+    }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 11.2 (Task #41): API Gửi mã OTP khôi phục mật khẩu Phụ huynh
+# ────────────────────────────────────────────────────────────────────────────
+
+@router.post("/auth/forgot-password/request-otp", status_code=status.HTTP_200_OK)
+@router.post("/forgot-password/request-otp", status_code=status.HTTP_200_OK)
+def request_forgot_password_otp(
+    payload: schemas.ForgotPasswordOtpRequestInput,
+    db: Session = Depends(get_db),
+):
+    """
+    US 11.2 - API gửi mã OTP cho Phụ huynh quên mật khẩu:
+    1. Kiểm tra tài khoản trong hệ thống. Nếu không tìm thấy -> 404.
+    2. Chặn tài khoản Google (oauth_provider == 'google' hoặc không có hashed_password) -> 400.
+    3. Phân tách vai trò: Nếu là tài khoản học sinh (STUDENT) -> 400 hướng dẫn sang luồng phụ huynh cấp mật khẩu.
+    4. Áp dụng giới hạn 60s chống spam và sinh mã OTP 6 số ngẫu nhiên qua _request_otp_internal.
+    5. Gửi email chứa mã OTP qua Brevo SMTP.
+    """
+    normalized_email = payload.email.lower().strip()
+
+    # 1. Tra cứu người dùng theo email
+    user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.email) == normalized_email)
+        .first()
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email này chưa được đăng ký trong hệ thống."
+        )
+
+    # 2. Chặn tài khoản đăng nhập bằng Google (AC3)
+    is_google_account = (
+        user.oauth_provider == "google"
+        or getattr(user, "google_id", None) is not None
+        or not user.hashed_password
+    )
+    if is_google_account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tài khoản này dùng đăng nhập Google, vui lòng bấm nút 'Đăng nhập bằng Google' ngoài màn hình chính."
+        )
+
+    # 3. Phân tách vai trò: Học sinh không đặt lại mật khẩu bằng email
+    if user.role == "STUDENT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tài khoản học sinh không đặt lại mật khẩu bằng email. Vui lòng nhờ Phụ huynh cấp lại mật khẩu trong trang Giám sát."
+        )
+
+    # 4. Sinh OTP 6 số, áp dụng giới hạn 60s và hủy mã cũ
+    new_otp = _request_otp_internal(
+        email=normalized_email,
+        purpose="PARENT_RESET_PASSWORD",
+        db=db,
+    )
+
+    # 5. Gửi email OTP qua Brevo SMTP
+    _send_otp_email(
+        to_email=normalized_email,
+        otp_code=new_otp.otp_code,
+        purpose="PARENT_RESET_PASSWORD",
+    )
+
+    return {
+        "success": True,
+        "message": f"Mã OTP đã được gửi đến email {normalized_email}. Hiệu lực trong {OTP_EXPIRE_MINUTES} phút.",
+        "email": normalized_email,
         "rate_limit_seconds": OTP_RATE_LIMIT_SECONDS,
     }
 

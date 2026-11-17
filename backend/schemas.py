@@ -24,10 +24,17 @@ class RegisterInput(BaseModel):
 class OtpRequestInput(BaseModel):
     """
     Payload yêu cầu gửi OTP qua email (US 9.1 - T9.2).
-    Dùng cho cả đăng ký Phụ huynh và đổi email trong Cài đặt.
+    Dùng cho đăng ký Phụ huynh, đổi email trong Cài đặt, hoặc quên mật khẩu.
     """
     email: EmailStr                       # Email sẽ nhận mã OTP
-    purpose: str = "PARENT_REGISTER"     # "PARENT_REGISTER" | "PARENT_CHANGE_EMAIL"
+    purpose: str = "PARENT_REGISTER"     # "PARENT_REGISTER" | "PARENT_CHANGE_EMAIL" | "PARENT_RESET_PASSWORD"
+
+
+class ForgotPasswordOtpRequestInput(BaseModel):
+    """
+    US 11.2: Payload yêu cầu gửi mã OTP khôi phục mật khẩu Phụ huynh.
+    """
+    email: EmailStr                       # Email tài khoản Phụ huynh cần khôi phục mật khẩu
 
 
 class OtpVerifyInput(BaseModel):
