@@ -18,6 +18,23 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const [confirmPassword, setConfirmPassword] = useState(""); // Đăng ký: Xác nhận mật khẩu
   const [isLoading, setIsLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);  // Trạng thái chuyển cảnh mượt mà chống nháy
+  const [lockoutCountdown, setLockoutCountdown] = useState<number>(0); // US 11.1: Đếm ngược khi bị tạm khóa (Task #362)
+
+  // US 11.1: Đếm lùi thời gian khóa tài khoản theo thời gian thực
+  React.useEffect(() => {
+    if (lockoutCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setErrors({});
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutCountdown]);
 
   const [errors, setErrors] = useState<{
     identifier?: string;
@@ -30,6 +47,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const toggleMode = () => {
     setIsLoginMode((prev) => !prev);
     setErrors({});
+    setLockoutCountdown(0);
     setIdentifier("");
     setUsername("");
     setPassword("");
@@ -106,7 +124,38 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
         });
 
         if (result?.error) {
-          throw new Error("Tên tài khoản hoặc mật khẩu không chính xác");
+          let parsed: any = null;
+          try {
+            parsed = JSON.parse(result.error);
+          } catch {
+            parsed = { message: result.error };
+          }
+
+          // US 11.1 (Task #362): Xử lý phản hồi lỗi Brute-Force & Rate Limiting
+          if (
+            parsed?.status === 429 ||
+            parsed?.error === "rate_limit_exceeded" ||
+            parsed?.reason === "AUTH_BRUTE_FORCE" ||
+            parsed?.reason === "IP_LOCKOUT"
+          ) {
+            const retrySeconds = parsed.retry_after_seconds || parsed.retry_after || 900;
+            setLockoutCountdown(retrySeconds);
+            setErrors({
+              form: parsed.message || "Tài khoản của bạn tạm thời bị khóa do nhập sai mật khẩu 5 lần liên tiếp."
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          if (parsed?.remaining_attempts !== undefined) {
+            setErrors({
+              form: parsed.message || `Tên tài khoản hoặc mật khẩu không chính xác. Bạn còn ${parsed.remaining_attempts} lần thử trước khi bị tạm khóa.`
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          throw new Error(parsed?.message || "Tên tài khoản hoặc mật khẩu không chính xác");
         }
 
         // Bật trạng thái chuyển cảnh mượt mà ngay lập tức
@@ -269,7 +318,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                       ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
                       : 'focus:ring-[#F7AD62] border-transparent'
                       }`}
-                    disabled={isLoading}
+                    disabled={isLoading || lockoutCountdown > 0}
                   />
                   {errors.identifier && (
                     <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.identifier}</p>
@@ -316,7 +365,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                     ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
                     : 'focus:ring-[#F7AD62] border-transparent'
                     }`}
-                  disabled={isLoading}
+                  disabled={isLoading || lockoutCountdown > 0}
                 />
                 {errors.password && (
                   <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.password}</p>
@@ -353,7 +402,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
               {isLoginMode && (
                 <div className="flex items-center justify-between mt-2 px-1">
                   <label className="flex items-center text-xs font-bold text-[#8C4905] cursor-pointer">
-                    <input type="checkbox" className="mr-2 rounded text-[#8C4905] focus:ring-[#F7AD62] cursor-pointer" disabled={isLoading} />
+                    <input type="checkbox" className="mr-2 rounded text-[#8C4905] focus:ring-[#F7AD62] cursor-pointer" disabled={isLoading || lockoutCountdown > 0} />
                     Nhớ tôi
                   </label>
                   <a href="#" className="text-xs font-bold text-[#8C4905] hover:text-[#8C4905] transition-colors cursor-pointer">
@@ -362,20 +411,36 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                 </div>
               )}
 
-              {/* Lỗi chung Form */}
-              {errors.form && (
-                <div className="mt-2 text-center">
-                  <p className={`text-sm font-bold ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#EF4444]'
-                    }`}>
+              {/* Lỗi chung Form & Thông báo Tạm Khóa Anti-Brute-Force (US 11.1 - Task #362) */}
+              {lockoutCountdown > 0 ? (
+                <div className="mt-3 p-3.5 rounded-xl bg-red-100/90 border border-red-300 text-left">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-xl select-none">🔒</span>
+                    <div>
+                      <p className="text-xs font-bold text-red-800">
+                        Tài khoản tạm thời bị khóa do nhập sai mật khẩu 5 lần liên tiếp.
+                      </p>
+                      <p className="text-xs text-red-700 mt-1 font-medium">
+                        Vui lòng thử lại sau:{" "}
+                        <span className="font-bold text-red-950 font-mono">
+                          {Math.floor(lockoutCountdown / 60)} phút {String(lockoutCountdown % 60).padStart(2, "0")} giây
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : errors.form ? (
+                <div className="mt-2 text-center p-2.5 rounded-lg bg-red-50/90 border border-red-200">
+                  <p className={`text-xs font-bold ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#EF4444]'}`}>
                     {errors.form}
                   </p>
                 </div>
-              )}
+              ) : null}
 
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || lockoutCountdown > 0}
                 className="w-full mt-4 bg-[#C1762A] hover:bg-[#8C4905] text-white font-semibold py-3.5 rounded-xl active:scale-[0.98] transition-all duration-150 ease-out flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-xs focus-visible:outline-2 focus-visible:outline-[#C1762A] cursor-pointer"
               >
                 {isLoading ? (
@@ -383,7 +448,13 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                ) : isLoginMode ? "Đăng Nhập" : "Đăng Ký"}
+                ) : lockoutCountdown > 0 ? (
+                  `Tạm khóa (${Math.floor(lockoutCountdown / 60)}:${String(lockoutCountdown % 60).padStart(2, "0")})`
+                ) : isLoginMode ? (
+                  "Đăng Nhập"
+                ) : (
+                  "Đăng Ký"
+                )}
               </button>
             </form>
 

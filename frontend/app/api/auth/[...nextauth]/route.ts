@@ -36,7 +36,25 @@ export const authOptions: NextAuthOptions = {
             }),
           });
 
-          if (!res.ok) return null;
+          if (!res.ok) {
+            let errorPayload: any = {
+              status: res.status,
+              message: "Tên tài khoản hoặc mật khẩu không chính xác",
+            };
+            try {
+              const errData = await res.json();
+              if (errData?.detail) {
+                if (typeof errData.detail === "object") {
+                  errorPayload = { ...errorPayload, ...errData.detail, status: res.status };
+                } else {
+                  errorPayload.message = errData.detail;
+                }
+              }
+            } catch {
+              // fallback
+            }
+            throw new Error(JSON.stringify(errorPayload));
+          }
 
           const data = await res.json();
 
@@ -65,7 +83,10 @@ export const authOptions: NextAuthOptions = {
             refresh_token: data.refresh_token, // US 6.2 (T6.13): lưu refresh_token của Backend
             is_new_user: isPending,
           };
-        } catch {
+        } catch (e: any) {
+          if (e?.message && typeof e.message === "string" && e.message.startsWith("{")) {
+            throw e;
+          }
           return null;
         }
       },
