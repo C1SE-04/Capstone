@@ -1,6 +1,7 @@
 # schemas.py
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Dict, Any, List
+import json
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Optional, Dict, Any, List, Union
 from datetime import datetime
 
 # Dữ liệu gửi lên khi Đăng ký & Đăng nhập (schema cũ — giữ để không phá các endpoint cũ)
@@ -1293,6 +1294,23 @@ class ResolveErrorRequest(BaseModel):
     resolved_note: Optional[str] = None
 
 
+class AiDiagnosisData(BaseModel):
+    """
+    US 11.3 (Task T374 & T375): Cấu trúc dữ liệu phân tích nguyên nhân cốt lõi (RCA) và đề xuất sửa lỗi từ Trợ lý AI.
+    """
+    root_cause: Optional[str] = None           # Nguyên nhân cốt lõi gây ra lỗi
+    resolution_summary: Optional[str] = None   # Tóm tắt hướng khắc phục nhanh cho Admin
+    fix_steps: Optional[List[str]] = None       # Danh sách các bước thao tác khắc phục chi tiết
+    code_patch: Optional[str] = None           # Đoạn mã nguồn đề xuất sửa lỗi (diff/patch)
+    file_path: Optional[str] = None            # Tệp mã nguồn nghi vấn gây sự cố
+    line_number: Optional[int] = None          # Dòng mã nguồn nghi vấn
+    confidence_score: Optional[float] = None   # Độ tự tin của gợi ý AI (0.0 - 1.0)
+    model_used: Optional[str] = None           # Tên mô hình AI đã chẩn đoán (VD: gemini-2.5-pro)
+
+    class Config:
+        from_attributes = True
+
+
 class SystemErrorItemResponse(BaseModel):
     """Thông tin chi tiết 1 sự cố hệ thống hoặc báo lỗi người dùng."""
     id: str
@@ -1311,6 +1329,20 @@ class SystemErrorItemResponse(BaseModel):
     resolved_by: Optional[str] = None
     resolved_note: Optional[str] = None
     created_at: datetime
+    # US 11.3 (Task T374): Trường lưu trữ chẩn đoán và thời gian chẩn đoán của AI
+    ai_diagnosis: Optional[Union[AiDiagnosisData, Dict[str, Any]]] = None
+    ai_diagnosed_at: Optional[datetime] = None
+
+    @field_validator("ai_diagnosis", mode="before")
+    @classmethod
+    def parse_ai_diagnosis(cls, v):
+        """Xử lý ngoại lệ nếu ai_diagnosis trong DB bị lưu dưới dạng JSON string thô hoặc text."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return {"root_cause": f"Raw analysis: {v}"}
+        return v
 
     class Config:
         from_attributes = True
