@@ -18,6 +18,7 @@ import {
   EyeOff,
   Loader2,
   RefreshCw,
+  Send,
 } from "lucide-react";
 
 export type ForgotPasswordRole = "parent" | "student";
@@ -55,6 +56,15 @@ export default function ForgotPasswordModal({
 
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  // ── State Luồng Học sinh (Task #371 / T11.1.8 & AC-PW-05) ──
+  // studentStep: 1 = Nhập Username tra cứu, 2 = Đã tìm thấy Phụ huynh, 3 = Đã gửi email thông báo thành công
+  const [studentStep, setStudentStep] = useState<1 | 2 | 3>(1);
+  const [studentUsername, setStudentUsername] = useState<string>("");
+  const [parentEmailMasked, setParentEmailMasked] = useState<string>("");
+  const [isStudentLoading, setIsStudentLoading] = useState<boolean>(false);
+  const [studentError, setStudentError] = useState<string | null>(null);
+  const [isSendingNotif, setIsSendingNotif] = useState<boolean>(false);
+
   // Reset state mỗi khi mở modal
   useEffect(() => {
     if (isOpen) {
@@ -70,6 +80,14 @@ export default function ForgotPasswordModal({
       setErrorMessage(null);
       setIsGoogleAccount(false);
       setCountdown(0);
+
+      // Reset luồng học sinh
+      setStudentStep(1);
+      setStudentUsername("");
+      setParentEmailMasked("");
+      setIsStudentLoading(false);
+      setStudentError(null);
+      setIsSendingNotif(false);
     }
   }, [isOpen, initialRole]);
 
@@ -286,6 +304,82 @@ export default function ForgotPasswordModal({
     }
   };
 
+  // ==============================================================================
+  // LUỒNG HỌC SINH: BƯỚC 1 - TRA CỨU HỌC SINH & PHỤ HUYNH BẢO TRỢ (AC-PW-05)
+  // ==============================================================================
+  const handleStudentLookup = async () => {
+    const cleanUsername = studentUsername.trim();
+    if (!cleanUsername) {
+      setStudentError("Vui lòng nhập Tên tài khoản (Username) của em.");
+      return;
+    }
+
+    setIsStudentLoading(true);
+    setStudentError(null);
+
+    try {
+      const res = await fetch(`${getBackendUrl()}/auth/forgot-password/student-lookup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: cleanUsername,
+          send_notification: false,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        setParentEmailMasked(data.parent_email_masked);
+        setStudentStep(2);
+      } else {
+        setStudentError(
+          data.detail || "Không tìm thấy tài khoản học sinh với tên đăng nhập này."
+        );
+      }
+    } catch {
+      setStudentError("Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại đường truyền mạng.");
+    } finally {
+      setIsStudentLoading(false);
+    }
+  };
+
+  // ==============================================================================
+  // LUỒNG HỌC SINH: BƯỚC 2 - GỬI EMAIL THÔNG BÁO TỚI PHỤ HUYNH (AC-PW-05)
+  // ==============================================================================
+  const handleSendNotificationToParent = async () => {
+    const cleanUsername = studentUsername.trim();
+    if (!cleanUsername) return;
+
+    setIsSendingNotif(true);
+    setStudentError(null);
+
+    try {
+      const res = await fetch(`${getBackendUrl()}/auth/forgot-password/student-lookup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: cleanUsername,
+          send_notification: true,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        setStudentStep(3);
+      } else {
+        setStudentError(
+          data.detail || "Chưa thể gửi email thông báo lúc này. Vui lòng thử lại sau ít phút."
+        );
+      }
+    } catch {
+      setStudentError("Không thể kết nối đến máy chủ để gửi thông báo. Vui lòng thử lại sau.");
+    } finally {
+      setIsSendingNotif(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
       {/* 1. Backdrop mờ nền & Click outside để đóng (AC-PW-01) */}
@@ -329,7 +423,7 @@ export default function ForgotPasswordModal({
         </div>
 
         {/* ── 2 Tab Phân Vai Trò Rõ Ràng (T11.1.6 & AC-PW-01) ── */}
-        {parentStep !== 4 && (
+        {parentStep !== 4 && studentStep !== 3 && (
           <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#F7ECE1]/70 rounded-2xl border border-[#F1CCA6]/60">
             <button
               type="button"
@@ -723,40 +817,167 @@ export default function ForgotPasswordModal({
             </div>
           ) : (
             /* ==============================================================================
-               LUỒNG HỌC SINH (Chuẩn bị sẵn cho Task #371 / T11.1.8)
+               LUỒNG HỌC SINH: 3 BƯỚC (Task #371 / T11.1.8 & AC-PW-05)
             ============================================================================== */
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/70 text-xs text-blue-900 flex items-start gap-2.5">
-                <HelpCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                  Vì học sinh tiểu học & THCS chỉ sử dụng <strong>Tên tài khoản (Username)</strong> để học, hệ thống sẽ giúp em tra cứu và gửi lời nhắn nhờ Bố/Mẹ hỗ trợ đổi mật khẩu.
-                </p>
-              </div>
+            <div className="space-y-4">
+              {/* Thông báo lỗi / cảnh báo luồng học sinh */}
+              {studentError && (
+                <div className="p-3.5 rounded-2xl border border-rose-200 bg-rose-50 text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in duration-200">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                  <p className="font-semibold leading-relaxed flex-1">{studentError}</p>
+                </div>
+              )}
 
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-[#8C4905] mb-1.5">
-                    Tên tài khoản (Username) của em:
-                  </label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-[#C1762A] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Nhập tên đăng nhập của em (VD: nguyenvanan)"
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#F1CCA6] rounded-xl text-xs text-[#1C1917] focus:outline-hidden focus:ring-2 focus:ring-[#C1762A]"
-                      readOnly
-                    />
+              {/* ── BƯỚC 1: Nhập Tên tài khoản (Username) để tra cứu ── */}
+              {studentStep === 1 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/70 text-xs text-blue-900 flex items-start gap-2.5">
+                    <HelpCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <p className="leading-relaxed">
+                      Vì học sinh chỉ sử dụng <strong>Tên tài khoản (Username)</strong> để học bài, hệ thống sẽ giúp em tra cứu địa chỉ email của Bố/Mẹ bảo trợ để nhờ hỗ trợ nhé!
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-[#8C4905] mb-1.5">
+                        Tên tài khoản (Username) của em:
+                      </label>
+                      <div className="relative">
+                        <User className="w-4 h-4 text-[#C1762A] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Nhập tên đăng nhập của em (VD: nguyenvanan)"
+                          value={studentUsername}
+                          onChange={(e) => {
+                            setStudentUsername(e.target.value);
+                            if (studentError) setStudentError(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleStudentLookup();
+                            }
+                          }}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#F1CCA6] rounded-xl text-xs text-[#1C1917] focus:outline-hidden focus:ring-2 focus:ring-[#C1762A]"
+                          disabled={isStudentLoading}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleStudentLookup}
+                      disabled={isStudentLoading || !studentUsername.trim()}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-[#C1762A] hover:from-blue-700 hover:to-[#a76421] text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-98"
+                    >
+                      {isStudentLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Đang tra cứu tài khoản...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Tra cứu tài khoản bảo trợ</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
+              )}
 
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
-                >
-                  <span>Tra cứu tài khoản bảo trợ</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
+              {/* ── BƯỚC 2: Hiển thị email Phụ huynh che mờ & Nút Bắn Email (AC-PW-05) ── */}
+              {studentStep === 2 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="font-extrabold text-[#8C4905]">
+                        Đã tìm thấy tài khoản: <strong className="font-mono">{studentUsername}</strong>
+                      </span>
+                    </div>
+
+                    <p className="leading-relaxed text-zinc-700">
+                      Đừng lo lắng nhé! Tài khoản của em đang được Bố/Mẹ bảo trợ qua địa chỉ email:
+                    </p>
+
+                    <div className="p-3 bg-white border border-[#F1CCA6] rounded-xl font-mono font-extrabold text-center text-sm text-[#8C4905] tracking-wide shadow-2xs">
+                      {parentEmailMasked}
+                    </div>
+
+                    <p className="text-[11px] text-[#78716C] leading-relaxed">
+                      Em hãy nhờ Bố/Mẹ mở ứng dụng SocraticKid (mục <em>"Giám sát con"</em>) để cấp lại mật khẩu mới cho em, hoặc bấm nút dưới đây để hệ thống gửi email nhắc nhở Bố/Mẹ ngay:
+                    </p>
+                  </div>
+
+                  {/* Nút bấm Gửi thông báo tới Bố/Mẹ */}
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={handleSendNotificationToParent}
+                      disabled={isSendingNotif}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-emerald-600 to-[#C1762A] hover:from-emerald-700 hover:to-[#8C4905] text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-98"
+                    >
+                      {isSendingNotif ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Đang gửi email thông báo tới Bố/Mẹ...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" />
+                          <span>Gửi thông báo tới Bố/Mẹ</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStudentStep(1);
+                        setStudentError(null);
+                      }}
+                      className="w-full py-2 text-center text-xs font-bold text-[#8C4905] hover:underline cursor-pointer"
+                    >
+                      Tra cứu tài khoản khác
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── BƯỚC 3: Gửi thông báo thành công (AC-PW-05) ── */}
+              {studentStep === 3 && (
+                <div className="text-center space-y-4 py-4 animate-in zoom-in-95 duration-300">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 shadow-sm">
+                    <CheckCircle2 className="w-10 h-10" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-black text-emerald-900">
+                      Đã Gửi Thông Báo Tới Bố/Mẹ Thành Công!
+                    </h3>
+                    <p className="text-xs text-zinc-600 max-w-sm mx-auto leading-relaxed">
+                      Hệ thống đã gửi một bức thư nhắc nhở về hòm thư của Bố/Mẹ: <strong className="font-mono text-[#8C4905]">{parentEmailMasked}</strong>.
+                    </p>
+                    <p className="text-xs text-zinc-600 max-w-sm mx-auto leading-relaxed">
+                      Em hãy nhắn Bố/Mẹ mở email hoặc vào trang <strong>Giám sát con</strong> trên SocraticKid để cấp lại mật khẩu mới cho em nhé!
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      if (onSwitchToLogin) onSwitchToLogin();
+                    }}
+                    className="inline-flex items-center justify-center gap-2 py-2.5 px-6 bg-[#C1762A] hover:bg-[#8C4905] text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer active:scale-98"
+                  >
+                    <span>Quay lại màn hình đăng nhập</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
