@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   X,
   User,
@@ -21,6 +21,7 @@ import {
   Info,
   Calendar,
   Compass,
+  Zap,
 } from "lucide-react";
 import {
   SystemErrorItem,
@@ -251,6 +252,36 @@ export default function ErrorDetailDrawer({
   const [copiedTrace, setCopiedTrace] = useState<boolean>(false);
   const [copiedPayload, setCopiedPayload] = useState<boolean>(false);
   const [resolveNote, setResolveNote] = useState<string>("");
+  const [isNoteHighlighted, setIsNoteHighlighted] = useState<boolean>(false);
+  const resolveInputRef = useRef<HTMLInputElement>(null);
+
+  // Tự động reset note và trạng thái highlight khi đổi sang xem lỗi khác
+  useEffect(() => {
+    setResolveNote("");
+    setIsNoteHighlighted(false);
+  }, [error?.id]);
+
+  // US 11.2 (Task T11.2.8 & AC-AI-06): Thao tác 1-Click tự động điền ghi chú từ đề xuất AI
+  const handleApplyResolveNote = (note: string) => {
+    setResolveNote(note);
+    setIsNoteHighlighted(true);
+
+    // Focus và cuộn mượt đến ô nhập ghi chú
+    setTimeout(() => {
+      if (resolveInputRef.current) {
+        resolveInputRef.current.focus();
+        resolveInputRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    }, 150);
+
+    // Tự động thu hồi viền sáng nổi bật sau 4 giây
+    setTimeout(() => {
+      setIsNoteHighlighted(false);
+    }, 4000);
+  };
 
   if (!isOpen || !error) return null;
 
@@ -475,13 +506,13 @@ export default function ErrorDetailDrawer({
               )}
             </div>
 
-            {/* US 11.2 (Task T11.2.6 & AC-AI-01): Trợ Lý AI Phân Tích & Đề Xuất Sửa Lỗi */}
+            {/* US 11.2 (Task T11.2.6, T11.2.7, T11.2.8): Trợ Lý AI Phân Tích & Đề Xuất Sửa Lỗi */}
             <AiDiagnosisCard
               error={error}
-              onApplyResolveNote={(note) => setResolveNote(note)}
+              onApplyResolveNote={handleApplyResolveNote}
             />
 
-            {/* Card 6: Thao tác xử lý sự cố (AC 9.5.6) */}
+            {/* Card 6: Thao tác xử lý sự cố (AC 9.5.6 & AC-AI-06) */}
             <div className="pt-4 border-t border-[#C1762A]/20 space-y-3">
               <h3 className="text-xs font-bold text-[#8C4905] uppercase tracking-wider">
                 Thao Tác Xử Lý Sự Cố
@@ -503,24 +534,56 @@ export default function ErrorDetailDrawer({
                   )}
                 </div>
               ) : (
-                <div className="space-y-3 bg-[#F7ECE1]/40 p-4 rounded-xl border border-[#C1762A]/20">
+                <div
+                  className={`space-y-3 p-4 rounded-xl border transition-all duration-300 ${
+                    isNoteHighlighted
+                      ? "bg-emerald-50/50 border-emerald-400 shadow-md ring-2 ring-emerald-200/50"
+                      : "bg-[#F7ECE1]/40 border-[#C1762A]/20"
+                  }`}
+                >
                   <div>
-                    <label className="text-xs font-semibold text-[#1C1917] block mb-1">
-                      Ghi chú cách giải quyết (tùy chọn):
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-[#1C1917] block">
+                        Ghi chú cách giải quyết (tùy chọn):
+                      </label>
+                      {isNoteHighlighted && (
+                        <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          Đã tự động điền từ AI ✓
+                        </span>
+                      )}
+                    </div>
                     <input
+                      ref={resolveInputRef}
                       type="text"
                       placeholder="Ví dụ: Đã sửa chia cho 0 / Đã điều chỉnh timeout Gemini lên 45s..."
                       value={resolveNote}
-                      onChange={(e) => setResolveNote(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-[#C1762A]/30 rounded-lg text-xs focus:outline-hidden focus:ring-2 focus:ring-[#C1762A]"
+                      onChange={(e) => {
+                        setResolveNote(e.target.value);
+                        if (isNoteHighlighted) setIsNoteHighlighted(false);
+                      }}
+                      className={`w-full px-3 py-2.5 rounded-lg text-xs transition-all duration-300 bg-white ${
+                        isNoteHighlighted
+                          ? "border-2 border-emerald-500 ring-4 ring-emerald-200 shadow-xs text-emerald-950 font-medium"
+                          : "border border-[#C1762A]/30 focus:outline-hidden focus:ring-2 focus:ring-[#C1762A]"
+                      }`}
                     />
+                    {isNoteHighlighted && (
+                      <p className="text-[11px] text-emerald-700 font-semibold mt-1.5 flex items-center gap-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <Zap className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        Đề xuất từ AI đã sẵn sàng. Bạn có thể bấm nút màu xanh bên dưới để hoàn tất xử lý ngay!
+                      </p>
+                    )}
                   </div>
 
                   <button
                     onClick={handleActionResolve}
                     disabled={isResolving}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50"
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50 ${
+                      isNoteHighlighted
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white ring-4 ring-emerald-300/60 scale-[1.01] shadow-lg animate-pulse"
+                        : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    }`}
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>{isResolving ? "Đang xử lý..." : "Đánh Dấu Đã Xử Lý (RESOLVED)"}</span>

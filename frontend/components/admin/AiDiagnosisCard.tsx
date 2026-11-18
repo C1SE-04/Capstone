@@ -124,6 +124,7 @@ export default function AiDiagnosisCard({
   const [diagnosis, setDiagnosis] = useState<AiDiagnosisData | null>(
     error.ai_diagnosis || null
   );
+  const [isCached, setIsCached] = useState<boolean>(Boolean(error.ai_diagnosis));
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
@@ -132,13 +133,14 @@ export default function AiDiagnosisCard({
   // Cập nhật khi prop error thay đổi (đổi sang xem lỗi khác)
   useEffect(() => {
     setDiagnosis(error.ai_diagnosis || null);
+    setIsCached(Boolean(error.ai_diagnosis));
     setIsLoading(false);
     setErrorMsg(null);
     setCopiedCode(false);
     setAppliedNote(false);
   }, [error.id, error.ai_diagnosis]);
 
-  // Xử lý gọi API chẩn đoán Gemini AI (có Cache-First & Fallback)
+  // Xử lý gọi API chẩn đoán Gemini AI (có Cache-First & Fallback - AC-AI-07)
   const handleDiagnose = async (forceRefresh: boolean = false) => {
     setIsLoading(true);
     setErrorMsg(null);
@@ -146,7 +148,9 @@ export default function AiDiagnosisCard({
 
     try {
       const backendUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        process.env.NEXT_PUBLIC_BACKEND_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        "http://127.0.0.1:8000";
       const token =
         (typeof window !== "undefined" &&
           (localStorage.getItem("admin_access_token") ||
@@ -172,6 +176,7 @@ export default function AiDiagnosisCard({
           const resJson = await res.json();
           // Hỗ trợ cả 2 dạng: { ai_diagnosis: ... } hoặc trả về trực tiếp
           data = resJson.ai_diagnosis || resJson;
+          setIsCached(Boolean(resJson.cached));
         }
       } catch {
         // Nếu Backend chưa bật hoặc offline trong lúc dev FE, chuyển sang fallback
@@ -183,6 +188,7 @@ export default function AiDiagnosisCard({
         // Giả lập thời gian Gemini phân tích (1.2s) để hiển thị hiệu ứng sóng chờ AC-AI-02
         await new Promise((resolve) => setTimeout(resolve, 1200));
         data = generateFallbackDiagnosis(error);
+        setIsCached(false);
       }
 
       setDiagnosis(data);
@@ -205,12 +211,13 @@ export default function AiDiagnosisCard({
     setTimeout(() => setCopiedCode(false), 2500);
   };
 
+  // US 11.2 (Task T11.2.8 & AC-AI-06): Điền nhanh tóm tắt của AI vào ô ghi chú
   const handleApplyNote = () => {
     if (!diagnosis?.resolution_summary) return;
     if (onApplyResolveNote) {
       onApplyResolveNote(diagnosis.resolution_summary);
       setAppliedNote(true);
-      setTimeout(() => setAppliedNote(false), 3000);
+      setTimeout(() => setAppliedNote(false), 3500);
     }
   };
 
@@ -223,7 +230,7 @@ export default function AiDiagnosisCard({
             <Sparkles className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xs font-black uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
                 Trợ Lý AI Phân Tích & Đề Xuất Sửa Lỗi
               </h3>
@@ -231,6 +238,13 @@ export default function AiDiagnosisCard({
                 <Cpu className="w-3 h-3 text-purple-600" />
                 {diagnosis?.model_used || "Gemini 3.5 Flash"}
               </span>
+              {/* AC-AI-07: Huy hiệu Cache-First từ DB */}
+              {isCached && diagnosis && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                  <Zap className="w-3 h-3 text-emerald-600" />
+                  Cache DB (&lt; 0.05s)
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-zinc-500 mt-0.5">
               Tự động chẩn đoán nguyên nhân cốt lõi (RCA) & sinh đoạn mã sửa mẫu
@@ -243,7 +257,7 @@ export default function AiDiagnosisCard({
           <button
             onClick={() => handleDiagnose(true)}
             className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-purple-700 hover:text-purple-900 hover:bg-purple-100/70 rounded-lg transition-colors cursor-pointer"
-            title="Gọi lại Gemini AI để phân tích lại (bỏ qua cache)"
+            title="Gọi lại Gemini AI để phân tích lại (bỏ qua cache DB)"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Phân tích lại</span>
@@ -441,20 +455,38 @@ export default function AiDiagnosisCard({
             </div>
           )}
 
-          {/* Khối 4: Nút 1-Click "⚡ Điền nhanh vào Ghi chú xử lý" (Task T11.2.8) */}
+          {/* Khối 4: Nút 1-Click "⚡ Điền nhanh vào Ghi chú xử lý" (Task T11.2.8 & AC-AI-06) */}
           {diagnosis.resolution_summary && onApplyResolveNote && (
-            <div className="pt-2 border-t border-purple-100 flex items-center justify-between flex-wrap gap-2">
-              <p className="text-[11px] text-zinc-500 italic max-w-sm">
-                Tóm tắt: {diagnosis.resolution_summary}
-              </p>
+            <div className="pt-3 border-t border-purple-200/60 bg-gradient-to-r from-purple-50/80 via-white to-amber-50/60 p-3.5 rounded-xl border border-purple-100/80 flex items-center justify-between flex-wrap gap-3">
+              <div className="space-y-0.5 flex-1 min-w-[240px]">
+                <span className="text-[10px] font-black text-purple-950 uppercase tracking-wide flex items-center gap-1">
+                  <Zap className="w-3.5 h-3.5 text-amber-600" />
+                  Tóm Tắt Đề Xuất Xử Lý Từ AI:
+                </span>
+                <p className="text-xs text-zinc-700 italic font-medium leading-relaxed">
+                  "{diagnosis.resolution_summary}"
+                </p>
+              </div>
               <button
                 onClick={handleApplyNote}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-[#8C4905] hover:from-amber-600 hover:to-[#743b04] text-white font-bold text-xs rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer"
+                className={`inline-flex items-center gap-2 px-4 py-2 font-extrabold text-xs rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer active:scale-98 ${
+                  appliedNote
+                    ? "bg-emerald-600 text-white ring-2 ring-emerald-300"
+                    : "bg-gradient-to-r from-amber-500 via-[#C1762A] to-[#8C4905] hover:from-amber-600 hover:to-[#743b04] text-white"
+                }`}
+                title="Tự động điền tóm tắt này vào ô ghi chú xử lý bên dưới"
               >
-                <Zap className="w-3.5 h-3.5" />
-                <span>
-                  {appliedNote ? "Đã điền ghi chú ✓" : "⚡ Điền nhanh vào Ghi chú"}
-                </span>
+                {appliedNote ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-white" />
+                    <span>Đã Điền Vào Ghi Chú ✓</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 text-amber-200" />
+                    <span>⚡ Điền Nhanh Vào Ghi Chú</span>
+                  </>
+                )}
               </button>
             </div>
           )}
