@@ -1318,6 +1318,32 @@ class AiDiagnosisData(BaseModel):
         from_attributes = True
 
 
+class AiDiagnoseResponse(BaseModel):
+    """
+    US 11.3 (Task T377): Phản hồi API chẩn đoán lỗi bằng Trợ lý AI.
+    Hỗ trợ cờ cached để phân biệt kết quả lấy từ DB hay vừa gọi Gemini API.
+    """
+    success: bool = True
+    cached: bool = False
+    error_id: str
+    ai_diagnosis: AiDiagnosisData
+    ai_diagnosed_at: Optional[datetime] = None
+
+    @field_validator("ai_diagnosis", mode="before")
+    @classmethod
+    def parse_ai_diagnosis(cls, v):
+        """Đảm bảo chuỗi JSON thô hoặc dict trong DB được parse chuẩn xác."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return {"root_cause": f"Raw analysis: {v}"}
+        return v
+
+    class Config:
+        from_attributes = True
+
+
 class SystemErrorItemResponse(BaseModel):
     """Thông tin chi tiết 1 sự cố hệ thống hoặc báo lỗi người dùng."""
     id: str
