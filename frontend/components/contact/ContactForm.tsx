@@ -14,6 +14,18 @@ import {
   Sparkles,
 } from "lucide-react";
 
+declare global {
+  interface Window {
+    grecaptcha?: {
+      ready: (callback: () => void) => void;
+      execute: (
+        siteKey: string,
+        options: { action: string }
+      ) => Promise<string>;
+    };
+  }
+}
+
 /**
  * File: frontend/components/contact/ContactForm.tsx
  * Sprint 11 - Task T11.5.5: Code Biểu mẫu Liên hệ
@@ -305,40 +317,59 @@ export default function ContactForm() {
     try {
       setIsSubmitting(true);
 
-      // Gửi yêu cầu qua API Backend hoặc Endpoint phản hồi
-      const backendUrl =
-        process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      // ── Tích hợp Google reCAPTCHA v3 ngầm (Invisible) ──
+      let recaptchaToken: string | null = null;
+      const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
 
-      // Đóng gói payload
-      const payload = {
-        fullName: formData.fullName,
-        email: formData.email,
-        category: formData.category,
-        message: formData.message,
-        attachedImagesCount: images.length,
-        submittedAt: new Date().toISOString(),
-      };
-
-      try {
-        await fetch(`${backendUrl}/api/errors/report-user-issue`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            reason: `[Góp ý Form] ${formData.category}: ${formData.fullName}`,
-            detail: formData.message,
-            endpoint: "/contact",
-            client_context: payload,
-          }),
-        });
-      } catch {
-        // Fallback mô phỏng độ trễ tự nhiên nếu Backend local chưa chạy
-        await new Promise((resolve) => setTimeout(resolve, 800));
+      if (siteKey && typeof window !== "undefined" && window.grecaptcha) {
+        try {
+          recaptchaToken = await window.grecaptcha.execute(siteKey, {
+            action: "contact_submit",
+          });
+        } catch (recaptchaErr) {
+          console.warn(
+            "[reCAPTCHA v3] Không thể lấy token từ Google reCAPTCHA, tiếp tục ở chế độ dự phòng:",
+            recaptchaErr
+          );
+        }
+      } else {
+        if (!siteKey) {
+          console.warn(
+            "[reCAPTCHA v3] Biến môi trường NEXT_PUBLIC_RECAPTCHA_SITE_KEY chưa được cấu hình. Cho phép gửi form ở chế độ thử nghiệm nội bộ."
+          );
+        }
       }
 
-      // Giả lập hoàn tất thành công
+      // Đóng gói payload gửi tới POST /api/contact/submit
+      const payload = {
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim(),
+        category: formData.category,
+        message: formData.message.trim(),
+        attachedImagesCount: images.length,
+        submittedAt: new Date().toISOString(),
+        recaptcha_token: recaptchaToken,
+      };
+
+      const res = await fetch("/api/contact/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || "Gửi thông tin không thành công.");
+      }
+
+      // Đánh dấu hoàn tất gửi thành công
       setIsSuccess(true);
-    } catch (err) {
-      showToast("Có lỗi xảy ra trong quá trình gửi. Vui lòng thử lại sau giây lát.");
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : "Có lỗi xảy ra trong quá trình gửi. Vui lòng thử lại sau giây lát.";
+      showToast(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -664,8 +695,26 @@ export default function ContactForm() {
           )}
         </button>
 
-        <p className="text-[11px] text-center text-[#7A3E04]/70 mt-3">
-          Thông tin của bạn được bảo mật tuyệt đối theo Quy chuẩn An toàn Sư phạm SocraticKid.
+        <p className="text-[11px] text-center text-[#7A3E04]/70 mt-3 leading-relaxed">
+          Trang này được bảo vệ bởi reCAPTCHA và tuân theo{" "}
+          <a
+            href="https://policies.google.com/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-[#C1762A] transition-colors"
+          >
+            Chính sách quyền riêng tư
+          </a>{" "}
+          &{" "}
+          <a
+            href="https://policies.google.com/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-[#C1762A] transition-colors"
+          >
+            Điều khoản dịch vụ
+          </a>{" "}
+          của Google.
         </p>
       </div>
     </form>

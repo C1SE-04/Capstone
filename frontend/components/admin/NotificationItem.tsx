@@ -150,7 +150,7 @@ export default function NotificationItem({
     <Link
       href={targetHref}
       onClick={handleClick}
-      className={`block p-3.5 transition-all duration-150 cursor-pointer group border-b border-[#F1CCA6]/40 last:border-b-0 hover:bg-[#F7ECE1]/50 focus:outline-hidden focus:bg-[#F7ECE1]/60 ${
+      className={`block p-3.5 transition-all duration-150 cursor-pointer group border-b border-[#F1CCA6]/40 last:border-b-0 hover:bg-[#F7ECE1]/50 focus:outline-hidden focus:bg-[#F7ECE1]/60 min-h-[44px] ${
         !isRead ? "bg-white" : "bg-gray-50/50"
       } ${className}`}
     >

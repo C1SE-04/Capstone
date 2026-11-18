@@ -9,6 +9,8 @@ import {
   ShieldCheck,
   X,
   Bell,
+  BellOff,
+  Sparkles,
 } from "lucide-react";
 
 import NotificationItem, {
@@ -263,129 +265,180 @@ export default function NotificationDropdown({
   };
 
   return (
-    <div
-      ref={dropdownRef}
-      role="dialog"
-      aria-label="Thông báo sự cố"
-      className="absolute right-0 top-12 w-[360px] sm:w-[410px] bg-white rounded-3xl shadow-2xl border border-[#F1CCA6] z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-    >
-      {/* ── 1. HEADER DROPDOWN ── */}
-      <div className="p-4 border-b border-[#F1CCA6]/60 bg-gradient-to-b from-[#F7ECE1]/60 to-white">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-orange-100/80 border border-[#F1CCA6] flex items-center justify-center text-[#C1762A] shadow-xs">
-              <Bell className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-extrabold text-[#1C1917] text-sm sm:text-base leading-tight">
-                Thông báo sự cố
-              </h3>
-              <p className="text-[11px] text-[#7A3E04] font-medium">
-                Cập nhật tức thời qua Incident Hub
-              </p>
+    <>
+      {/* Backdrop mờ nhẹ trên Mobile (< 640px) chống bấm nhầm */}
+      <div
+        className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-40 sm:hidden animate-in fade-in duration-200"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        ref={dropdownRef}
+        role="dialog"
+        aria-label="Thông báo sự cố"
+        className="fixed inset-x-3 top-16 w-auto max-w-[calc(100vw-24px)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:mt-2 sm:w-[380px] sm:max-w-none bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-[#F1CCA6] z-50 overflow-hidden flex flex-col max-h-[calc(100dvh-5rem)] sm:max-h-[520px] animate-in fade-in zoom-in-95 duration-200"
+      >
+        {/* ── 1. HEADER DROPDOWN ── */}
+        <div className="p-4 border-b border-[#F1CCA6]/60 bg-gradient-to-b from-[#F7ECE1]/60 to-white shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-orange-100/80 border border-[#F1CCA6] flex items-center justify-center text-[#C1762A] shadow-xs shrink-0">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-extrabold text-[#1C1917] text-sm sm:text-base leading-tight truncate">
+                  Thông báo sự cố
+                </h3>
+                <p className="text-[11px] text-[#7A3E04] font-medium truncate">
+                  Cập nhật tức thời qua Incident Hub
+                </p>
+              </div>
+
+              {/* Badge số đếm chưa đọc kèm Pulse Animation */}
+              {unreadCount > 0 && (
+                <span
+                  className="px-2 py-0.5 text-xs font-black rounded-full bg-red-500 text-white leading-none shadow-xs animate-pulse ring-2 ring-red-100 shrink-0"
+                  title={`${unreadCount} thông báo chưa đọc`}
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </div>
 
-            {/* Badge số đếm chưa đọc kèm Pulse Animation */}
-            {unreadCount > 0 && (
-              <span
-                className="px-2 py-0.5 text-xs font-black rounded-full bg-red-500 text-white leading-none shadow-xs animate-pulse ring-2 ring-red-100"
-                title={`${unreadCount} thông báo chưa đọc`}
-              >
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </span>
-            )}
-          </div>
+            <div className="flex items-center gap-1">
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllRead}
+                  className="inline-flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 text-xs font-bold text-[#8C4905] hover:text-[#C1762A] hover:bg-[#F7ECE1]/60 px-2.5 py-1.5 rounded-xl border border-transparent hover:border-[#F1CCA6]/60 transition-all cursor-pointer active:scale-95"
+                  title="Đánh dấu tất cả thông báo là đã đọc"
+                  aria-label="Đánh dấu tất cả đã đọc"
+                >
+                  <CheckCheck className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
+                  <span className="hidden sm:inline">Đọc tất cả</span>
+                </button>
+              )}
 
-          <div className="flex items-center gap-1.5">
-            {unreadCount > 0 && (
               <button
                 type="button"
-                onClick={handleMarkAllRead}
-                className="inline-flex items-center gap-1 text-xs font-bold text-[#8C4905] hover:text-[#C1762A] hover:bg-white/80 px-2 py-1 rounded-lg border border-transparent hover:border-[#F1CCA6]/60 transition-all cursor-pointer active:scale-95"
-                title="Đánh dấu tất cả thông báo là đã đọc"
+                onClick={onClose}
+                className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-2 text-[#7A3E04] hover:text-[#1C1917] hover:bg-[#F7ECE1] rounded-xl transition-colors cursor-pointer flex items-center justify-center"
+                aria-label="Đóng bảng thông báo"
               >
-                <CheckCheck className="w-3.5 h-3.5 text-[#10B981]" />
-                <span className="hidden sm:inline">Đọc tất cả</span>
+                <X className="w-4 h-4" />
               </button>
-            )}
+            </div>
+          </div>
+
+          {/* ── Tab Switcher Segmented Control (T11.3.4) ── */}
+          <div className="flex items-center gap-1.5 p-1 bg-[#F7ECE1]/60 rounded-2xl border border-[#F1CCA6]/60">
+            <button
+              type="button"
+              onClick={() => setActiveTab("all")}
+              className={`flex-1 min-h-[44px] sm:min-h-0 sm:py-1.5 px-3 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] ${
+                activeTab === "all"
+                  ? "bg-[#F7ECE1] text-[#8C4905] shadow-xs border border-[#F1CCA6]"
+                  : "text-[#7A3E04]/70 hover:text-[#1C1917] hover:bg-[#F7ECE1]/40 border border-transparent"
+              }`}
+            >
+              <span>Tất cả</span>
+              <span
+                className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                  activeTab === "all"
+                    ? "bg-[#C1762A]/15 text-[#8C4905]"
+                    : "bg-black/5 text-[#7A3E04]/80"
+                }`}
+              >
+                {items.length}
+              </span>
+            </button>
 
             <button
               type="button"
-              onClick={onClose}
-              className="p-1.5 text-[#7A3E04] hover:text-[#1C1917] hover:bg-[#F7ECE1] rounded-xl transition-colors cursor-pointer"
-              aria-label="Đóng bảng thông báo"
+              onClick={() => setActiveTab("unread")}
+              className={`flex-1 min-h-[44px] sm:min-h-0 sm:py-1.5 px-3 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] ${
+                activeTab === "unread"
+                  ? "bg-[#F7ECE1] text-[#8C4905] shadow-xs border border-[#F1CCA6]"
+                  : "text-[#7A3E04]/70 hover:text-[#1C1917] hover:bg-[#F7ECE1]/40 border border-transparent"
+              }`}
             >
-              <X className="w-4 h-4" />
+              <span>Chưa đọc</span>
+              <span
+                className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                  unreadCount > 0
+                    ? "bg-red-500 text-white"
+                    : activeTab === "unread"
+                      ? "bg-[#C1762A]/15 text-[#8C4905]"
+                      : "bg-black/5 text-[#7A3E04]/80"
+                }`}
+              >
+                {unreadCount}
+              </span>
             </button>
           </div>
         </div>
 
-        {/* Tab Switcher: Tất cả / Chưa đọc */}
-        <div className="flex items-center gap-1 p-1 bg-[#F7ECE1]/70 rounded-2xl border border-[#F1CCA6]/50">
-          <button
-            type="button"
-            onClick={() => setActiveTab("all")}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-              activeTab === "all"
-                ? "bg-white text-[#8C4905] shadow-sm border border-[#F1CCA6]/60"
-                : "text-[#7A3E04] hover:text-[#1C1917]"
-            }`}
+        {/* ── 2. SCROLLABLE BODY VỚI NOTIFICATION ITEMS (Task T11.3.2 & T11.3.4) ── */}
+        <div className="flex-1 overflow-y-auto divide-y divide-[#F1CCA6]/30">
+          {filteredItems.length === 0 ? (
+            // Empty State thân thiện & ấm áp (Task T11.3.4)
+            <div className="py-12 px-6 text-center flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-200">
+              <div className="relative mb-3.5">
+                <div
+                  className={`w-16 h-16 rounded-full flex items-center justify-center shadow-xs border ${
+                    activeTab === "all"
+                      ? "bg-[#ECFDF5] border-[#10B981]/25 text-[#10B981]"
+                      : "bg-[#F7ECE1] border-[#F1CCA6] text-[#C1762A]"
+                  }`}
+                >
+                  {activeTab === "all" ? (
+                    <ShieldCheck className="w-8 h-8 stroke-[1.8]" />
+                  ) : (
+                    <BellOff className="w-8 h-8 stroke-[1.8]" />
+                  )}
+                </div>
+                <Sparkles
+                  className={`w-4 h-4 absolute -top-1 -right-1 animate-pulse ${
+                    activeTab === "all" ? "text-[#10B981]" : "text-[#C1762A]"
+                  }`}
+                />
+              </div>
+
+              <h4 className="text-sm sm:text-base font-extrabold text-[#1C1917] mb-1.5">
+                {activeTab === "all"
+                  ? "Hệ thống đang an toàn!"
+                  : "Bạn đã xem hết thông báo!"}
+              </h4>
+              <p className="text-xs sm:text-sm text-[#7A3E04] max-w-[270px] mx-auto leading-relaxed">
+                {activeTab === "all"
+                  ? "Chưa có sự cố hay phản ánh nào từ học sinh cần xử lý."
+                  : "Tuyệt vời, không còn sự cố nào bị bỏ sót."}
+              </p>
+            </div>
+          ) : (
+            filteredItems.map((item) => (
+              <NotificationItem
+                key={item.id}
+                notification={item}
+                onClick={handleItemClick}
+              />
+            ))
+          )}
+        </div>
+
+        {/* ── 3. FOOTER ĐIỀU HƯỚNG QUẢN TRỊ ── */}
+        <div className="p-3 bg-[#F7ECE1]/50 border-t border-[#F1CCA6]/60 text-center shrink-0">
+          <Link
+            href="/admin/errors"
+            onClick={onClose}
+            className="inline-flex items-center justify-center gap-2 w-full min-h-[44px] sm:min-h-0 py-2.5 sm:py-2 px-3 text-xs font-bold text-[#8C4905] hover:text-[#C1762A] hover:bg-white rounded-xl transition-all border border-transparent hover:border-[#F1CCA6]/60 shadow-2xs group cursor-pointer"
           >
-            Tất cả ({items.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("unread")}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-              activeTab === "unread"
-                ? "bg-white text-[#8C4905] shadow-sm border border-[#F1CCA6]/60"
-                : "text-[#7A3E04] hover:text-[#1C1917]"
-            }`}
-          >
-            Chưa đọc ({unreadCount})
-          </button>
+            <span>Xem chi tiết tại Trung tâm Sự cố (Incident Hub)</span>
+            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+          </Link>
         </div>
       </div>
-
-      {/* ── 2. SCROLLABLE BODY VỚI NOTIFICATION ITEMS (Task T11.3.2) ── */}
-      <div className="max-h-[380px] overflow-y-auto divide-y divide-[#F1CCA6]/30">
-        {filteredItems.length === 0 ? (
-          // Empty State thân thiện
-          <div className="py-12 px-6 text-center flex flex-col items-center justify-center">
-            <div className="w-14 h-14 rounded-2xl bg-[#ECFDF5] border border-[#10B981]/30 flex items-center justify-center text-[#10B981] mb-3 shadow-xs">
-              <ShieldCheck className="w-7 h-7" />
-            </div>
-            <h4 className="text-sm font-bold text-[#1C1917] mb-1">
-              Hệ thống hoạt động ổn định!
-            </h4>
-            <p className="text-xs text-[#7A3E04] max-w-[260px] leading-relaxed">
-              {activeTab === "unread"
-                ? "Tuyệt vời! Bạn đã đọc hết tất cả thông báo sự cố trong danh sách."
-                : "Hiện không có sự cố nào được ghi nhận gần đây."}
-            </p>
-          </div>
-        ) : (
-          filteredItems.map((item) => (
-            <NotificationItem
-              key={item.id}
-              notification={item}
-              onClick={handleItemClick}
-            />
-          ))
-        )}
-      </div>
-
-      {/* ── 3. FOOTER ĐIỀU HƯỚNG QUẢN TRỊ ── */}
-      <div className="p-3 bg-[#F7ECE1]/50 border-t border-[#F1CCA6]/60 text-center">
-        <Link
-          href="/admin/errors"
-          onClick={onClose}
-          className="inline-flex items-center justify-center gap-2 w-full py-2 px-3 text-xs font-bold text-[#8C4905] hover:text-[#C1762A] hover:bg-white rounded-xl transition-all border border-transparent hover:border-[#F1CCA6]/60 shadow-2xs group cursor-pointer"
-        >
-          <span>Xem chi tiết tại Trung tâm Sự cố (Incident Hub)</span>
-          <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-        </Link>
-      </div>
-    </div>
+    </>
   );
 }
