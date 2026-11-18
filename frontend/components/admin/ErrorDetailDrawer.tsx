@@ -28,6 +28,7 @@ import {
   SystemErrorType,
   SystemErrorStatus,
 } from "@/types/admin";
+import AiDiagnosisCard from "./AiDiagnosisCard";
 
 interface ErrorDetailDrawerProps {
   error: SystemErrorItem | null;
@@ -473,6 +474,12 @@ export default function ErrorDetailDrawer({
                 </div>
               )}
             </div>
+
+            {/* US 11.2 (Task T11.2.6 & AC-AI-01): Trợ Lý AI Phân Tích & Đề Xuất Sửa Lỗi */}
+            <AiDiagnosisCard
+              error={error}
+              onApplyResolveNote={(note) => setResolveNote(note)}
+            />
 
             {/* Card 6: Thao tác xử lý sự cố (AC 9.5.6) */}
             <div className="pt-4 border-t border-[#C1762A]/20 space-y-3">

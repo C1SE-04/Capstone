@@ -181,7 +181,7 @@ const INITIAL_CURATED_MODELS: ModelOption[] = [
     display_name: "Gemini 3.5 Flash",
     description: "Cân bằng hoàn hảo tốc độ và phân tích tổng hợp lịch sử học tập dài hạn",
     speed: "Rất nhanh (~0.4s)",
-    recommended_for: "Báo Cáo Phụ Huynh (parent_insight_model)",
+    recommended_for: "Báo Cáo Phụ Huynh & Chẩn Đoán Lỗi RCA (parent_insight_model)",
   },
   {
     id: "gemini-3.1-flash-lite",
@@ -190,22 +190,6 @@ const INITIAL_CURATED_MODELS: ModelOption[] = [
     description: "Tiết kiệm chi phí token tới 60%, phản hồi tức thì cho phân loại SGK",
     speed: "Tức thì (~0.15s)",
     recommended_for: "Phân Loại SGK & Email (classifier_model, email_model)",
-  },
-  {
-    id: "gemini-3.5-flash-lite",
-    name: "gemini-3.5-flash-lite",
-    display_name: "Gemini 3.5 Flash-Lite",
-    description: "Trọng lượng nhẹ, ổn định cao, tối ưu rút trích thẻ ghi nhớ & dự phòng",
-    speed: "Cực nhanh (~0.2s)",
-    recommended_for: "Flashcard & Dự Phòng (flashcard_model, backup_model)",
-  },
-  {
-    id: "gemini-2.5-flash",
-    name: "gemini-2.5-flash",
-    display_name: "Gemini 2.5 Flash (LTS)",
-    description: "Phiên bản ổn định cao, nhận diện hình học và chữ viết tay học sinh",
-    speed: "Rất nhanh (~0.35s)",
-    recommended_for: "Dự phòng phụ",
   },
 ];
 

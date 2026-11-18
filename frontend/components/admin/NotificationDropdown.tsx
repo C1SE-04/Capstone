@@ -25,6 +25,7 @@ import {
 import { SystemErrorItem, SystemErrorsListResponse } from "@/types/admin";
 
 export type { NotificationSeverity, NotificationItemData };
+export type NotificationItem = NotificationItemData;
 
 interface NotificationDropdownProps {
   isOpen: boolean;
