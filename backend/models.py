@@ -578,7 +578,7 @@ class EmailOtp(Base):
     # Mã OTP 6 chữ số (lưu dạng plain string — OTP ngắn hạn, không cần hash)
     otp_code = Column(String(6), nullable=False)
 
-    # Mục đích của OTP: "PARENT_REGISTER" | "PARENT_CHANGE_EMAIL"
+    # Mục đích của OTP: "PARENT_REGISTER" | "PARENT_CHANGE_EMAIL" | "PARENT_RESET_PASSWORD"
     purpose = Column(String, nullable=False, default="PARENT_REGISTER")
 
     # Số lần nhập sai mã (>= 5 → mã bị vô hiệu hóa)
