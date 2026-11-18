@@ -22,6 +22,7 @@ from database import get_db
 import models
 import schemas
 import dependencies
+from services.error_diagnosis_service import ErrorDiagnosisService
 
 router = APIRouter(tags=["Admin System Errors & Incident Hub"])
 
@@ -321,3 +322,87 @@ def resolve_system_error(
     db.refresh(record)
 
     return _map_system_error_response(record)
+
+
+# ==============================================================================
+# 3. API Trợ Lý AI Chẩn Đoán Lỗi Hệ Thống (AI Root Cause Analysis - US 11.3)
+# ==============================================================================
+
+@router.post(
+    "/admin/errors/{error_id}/ai-diagnose",
+    response_model=schemas.AiDiagnoseResponse,
+)
+@router.post(
+    "/api/admin/errors/{error_id}/ai-diagnose",
+    response_model=schemas.AiDiagnoseResponse,
+)
+def diagnose_system_error_with_ai(
+    error_id: str,
+    force_refresh: bool = Query(
+        False,
+        description="Bắt buộc chẩn đoán lại bằng AI, bỏ qua kết quả đã lưu trong DB",
+    ),
+    current_user: dict = Depends(dependencies.require_role(["ADMIN"])),
+    db: Session = Depends(get_db),
+):
+    """
+    US 11.3 - Task T377 & AC-AI-07:
+    API Trợ lý AI Chẩn đoán lỗi hệ thống & phân tích nguyên nhân gốc rễ (RCA):
+      - Cache-First: Nếu đã từng phân tích và force_refresh=False, trả về ngay từ DB (< 0.05s).
+      - On-Demand RCA: Nếu chưa phân tích hoặc force_refresh=True, gọi ErrorDiagnosisService.
+      - Persistence: Lưu kết quả phân tích vào cột ai_diagnosis và ai_diagnosed_at trong DB Neon.
+      - Zero Duplicate Cost: Không tiêu tốn thêm token khi mở xem lại lỗi cũ.
+    """
+    # 1. Tra cứu sự cố trong DB
+    record = db.query(models.SystemError).filter(models.SystemError.id == error_id).first()
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy thông tin sự cố với mã ID này.",
+        )
+
+    # 2. Cơ chế Cache-First (AC-AI-07): Kiểm tra dữ liệu đã cache trong DB
+    if record.ai_diagnosis and not force_refresh:
+        return schemas.AiDiagnoseResponse(
+            success=True,
+            cached=True,
+            error_id=record.id,
+            ai_diagnosis=record.ai_diagnosis,
+            ai_diagnosed_at=record.ai_diagnosed_at,
+        )
+
+    # 3. Kích hoạt Trợ lý AI phân tích sự cố (T376 Service)
+    service = ErrorDiagnosisService(db=db)
+    diagnosis_result = service.diagnose_error(record)
+
+    # 4. Lưu trữ kết quả phân tích vào DB (Database Persistence)
+    diag_dict = (
+        diagnosis_result.model_dump()
+        if hasattr(diagnosis_result, "model_dump")
+        else diagnosis_result.dict()
+    )
+    now = datetime.now(timezone.utc)
+    record.ai_diagnosis = diag_dict
+    record.ai_diagnosed_at = now
+
+    try:
+        db.commit()
+        db.refresh(record)
+    except Exception:
+        db.rollback()
+        # Vẫn trả về kết quả chẩn đoán cho Admin ngay cả khi DB gặp sự cố ghi tạm thời
+        return schemas.AiDiagnoseResponse(
+            success=True,
+            cached=False,
+            error_id=record.id,
+            ai_diagnosis=diagnosis_result,
+            ai_diagnosed_at=now,
+        )
+
+    return schemas.AiDiagnoseResponse(
+        success=True,
+        cached=False,
+        error_id=record.id,
+        ai_diagnosis=record.ai_diagnosis,
+        ai_diagnosed_at=record.ai_diagnosed_at,
+    )
