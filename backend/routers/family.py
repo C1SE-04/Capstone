@@ -222,6 +222,25 @@ def remove_student_link(
     return {"message": "Đã hủy liên kết thành công"}
 
 
+@router.post("/students/{student_id}/reset-password", response_model=schemas.ParentResetStudentPasswordResponse)
+def family_reset_student_password(
+    student_id: str,
+    payload: schemas.ParentResetStudentPasswordInput,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    US 11.2 (Task 3): API Phụ huynh cấp lại mật khẩu cho con (alias /family/students/{student_id}/reset-password).
+    """
+    from routers.auth import parent_reset_student_password
+    return parent_reset_student_password(
+        student_id=student_id,
+        payload=payload,
+        current_user=current_user,
+        db=db,
+    )
+
+
 # US 5.2: GET /family/students/{student_id}/metrics
 # Tối ưu: dùng COUNT + GROUP BY ngay tại DB, tránh N+1, tận dụng index thời gian
 @router.get("/students/{student_id}/metrics", response_model=schemas.StudentMetricsResponse)

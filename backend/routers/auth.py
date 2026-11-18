@@ -9,7 +9,7 @@ from sqlalchemy import func, or_
 from fastapi.security import OAuth2PasswordRequestForm
 import redis.asyncio as aioredis
 from redis_client import get_redis
-from services.rate_limiter_service import RateLimiterService
+from services.rate_limiter_service import RateLimiterService, _fallback_memory_limiter
 
 import models, schemas, auth, dependencies
 from database import get_db
@@ -265,6 +265,7 @@ def register_monitor(user_data: schemas.AuthInput, db: Session = Depends(get_db)
 from sqlalchemy import func
 
 @router.post("/login", response_model=schemas.TokenResponse)
+@router.post("/auth/login", response_model=schemas.TokenResponse)
 async def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -808,6 +809,459 @@ def request_forgot_password_otp(
         "email": normalized_email,
         "rate_limit_seconds": OTP_RATE_LIMIT_SECONDS,
     }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 11.2: Các hàm tiện ích cho Forgot Password & Mask Email
+# ────────────────────────────────────────────────────────────────────────────
+
+OTP_LOCKOUT_SECONDS = 900             # Khóa tạm 15 phút sau 5 lần nhập sai OTP (US 11.2 Note)
+STUDENT_NOTIF_COOLDOWN_SECONDS = 60  # Cooldown 60s khi gửi thông báo tới phụ huynh
+
+
+def mask_email(email: str | None) -> str:
+    """
+    Che mờ email theo chuẩn US 11.2 (ví dụ: ng***@gmail.com, a***@gmail.com).
+    """
+    if not email or "@" not in email:
+        return email or ""
+    local_part, domain = email.split("@", 1)
+    if len(local_part) <= 1:
+        masked_local = f"{local_part}***"
+    elif len(local_part) == 2:
+        masked_local = f"{local_part[0]}***"
+    else:
+        masked_local = f"{local_part[:2]}***"
+    return f"{masked_local}@{domain}"
+
+
+async def _check_otp_lockout(email: str) -> None:
+    """Kiểm tra tài khoản có đang bị khóa tạm thời 15 phút do nhập sai OTP 5 lần không."""
+    lockout_key = f"auth:otp_lockout:{email}"
+    try:
+        redis_client = await get_redis()
+        if redis_client:
+            ttl = await redis_client.ttl(lockout_key)
+            if ttl > 0:
+                minutes_left = max(1, ttl // 60)
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=f"Tài khoản đang bị tạm khóa xác thực OTP do nhập sai quá 5 lần. Vui lòng thử lại sau {minutes_left} phút."
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    ram_ttl = _fallback_memory_limiter.get_lockout(lockout_key)
+    if ram_ttl is not None and ram_ttl > 0:
+        minutes_left = max(1, ram_ttl // 60)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Tài khoản đang bị tạm khóa xác thực OTP do nhập sai quá 5 lần. Vui lòng thử lại sau {minutes_left} phút."
+        )
+
+
+async def _set_otp_lockout(email: str, duration_seconds: int = OTP_LOCKOUT_SECONDS) -> None:
+    """Kích hoạt khóa tạm thời 15 phút khi nhập sai OTP đủ 5 lần."""
+    lockout_key = f"auth:otp_lockout:{email}"
+    try:
+        redis_client = await get_redis()
+        if redis_client:
+            await redis_client.set(lockout_key, "1", ex=duration_seconds)
+    except Exception:
+        pass
+    _fallback_memory_limiter.set_lockout(lockout_key, duration_seconds)
+
+
+async def _clear_otp_lockout(email: str) -> None:
+    """Xóa khóa tạm thời sau khi đổi mật khẩu thành công."""
+    lockout_key = f"auth:otp_lockout:{email}"
+    try:
+        redis_client = await get_redis()
+        if redis_client:
+            await redis_client.delete(lockout_key)
+    except Exception:
+        pass
+    _fallback_memory_limiter.clear_key(lockout_key)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 11.2 (Task 1): API Xác thực OTP & Đổi mật khẩu Phụ huynh
+# ────────────────────────────────────────────────────────────────────────────
+
+@router.post("/auth/forgot-password/verify-and-reset", response_model=schemas.ForgotPasswordResetResponse)
+@router.post("/forgot-password/verify-and-reset", response_model=schemas.ForgotPasswordResetResponse)
+async def forgot_password_verify_and_reset(
+    payload: schemas.ForgotPasswordVerifyAndResetInput,
+    db: Session = Depends(get_db),
+):
+    """
+    US 11.2 - API xác thực OTP & Đổi mật khẩu cho Phụ huynh:
+    1. Kiểm tra khóa chống brute-force (khóa tạm 15 phút sau 5 lần nhập sai).
+    2. Kiểm tra email và tài khoản phụ huynh trong hệ thống.
+    3. Chặn tài khoản Google (hướng dẫn dùng Google Auth).
+    4. Kiểm tra OTP: tối đa 5 lần thử; băm bcrypt mật khẩu mới.
+    5. Tăng session_version và thu hồi refresh token để đăng xuất các thiết bị cũ (AC4).
+    """
+    normalized_email = payload.email.lower().strip()
+
+    # 1. Kiểm tra xem tài khoản có đang bị khóa 15 phút không
+    await _check_otp_lockout(normalized_email)
+
+    # 2. Tra cứu người dùng
+    user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.email) == normalized_email)
+        .first()
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email này chưa được đăng ký trong hệ thống."
+        )
+
+    # 3. Chặn tài khoản Google (AC3)
+    is_google_account = (
+        user.oauth_provider == "google"
+        or getattr(user, "google_id", None) is not None
+        or not user.hashed_password
+    )
+    if is_google_account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tài khoản này dùng đăng nhập Google, vui lòng bấm nút 'Đăng nhập bằng Google' ngoài màn hình chính."
+        )
+
+    # 4. Phân tách vai trò
+    if user.role == "STUDENT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tài khoản học sinh không đặt lại mật khẩu bằng email. Vui lòng nhờ Phụ huynh cấp lại mật khẩu trong trang Giám sát."
+        )
+
+    # 5. Kiểm tra mật khẩu mới
+    new_password = payload.new_password.strip() if payload.new_password else ""
+    if len(new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mật khẩu mới phải có ít nhất 6 ký tự."
+        )
+
+    # 6. Tìm mã OTP hợp lệ
+    now = datetime.now(timezone.utc)
+    otp_record = (
+        db.query(models.EmailOtp)
+        .filter(
+            models.EmailOtp.email == normalized_email,
+            models.EmailOtp.purpose == "PARENT_RESET_PASSWORD",
+            models.EmailOtp.is_used.is_(False),
+            models.EmailOtp.expires_at > now,
+        )
+        .order_by(models.EmailOtp.created_at.desc())
+        .first()
+    )
+
+    if not otp_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mã OTP không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu gửi lại mã mới."
+        )
+
+    # 7. Kiểm tra số lần nhập sai trên mã OTP này
+    if otp_record.attempts >= OTP_MAX_ATTEMPTS:
+        otp_record.is_used = True
+        db.commit()
+        await _set_otp_lockout(normalized_email)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 15 phút."
+        )
+
+    # 8. Xác thực mã OTP
+    if otp_record.otp_code != payload.otp_code.strip():
+        otp_record.attempts += 1
+        db.commit()
+        remaining = OTP_MAX_ATTEMPTS - otp_record.attempts
+        if remaining <= 0:
+            otp_record.is_used = True
+            db.commit()
+            await _set_otp_lockout(normalized_email)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 15 phút."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Mã OTP không đúng. Bạn còn {remaining} lần thử."
+        )
+
+    # 9. Mã đúng: Đánh dấu đã dùng
+    otp_record.is_used = True
+
+    # 10. Băm mật khẩu mới bằng bcrypt và cập nhật user
+    user.hashed_password = auth.hash_password(new_password)
+
+    # 11. Tăng session_version để tự động đăng xuất các máy cũ (AC4)
+    user.session_version = (user.session_version or 1) + 1
+
+    # 12. Thu hồi toàn bộ refresh token cũ của user
+    db.query(models.RefreshToken).filter(
+        models.RefreshToken.user_id == user.id,
+        models.RefreshToken.revoked.is_(False)
+    ).update({"revoked": True})
+
+    db.commit()
+
+    # 13. Xóa cờ khóa tạm (nếu có)
+    await _clear_otp_lockout(normalized_email)
+
+    return schemas.ForgotPasswordResetResponse(
+        success=True,
+        message="Đổi mật khẩu thành công. Các phiên đăng nhập trên thiết bị cũ đã được đăng xuất. Vui lòng đăng nhập lại bằng mật khẩu mới."
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 11.2 (Task 2): API Tra cứu học sinh & Gửi email thông báo cho Phụ huynh
+# ────────────────────────────────────────────────────────────────────────────
+
+@router.post("/auth/forgot-password/student-lookup", response_model=schemas.StudentLookupResponse)
+@router.post("/forgot-password/student-lookup", response_model=schemas.StudentLookupResponse)
+async def student_lookup_forgot_password(
+    payload: schemas.StudentLookupInput,
+    db: Session = Depends(get_db),
+):
+    """
+    US 11.2 - API tra cứu học sinh & Gửi email thông báo phụ huynh:
+    1. Học sinh nhập tên tài khoản -> tra cứu hệ thống.
+    2. Tra cứu liên kết bảo trợ gia đình (parent_student_links).
+    3. Trả về email phụ huynh che mờ (ví dụ: ng***@gmail.com, a***@gmail.com) theo AC5.
+    4. Nếu send_notification=True -> gửi email thông báo nhắc nhở phụ huynh cấp mật khẩu kèm giới hạn 60s.
+    """
+    clean_username = payload.username.strip()
+    if not clean_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vui lòng nhập tên tài khoản học sinh."
+        )
+
+    # 1. Tra cứu tài khoản học sinh
+    student = (
+        db.query(models.User)
+        .filter(func.lower(models.User.username) == clean_username.lower())
+        .first()
+    )
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy tài khoản học sinh với tên đăng nhập này."
+        )
+
+    if student.role != "STUDENT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tên tài khoản này không thuộc về học sinh. Nếu bạn là Phụ huynh, vui lòng chọn tab 'Phụ huynh' để khôi phục mật khẩu bằng email."
+        )
+
+    # 2. Tra cứu liên kết bảo trợ gia đình
+    link = (
+        db.query(models.ParentStudentLink)
+        .filter(models.ParentStudentLink.student_id == student.id)
+        .first()
+    )
+    if not link:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tài khoản học sinh này chưa được liên kết với tài khoản Phụ huynh nào. Bé hãy nhờ Bố/Mẹ vào tài khoản Phụ huynh để kết nối nhé."
+        )
+
+    # 3. Tra cứu thông tin phụ huynh bảo trợ
+    parent = db.query(models.User).filter(models.User.id == link.parent_id).first()
+    if not parent or not parent.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phụ huynh bảo trợ chưa cập nhật địa chỉ email nhận thông báo trong hệ thống."
+        )
+
+    masked_parent_email = mask_email(parent.email)
+
+    # 4. Nếu chưa yêu cầu gửi email thông báo -> chỉ trả về thông tin tra cứu
+    if not payload.send_notification:
+        return schemas.StudentLookupResponse(
+            success=True,
+            student_username=student.username or clean_username,
+            parent_email_masked=masked_parent_email,
+            notification_sent=False,
+            message="Đã tìm thấy tài khoản học sinh. Bạn có thể bấm 'Gửi thông báo tới Bố/Mẹ' để gửi email nhắc nhở."
+        )
+
+    # 5. Nếu yêu cầu gửi email thông báo -> kiểm tra giới hạn 60s chống spam
+    cooldown_key = f"notif:student_reset:{student.id}"
+    try:
+        redis_client = await get_redis()
+        if redis_client:
+            ttl = await redis_client.ttl(cooldown_key)
+            if ttl > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=f"Thông báo đã được gửi tới Phụ huynh cách đây ít phút. Vui lòng đợi {ttl} giây trước khi gửi lại."
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    ram_ttl = _fallback_memory_limiter.get_lockout(cooldown_key)
+    if ram_ttl is not None and ram_ttl > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Thông báo đã được gửi tới Phụ huynh cách đây ít phút. Vui lòng đợi {ram_ttl} giây trước khi gửi lại."
+        )
+
+    # 6. Gửi email thông báo nhắc nhở phụ huynh qua Brevo SMTP
+    subject = f"[SocraticKid] Bé {student.username} cần Bố/Mẹ cấp lại mật khẩu"
+    text_content = (
+        f"Kính gửi Quý phụ huynh,\n\n"
+        f"Bé nhà mình có tài khoản là '{student.username}' vừa gửi yêu cầu hỗ trợ cấp lại mật khẩu đăng nhập trên nền tảng SocraticKid.\n\n"
+        f"Để cấp lại mật khẩu cho con, Quý phụ huynh vui lòng thực hiện theo các bước sau:\n"
+        f"1. Đăng nhập vào SocraticKid bằng tài khoản Phụ huynh ({parent.email}).\n"
+        f"2. Truy cập trang Giám sát con (/dashboard/monitor).\n"
+        f"3. Tại thẻ của bé '{student.username}', bấm nút '🔑 Cấp lại mật khẩu' để nhập mật khẩu mới cho con.\n\n"
+        f"Sau khi lưu, bé có thể sử dụng mật khẩu mới này để đăng nhập ngay lập tức.\n"
+        f"Nếu không phải bé nhà mình yêu cầu, Quý phụ huynh có thể bỏ qua thông báo này.\n\n"
+        f"Trân trọng,\nĐội ngũ SocraticKid"
+    )
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px;">
+        <h2 style="color: #2b6cb0; margin-top: 0;">SocraticKid - Nhắc Nhở Cấp Mật Khẩu Cho Con</h2>
+        <p>Kính gửi Quý phụ huynh,</p>
+        <p>Bé nhà mình với tên tài khoản <strong>{student.username}</strong> vừa gửi yêu cầu hỗ trợ cấp lại mật khẩu đăng nhập trên nền tảng <strong>SocraticKid</strong>.</p>
+        <div style="background-color: #f7fafc; border-left: 4px solid #3182ce; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; font-weight: bold; color: #2d3748;">Hướng dẫn cấp lại mật khẩu cho con:</p>
+            <ol style="margin: 8px 0 0 0; padding-left: 20px;">
+                <li>Đăng nhập tài khoản Phụ huynh trên SocraticKid.</li>
+                <li>Truy cập trang <strong>Giám sát con</strong> (<code>/dashboard/monitor</code>).</li>
+                <li>Tại thẻ của bé <strong>{student.username}</strong>, nhấn nút <strong>🔑 Cấp lại mật khẩu</strong>.</li>
+                <li>Nhập mật khẩu mới và bấm Lưu để bé đăng nhập ngay lập tức.</li>
+            </ol>
+        </div>
+        <p style="color: #718096; font-size: 13px;">Nếu không phải bé nhà mình yêu cầu, Quý phụ huynh có thể yên tâm bỏ qua email này.</p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+        <p style="color: #a0aec0; font-size: 12px; margin: 0;">Email tự động từ hệ thống SocraticKid. Vui lòng không trả lời thư này.</p>
+    </div>
+    """
+
+    send_email(
+        to_email=parent.email,
+        subject=subject,
+        text_content=text_content,
+        html_content=html_content,
+        category="PARENT_RESET_NOTIFICATION"
+    )
+
+    # 7. Kích hoạt giới hạn cooldown 60s
+    try:
+        redis_client = await get_redis()
+        if redis_client:
+            await redis_client.set(cooldown_key, "1", ex=STUDENT_NOTIF_COOLDOWN_SECONDS)
+    except Exception:
+        pass
+    _fallback_memory_limiter.set_lockout(cooldown_key, STUDENT_NOTIF_COOLDOWN_SECONDS)
+
+    return schemas.StudentLookupResponse(
+        success=True,
+        student_username=student.username or clean_username,
+        parent_email_masked=masked_parent_email,
+        notification_sent=True,
+        message=f"Đã gửi email thông báo nhắc nhở tới Bố/Mẹ ({masked_parent_email}). Bé hãy báo Bố/Mẹ kiểm tra hòm thư nhé!"
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 11.2 (Task 3): API Phụ huynh cấp lại mật khẩu cho con
+# ────────────────────────────────────────────────────────────────────────────
+
+@router.post("/parent/students/{student_id}/reset-password", response_model=schemas.ParentResetStudentPasswordResponse)
+@router.post("/family/students/{student_id}/reset-password", response_model=schemas.ParentResetStudentPasswordResponse)
+def parent_reset_student_password(
+    student_id: str,
+    payload: schemas.ParentResetStudentPasswordInput,
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    US 11.2 - API Phụ huynh cấp lại mật khẩu cho con:
+    1. Kiểm tra vai trò phụ huynh (MONITOR/PARENT) hoặc Quản trị viên (ADMIN).
+    2. Kiểm tra quyền giám hộ chặt chẽ (AC7): Phụ huynh chỉ được đổi mật khẩu cho đúng con của mình qua parent_student_links.
+    3. Cập nhật mật khẩu mới cho học sinh ngay lập tức (AC6).
+    4. Tăng session_version và thu hồi refresh token của học sinh để bảo mật.
+    """
+    user_role = current_user.get("role")
+    if user_role not in ["MONITOR", "PARENT", "ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ phụ huynh mới có quyền cấp lại mật khẩu cho học sinh."
+        )
+
+    # Kiểm tra quyền giám hộ chặt chẽ ngăn phụ huynh can thiệp tài khoản con nhà khác (AC7)
+    if user_role != "ADMIN":
+        link = (
+            db.query(models.ParentStudentLink)
+            .filter(
+                models.ParentStudentLink.parent_id == current_user["id"],
+                models.ParentStudentLink.student_id == student_id
+            )
+            .first()
+        )
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Bạn không có quyền quản lý hoặc đổi mật khẩu cho học sinh này."
+            )
+
+    # Tra cứu học sinh
+    student = db.query(models.User).filter(models.User.id == student_id).first()
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy tài khoản học sinh."
+        )
+
+    if student.role != "STUDENT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tài khoản đích không phải là tài khoản học sinh."
+        )
+
+    # Kiểm tra mật khẩu mới
+    new_password = payload.new_password.strip() if payload.new_password else ""
+    if len(new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mật khẩu mới phải có ít nhất 6 ký tự."
+        )
+
+    # Cập nhật mật khẩu băm bcrypt
+    student.hashed_password = auth.hash_password(new_password)
+
+    # Tăng session_version của học sinh để tự động vô hiệu hóa phiên cũ
+    student.session_version = (student.session_version or 1) + 1
+
+    # Thu hồi refresh tokens cũ của học sinh
+    db.query(models.RefreshToken).filter(
+        models.RefreshToken.user_id == student.id,
+        models.RefreshToken.revoked.is_(False)
+    ).update({"revoked": True})
+
+    db.commit()
+
+    return schemas.ParentResetStudentPasswordResponse(
+        success=True,
+        message=f"Cấp lại mật khẩu cho học sinh '{student.username or student.id}' thành công. Học sinh có thể dùng mật khẩu mới đăng nhập ngay lập tức.",
+        student_id=student.id,
+        student_username=student.username,
+    )
 
 
 @router.post("/auth/verify-otp", response_model=schemas.OtpVerifyResponse)
