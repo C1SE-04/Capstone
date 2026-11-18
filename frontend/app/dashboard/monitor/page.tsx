@@ -17,7 +17,8 @@ import { AIInsightsCard } from "@/components/monitor/AIInsightsCard";
 import { TimeRangeFilter, TimeRange } from "@/components/monitor/TimeRangeFilter";
 import { IndependenceChart, IndependencePoint } from "@/components/monitor/IndependenceChart";
 import { ChildProblemHistory } from "@/components/monitor/ChildProblemHistory";
-import { UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import ResetStudentPasswordModal from "@/components/monitor/ResetStudentPasswordModal";
+import { UserPlus, ChevronLeft, ChevronRight, KeyRound } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -67,6 +68,9 @@ export default function MonitorPage() {
 
   // State bộ lọc thời gian (T6.8: 7 ngày / 30 ngày)
   const [timeRange, setTimeRange] = useState<TimeRange>("7d");
+
+  // State mở modal cấp lại mật khẩu cho con (US 11.1 - Task #372 / AC-PW-06)
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
 
   // State quản lý tuần đang xem (0: tuần hiện tại, -1: tuần trước, v.v...)
   const [weekOffset, setWeekOffset] = useState(0);
@@ -286,9 +290,21 @@ export default function MonitorPage() {
               {displayName.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h1 className="text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
-                {displayName}
-              </h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
+                  {displayName}
+                </h1>
+                {/* Nút Cấp lại mật khẩu (AC-PW-06) */}
+                <button
+                  type="button"
+                  onClick={() => setIsResetPasswordOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6] rounded-xl font-bold text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer active:scale-98"
+                  title="Cấp lại mật khẩu cho con"
+                >
+                  <KeyRound size={13} className="text-[#C1762A]" />
+                  <span>🔑 Cấp lại mật khẩu</span>
+                </button>
+              </div>
               <p className="text-sm text-[#C1762A] mt-1">{selectedStudent.email}</p>
             </div>
           </div>
@@ -423,6 +439,13 @@ export default function MonitorPage() {
       <ChildProblemHistory
         key={selectedStudent.student_id}
         studentId={selectedStudent.student_id}
+      />
+
+      {/* Modal cấp lại mật khẩu cho con (US 11.1 - Task #372 / AC-PW-06) */}
+      <ResetStudentPasswordModal
+        isOpen={isResetPasswordOpen}
+        onClose={() => setIsResetPasswordOpen(false)}
+        student={selectedStudent}
       />
     </div>
   );

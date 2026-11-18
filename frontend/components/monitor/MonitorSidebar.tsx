@@ -23,9 +23,11 @@ import {
   Edit2,
   Settings,
   Settings2,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LinkStudentModal from "@/components/LinkStudentModal";
+import ResetStudentPasswordModal from "./ResetStudentPasswordModal";
 
 export interface LinkedStudent {
   student_id: string;
@@ -49,6 +51,7 @@ export default function MonitorSidebar({
   const [isLoading, setIsLoading] = useState(true);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [resettingStudent, setResettingStudent] = useState<LinkedStudent | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
 
@@ -298,6 +301,21 @@ export default function MonitorSidebar({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        setResettingStudent(student);
+                      }}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all duration-150",
+                        isActive
+                          ? "hover:bg-white/20 text-white"
+                          : "hover:bg-[#F1CCA6] text-[#C1762A]"
+                      )}
+                      title="🔑 Cấp lại mật khẩu cho con"
+                    >
+                      <KeyRound size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         handleRemoveStudent(student.student_id);
                       }}
                       disabled={removingId === student.student_id}
@@ -414,6 +432,13 @@ export default function MonitorSidebar({
         isOpen={showLinkModal}
         onClose={() => setShowLinkModal(false)}
         onSuccess={handleLinkSuccess}
+      />
+
+      {/* Modal cấp lại mật khẩu cho con (US 11.1 - Task #372 / AC-PW-06) */}
+      <ResetStudentPasswordModal
+        isOpen={!!resettingStudent}
+        onClose={() => setResettingStudent(null)}
+        student={resettingStudent}
       />
     </>
   );
