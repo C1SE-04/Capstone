@@ -38,6 +38,59 @@ class ForgotPasswordOtpRequestInput(BaseModel):
     email: EmailStr                       # Email tài khoản Phụ huynh cần khôi phục mật khẩu
 
 
+class ForgotPasswordVerifyAndResetInput(BaseModel):
+    """
+    US 11.2: Payload xác thực OTP và đổi mật khẩu mới cho Phụ huynh.
+    """
+    email: EmailStr                       # Email tài khoản Phụ huynh
+    otp_code: str                         # Mã OTP 6 chữ số
+    new_password: str                     # Mật khẩu mới
+
+
+class ForgotPasswordResetResponse(BaseModel):
+    """
+    US 11.2: Phản hồi sau khi đổi mật khẩu thành công.
+    """
+    success: bool = True
+    message: str
+
+
+class StudentLookupInput(BaseModel):
+    """
+    US 11.2: Payload tra cứu học sinh và gửi thông báo tới Phụ huynh.
+    """
+    username: str                         # Tên tài khoản học sinh
+    send_notification: bool = False       # True nếu học sinh bấm "Gửi thông báo tới Bố/Mẹ"
+
+
+class StudentLookupResponse(BaseModel):
+    """
+    US 11.2: Phản hồi tra cứu học sinh kèm email phụ huynh đã che mờ.
+    """
+    success: bool = True
+    student_username: str
+    parent_email_masked: str
+    notification_sent: bool = False
+    message: str
+
+
+class ParentResetStudentPasswordInput(BaseModel):
+    """
+    US 11.2: Payload Phụ huynh cấp lại mật khẩu cho con.
+    """
+    new_password: str                     # Mật khẩu mới cấp cho con
+
+
+class ParentResetStudentPasswordResponse(BaseModel):
+    """
+    US 11.2: Phản hồi Phụ huynh cấp lại mật khẩu cho con.
+    """
+    success: bool = True
+    message: str
+    student_id: str
+    student_username: Optional[str] = None
+
+
 class OtpVerifyInput(BaseModel):
     """
     Payload xác thực mã OTP (US 9.1 - T9.2).
