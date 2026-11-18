@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { migrateLocalStorageBadgesToDB } from "@/lib/badgeStorage";
+import ForgotPasswordModal from "@/components/ForgotPasswordModal";
 
 interface AuthFormProps {
   onClose?: () => void;
@@ -19,6 +20,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);  // Trạng thái chuyển cảnh mượt mà chống nháy
   const [lockoutCountdown, setLockoutCountdown] = useState<number>(0); // US 11.1: Đếm ngược khi bị tạm khóa (Task #362)
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false); // US 11.1: Mở Modal Quên mật khẩu (Task #372 / AC-PW-01)
 
   // US 11.1: Đếm lùi thời gian khóa tài khoản theo thời gian thực
   React.useEffect(() => {
@@ -405,9 +407,14 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
                     <input type="checkbox" className="mr-2 rounded text-[#8C4905] focus:ring-[#F7AD62] cursor-pointer" disabled={isLoading || lockoutCountdown > 0} />
                     Nhớ tôi
                   </label>
-                  <a href="#" className="text-xs font-bold text-[#8C4905] hover:text-[#8C4905] transition-colors cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={() => setIsForgotPasswordOpen(true)}
+                    disabled={isLoading || lockoutCountdown > 0}
+                    className="text-xs font-bold text-[#8C4905] hover:text-[#C1762A] hover:underline transition-colors cursor-pointer focus:outline-none disabled:opacity-50"
+                  >
                     Quên mật khẩu?
-                  </a>
+                  </button>
                 </div>
               )}
 
@@ -496,6 +503,17 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           </>
         )}
       </div>
+
+      {/* Modal Khôi phục mật khẩu đa vai trò (US 11.1 - Task #372 / AC-PW-01) */}
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+        onSwitchToLogin={() => {
+          setIsForgotPasswordOpen(false);
+          setIsLoginMode(true);
+        }}
+        initialRole={identifier.includes("@") ? "parent" : "student"}
+      />
     </div>
   );
 }

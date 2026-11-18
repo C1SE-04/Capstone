@@ -381,7 +381,7 @@ export default function ForgotPasswordModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
       {/* 1. Backdrop mờ nền & Click outside để đóng (AC-PW-01) */}
       <div
         onClick={onClose}
@@ -439,7 +439,7 @@ export default function ForgotPasswordModal({
               }`}
             >
               <Users className="w-4 h-4 shrink-0" />
-              <span>👨‍👩‍👧 Phụ huynh</span>
+              <span>Phụ huynh</span>
             </button>
 
             <button
@@ -456,7 +456,7 @@ export default function ForgotPasswordModal({
               }`}
             >
               <User className="w-4 h-4 shrink-0" />
-              <span>👦 Học sinh</span>
+              <span>Học sinh</span>
             </button>
           </div>
         )}
