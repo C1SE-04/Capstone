@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { FileTooLargeToast } from "./FileTooLargeToast";
 import { ImageZoomModal } from "./ImageZoomModal";
 import { MathSymbolToolbar } from "./MathSymbolToolbar";
+import { formatLatexForChat } from "@/lib/latex";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -50,91 +51,6 @@ export interface ChatInputProps {
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
-
-// ─── Helper: Format LaTeX cho Chat & KaTeX ─────────────────────────────────────
-
-function splitLeadingMathAndTrailingText(str: string): { mathPart: string; textPart: string } | null {
-  if (!str.startsWith("\\")) return null;
-
-  let depth = 0;
-  let lastMathEnd = -1;
-
-  for (let i = 0; i < str.length; i++) {
-    const ch = str[i];
-    if (ch === "{" || str.startsWith("\\left", i)) {
-      depth++;
-    } else if (ch === "}" || str.startsWith("\\right", i)) {
-      depth--;
-      if (depth === 0) {
-        lastMathEnd = i + 1;
-      }
-    }
-  }
-
-  if (lastMathEnd > 0 && lastMathEnd < str.length) {
-    let j = lastMathEnd;
-    while (j < str.length && /[0-9\+\-\=\*\/\^\_\s\.]/.test(str[j])) {
-      j++;
-    }
-    const remainder = str.substring(j).trim();
-    if (remainder && /[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(remainder)) {
-      return {
-        mathPart: str.substring(0, j).trim(),
-        textPart: remainder,
-      };
-    }
-  }
-
-  return null;
-}
-
-function formatLatexForChat(latex: string): string {
-  let text = (latex || "").trim();
-  if (!text) return "";
-
-  // 1. Gỡ bỏ dấu $ bao quanh toàn bộ nếu có từ trước
-  if (text.startsWith("$") && text.endsWith("$") && text.length > 2) {
-    text = text.substring(1, text.length - 1).trim();
-  }
-
-  // 2. Chuyển các ký tự thoát dấu khoảng trắng, placeholder & dấu câu của MathLive về văn bản tự nhiên
-  text = text
-    .replace(/\\placeholder\{[^}]*\}/g, "\\square")
-    .replace(/\\ /g, " ")
-    .replace(/\\,/g, ",")
-    .replace(/\\;/g, ";")
-    .replace(/\\:/g, ":")
-    .replace(/\\!/g, "")
-    .replace(/\\+$/g, "")
-    .trim();
-
-  // 3. Nếu không có ký hiệu toán hay backslash nào -> văn bản thuần túy
-  if (!/[\\^_{}√±×÷≤≥≠π]/.test(text)) {
-    return text;
-  }
-
-  // 4. Trường hợp 1: Toán ở đầu câu, văn bản hỏi đáp ở sau (VD: "\sqrt{2323 \frac{2323}{44}} bằng mấy")
-  const leadingMath = splitLeadingMathAndTrailingText(text);
-  if (leadingMath) {
-    let cleanText = leadingMath.textPart.replace(/\\+$/g, "").trim();
-    // Khắc phục hiện tượng tách chữ do bộ gõ tiếng Việt (VD: "b ằng mấy" -> "bằng mấy")
-    cleanText = cleanText.replace(/\b([a-zA-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ])/gi, "$1$2");
-    return `$${leadingMath.mathPart}$ ${cleanText}`;
-  }
-
-  // 5. Trường hợp 2: Văn bản ở đầu câu, toán ở sau (VD: "giải \frac{1}{2}", "chào thầy tính giúp em \sqrt{16}")
-  const firstMathIdx = text.search(/\\(frac|sqrt|left|log|sin|cos|tan|cot|le|ge|ne|pm|pi|times|div|Delta|square)/);
-  if (firstMathIdx > 0) {
-    const textPart = text.substring(0, firstMathIdx).trim();
-    const mathPart = text.substring(firstMathIdx).trim();
-    if (textPart) {
-      return `${textPart} $${mathPart}$`;
-    }
-  }
-
-  // 6. Trường hợp 3: Biểu thức toán thuần túy (VD: "\sqrt{2323 \frac{2323}{44}}", "x^2 + 5 = 10")
-  return `$${text}$`;
-}
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
@@ -247,11 +163,13 @@ export function ChatInput({
       const text = e.clipboardData?.getData("text/plain");
       if (!text) return;
       e.preventDefault();
-      // Dung insert() API cua MathLive voi mode text de giu space
+      // Chuẩn hóa Unicode ký tự toán học (như 𝑥, 𝑦, 𝐴, 𝟐 copy từ web/Word) về ký tự chuẩn
+      const cleanText = text.normalize("NFKC");
+      // Dùng insert() API của MathLive với mode text để giữ space
       if (typeof node.insert === "function") {
-        node.insert(text, { mode: "text" });
+        node.insert(cleanText, { mode: "text" });
       } else {
-        node.executeCommand(["insert", text]);
+        node.executeCommand(["insert", cleanText]);
       }
       updateContent();
     });
