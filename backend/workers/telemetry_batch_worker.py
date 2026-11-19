@@ -24,7 +24,10 @@ from typing import Optional, List, Dict, Any
 
 from dotenv import load_dotenv
 from sqlalchemy import text
-from upstash_redis.asyncio import Redis
+try:
+    from upstash_redis.asyncio import Redis
+except ImportError:
+    Redis = None  # type: ignore
 
 from middleware.telemetry_middleware import telemetry_queue
 from database import SessionLocal
@@ -46,8 +49,10 @@ _SLA_P95_MAX_MS = 1800
 _SLA_ERROR_5XX_MAX_RATE = 0.02  # 2%
 
 
-def _get_upstash_redis() -> Optional[Redis]:
+def _get_upstash_redis() -> Optional[Any]:
     """Khởi tạo Upstash Redis REST client từ biến môi trường."""
+    if Redis is None:
+        return None
     rest_url = os.getenv("UPSTASH_REDIS_REST_URL")
     rest_token = os.getenv("UPSTASH_REDIS_REST_TOKEN")
 
