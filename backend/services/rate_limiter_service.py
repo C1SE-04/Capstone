@@ -575,7 +575,7 @@ class RateLimiterService:
                         "reason": "INVALID_CREDENTIALS",
                         "message": (
                             f"Tên tài khoản/email hoặc mật khẩu không đúng. "
-                            f"Bạn còn {remaining} lần thử trước khi bị tạm khóa 15 phút."
+                            f"Bạn còn {remaining} lần thử trước khi bị tạm khóa {cls.LOGIN_LOCKOUT_SECONDS // 60} phút."
                         ),
                         "remaining_attempts": remaining,
                         "retry_after": 0,
@@ -592,7 +592,7 @@ class RateLimiterService:
             return {
                 "is_locked": True,
                 "reason": "AUTH_BRUTE_FORCE",
-                "message": f"Bạn đã nhập sai mật khẩu 5 lần. Tài khoản tạm khóa 15 phút.",
+                "message": f"Bạn đã nhập sai mật khẩu 5 lần. Tài khoản tạm khóa {cls.LOGIN_LOCKOUT_SECONDS // 60} phút.",
                 "retry_after": cls.LOGIN_LOCKOUT_SECONDS,
                 "reset_at": int(now_ts + cls.LOGIN_LOCKOUT_SECONDS),
                 "remaining_attempts": 0,

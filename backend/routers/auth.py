@@ -815,7 +815,7 @@ def request_forgot_password_otp(
 # US 11.2: Các hàm tiện ích cho Forgot Password & Mask Email
 # ────────────────────────────────────────────────────────────────────────────
 
-OTP_LOCKOUT_SECONDS = 900             # Khóa tạm 15 phút sau 5 lần nhập sai OTP (US 11.2 Note)
+OTP_LOCKOUT_SECONDS = 90              # Khóa tạm 1 phút 30 giây (90s) sau 5 lần nhập sai OTP theo yêu cầu người dùng
 STUDENT_NOTIF_COOLDOWN_SECONDS = 60  # Cooldown 60s khi gửi thông báo tới phụ huynh
 
 
@@ -835,18 +835,29 @@ def mask_email(email: str | None) -> str:
     return f"{masked_local}@{domain}"
 
 
+def _format_lockout_duration(ttl_seconds: int) -> str:
+    """Format số giây thành chuỗi thân thiện với người dùng (ví dụ: 1 phút 30 giây, 45 giây)."""
+    mins = ttl_seconds // 60
+    secs = ttl_seconds % 60
+    if mins > 0 and secs > 0:
+        return f"{mins} phút {secs} giây"
+    elif mins > 0:
+        return f"{mins} phút"
+    return f"{secs} giây"
+
+
 async def _check_otp_lockout(email: str) -> None:
-    """Kiểm tra tài khoản có đang bị khóa tạm thời 15 phút do nhập sai OTP 5 lần không."""
+    """Kiểm tra tài khoản có đang bị khóa tạm thời do nhập sai OTP 5 lần không."""
     lockout_key = f"auth:otp_lockout:{email}"
     try:
         redis_client = await get_redis()
         if redis_client:
             ttl = await redis_client.ttl(lockout_key)
             if ttl > 0:
-                minutes_left = max(1, ttl // 60)
+                time_str = _format_lockout_duration(ttl)
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Tài khoản đang bị tạm khóa xác thực OTP do nhập sai quá 5 lần. Vui lòng thử lại sau {minutes_left} phút."
+                    detail=f"Tài khoản đang bị tạm khóa xác thực OTP do nhập sai quá 5 lần. Vui lòng thử lại sau {time_str}."
                 )
     except HTTPException:
         raise
@@ -855,10 +866,10 @@ async def _check_otp_lockout(email: str) -> None:
 
     ram_ttl = _fallback_memory_limiter.get_lockout(lockout_key)
     if ram_ttl is not None and ram_ttl > 0:
-        minutes_left = max(1, ram_ttl // 60)
+        time_str = _format_lockout_duration(ram_ttl)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Tài khoản đang bị tạm khóa xác thực OTP do nhập sai quá 5 lần. Vui lòng thử lại sau {minutes_left} phút."
+            detail=f"Tài khoản đang bị tạm khóa xác thực OTP do nhập sai quá 5 lần. Vui lòng thử lại sau {time_str}."
         )
 
 
@@ -942,7 +953,7 @@ async def forgot_password_verify_otp(
         await _set_otp_lockout(normalized_email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 15 phút."
+            detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 1 phút 30 giây."
         )
 
     # 4. Xác thực mã OTP
@@ -956,7 +967,7 @@ async def forgot_password_verify_otp(
             await _set_otp_lockout(normalized_email)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 15 phút."
+                detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 1 phút 30 giây."
             )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1058,7 +1069,7 @@ async def forgot_password_verify_and_reset(
         await _set_otp_lockout(normalized_email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 15 phút."
+            detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 1 phút 30 giây."
         )
 
     # 8. Xác thực mã OTP
@@ -1072,7 +1083,7 @@ async def forgot_password_verify_and_reset(
             await _set_otp_lockout(normalized_email)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 15 phút."
+                detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 1 phút 30 giây."
             )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
