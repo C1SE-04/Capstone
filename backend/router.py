@@ -123,9 +123,10 @@ def extract_audit_tag(text: str) -> tuple[str, Optional[str]]:
 
 def sanitize_stream_chunks(chunk_iterator):
     """
-    US 10.4: Bộ lọc chống rò rỉ thẻ ẩn và tag comprehension khi streaming.
+    US 10.4 & US 11.6: Bộ lọc chống rò rỉ thẻ ẩn và tag comprehension khi streaming.
     Sử dụng kỹ thuật Lookahead Holding Buffer để ngăn chặn việc các thẻ bị cắt đôi/cắt ba
     giữa các chunk (Chunk Boundary Fragmentation) hiển thị lên màn hình học sinh ([AC-AL-01]).
+    Bảo vệ triệt để các thẻ ẩn: <!-- AUDIT_AGENT:... -->, <!-- PROBE_PENDING -->, <!-- SUMMER_PROBE_PENDING -->, v.v.
     """
     buffer = ""
     for chunk in chunk_iterator:
@@ -133,6 +134,8 @@ def sanitize_stream_chunks(chunk_iterator):
         
         # Liên tục loại bỏ các tag hoàn chỉnh đã xuất hiện trong buffer
         buffer = AUDIT_REGEX.sub("", buffer)
+        buffer = re.sub(r"<!--[\s\S]*?-->", "", buffer)
+        buffer = re.sub(r"\[(?:SUMMER_)?PROBE_PENDING\]", "", buffer, flags=re.IGNORECASE)
         buffer = buffer.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
         
         # Kiểm tra xem cuối buffer có dấu hiệu mở thẻ chưa đóng không:
@@ -156,6 +159,8 @@ def sanitize_stream_chunks(chunk_iterator):
     # Khi stream kết thúc, xử lý và xả nốt phần buffer còn lại
     if buffer:
         final_clean = AUDIT_REGEX.sub("", buffer)
+        final_clean = re.sub(r"<!--[\s\S]*?-->", "", final_clean)
+        final_clean = re.sub(r"\[(?:SUMMER_)?PROBE_PENDING\]", "", final_clean, flags=re.IGNORECASE)
         final_clean = final_clean.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "").strip()
         if final_clean:
             yield final_clean

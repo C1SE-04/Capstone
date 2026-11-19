@@ -441,7 +441,7 @@ export default function TryPage() {
                 <div className="break-words [&>p]:m-0 [&_.katex]:text-white [&_.katex-html]:text-white">
                   <ReactMarkdown
                     remarkPlugins={[remarkMath, remarkGfm]}
-                    rehypePlugins={[rehypeKatex]}
+                    rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
                   >
                     {preprocessLaTeX(msg.content)}
                   </ReactMarkdown>
@@ -457,7 +457,7 @@ export default function TryPage() {
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkMath, remarkGfm]}
-                    rehypePlugins={[rehypeKatex]}
+                    rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
                   >
                     {preprocessLaTeX(msg.content)}
                   </ReactMarkdown>
