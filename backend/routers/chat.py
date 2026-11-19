@@ -42,6 +42,17 @@ def _tracked_sse_stream(generator, session_id: str | None = None):
                 pass
 
 
+@router.get("/chat/limits")
+@router.get("/limits")
+def get_chat_rate_limits(db: Session = Depends(get_db)):
+    """Trả về giới hạn lượt hỏi công khai cho Guest và Student theo cấu hình hệ thống."""
+    sys_settings = system_config_service.get_system_settings(db)
+    return {
+        "guest_rate_limit": int(sys_settings.get("guest_rate_limit", 10)),
+        "student_rate_limit": int(sys_settings.get("student_rate_limit", 30)),
+    }
+
+
 @router.post("/chat/orchestrator")
 async def chat_with_orchestrator(
     request: schemas.GeminiRequest, 

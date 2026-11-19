@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useSyncExternalStore } from "react";
+import { useState, useEffect, useMemo, useCallback, useSyncExternalStore, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatWindow } from "@/components/chat/ChatWindow";
@@ -58,6 +58,25 @@ export default function ChatPage() {
   // Key tăng mỗi khi người dùng chọn chat cũ từ Sidebar
   // ChatWindow lắng nghe key này để trigger scroll-to-bottom ngay lập tức
   const [selectedChatKey, setSelectedChatKey] = useState(0);
+
+  // US 11.1 (AC 2, AC 3): Rate Limit Cooldown & Đồng hồ đếm lùi thời gian thực
+  const [rateLimitCooldown, setRateLimitCooldown] = useState<number>(0);
+  const lastAiFinishedAtRef = useRef<number>(0);
+
+  // Hiệu ứng đếm lùi mỗi 1 giây cho tới khi về 0 để tự động mở khóa nút Gửi mà không cần tải lại trang
+  useEffect(() => {
+    if (rateLimitCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setRateLimitCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [rateLimitCooldown]);
 
   // Trạng thái mở/đóng thanh sidebar bên phải (Right Sidebar chứa ảnh bài tập giống Zalo)
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
@@ -763,12 +782,35 @@ export default function ChatPage() {
 
       if (!response.ok) {
         let errMsg = `Lỗi từ máy chủ (${response.status})`;
+        let retryAfterSec = 0;
         try {
           const errData = await response.json();
-          if (errData?.detail) errMsg = errData.detail;
+          if (errData?.detail) {
+            if (typeof errData.detail === "string") {
+              errMsg = errData.detail;
+            } else if (errData.detail.message) {
+              errMsg = errData.detail.message;
+            } else {
+              errMsg = JSON.stringify(errData.detail);
+            }
+            if (errData.detail.retry_after_seconds) {
+              retryAfterSec = Number(errData.detail.retry_after_seconds);
+            }
+          }
         } catch {
           // ignore
         }
+
+        const retryHeader = response.headers.get("Retry-After");
+        if (retryHeader) {
+          retryAfterSec = Math.max(retryAfterSec, parseInt(retryHeader, 10) || 0);
+        }
+
+        // US 11.1 (AC 1 & AC 3): Tự động khóa mờ nút gửi và kích hoạt đồng hồ đếm lùi thời gian thực
+        if (response.status === 429 && retryAfterSec > 0) {
+          setRateLimitCooldown(retryAfterSec);
+        }
+
         throw new Error(errMsg);
       }
 
@@ -848,6 +890,7 @@ export default function ChatPage() {
       );
     } finally {
       setIsTyping(false);
+      lastAiFinishedAtRef.current = Date.now();
     }
   };
 
@@ -856,9 +899,35 @@ export default function ChatPage() {
   // -> Khong reset notUnderstoodCount vi day la phan cua flow "Chua hieu"
   // imageFile?: File - File ảnh đính kèm từ ChatInput (US 6.4: Tích hợp upload Cloudinary)
   const handleSendMessage = async (content: string, isExplanation = false, imageFile?: File) => {
-    // Chống spam: Chặn gửi tin nhắn khi AI đang suy nghĩ / phản hồi
-    if (isTyping) {
+    // Chống spam: Chặn gửi tin nhắn khi AI đang suy nghĩ / phản hồi hoặc đang trong thời gian chờ cooldown
+    if (isTyping || rateLimitCooldown > 0) {
       return;
+    }
+
+    // US 11.1 (AC 2): Ở khung chat học sinh, ngay sau khi AI vừa trả lời xong, bấm gửi câu hỏi mới dưới 5 giây.
+    // Hệ thống không gửi đi, hiển thị ngay lời nhắc nhở sư phạm yêu cầu đọc kỹ gợi ý trước khi hỏi tiếp và không trừ lượt hỏi.
+    if (lastAiFinishedAtRef.current > 0) {
+      const elapsedSec = (Date.now() - lastAiFinishedAtRef.current) / 1000;
+      if (elapsedSec < 5) {
+        const remainingCooldown = Math.ceil(5 - elapsedSec);
+        setRateLimitCooldown(remainingCooldown);
+        const pedagogicalMsg: Message = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: "Thầy Socratic nhận thấy em đang gửi câu hỏi rất nhanh. Em hãy dành ít nhất 5 giây để quan sát hình vẽ và đọc kỹ gợi ý của thầy trước khi hỏi tiếp nhé! 🦉",
+        };
+        const targetId = activeChatId || conversations[0]?.id;
+        if (targetId) {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === targetId
+                ? { ...c, messages: [...c.messages, pedagogicalMsg] }
+                : c,
+            ),
+          );
+        }
+        return;
+      }
     }
 
     // US4.1: Chi reset dem "Chua hieu" khi hoc sinh tu go tin nhan moi hoan toan,
@@ -1170,6 +1239,7 @@ export default function ChatPage() {
             onUnderstood={handleUnderstood}
             onNotUnderstood={handleNotUnderstood}
             notUnderstoodCount={notUnderstoodCount}
+            cooldownSeconds={rateLimitCooldown}
             selectedChatKey={selectedChatKey}
             sessionId={activeChatId || undefined}
           />

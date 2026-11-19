@@ -140,7 +140,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             parsed?.reason === "AUTH_BRUTE_FORCE" ||
             parsed?.reason === "IP_LOCKOUT"
           ) {
-            const retrySeconds = parsed.retry_after_seconds || parsed.retry_after || 900;
+            const retrySeconds = parsed.retry_after_seconds || parsed.retry_after || 180;
             setLockoutCountdown(retrySeconds);
             setErrors({
               form: parsed.message || "Tài khoản của bạn tạm thời bị khóa do nhập sai mật khẩu 5 lần liên tiếp."
