@@ -9,6 +9,7 @@ Tasks:
 
 import time
 import uuid
+import random
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
@@ -340,8 +341,8 @@ def test_anti_brute_force_lockout_and_ip_isolation(test_auth_user):
     correct_pwd = test_auth_user["password"]
     wrong_pwd = "IncorrectPassword999"
 
-    ip_a = "192.168.10.1"
-    ip_b = "192.168.20.2"
+    ip_a = f"192.168.{random.randint(10, 49)}.{random.randint(1, 250)}"
+    ip_b = f"192.168.{random.randint(50, 99)}.{random.randint(1, 250)}"
 
     # Lần 1 đến 4: Sai mật khẩu -> 401 kèm số lần còn lại
     for attempt in range(1, 5):
@@ -401,7 +402,7 @@ def test_login_success_resets_attempt_count(test_auth_user):
     username = test_auth_user["username"]
     correct_pwd = test_auth_user["password"]
     wrong_pwd = "WrongPassword123"
-    client_ip = "192.168.30.99"
+    client_ip = f"192.168.{random.randint(100, 150)}.{random.randint(1, 250)}"
 
     # Thử sai 2 lần
     res1 = client.post("/login", data={"username": username, "password": wrong_pwd}, headers={"X-Real-IP": client_ip})
@@ -420,4 +421,89 @@ def test_login_success_resets_attempt_count(test_auth_user):
     res_after = client.post("/login", data={"username": username, "password": wrong_pwd}, headers={"X-Real-IP": client_ip})
     assert res_after.status_code == 401
     assert res_after.json()["detail"]["remaining_attempts"] == 4
+
+
+def test_dynamic_admin_setting_rate_limit_applied(test_student_and_session):
+    """
+    US 11.1 - AC1: Kiểm tra cấu hình động student_rate_limit = N từ Admin Settings.
+    Nếu Admin đặt student_rate_limit = 3 thì router chat nhận đúng limit=3 và chặn
+    ở câu thứ 4 kèm đầy đủ 4 RFC headers.
+    """
+    client = TestClient(app)
+    session_id = test_student_and_session["session_id"]
+
+    def _mock_ai_stream(*args, **kwargs):
+        yield "event: message\ndata: {\"text\": \"Chào em!\"}\n\n"
+        yield "event: done\ndata: {}\n\n"
+
+    mock_settings = {
+        "student_rate_limit": 3,
+        "global_gemini_rpm_limit": 100,
+    }
+
+    call_count = 0
+    passed_limit = None
+
+    async def fake_check_sliding_window(redis_client, key, limit, window_seconds=60):
+        nonlocal call_count, passed_limit
+        if "ratelimit:student" in key:
+            passed_limit = limit
+            call_count += 1
+            if call_count > limit:
+                return False, {
+                    "allowed": False,
+                    "current_count": call_count,
+                    "remaining": 0,
+                    "retry_after": 35,
+                    "reset_at": int(time.time() + 35),
+                }
+            return True, {
+                "allowed": True,
+                "current_count": call_count,
+                "remaining": limit - call_count,
+                "retry_after": 0,
+                "reset_at": int(time.time() + 60),
+            }
+        return True, {"allowed": True, "current_count": 1, "remaining": 99, "retry_after": 0, "reset_at": int(time.time() + 60)}
+
+    with patch("orchestrator_bridge.process_query_with_orchestrator", side_effect=_mock_ai_stream):
+        with patch("routers.chat.system_config_service.get_system_settings", return_value=mock_settings):
+            with patch.object(RateLimiterService, "check_socratic_cooldown", return_value=(True, 0, 999.0)):
+                with patch.object(RateLimiterService, "check_sliding_window", side_effect=fake_check_sliding_window):
+                    # 3 câu đầu hợp lệ
+                    for i in range(1, 4):
+                        res = client.post("/chat/orchestrator", json={"session_id": session_id, "prompt": f"Câu {i}"})
+                        assert res.status_code == 200
+
+                    # Câu 4 -> Bị chặn 429
+                    res4 = client.post("/chat/orchestrator", json={"session_id": session_id, "prompt": "Câu 4"})
+                    assert res4.status_code == 429
+                    assert passed_limit == 3
+                    assert res4.headers.get("X-RateLimit-Limit") == "3"
+                    assert res4.headers.get("X-RateLimit-Remaining") == "0"
+                    assert res4.headers.get("Retry-After") == "35"
+                    assert int(res4.headers.get("X-RateLimit-Reset", "0")) > 0
+
+
+@pytest.mark.anyio
+async def test_socratic_cooldown_cross_session_isolation():
+    """
+    US 11.1 - AC2: Socratic Cool-Down áp dụng theo session_id.
+    Session A vừa hoàn thành câu trả lời (AI completion) bị phạt cool-down 5s
+    không được làm ảnh hưởng đến Session B.
+    """
+    mock_redis = None # Test trên in-memory fallback
+
+    # Session A hoàn thành câu trả lời lúc t0
+    await RateLimiterService.record_ai_completion(mock_redis, "session-A")
+
+    # Kiểm tra ngay lập tức (< 5s) tại session A -> Bị phạt
+    ok_a, retry_a, delta_a = await RateLimiterService.check_socratic_cooldown(mock_redis, "session-A", cooldown_seconds=5)
+    assert ok_a is False
+    assert retry_a > 0
+
+    # Cùng lúc đó, kiểm tra tại session B -> Không hề bị ảnh hưởng (cho qua)
+    ok_b, retry_b, delta_b = await RateLimiterService.check_socratic_cooldown(mock_redis, "session-B", cooldown_seconds=5)
+    assert ok_b is True
+    assert retry_b == 0
 

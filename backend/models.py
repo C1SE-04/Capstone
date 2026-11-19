@@ -885,4 +885,34 @@ class AuditFeedbackLog(Base):
     )
 
 
+# ==============================================================================
+# US 11.5 - Task T11.5.0: Contact Requests (Feedback & Contact Hub)
+# ==============================================================================
+
+class ContactRequest(Base):
+    """
+    US 11.5 - Task T11.5.0:
+    Bảng lưu trữ thông tin liên hệ và đóng góp ý kiến (Feedback & Contact Hub).
+    Hỗ trợ phân loại báo lỗi (BUG) và góp ý tính năng (FEATURE/FEEDBACK) để bắn Webhook tới đội ngũ Dev/PM.
+    """
+    __tablename__ = "contact_requests"
+
+    id = Column(String(64), primary_key=True, default=lambda: uuid.uuid4().hex)
+    full_name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False, index=True)
+    role = Column(String(50), nullable=False, default="GUEST", server_default="GUEST")        # STUDENT | PARENT | GUEST | OTHER
+    topic = Column(String(50), nullable=False, default="FEEDBACK", server_default="FEEDBACK") # BUG | FEATURE | PEDAGOGY | COOPERATION | OTHER
+    content = Column(Text, nullable=False)
+    attachment_urls = Column(JSON, nullable=True, default=list)                               # Danh sách URL ảnh đính kèm (Cloudinary)
+    recaptcha_score = Column(Numeric(3, 2), nullable=True)                                    # Điểm Google reCAPTCHA v3 (0.00 -> 1.00)
+    status = Column(String(50), nullable=False, default="PENDING", server_default="PENDING")  # PENDING | IN_PROGRESS | RESOLVED | REJECTED
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_contact_requests_topic_status", "topic", "status"),
+        Index("ix_contact_requests_created_at_desc", created_at.desc()),
+    )
+
+
+
 

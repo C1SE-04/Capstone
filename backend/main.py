@@ -104,6 +104,8 @@ app.include_router(admin_active_learning.router)
 app.include_router(admin_active_learning.compat_router)
 from routers import admin_message_logs  # US 10.4 (Task T10.4.7): Nhật ký Tin nhắn
 app.include_router(admin_message_logs.router)
+from routers import contact  # US 11.5: Feedback & Contact Hub
+app.include_router(contact.router)
 
 
 
