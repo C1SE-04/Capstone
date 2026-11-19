@@ -102,7 +102,7 @@ export default function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
       const backendUrl =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
       const token = (session as { access_token?: string })?.access_token || "";
-      const res = await fetch(`${backendUrl}/admin/errors?status=OPEN&limit=10`, {
+      const res = await fetch(`${backendUrl}/admin/errors?status=OPEN&limit=30`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

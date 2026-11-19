@@ -9,6 +9,7 @@ cho 2 nhóm sự cố:
 Đầu ra đảm bảo 100% tương thích với Schema AiDiagnosisData.
 """
 
+import os
 from typing import Dict, Any, Optional
 import json
 import re
@@ -47,16 +48,16 @@ BẠN BẮT BUỘC PHẢI TUÂN THỦ CÁC NGUYÊN TẮC VÀNG SAU:
      * Phải giải thích rõ nguyên nhân cốt lõi (tại sao xảy ra ngoại lệ: chia cho 0, NoneType, timeout kết nối, lỗi cú pháp, tràn bộ nhớ...).
      * BẮT BUỘC cung cấp đoạn mã nguồn sửa lỗi mẫu (`code_patch`) với cú pháp Python chuẩn, có chú thích giải thích rõ ràng trước và sau khi sửa.
    - LOẠI 2: LỖI HỌC SINH BÁO CÁO TRẢI NGHIỆM (USER_REPORT - Đơ lag, lỗi mạng, không phản hồi):
-     * Đây là phản ánh từ học sinh tiểu học/THCS, thường KHÔNG CÓ Stack Trace.
-     * Dựa vào thông tin thiết bị (iPad, iPhone, Android, Windows), trình duyệt (Safari, Chrome) và nội dung phản ánh để suy đoán nguyên nhân: nghẽn băng thông, trình duyệt chặn WebSocket/SSE, thiết bị cũ bị giật khung hình...
+     * Đây là phản ánh từ học sinh tiểu học/THCS, thường KHÔNG CÓ Stack Trace (không phải lỗi sập code).
+     * Dựa vào thông tin thiết bị (iPad, iPhone, Android, Windows), trình duyệt (Safari, Chrome) và nội dung phản ánh để suy đoán nguyên nhân: nghẽn băng thông, trình duyệt chặn WebSocket/SSE, thời gian chờ client quá ngắn...
      * Cung cấp các bước khắc phục hạ tầng và hướng dẫn hỗ trợ người dùng.
-     * Đối với loại này, `code_patch` có thể là cấu hình gợi ý (vd: tăng timeout, cấu hình keep-alive) hoặc `null` nếu là sự cố mạng cục bộ của người dùng.
+     * BẮT BUỘC: ĐỐI VỚI LOẠI LỖI NÀY, VÌ KHÔNG CÓ TRACE MÃ NGUỒN, BẠN BẮT BUỘC ĐỂ `file_path: null`, `line_number: null` VÀ `code_patch: null`. TUYỆT ĐỐI KHÔNG TỰ BỊA RA FILE FRONTEND HAY BACKEND.
 
 3. QUY TẮC CHỐNG ẢO GIÁC (ANTI-HALLUCINATION):
    - Chỉ căn cứ vào dữ liệu thực tế trong thông tin sự cố (Stack Trace, Endpoint, Payload, Message).
-   - Tuyệt đối KHÔNG tự sáng tác tên file hoặc module không có trong thông tin cung cấp.
-   - Nếu Stack Trace bị cắt xén hoặc không đủ dữ liệu để khẳng định chắc chắn 100%, hãy ghi chú điều này vào `resolution_summary` và đặt `confidence_score` ở mức vừa phải (0.6 - 0.75). Nếu có đầy đủ stack trace rõ ràng, đặt `confidence_score` cao (0.85 - 0.98).
-   - Nếu không xác định được file hay dòng code cụ thể, BẮT BUỘC để `file_path: null` và `line_number: null`.
+   - Tuyệt đối KHÔNG tự sáng tác tên file hoặc module không có trong thông tin cung cấp (lưu ý: dự án KHÔNG CÓ file frontend/hooks/useChat.ts; giao diện chat nằm ở frontend/components/chat/ChatWindow.tsx, API chat nằm ở backend/routers/chat.py).
+   - Nếu không có Stack Trace hoặc không đủ dữ liệu để khẳng định chắc chắn 100%, hãy ghi chú điều này vào `resolution_summary` và đặt `confidence_score` ở mức vừa phải (0.65 - 0.80). Nếu có đầy đủ stack trace rõ ràng, đặt `confidence_score` cao (0.85 - 0.98).
+   - Nếu không xác định được file hay dòng code cụ thể từ Stack Trace, BẮT BUỘC để `file_path: null` và `line_number: null`.
 
 4. ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:
    - BẮT BUỘC trả về đúng định dạng JSON thuần túy (Plain JSON).
@@ -129,9 +130,9 @@ RCA_FEW_SHOT_EXAMPLES = """
     "Gửi phản hồi chăm sóc phụ huynh/học sinh qua email thông báo hệ thống đã ghi nhận và tối ưu đường truyền."
   ],
   "code_patch": null,
-  "file_path": "backend/routers/chat.py",
+  "file_path": null,
   "line_number": null,
-  "confidence_score": 0.85,
+  "confidence_score": 0.80,
   "model_used": "gemini-3.5-flash"
 }
 """
@@ -253,6 +254,25 @@ def parse_rca_output(raw_output: str, model_used: str = "gemini-3.5-flash") -> A
                 data["line_number"] = int(data["line_number"])
             except ValueError:
                 data["line_number"] = None
+
+        # BỘ LỌC XÁC THỰC ĐƯỜNG DẪN THỰC TẾ (Path Verification & Anti-Hallucination Guard)
+        # Chỉ giữ lại file_path nếu tệp đó thực sự tồn tại trong cây thư mục dự án
+        if data.get("file_path"):
+            fp = str(data["file_path"]).strip().replace("\\", "/")
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            full_path = os.path.join(project_root, fp)
+            if not os.path.exists(full_path):
+                # Thử tìm tương đối trong backend hoặc frontend
+                backend_path = os.path.join(project_root, "backend", fp)
+                frontend_path = os.path.join(project_root, "frontend", fp)
+                if os.path.exists(backend_path):
+                    data["file_path"] = os.path.relpath(backend_path, project_root).replace("\\", "/")
+                elif os.path.exists(frontend_path):
+                    data["file_path"] = os.path.relpath(frontend_path, project_root).replace("\\", "/")
+                else:
+                    # File hoàn toàn không tồn tại trong repository -> AI ảo giác -> Triệt tiêu!
+                    data["file_path"] = None
+                    data["line_number"] = None
 
         return AiDiagnosisData.model_validate(data)
 

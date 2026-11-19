@@ -151,7 +151,7 @@ export default function NotificationDropdown({
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
       const token = (session as { access_token?: string })?.access_token || "";
 
-      const res = await fetch(`${backendUrl}/admin/errors?status=OPEN&limit=10`, {
+      const res = await fetch(`${backendUrl}/admin/errors?status=OPEN&limit=30`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
@@ -434,7 +434,7 @@ export default function NotificationDropdown({
             onClick={onClose}
             className="inline-flex items-center justify-center gap-2 w-full min-h-[44px] sm:min-h-0 py-2.5 sm:py-2 px-3 text-xs font-bold text-[#8C4905] hover:text-[#C1762A] hover:bg-white rounded-xl transition-all border border-transparent hover:border-[#F1CCA6]/60 shadow-2xs group cursor-pointer"
           >
-            <span>Xem chi tiết tại Trung tâm Sự cố (Incident Hub)</span>
+            <span>Xem chi tiết tại Quản trị Báo Lỗi</span>
             <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
           </Link>
         </div>

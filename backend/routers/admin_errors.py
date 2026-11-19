@@ -269,7 +269,16 @@ def get_system_error_detail(
     Xem chi tiết sự cố hệ thống phục vụ hiển thị Drawer trượt bên phải:
     User context, request payload và Full Stack Trace.
     """
-    record = db.query(models.SystemError).filter(models.SystemError.id == error_id).first()
+    record = (
+        db.query(models.SystemError)
+        .filter(
+            or_(
+                models.SystemError.id == error_id,
+                models.SystemError.error_code == error_id,
+            )
+        )
+        .first()
+    )
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -301,7 +310,16 @@ def resolve_system_error(
     US 9.5 - AC 9.5.6:
     Admin bấm nút "Đánh dấu đã xử lý" trên Drawer -> Đổi trạng thái sang "RESOLVED" tức thì.
     """
-    record = db.query(models.SystemError).filter(models.SystemError.id == error_id).first()
+    record = (
+        db.query(models.SystemError)
+        .filter(
+            or_(
+                models.SystemError.id == error_id,
+                models.SystemError.error_code == error_id,
+            )
+        )
+        .first()
+    )
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -354,7 +372,16 @@ def diagnose_system_error_with_ai(
       - Zero Duplicate Cost: Không tiêu tốn thêm token khi mở xem lại lỗi cũ.
     """
     # 1. Tra cứu sự cố trong DB
-    record = db.query(models.SystemError).filter(models.SystemError.id == error_id).first()
+    record = (
+        db.query(models.SystemError)
+        .filter(
+            or_(
+                models.SystemError.id == error_id,
+                models.SystemError.error_code == error_id,
+            )
+        )
+        .first()
+    )
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

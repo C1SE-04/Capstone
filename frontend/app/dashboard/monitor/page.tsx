@@ -301,8 +301,8 @@ export default function MonitorPage() {
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6] rounded-xl font-bold text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer active:scale-98"
                   title="Cấp lại mật khẩu cho con"
                 >
-                  <KeyRound size={13} className="text-[#C1762A]" />
-                  <span>🔑 Cấp lại mật khẩu</span>
+                  <KeyRound size={14} className="text-[#C1762A]" />
+                  <span>Cấp lại mật khẩu</span>
                 </button>
               </div>
               <p className="text-sm text-[#C1762A] mt-1">{selectedStudent.email}</p>

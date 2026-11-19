@@ -45,17 +45,17 @@ function generateFallbackDiagnosis(error: SystemErrorItem): AiDiagnosisData {
       resolution_summary:
         "Bổ sung điều kiện kiểm tra total_turns <= 0 trước khi tính điểm; nếu bằng 0 trả về điểm mặc định là 0.0.",
       fix_steps: [
-        "1. Mở tệp nguồn backend/services/independence_service.py tại dòng 74.",
+        "1. Mở tệp nguồn backend/routers/independence.py tại dòng 74.",
         "2. Bổ sung điều kiện kiểm tra mẫu số: nếu total_turns <= 0 thì lập tức trả về điểm mặc định 0.0.",
-        "3. Chạy lại bộ kiểm thử tự động test_independence_score.py để xác nhận ngoại lệ đã được xử lý triệt để.",
+        "3. Chạy lại bộ kiểm thử tự động test_independence.py để xác nhận ngoại lệ đã được xử lý triệt để.",
       ],
-      code_patch: `# File: backend/services/independence_service.py (dòng 74)
+      code_patch: `# File: backend/routers/independence.py (dòng 74)
 def calculate_independence_score(valid_turns: int, total_turns: int) -> float:
     # Bổ sung kiểm tra an toàn: tránh chia cho 0 khi phiên học mới bắt đầu
     if not total_turns or total_turns <= 0:
         return 0.0
     return round((valid_turns / total_turns) * 100, 1)`,
-      file_path: "backend/services/independence_service.py",
+      file_path: "backend/routers/independence.py",
       line_number: 74,
       confidence_score: 0.98,
       model_used: "Gemini 3.5 Flash (RCA Engine)",
@@ -66,20 +66,18 @@ def calculate_independence_score(valid_turns: int, total_turns: int) -> float:
   if (isUserReport) {
     return {
       root_cause:
-        "Phản ánh từ học sinh liên quan đến hiện tượng giật lag hoặc AI không phản hồi kịp. Bối cảnh trình duyệt client cho thấy luồng Server-Sent Events (SSE) bị đứt kết nối ngầm giữa chừng do thời gian chờ client (Client Timeout) quá ngắn khi mạng chập chờn.",
+        "Phản ánh từ học sinh liên quan đến hiện tượng giật lag hoặc AI không phản hồi kịp. Bối cảnh trải nghiệm cho thấy kết nối mạng của học sinh bị gián đoạn hoặc luồng Server-Sent Events (SSE) bị nghẽn do thời gian chờ client ngắn khi đường truyền Wifi yếu.",
       resolution_summary:
-        "Đã cấu hình Heartbeat Ping 15s cho luồng SSE chat và nâng client timeout lên 60s để chống rớt kết nối mạng học sinh.",
+        "Kiểm tra nhật ký tương tác của học sinh trong Giám Sát Agent, tối ưu heartbeat ping giữ kết nối và hỗ trợ học sinh kiểm tra đường truyền Wifi.",
       fix_steps: [
-        "1. Bổ sung cơ chế Heartbeat Ping định kỳ mỗi 15 giây cho luồng truyền tin Server-Sent Events (SSE) để duy trì kết nối sống.",
-        "2. Tăng thời gian chờ phản hồi tối đa (Client Timeout) trên giao diện chat từ 30s lên 60s đối với các bài giải toán nhiều bước.",
-        "3. Hiển thị thông báo hỗ trợ học sinh kiểm tra lại kết nối Wifi khi phát hiện mất gói tin kết nối mạng.",
+        "1. Mở trang Giám sát Agent để kiểm tra nhật ký tương tác và thời điểm gián đoạn của học sinh.",
+        "2. Xác nhận tình trạng đường truyền kết nối Server-Sent Events (SSE) và Gemini API.",
+        "3. Hướng dẫn học sinh tải lại trang hoặc kiểm tra kết nối mạng Wifi/4G khi tín hiệu mạng yếu.",
       ],
-      code_patch: `# Cấu hình Heartbeat SSE & Client Timeout an toàn (frontend/hooks/useChat.ts)
-const SSE_CLIENT_TIMEOUT_MS = 60000;   // Nâng timeout lên 60s chống mạng lag
-const HEARTBEAT_INTERVAL_MS = 15000;  // Gửi heartbeat ping mỗi 15s giữ kết nối sống`,
-      file_path: "frontend/hooks/useChat.ts",
-      line_number: 85,
-      confidence_score: 0.92,
+      code_patch: null,
+      file_path: null,
+      line_number: null,
+      confidence_score: 0.82,
       model_used: "Gemini 3.5 Flash (RCA Engine)",
     };
   }
@@ -106,9 +104,11 @@ try:
 except Exception as exc:
     logger.error(f"Handled exception safely: {exc}")
     return 0.0`,
-    file_path: "backend/services/independence_service.py",
-    line_number: 74,
-    confidence_score: 0.95,
+    file_path: error.stack_trace?.match(/File "([^"]+)"/)?.[1] || null,
+    line_number: error.stack_trace?.match(/line (\d+)/)?.[1]
+      ? parseInt(error.stack_trace.match(/line (\d+)/)![1], 10)
+      : null,
+    confidence_score: 0.85,
     model_used: "Gemini 3.5 Flash (RCA Engine)",
   };
 }
@@ -338,28 +338,18 @@ export default function AiDiagnosisCard({
       {/* ── 5. Trạng thái: Đã có kết quả chẩn đoán (Diagnosed State) ── */}
       {diagnosis && !isLoading && (
         <div className="space-y-4 animate-in fade-in duration-300">
-          {/* Metadata Bar: File, Line, Độ tự tin */}
-          {(diagnosis.file_path || diagnosis.confidence_score) && (
-            <div className="flex items-center flex-wrap gap-2 text-[11px] bg-purple-50/80 px-3 py-1.5 rounded-lg border border-purple-200/60">
-              {diagnosis.file_path && (
-                <div className="flex items-center gap-1 text-purple-900 font-mono font-bold">
-                  <FileCode className="w-3.5 h-3.5 text-purple-600" />
-                  <span>{diagnosis.file_path}</span>
-                  {diagnosis.line_number && (
-                    <span className="text-amber-700">
-                      :line {diagnosis.line_number}
-                    </span>
-                  )}
-                </div>
-              )}
-              {diagnosis.confidence_score && (
-                <div className="ml-auto flex items-center gap-1 text-emerald-800 font-bold">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>
-                    Độ tin cậy: {Math.round(diagnosis.confidence_score * 100)}%
+          {/* Metadata Bar: File, Line */}
+          {diagnosis.file_path && (
+            <div className="flex items-center gap-2 text-[11px] bg-purple-50/80 px-3 py-1.5 rounded-lg border border-purple-200/60">
+              <div className="flex items-center gap-1 text-purple-900 font-mono font-bold">
+                <FileCode className="w-3.5 h-3.5 text-purple-600" />
+                <span>{diagnosis.file_path}</span>
+                {diagnosis.line_number && (
+                  <span className="text-amber-700">
+                    :line {diagnosis.line_number}
                   </span>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
@@ -436,7 +426,7 @@ export default function AiDiagnosisCard({
                   {copiedCode ? (
                     <>
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Đã sao chép! ✓</span>
+                      <span>Đã sao chép!</span>
                     </>
                   ) : (
                     <>
