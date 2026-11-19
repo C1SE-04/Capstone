@@ -91,6 +91,90 @@ class ParentResetStudentPasswordResponse(BaseModel):
     student_username: Optional[str] = None
 
 
+# ==============================================================================
+# US 11.5: Schema Liên hệ & Đóng góp ý kiến (Feedback & Contact Hub)
+# ==============================================================================
+
+class ContactSubmitInput(BaseModel):
+    """
+    US 11.5: Payload gửi thông tin liên hệ / báo lỗi / góp ý tính năng.
+    Hỗ trợ alias theo camelCase từ Frontend Next.js (fullName, category, message, attachedImagesCount).
+    """
+    full_name: Optional[str] = Field(None, max_length=255)
+    fullName: Optional[str] = None
+
+    email: EmailStr
+
+    role: Optional[str] = "GUEST"                                 # STUDENT | PARENT | GUEST | OTHER
+
+    topic: Optional[str] = None                                   # BUG | FEATURE | PEDAGOGY | COOPERATION | OTHER
+    category: Optional[str] = None                                # Alias từ FE
+
+    content: Optional[str] = None                                 # Tối đa 500 ký tự theo AC3
+    message: Optional[str] = None                                 # Alias từ FE
+
+    attachment_urls: Optional[List[str]] = Field(default_factory=list)
+    attachedImagesCount: Optional[int] = 0
+
+    recaptcha_token: Optional[str] = None
+    recaptcha_score: Optional[float] = None
+
+    def get_resolved_full_name(self) -> str:
+        name = self.full_name or self.fullName or ""
+        return name.strip()
+
+    def get_resolved_topic(self) -> str:
+        raw = self.topic or self.category or "FEEDBACK"
+        mapping = {
+            "BUG_REPORT": "BUG",
+            "FEATURE_REQUEST": "FEATURE",
+            "PEDAGOGY": "PEDAGOGY",
+            "COOPERATION": "COOPERATION",
+            "OTHER": "OTHER",
+        }
+        return mapping.get(raw.upper(), raw.upper())
+
+    def get_resolved_content(self) -> str:
+        text_content = self.content or self.message or ""
+        return text_content.strip()
+
+
+class ContactSubmitResponse(BaseModel):
+    """
+    US 11.5: Phản hồi gửi liên hệ thành công.
+    """
+    success: bool = True
+    message: str
+    request_id: str
+    created_at: str
+
+
+class ContactRequestItemResponse(BaseModel):
+    """
+    US 11.5: Chi tiết một yêu cầu liên hệ / phản hồi trong quản trị.
+    """
+    id: str
+    full_name: str
+    email: str
+    role: str
+    topic: str
+    content: str
+    attachment_urls: List[str] = Field(default_factory=list)
+    recaptcha_score: Optional[float] = None
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ContactStatusUpdateInput(BaseModel):
+    """
+    US 11.5: Quản trị viên cập nhật trạng thái phản hồi.
+    """
+    status: str  # PENDING | IN_PROGRESS | RESOLVED | REJECTED
+
+
 class OtpVerifyInput(BaseModel):
     """
     Payload xác thực mã OTP (US 9.1 - T9.2).
