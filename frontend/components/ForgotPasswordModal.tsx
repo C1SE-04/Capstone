@@ -56,11 +56,12 @@ export default function ForgotPasswordModal({
 
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // ── State Luồng Học sinh (Task #371 / T11.1.8 & AC-PW-05) ──
+  // ── State Luồng Học sinh (Task #371 / T11.1.8, AC-PW-05 & Bug #416) ──
   // studentStep: 1 = Nhập Username tra cứu, 2 = Đã tìm thấy Phụ huynh, 3 = Đã gửi email thông báo thành công
   const [studentStep, setStudentStep] = useState<1 | 2 | 3>(1);
   const [studentUsername, setStudentUsername] = useState<string>("");
   const [parentEmailMasked, setParentEmailMasked] = useState<string>("");
+  const [parentEmailsMasked, setParentEmailsMasked] = useState<string[]>([]);
   const [isStudentLoading, setIsStudentLoading] = useState<boolean>(false);
   const [studentError, setStudentError] = useState<string | null>(null);
   const [isSendingNotif, setIsSendingNotif] = useState<boolean>(false);
@@ -85,6 +86,7 @@ export default function ForgotPasswordModal({
       setStudentStep(1);
       setStudentUsername("");
       setParentEmailMasked("");
+      setParentEmailsMasked([]);
       setIsStudentLoading(false);
       setStudentError(null);
       setIsSendingNotif(false);
@@ -192,14 +194,32 @@ export default function ForgotPasswordModal({
   };
 
   // ==============================================================================
-  // LUỒNG PHỤ HUYNH: BƯỚC 2 - NHẬP 6 Ô OTP TỰ NHẢY CON TRỎ
+  // LUỒNG PHỤ HUYNH: BƯỚC 2 - NHẬP 6 Ô OTP TỰ NHẢY CON TRỎ & PASTE HỖ TRỢ ĐỦ 6 SỐ
   // ==============================================================================
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasteData = e.clipboardData.getData("text").replace(/\D/g, "");
+    if (!pasteData) return;
+    const digits = pasteData.slice(0, 6).split("");
+    const nextDigits = [...otpDigits];
+    digits.forEach((digit, i) => {
+      if (i < 6) {
+        nextDigits[i] = digit;
+      }
+    });
+    setOtpDigits(nextDigits);
+    setErrorMessage(null);
+
+    const nextFocusIndex = Math.min(digits.length, 5);
+    otpInputRefs.current[nextFocusIndex]?.focus();
+  };
+
   const handleOtpDigitChange = (index: number, value: string) => {
     // Chỉ nhận ký tự số
     const cleaned = value.replace(/\D/g, "");
 
-    // Hỗ trợ paste chuỗi nhiều số
-    if (cleaned.length > 1) {
+    // Hỗ trợ paste chuỗi nhiều số qua onChange (ví dụ người dùng dán hoặc autofill từ 3 số trở lên)
+    if (cleaned.length > 2) {
       const pasteDigits = cleaned.slice(0, 6).split("");
       const nextDigits = [...otpDigits];
       pasteDigits.forEach((digit, i) => {
@@ -215,13 +235,15 @@ export default function ForgotPasswordModal({
       return;
     }
 
+    // Nếu gõ đè lên ô đã có sẵn số (length = 2), lấy ký tự mới nhất (ký tự cuối)
+    const singleDigit = cleaned.slice(-1);
     const nextDigits = [...otpDigits];
-    nextDigits[index] = cleaned;
+    nextDigits[index] = singleDigit;
     setOtpDigits(nextDigits);
     setErrorMessage(null);
 
     // Tự động nhảy sang ô tiếp theo khi nhập
-    if (cleaned && index < 5) {
+    if (singleDigit && index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     }
   };
@@ -231,16 +253,52 @@ export default function ForgotPasswordModal({
     if (e.key === "Backspace" && !otpDigits[index] && index > 0) {
       otpInputRefs.current[index - 1]?.focus();
     }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleVerifyOtpStep();
+    }
   };
 
-  const handleGoToPasswordStep = () => {
-    const fullOtp = otpDigits.join("");
-    if (fullOtp.length !== 6 || fullOtp.includes("")) {
+  const handleVerifyOtpStep = async () => {
+    const fullOtp = otpDigits.join("").trim();
+    // Thông báo nhập đủ 6 chữ số CHỈ hiển thị khi người dùng nhập thiếu (ví dụ mới nhập 3 số rồi bấm Enter/nút)
+    if (fullOtp.length !== 6 || otpDigits.some((d) => !d.trim())) {
       setErrorMessage("Vui lòng nhập đủ 6 chữ số mã OTP xác nhận.");
       return;
     }
+
+    setIsLoading(true);
     setErrorMessage(null);
-    setParentStep(3);
+
+    try {
+      const res = await fetch(`${getBackendUrl()}/auth/forgot-password/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: parentEmail.trim().toLowerCase(),
+          otp_code: fullOtp,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        setErrorMessage(null);
+        setParentStep(3);
+      } else {
+        const detailMsg =
+          typeof data.detail === "string"
+            ? data.detail
+            : Array.isArray(data.detail)
+            ? data.detail[0]?.msg
+            : "Mã OTP không đúng. Vui lòng kiểm tra lại.";
+        setErrorMessage(detailMsg);
+      }
+    } catch {
+      setErrorMessage("Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại đường truyền mạng.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // ==============================================================================
@@ -286,13 +344,20 @@ export default function ForgotPasswordModal({
         // AC-PW-04: Đặt lại mật khẩu thành công -> Chuyển sang màn hình chúc mừng
         setParentStep(4);
       } else {
-        const detailMsg = data.detail || "Không thể đặt lại mật khẩu. Vui lòng kiểm tra lại mã OTP.";
+        const detailMsg =
+          typeof data.detail === "string"
+            ? data.detail
+            : Array.isArray(data.detail)
+            ? data.detail[0]?.msg
+            : "Không thể đặt lại mật khẩu. Vui lòng kiểm tra lại mã OTP.";
         setErrorMessage(detailMsg);
 
-        // Nếu lỗi do OTP sai -> quay lại bước 2 để phụ huynh gõ lại mã
+        // Nếu lỗi do OTP sai hoặc hết hạn -> quay lại bước 2 để phụ huynh gõ lại mã
         if (
           typeof detailMsg === "string" &&
-          (detailMsg.toLowerCase().includes("otp") || detailMsg.toLowerCase().includes("hết hiệu lực"))
+          (detailMsg.toLowerCase().includes("otp") ||
+            detailMsg.toLowerCase().includes("hết hiệu lực") ||
+            detailMsg.toLowerCase().includes("hết hạn"))
         ) {
           setParentStep(2);
         }
@@ -330,7 +395,14 @@ export default function ForgotPasswordModal({
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data.success) {
-        setParentEmailMasked(data.parent_email_masked);
+        const emails: string[] =
+          Array.isArray(data.parent_emails_masked) && data.parent_emails_masked.length > 0
+            ? data.parent_emails_masked
+            : data.parent_email_masked
+            ? [data.parent_email_masked]
+            : [];
+        setParentEmailsMasked(emails);
+        setParentEmailMasked(data.parent_email_masked || emails[0] || "");
         setStudentStep(2);
       } else {
         setStudentError(
@@ -527,23 +599,60 @@ export default function ForgotPasswordModal({
               {/* Thông báo lỗi / cảnh báo */}
               {errorMessage && (
                 <div
-                  className={`p-3.5 rounded-2xl border text-xs flex items-start gap-2.5 animate-in fade-in duration-200 ${
+                  className={`p-4 rounded-2xl border text-xs flex items-start gap-3 animate-in fade-in duration-200 ${
                     isGoogleAccount
-                      ? "bg-amber-50 border-amber-300 text-amber-900"
+                      ? "bg-amber-50/90 border-2 border-amber-400 text-amber-950 shadow-sm"
                       : "bg-rose-50 border-rose-200 text-rose-800"
                   }`}
                 >
                   <AlertCircle
-                    className={`w-4 h-4 shrink-0 mt-0.5 ${
+                    className={`w-5 h-5 shrink-0 mt-0.5 ${
                       isGoogleAccount ? "text-amber-600" : "text-rose-600"
                     }`}
                   />
-                  <div className="flex-1 space-y-1">
-                    <p className="font-semibold leading-relaxed">{errorMessage}</p>
-                    {isGoogleAccount && (
-                      <p className="text-[11px] text-amber-800 font-medium">
-                        👉 Vui lòng đóng hộp thoại này và chọn <strong>"Đăng nhập bằng Google"</strong>.
-                      </p>
+                  <div className="flex-1 space-y-2.5">
+                    {isGoogleAccount ? (
+                      <div className="space-y-2.5">
+                        <p className="font-semibold text-stone-900 text-xs leading-relaxed">
+                          Tài khoản này sử dụng đăng nhập bằng{" "}
+                          <span className="font-extrabold text-[#1F1F1F] inline-flex items-center gap-0.5 px-2 py-0.5 bg-white rounded-md border border-stone-200 shadow-2xs">
+                            <span className="text-[#4285F4]">G</span>
+                            <span className="text-[#EA4335]">o</span>
+                            <span className="text-[#FBBC05]">o</span>
+                            <span className="text-[#4285F4]">g</span>
+                            <span className="text-[#34A853]">l</span>
+                            <span className="text-[#EA4335]">e</span>
+                          </span>
+                          . Bạn không cần đổi mật khẩu bằng mã OTP!
+                        </p>
+
+                        <div className="bg-white p-3 rounded-xl border-2 border-[#4285F4]/30 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                          <span className="text-xs font-bold text-stone-700">
+                            Bấm vào đây để đăng nhập ngay:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              if (onSwitchToLogin) onSwitchToLogin();
+                            }}
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-4 py-2 bg-white hover:bg-stone-50 border-2 border-stone-300 hover:border-[#4285F4] rounded-xl text-xs font-black text-stone-900 shadow-sm transition-all cursor-pointer group active:scale-98"
+                          >
+                            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                            </svg>
+                            <span className="font-extrabold text-[#1F1F1F] tracking-tight">
+                              Đăng nhập bằng Google
+                            </span>
+                            <ArrowRight className="w-3.5 h-3.5 text-[#4285F4] transition-transform group-hover:translate-x-0.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="font-semibold leading-relaxed">{errorMessage}</p>
                     )}
                   </div>
                 </div>
@@ -646,8 +755,10 @@ export default function ForgotPasswordModal({
                           }}
                           type="text"
                           inputMode="numeric"
-                          maxLength={1}
+                          maxLength={6}
                           value={digit}
+                          onFocus={(e) => e.target.select()}
+                          onPaste={handleOtpPaste}
                           onChange={(e) => handleOtpDigitChange(index, e.target.value)}
                           onKeyDown={(e) => handleOtpKeyDown(index, e)}
                           className="w-10 h-12 sm:w-11 sm:h-13 text-center text-lg font-black font-mono bg-white border-2 border-[#F1CCA6] rounded-xl text-[#8C4905] focus:outline-hidden focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 transition-all shadow-xs"
@@ -680,12 +791,21 @@ export default function ForgotPasswordModal({
                   {/* Nút tiếp tục sang Bước 3 */}
                   <button
                     type="button"
-                    onClick={handleGoToPasswordStep}
-                    disabled={otpDigits.join("").length !== 6}
+                    onClick={handleVerifyOtpStep}
+                    disabled={isLoading}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-[#C1762A] hover:bg-[#8C4905] text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-98"
                   >
-                    <span>Tiếp tục đặt mật khẩu mới</span>
-                    <ArrowRight className="w-4 h-4" />
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Đang kiểm tra mã OTP...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Tiếp tục đặt mật khẩu mới</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -888,10 +1008,10 @@ export default function ForgotPasswordModal({
                 </div>
               )}
 
-              {/* ── BƯỚC 2: Hiển thị email Phụ huynh che mờ & Nút Bắn Email (AC-PW-05) ── */}
+              {/* ── BƯỚC 2: Hiển thị email Phụ huynh che mờ & Nút Bắn Email (AC-PW-05 & Bug #416) ── */}
               {studentStep === 2 && (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-2.5">
+                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-3">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                       <span className="font-extrabold text-[#8C4905]">
@@ -899,17 +1019,43 @@ export default function ForgotPasswordModal({
                       </span>
                     </div>
 
-                    <p className="leading-relaxed text-zinc-700">
-                      Đừng lo lắng nhé! Tài khoản của em đang được Bố/Mẹ bảo trợ qua địa chỉ email:
-                    </p>
+                    {parentEmailsMasked.length > 1 ? (
+                      <>
+                        <p className="leading-relaxed text-zinc-700 font-medium">
+                          Tài khoản của em đang được bảo trợ bởi các phụ huynh:
+                        </p>
 
-                    <div className="p-3 bg-white border border-[#F1CCA6] rounded-xl font-mono font-extrabold text-center text-sm text-[#8C4905] tracking-wide shadow-2xs">
-                      {parentEmailMasked}
-                    </div>
+                        <div className="space-y-1.5 p-3 bg-white border border-[#F1CCA6] rounded-xl shadow-2xs">
+                          {parentEmailsMasked.map((email, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center gap-2 font-mono font-bold text-xs sm:text-sm text-[#8C4905]"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#C1762A] shrink-0" />
+                              <span>{email}</span>
+                            </div>
+                          ))}
+                        </div>
 
-                    <p className="text-[11px] text-[#78716C] leading-relaxed">
-                      Em hãy nhờ Bố/Mẹ mở ứng dụng SocraticKid (mục <em>"Giám sát con"</em>) để cấp lại mật khẩu mới cho em, hoặc bấm nút dưới đây để hệ thống gửi email nhắc nhở Bố/Mẹ ngay:
-                    </p>
+                        <p className="text-[11px] text-[#78716C] leading-relaxed">
+                          Em đừng lo nhé! Khi bấm nút dưới đây, hệ thống sẽ gửi thông báo đến cả Bố và Mẹ để ai rảnh có thể hỗ trợ em nhanh nhất!
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="leading-relaxed text-zinc-700">
+                          Đừng lo lắng nhé! Tài khoản của em đang được Bố/Mẹ bảo trợ qua địa chỉ email:
+                        </p>
+
+                        <div className="p-3 bg-white border border-[#F1CCA6] rounded-xl font-mono font-extrabold text-center text-sm text-[#8C4905] tracking-wide shadow-2xs">
+                          {parentEmailsMasked[0] || parentEmailMasked}
+                        </div>
+
+                        <p className="text-[11px] text-[#78716C] leading-relaxed">
+                          Em hãy nhờ Bố/Mẹ mở ứng dụng SocraticKid (mục <em>"Giám sát con"</em>) để cấp lại mật khẩu mới cho em, hoặc bấm nút dưới đây để hệ thống gửi email nhắc nhở Bố/Mẹ ngay:
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   {/* Nút bấm Gửi thông báo tới Bố/Mẹ */}
@@ -923,7 +1069,7 @@ export default function ForgotPasswordModal({
                       {isSendingNotif ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Đang gửi email thông báo tới Bố/Mẹ...</span>
+                          <span>Đang gửi thông báo...</span>
                         </>
                       ) : (
                         <>
@@ -947,18 +1093,34 @@ export default function ForgotPasswordModal({
                 </div>
               )}
 
-              {/* ── BƯỚC 3: Gửi thông báo thành công (AC-PW-05) ── */}
+              {/* ── BƯỚC 3: Gửi thông báo thành công (AC-PW-05 & Bug #416) ── */}
               {studentStep === 3 && (
                 <div className="text-center space-y-4 py-4 animate-in zoom-in-95 duration-300">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 shadow-sm">
                     <CheckCircle2 className="w-10 h-10" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-lg font-black text-emerald-900">
-                      Đã Gửi Thông Báo Tới Bố/Mẹ Thành Công!
+                    <h3 className="text-base sm:text-lg font-black text-emerald-900 leading-tight">
+                      {parentEmailsMasked.length > 1
+                        ? "Đã gửi thư nhắc nhở đến các hòm thư bảo trợ của em thành công!"
+                        : "Đã Gửi Thông Báo Tới Bố/Mẹ Thành Công!"}
                     </h3>
                     <p className="text-xs text-zinc-600 max-w-sm mx-auto leading-relaxed">
-                      Hệ thống đã gửi một bức thư nhắc nhở về hòm thư của Bố/Mẹ: <strong className="font-mono text-[#8C4905]">{parentEmailMasked}</strong>.
+                      {parentEmailsMasked.length > 1 ? (
+                        <>
+                          Hệ thống đã gửi thư nhắc nhở đến các hòm thư phụ huynh bảo trợ:{" "}
+                          <strong className="font-mono text-[#8C4905]">
+                            {parentEmailsMasked.join(", ")}
+                          </strong>.
+                        </>
+                      ) : (
+                        <>
+                          Hệ thống đã gửi một bức thư nhắc nhở về hòm thư của Bố/Mẹ:{" "}
+                          <strong className="font-mono text-[#8C4905]">
+                            {parentEmailsMasked[0] || parentEmailMasked}
+                          </strong>.
+                        </>
+                      )}
                     </p>
                     <p className="text-xs text-zinc-600 max-w-sm mx-auto leading-relaxed">
                       Em hãy nhắn Bố/Mẹ mở email hoặc vào trang <strong>Giám sát con</strong> trên SocraticKid để cấp lại mật khẩu mới cho em nhé!

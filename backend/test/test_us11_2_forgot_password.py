@@ -280,6 +280,64 @@ def test_forgot_password_verify_and_reset_invalid_otp_and_lockout(test_users_set
     assert "khóa" in res5.json()["detail"]
 
 
+def test_forgot_password_verify_otp_step2_flow(test_users_setup):
+    """
+    [Bug #414]: Kiểm tra API xác thực OTP ở Bước 2 (/auth/forgot-password/verify-otp):
+    1. Nhập sai OTP -> 400 báo rõ số lần thử còn lại.
+    2. Nhập đúng OTP -> 200 thành công cho phép chuyển sang bước mật khẩu mới.
+    """
+    from datetime import timedelta
+    client = TestClient(app)
+    suffix = uuid.uuid4().hex[:6]
+    test_email = f"parent_verify_{suffix}@example.com"
+
+    # Tạo user và mã OTP trong DB
+    db = SessionLocal()
+    user = models.User(
+        id=f"parent-v-{suffix}",
+        email=test_email,
+        username=f"user_v_{suffix}",
+        hashed_password=auth.hash_password("Pass123"),
+        role="MONITOR",
+    )
+    otp = models.EmailOtp(
+        email=test_email.lower(),
+        otp_code="987654",
+        purpose="PARENT_RESET_PASSWORD",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        attempts=0,
+        is_used=False,
+    )
+    db.add(user)
+    db.add(otp)
+    db.commit()
+    db.close()
+
+    # 1. Nhập sai OTP -> 400 và báo còn 4 lần thử
+    res_wrong = client.post(
+        "/auth/forgot-password/verify-otp",
+        json={"email": test_email, "otp_code": "111111"}
+    )
+    assert res_wrong.status_code == 400
+    assert "Bạn còn 4 lần thử" in res_wrong.json()["detail"]
+
+    # 2. Nhập đúng OTP -> 200 thành công
+    res_correct = client.post(
+        "/auth/forgot-password/verify-otp",
+        json={"email": test_email, "otp_code": "987654"}
+    )
+    assert res_correct.status_code == 200
+    assert res_correct.json()["success"] is True
+    assert "chính xác" in res_correct.json()["message"]
+
+    # Dọn dẹp
+    db = SessionLocal()
+    db.query(models.EmailOtp).filter_by(email=test_email.lower()).delete()
+    db.query(models.User).filter_by(id=f"parent-v-{suffix}").delete()
+    db.commit()
+    db.close()
+
+
 def test_forgot_password_verify_and_reset_success_and_session_version(test_users_setup):
     """
     [Task 1 & AC4]: Nhập đúng OTP -> Cập nhật mật khẩu mới, tăng session_version, thu hồi refresh token.
@@ -396,6 +454,73 @@ def test_student_lookup_masked_email_and_send_notification(test_users_setup):
     )
     assert res_cooldown.status_code == 429
     assert "Thông báo đã được gửi" in res_cooldown.json()["detail"]
+
+
+def test_student_lookup_multiple_parents_flow():
+    """
+    [Bug #416]: Kiểm tra tra cứu học sinh có nhiều phụ huynh bảo trợ:
+    1. Hiển thị đầy đủ danh sách email che mờ của tất cả phụ huynh liên kết.
+    2. Khi bấm gửi thông báo -> gửi email nhắc nhở tới TẤT CẢ các phụ huynh liên kết.
+    """
+    suffix = uuid.uuid4().hex[:6]
+    db = SessionLocal()
+
+    student_id = f"st-multi-{suffix}"
+    student_name = f"kid_multi_{suffix}"
+    p1_id = f"p1-{suffix}"
+    p1_email = f"father_{suffix}@example.com"
+    p2_id = f"p2-{suffix}"
+    p2_email = f"mother_{suffix}@example.com"
+
+    student = models.User(id=student_id, username=student_name, role="STUDENT", grade=5)
+    p1 = models.User(id=p1_id, username=f"dad_{suffix}", email=p1_email, role="MONITOR", hashed_password=auth.hash_password("Pass123"))
+    p2 = models.User(id=p2_id, username=f"mom_{suffix}", email=p2_email, role="MONITOR", hashed_password=auth.hash_password("Pass123"))
+
+    # Commit Users trước để thỏa mãn Foreign Key Constraint
+    db.add_all([student, p1, p2])
+    db.commit()
+
+    link1 = models.ParentStudentLink(parent_id=p1_id, student_id=student_id, student_nickname="Con iu 1")
+    link2 = models.ParentStudentLink(parent_id=p2_id, student_id=student_id, student_nickname="Con iu 2")
+
+    db.add_all([link1, link2])
+    db.commit()
+    db.close()
+
+    client = TestClient(app)
+
+    # 1. Tra cứu học sinh: phải trả về cả 2 email phụ huynh che mờ
+    res_lookup = client.post(
+        "/auth/forgot-password/student-lookup",
+        json={"username": student_name, "send_notification": False}
+    )
+    assert res_lookup.status_code == 200
+    data = res_lookup.json()
+    assert data["success"] is True
+    assert data["parent_count"] == 2
+    assert len(data["parent_emails_masked"]) == 2
+
+    # 2. Gửi thông báo: phải gửi thư tới cả 2 phụ huynh
+    clear_sent_emails()
+    res_notify = client.post(
+        "/auth/forgot-password/student-lookup",
+        json={"username": student_name, "send_notification": True}
+    )
+    assert res_notify.status_code == 200
+    assert res_notify.json()["notification_sent"] is True
+
+    sent_emails = get_sent_emails()
+    sent_recipients = {item["to_email"] for item in sent_emails}
+    assert len(sent_recipients) == 2
+    assert p1_email.lower() in sent_recipients
+    assert p2_email.lower() in sent_recipients
+
+    # Dọn dẹp DB
+    db = SessionLocal()
+    db.query(models.ParentStudentLink).filter_by(student_id=student_id).delete()
+    db.query(models.User).filter(models.User.id.in_([student_id, p1_id, p2_id])).delete(synchronize_session=False)
+    db.commit()
+    db.close()
 
 
 def test_student_lookup_unlinked_student():

@@ -38,6 +38,22 @@ class ForgotPasswordOtpRequestInput(BaseModel):
     email: EmailStr                       # Email tài khoản Phụ huynh cần khôi phục mật khẩu
 
 
+class ForgotPasswordVerifyOtpInput(BaseModel):
+    """
+    US 11.2: Payload xác thực mã OTP ở Bước 2 trước khi đặt mật khẩu mới.
+    """
+    email: EmailStr                       # Email tài khoản Phụ huynh
+    otp_code: str                         # Mã OTP 6 chữ số
+
+
+class ForgotPasswordVerifyOtpResponse(BaseModel):
+    """
+    US 11.2: Phản hồi xác thực mã OTP thành công.
+    """
+    success: bool = True
+    message: str
+
+
 class ForgotPasswordVerifyAndResetInput(BaseModel):
     """
     US 11.2: Payload xác thực OTP và đổi mật khẩu mới cho Phụ huynh.
@@ -65,11 +81,13 @@ class StudentLookupInput(BaseModel):
 
 class StudentLookupResponse(BaseModel):
     """
-    US 11.2: Phản hồi tra cứu học sinh kèm email phụ huynh đã che mờ.
+    US 11.2 & Bug #416: Phản hồi tra cứu học sinh kèm danh sách email phụ huynh đã che mờ.
     """
     success: bool = True
     student_username: str
-    parent_email_masked: str
+    parent_email_masked: str = ""                         # Email phụ huynh đầu tiên (giữ tương thích ngược)
+    parent_emails_masked: list[str] = Field(default_factory=list) # Danh sách tất cả email phụ huynh đã che mờ
+    parent_count: int = 0                                 # Số lượng phụ huynh bảo trợ
     notification_sent: bool = False
     message: str
 
