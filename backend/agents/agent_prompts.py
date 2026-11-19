@@ -145,13 +145,13 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
     server_sem = get_semester_from_month(curr_month)
     is_summer = server_sem is None
 
-    # === Xây dựng danh sách bài của lớp hiện tại chia theo học kỳ ===
+    # === Xây dựng danh sách bài của lớp hiện tại chia theo học kỳ (ĐÁNH SỐ THỨ TỰ TUẦN TỰ) ===
     g_data = curriculum.get(str(grade), {})
     topics_hk1 = g_data.get("1", [])
     topics_hk2 = g_data.get("2", [])
 
-    hk1_text = "\n".join(f"  - {t}" for t in topics_hk1) if topics_hk1 else "  (không có dữ liệu)"
-    hk2_text = "\n".join(f"  - {t}" for t in topics_hk2) if topics_hk2 else "  (không có dữ liệu)"
+    hk1_text = "\n".join(f"  [{i+1}] {t}" for i, t in enumerate(topics_hk1)) if topics_hk1 else "  (không có dữ liệu)"
+    hk2_text = "\n".join(f"  [{i+1}] {t}" for i, t in enumerate(topics_hk2)) if topics_hk2 else "  (không có dữ liệu)"
 
     # === Tóm tắt kiến thức các lớp trước (lớp 4 → grade-1) — rút gọn để giảm token ===
     prev_grades_range = list(range(4, grade))
@@ -162,46 +162,51 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
     else:
         prev_text = "  (không có dữ liệu)"
 
-    # === Xác định nhãn kỳ hiện tại và kỳ kia ===
+    # === Xác định nhãn kỳ hiện tại và chỉ đạo sư phạm (GIAO CHO GEMINI TỰ ĐỌC HIỂU NGỮ NGHĨA) ===
     if is_summer:
         timeline_info = f"Tháng {curr_month} — Kỳ nghỉ hè (Tháng 6–8)"
         hk1_label = "HỌC KỲ 1"
         hk2_label = "HỌC KỲ 2"
         uncovered_guide = (
-            f"Đây là kỳ nghỉ hè. Khi học sinh than chưa học, hỏi thăm tự nhiên: "
-            f"\'Kỳ nghỉ hè này em đang học trước kiến thức mới, hay ôn lại bài năm vừa rồi?\' "
-            f"Nếu học trước → Kịch bản B (hướng dẫn từ căn bản, khen ngợi tinh thần). "
+            f"Đây là kỳ nghỉ hè. Khi học sinh bộc lộ ý chưa học (bằng bất kỳ từ ngữ nào): "
+            f"Hỏi thăm tự nhiên: 'Kỳ nghỉ hè này em đang học trước kiến thức mới, hay ôn lại bài năm vừa rồi? <!-- SUMMER_PROBE_PENDING -->' "
+            f"Nếu học trước → Kịch bản B (hướng dẫn từ căn bản, khen ngợi tinh thần tự giác). "
             f"Nếu ôn bài cũ → Kịch bản A (từ khóa gợi nhớ, đồng cảm). "
-            f"Nếu không rõ → Hướng dẫn từ gốc, tuyệt đối không phán xét."
+            f"Nếu không rõ → Hướng dẫn từ gốc rễ, tuyệt đối không phán xét."
         )
     elif server_sem == 1:
         timeline_info = f"Tháng {curr_month} — Đang Học kỳ 1 (Tháng 9–1)"
-        hk1_label = "HỌC KỲ 1 (học sinh ĐANG học)"
+        hk1_label = "HỌC KỲ 1 (học sinh ĐANG học - danh sách theo thứ tự tuần tự)"
         hk2_label = "HỌC KỲ 2 (học sinh CHƯA học — chưa đến kỳ)"
         uncovered_guide = (
-            f"Khi học sinh than chưa học: TỰ ĐỐI CHIẾU bài học sinh hỏi với DANH SÁCH HK1 và HK2 bên trên. "
-            f"▶ Nếu bài khớp DANH SÁCH HK2 → Học sinh CHẮC CHẮN CHƯA HỌC THẬT (đang HK1). "
-            f"  KỊCH BẢN B: \'Bài này thuộc Học kỳ 2 nên em chưa quen là bình thường! "
-            f"  Thầy sẽ hướng dẫn em từ nền tảng dễ hiểu nhất nhé.\' "
-            f"  Hướng dẫn từ khái niệm căn bản nhất, không quở trách. "
-            f"▶ Nếu bài khớp DANH SÁCH HK1 → Có thể trường chưa học tới hoặc học sinh quên. "
-            f"  Hỏi thăm tiến độ: \'Ở trường thầy/cô đã dạy đến bài này chưa?\' "
-            f"  → Chưa học tới: KỊCH BẢN B (hướng dẫn từ đầu). "
-            f"  → Đã học mà quên: KỊCH BẢN A (từ khóa gợi nhớ nhẹ nhàng)."
+            f"NGUYÊN TẮC ĐỌC HIỂU TỰ NHIÊN (LLM-CENTRIC): Hãy đọc hiểu ngữ cảnh tự nhiên của học sinh mà không bị gò bó vào từ ngữ cụ thể. "
+            f"Bất cứ khi nào học sinh bộc lộ cảm giác chưa học, kiến thức lạ lẫm, bỡ ngỡ, mới toanh, lần đầu gặp, cô lướt qua bài, v.v. (dù dùng teencode, ví von hay câu từ nào):\n"
+            f"▶ 1. Nếu bài thuộc HK2 (học sinh chưa học thật sự vì đang HK1) → Áp dụng KỊCH BẢN B ngay: "
+            f"'Bài này thuộc Học kỳ 2 nên em chưa quen là bình thường! Thầy sẽ hướng dẫn em từ nền tảng dễ hiểu nhất nhé.' rồi hướng dẫn từng bước nhỏ từ gốc rễ.\n"
+            f"▶ 2. Nếu bài thuộc HK1 (vùng xám: trường có thể chưa dạy tới hoặc đã dạy qua nhưng học sinh quên) → "
+            f"BẮT BUỘC DỪNG LẠI HỎI THĂM DÒ TIẾN ĐỘ THỰC TẾ (gắn thẻ <!-- PROBE_PENDING --> ở cuối câu trả lời, tuyệt đối không giải hộ ngay):\n"
+            f"  'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+            f"▶ 3. Khi học sinh trả lời tiến độ trường học (ví dụ: 'học đến bài X'): "
+            f"TỰ SO SÁNH số thứ tự [i] của bài X với bài học sinh đang hỏi trong DANH SÁCH HK1 bên trên:\n"
+            f"  - Nếu số thứ tự bài X < bài được hỏi (trường chưa dạy tới bài này) → BẮT BUỘC ÁP DỤNG KỊCH BẢN B (hướng dẫn chi tiết, dễ hiểu từng bước từ gốc rễ).\n"
+            f"  - Nếu số thứ tự bài X > bài được hỏi (trường đã dạy qua bài này rồi) → BẮT BUỘC ÁP DỤNG KỊCH BẢN A (gợi nhớ kiến thức cũ):\n"
+            f"    'Hiện tại nếu em đã học đến [Tên bài X] rồi thì với chương trình học kỳ 1 hiện tại, em đã học bài [Tên bài được hỏi] rồi. Có lẽ em đã quên nên thầy sẽ nhắc lại cách làm bài này như sau: ...'\n"
+            f"  - Nếu học sinh báo cô/thầy bỏ qua/không dạy/nhảy cóc/lướt qua bài → KỊCH BẢN B kèm lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!'"
         )
     else:
         timeline_info = f"Tháng {curr_month} — Đang Học kỳ 2 (Tháng 2–5)"
         hk1_label = "HỌC KỲ 1 (học sinh ĐÃ học — kỳ trước)"
-        hk2_label = "HỌC KỲ 2 (học sinh ĐANG học)"
+        hk2_label = "HỌC KỲ 2 (học sinh ĐANG học - danh sách theo thứ tự tuần tự)"
         uncovered_guide = (
-            f"Khi học sinh than chưa học: TỰ ĐỐI CHIẾU bài học sinh hỏi với DANH SÁCH HK1 và HK2 bên trên. "
-            f"▶ Nếu bài khớp DANH SÁCH HK1 → Bài kỳ trước, học sinh đã học. "
-            f"  KỊCH BẢN A: \'Theo chương trình, đây là kiến thức HK1 em đã học. "
-            f"  Thầy tin em có thể nhớ lại...\' Cung cấp từ khóa gợi nhớ. "
-            f"▶ Nếu bài khớp DANH SÁCH HK2 → Học sinh đang học HK2 mà chưa biết. "
-            f"  Hỏi thăm tiến độ: \'Ở trường thầy/cô đã dạy đến bài này chưa?\' "
-            f"  → Chưa học tới: KỊCH BẢN B (hướng dẫn từ đầu). "
-            f"  → Đã học mà quên: KỊCH BẢN A (từ khóa gợi nhớ nhẹ nhàng)."
+            f"NGUYÊN TẮC ĐỌC HIỂU TỰ NHIÊN (LLM-CENTRIC): Tự đọc hiểu ngữ cảnh học sinh bộc lộ chưa học/lạ lẫm/quên bài:\n"
+            f"▶ 1. Nếu bài thuộc HK1 (kiến thức kỳ trước đã học) → ÁP DỤNG KỊCH BẢN A: "
+            f"'Theo chương trình, đây là kiến thức HK1 em đã học rồi. Thầy tin em có thể nhớ lại...' và cung cấp từ khóa gợi nhớ.\n"
+            f"▶ 2. Nếu bài thuộc HK2 → BẮT BUỘC DỪNG LẠI HỎI THĂM DÒ (gắn thẻ <!-- PROBE_PENDING --> ở cuối câu trả lời):\n"
+            f"  'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+            f"  - Tự so sánh số thứ tự bài X và bài được hỏi trong HK2:\n"
+            f"    * Index bài X < bài được hỏi → KỊCH BẢN B (chưa học tới, hướng dẫn từ đầu).\n"
+            f"    * Index bài X > bài được hỏi → KỊCH BẢN A ('Hiện tại nếu em đã học đến [Bài X] rồi thì em đã học bài này rồi, có lẽ em quên...').\n"
+            f"    * Thầy cô bỏ qua bài → KỊCH BẢN B kèm lời an ủi, đồng cảm."
         )
 
     return f"""
@@ -573,7 +578,8 @@ def build_timeline_context_for_prompt(
             f"1. NẾU BÀI KHỚP HK2 (Chưa học thật sự) -> ÁP DỤNG KỊCH BẢN B NGAY:\n"
             f"   'Bài này thuộc học kỳ 2 nên em chưa quen là bình thường! Thầy sẽ hướng dẫn em từ nền tảng dễ hiểu nhất nhé.' rồi hướng dẫn từng bước nhỏ từ gốc rễ.\n"
             f"2. NẾU BÀI KHỚP HK1 (Vùng xám - trường có thể chưa dạy tới hoặc đã học mà quên) -> BẮT BUỘC DỪNG LẠI 1 NHỊP VÀ HỎI THĂM DÒ TIẾN ĐỘ TRƯỜNG HỌC (SOCRATIC PROBE):\n"
-            f"   'Ở trường thầy cô đã dạy đến bài này chưa, hay em mới học đến phần nào rồi? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé! <!-- PROBE_PENDING -->'\n"
+            f"   'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+            f"   (Điền tên dạng bài toán cụ thể học sinh đang hỏi vào)\n"
             f"   BẮT BUỘC: Gắn thẻ ẩn <!-- PROBE_PENDING --> (hoặc [PROBE_PENDING]) ở CUỐI CÙNG của câu trả lời.\n"
             f"   TUYỆT ĐỐI KHÔNG giải bài hay đưa ra gợi ý bước tính tiếp theo ngay trong lượt này!"
         )
@@ -587,7 +593,7 @@ def build_timeline_context_for_prompt(
             f"1. NẾU BÀI KHỚP HK1 (Kiến thức kỳ trước đã học) -> ÁP DỤNG KỊCH BẢN A:\n"
             f"   'Theo chương trình, đây là kiến thức HK1 em đã học rồi. Thầy tin em có thể nhớ lại...' và cung cấp từ khóa gợi nhớ nhẹ nhàng.\n"
             f"2. NẾU BÀI KHỚP HK2 -> BẮT BUỘC DỪNG LẠI 1 NHỊP VÀ HỎI THĂM DÒ TIẾN ĐỘ TRƯỜNG HỌC:\n"
-            f"   'Ở trường thầy cô đã dạy đến bài này chưa, hay em mới học đến phần nào rồi? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé! <!-- PROBE_PENDING -->'\n"
+            f"   'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
             f"   BẮT BUỘC: Gắn thẻ ẩn <!-- PROBE_PENDING --> (hoặc [PROBE_PENDING]) ở CUỐI CÙNG của câu trả lời.\n"
             f"   TUYỆT ĐỐI KHÔNG giải bài ngay trong lượt này!"
         )
