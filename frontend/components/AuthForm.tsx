@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { migrateLocalStorageBadgesToDB } from "@/lib/badgeStorage";
@@ -22,10 +22,50 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const [lockoutCountdown, setLockoutCountdown] = useState<number>(0); // US 11.1: Đếm ngược khi bị tạm khóa (Task #362)
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false); // US 11.1: Mở Modal Quên mật khẩu (Task #372 / AC-PW-01)
 
-  // US 11.1: Đếm lùi thời gian khóa tài khoản theo thời gian thực
+  // US 11.1: Tự động kiểm tra và phục hồi countdown khóa tài khoản theo từng username
+  useEffect(() => {
+    if (!isLoginMode) return;
+    const cleanId = identifier.trim().toLowerCase();
+    if (!cleanId) {
+      setLockoutCountdown(0);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(`sk_auth_lockout_${cleanId}`);
+      if (stored) {
+        const remaining = Math.ceil((parseInt(stored, 10) - Date.now()) / 1000);
+        if (remaining > 0) {
+          setLockoutCountdown(remaining);
+        } else {
+          localStorage.removeItem(`sk_auth_lockout_${cleanId}`);
+          setLockoutCountdown(0);
+        }
+      } else {
+        setLockoutCountdown(0);
+      }
+    }
+  }, [identifier, isLoginMode]);
+
+  // US 11.1: Đếm lùi thời gian khóa tài khoản chuẩn xác theo mốc thời gian thực (wall-clock timestamp)
   React.useEffect(() => {
     if (lockoutCountdown <= 0) return;
+    const cleanId = identifier.trim().toLowerCase();
     const timer = setInterval(() => {
+      if (typeof window !== "undefined" && cleanId) {
+        const stored = localStorage.getItem(`sk_auth_lockout_${cleanId}`);
+        if (stored) {
+          const remaining = Math.ceil((parseInt(stored, 10) - Date.now()) / 1000);
+          if (remaining <= 0) {
+            localStorage.removeItem(`sk_auth_lockout_${cleanId}`);
+            setLockoutCountdown(0);
+            setErrors({});
+            clearInterval(timer);
+            return;
+          }
+          setLockoutCountdown(remaining);
+          return;
+        }
+      }
       setLockoutCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
@@ -36,7 +76,7 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [lockoutCountdown]);
+  }, [lockoutCountdown, identifier]);
 
   const [errors, setErrors] = useState<{
     identifier?: string;
@@ -141,6 +181,13 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
             parsed?.reason === "IP_LOCKOUT"
           ) {
             const retrySeconds = parsed.retry_after_seconds || parsed.retry_after || 180;
+            const expireAt = Date.now() + retrySeconds * 1000;
+            if (typeof window !== "undefined") {
+              const cleanId = identifier.trim().toLowerCase();
+              if (cleanId) {
+                localStorage.setItem(`sk_auth_lockout_${cleanId}`, expireAt.toString());
+              }
+            }
             setLockoutCountdown(retrySeconds);
             setErrors({
               form: parsed.message || "Tài khoản của bạn tạm thời bị khóa do nhập sai mật khẩu 5 lần liên tiếp."
@@ -158,6 +205,14 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           }
 
           throw new Error(parsed?.message || "Tên tài khoản hoặc mật khẩu không chính xác");
+        }
+
+        // Đăng nhập thành công -> Xóa cờ khóa tạm (nếu có)
+        if (typeof window !== "undefined") {
+          const cleanId = identifier.trim().toLowerCase();
+          if (cleanId) {
+            localStorage.removeItem(`sk_auth_lockout_${cleanId}`);
+          }
         }
 
         // Bật trạng thái chuyển cảnh mượt mà ngay lập tức

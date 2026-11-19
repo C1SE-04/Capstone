@@ -813,17 +813,9 @@ export default function ForgotPasswordModal({
               {/* ── BƯỚC 3: Nhập Mật khẩu mới & Xác nhận (AC-PW-04) ── */}
               {parentStep === 3 && (
                 <form onSubmit={handleVerifyAndResetPassword} className="space-y-3 animate-in fade-in duration-200">
-                  <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/70 text-xs text-amber-900 flex items-center justify-between">
-                    <span>
-                      Mã xác nhận: <strong className="font-mono text-amber-950 font-bold">{otpDigits.join("")}</strong>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setParentStep(2)}
-                      className="text-[11px] font-bold text-[#8C4905] hover:underline cursor-pointer"
-                    >
-                      Nhập lại OTP
-                    </button>
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Mã OTP đã được xác thực thành công. Vui lòng thiết lập mật khẩu mới bên dưới.</span>
                   </div>
 
                   {/* Ô nhập mật khẩu mới */}
