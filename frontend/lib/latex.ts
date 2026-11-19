@@ -11,12 +11,30 @@
  * - Bảo vệ 100% các khối code (``` và `) không bị thay thế nhầm
  */
 
+/**
+ * Loại bỏ triệt để toàn bộ thẻ ẩn (hidden metadata tags) và HTML comments khỏi chuỗi hiển thị:
+ * - HTML comment: <!-- PROBE_PENDING -->, <!-- SUMMER_PROBE_PENDING -->, <!-- AUDIT_AGENT: ... -->, v.v.
+ * - Thẻ đóng mở dang dở khi đang stream: <!-- ...
+ * - Thẻ vuông metadata: [PROBE_PENDING], [SUMMER_PROBE_PENDING], [COMPREHENSION_CHECK]
+ */
+export function stripHiddenTags(content: string): string {
+  if (!content || typeof content !== "string") return "";
+  return content
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
+    .replace(/\s*\[(?:SUMMER_)?PROBE_PENDING\]/gi, "")
+    .replace(/\s*\[COMPREHENSION_CHECK\]/gi, "")
+    .trim();
+}
+
 export function preprocessLaTeX(content: string): string {
   if (!content || typeof content !== "string") return content;
 
+  // 0. Làm sạch thẻ ẩn (hidden tags) để không bao giờ lộ ra trên màn hình chat của học sinh
+  const cleaned = stripHiddenTags(content);
+
   // 1. Tách và bảo vệ các khối code (code block ```...``` và inline code `...`)
   const codeBlocks: { id: string; code: string }[] = [];
-  let protectedContent = content.replace(/(```[\s\S]*?```|`[^`\n]+`)/g, (match) => {
+  let protectedContent = cleaned.replace(/(```[\s\S]*?```|`[^`\n]+`)/g, (match) => {
     const id = `%%%CODE_BLOCK_${codeBlocks.length}%%%`;
     codeBlocks.push({ id, code: match });
     return id;
@@ -155,7 +173,7 @@ export function preprocessLaTeX(content: string): string {
  */
 export function cleanLatexForDisplay(content: string | null | undefined, maxLength?: number): string {
   if (!content || typeof content !== "string") return "";
-  let t = content.trim();
+  let t = stripHiddenTags(content).trim();
 
   // Bỏ dấu ngoặc kép thừa nếu chuỗi bị bọc lặp (VD: "\"$\frac{...}$\"")
   if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith('“') && t.endsWith('”'))) {

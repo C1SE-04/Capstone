@@ -135,7 +135,7 @@ export function ChatMessage({
                   <div className="flex-1 break-words [&>p]:m-0 [&_.katex]:text-white [&_.katex-html]:text-white">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
+                      rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
                     >
                       {preprocessLaTeX(message.content)}
                     </ReactMarkdown>
@@ -176,7 +176,7 @@ export function ChatMessage({
             >
               <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm]}
-                rehypePlugins={[rehypeKatex]}
+                rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
               >
                 {preprocessLaTeX(message.content)}
               </ReactMarkdown>
