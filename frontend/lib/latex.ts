@@ -11,8 +11,184 @@
  * - Bảo vệ 100% các khối code (``` và `) không bị thay thế nhầm
  */
 
+const VIETNAMESE_ACCENTS =
+  "àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ" +
+  "ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ";
+
+const MATH_COMMANDS = new Set([
+  "frac", "sqrt", "left", "right", "log", "ln", "sin", "cos", "tan", "cot",
+  "le", "ge", "ne", "pm", "pi", "times", "div", "Delta", "circ", "square",
+  "approx", "cdot", "cdots", "ldots"
+]);
+
+// Chỉ gồm từ tiếng Việt >= 2 âm tiết hoặc từ không thể là biến toán học.
+// Loại bỏ: "a", "b", "c", "d", "co", "la", "va", "ba", "an", "vi", "ma", "ra", "di", "ha"
+// vì những từ này rất hay là biến toán học (a, b, c...) → gây false positive khi detect "natural language"
+const COMMON_WORDS = new Set([
+  "sao", "cho", "em", "neu", "hay", "hoac",
+  "khi", "nao", "vao", "trong", "ngoai", "tren", "duoi",
+  "giup", "tinh", "bai", "toan", "khong", "biet", "nay", "lam", "hoi", "rut", "gon",
+  "thay", "oi", "giai", "thi", "de", "voi", "mot", "hai", "bon", "nam",
+  "dung", "sai", "ket", "qua", "dap", "buoc", "nhe"
+]);
+
+export function isTextToken(token: string): boolean {
+  if (/[\\^_{}√±×÷≤≥≠π=<>]/.test(token)) {
+    return false;
+  }
+  const clean = token.replace(/^[^\w\u00C0-\u1EF9]+|[^\w\u00C0-\u1EF9]+$/g, "");
+  if (!clean) return false;
+
+  for (let i = 0; i < clean.length; i++) {
+    if (VIETNAMESE_ACCENTS.includes(clean[i])) return true;
+  }
+  const cl = clean.toLowerCase();
+  if (COMMON_WORDS.has(cl)) return true;
+  if (/^[a-zA-Z]{2,}$/.test(clean) && !MATH_COMMANDS.has(cl)) {
+    return true;
+  }
+  return false;
+}
+
+export function hasNaturalLanguage(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    if (VIETNAMESE_ACCENTS.includes(text[i])) return true;
+  }
+  const words = text.match(/[a-zA-Z]+/g) || [];
+  for (const w of words) {
+    const wl = w.toLowerCase();
+    if (COMMON_WORDS.has(wl)) return true;
+    if (wl.length >= 3 && !MATH_COMMANDS.has(wl)) return true;
+  }
+  return false;
+}
+
+/**
+ * Chuẩn hóa chuỗi LaTeX từ MathLive trước khi gửi vào Chat/Markdown.
+ * Tách biệt rõ ràng giữa câu chữ tự nhiên và công thức toán học,
+ * chỉ bọc $...$ cho các phân đoạn toán thực sự, tránh lỗi dính chữ (mất space) và font nghiêng (math mode).
+ */
+export function formatLatexForChat(latex: string): string {
+  if (!latex) return "";
+
+  // Xử lý multiline: mỗi dòng được xử lý riêng lẻ, giữ nguyên ký tự xuống dòng
+  if (latex.includes("\n")) {
+    return latex
+      .split("\n")
+      .map((line) => formatLatexForChat(line))
+      .join("\n");
+  }
+
+  let text = latex.trim();
+  if (!text) return "";
+
+  // 1. Chuẩn hóa Unicode ký tự toán học (như 𝑥, 𝑦, 𝐴, 𝟐 copy từ web/Word) về ký tự chuẩn
+  text = text.normalize("NFKC");
+
+  // 2. Gỡ bỏ các lệnh bọc font chữ LaTeX thừa do paste từ MathLive hoặc trang web khác (VD: \text{...}, \mathrm{...}, \textbf{...}, \textit{...})
+  // Giúp toàn bộ chữ đàm thoại / đề bài trở về dạng văn bản thuần túy, render đúng 100% font Geist Sans chuẩn của website
+  // Hỗ trợ nested braces 1 cấp: \text{Tìm x biết \frac{1}{2}} → "Tìm x biết \frac{1}{2}"
+  const TEXT_WRAP_RE = /\\(?:text|mathrm|textrm|textsf|textbf|textit|mathbf|mathit)\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g;
+  while (TEXT_WRAP_RE.test(text)) {
+    TEXT_WRAP_RE.lastIndex = 0; // reset sau .test()
+    text = text.replace(TEXT_WRAP_RE, "$1");
+  }
+
+  // 3. Gỡ bỏ dấu $ bao quanh toàn bộ nếu có từ trước
+  if (text.startsWith("$") && text.endsWith("$") && text.length > 2) {
+    text = text.substring(1, text.length - 1).trim();
+  }
+
+  // 2. Chuyển các ký tự thoát dấu khoảng trắng, placeholder & dấu câu của MathLive về văn bản tự nhiên
+  text = text
+    .replace(/\\placeholder\{[^}]*\}/g, "\\square")
+    .replace(/\\ /g, " ")
+    .replace(/\\,/g, ",")
+    .replace(/\\;/g, ";")
+    .replace(/\\:/g, ":")
+    .replace(/\\!/g, "")
+    .replace(/\\+$/g, "")
+    .trim();
+
+  // 3. Chuyển x đơn lẻ giữa các biểu thức số/lũy thừa thành \times (VD: 2^3 x 2^4 -> 2^3 \times 2^4)
+  text = text.replace(/([0-9\}\)])\s+x\s+([0-9\\\(])/g, "$1 \\times $2");
+
+  // 4. Tách từ chữ dính vào lệnh LaTeX (VD: "toán\frac{1}{2}" -> "toán \frac{1}{2}")
+  text = text.replace(/([a-zA-Z\u00C0-\u1EF9])\\([a-zA-Z])/g, "$1 \\$2");
+
+  // 5. Tách chữ dính sau dấu đóng ngoặc hoặc số nếu từ đó là từ tự nhiên (VD: "2^{4}này" -> "2^{4} này", "\frac{1}{2}ạ" -> "\frac{1}{2} ạ")
+  text = text.replace(/([\}\)\]0-9])([a-zA-Z\u00C0-\u1EF9]+)/g, (match, prefix, word) => {
+    if (isTextToken(word) || hasNaturalLanguage(word)) {
+      return `${prefix} ${word}`;
+    }
+    return match;
+  });
+
+  // 6. Khắc phục hiện tượng tách chữ do bộ gõ tiếng Việt (VD: "b ằng mấy" -> "bằng mấy")
+  text = text.replace(
+    /(^|\s)([b-df-hj-np-tv-zB-DF-HJ-NP-TV-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ])/gi,
+    "$1$2$3"
+  );
+
+  // 7. Nếu không có ký hiệu toán hay backslash nào -> văn bản thuần túy
+  const hasMathSyntax = /[\\^_{}√±×÷≤≥≠π]/.test(text);
+  if (!hasMathSyntax) {
+    return text;
+  }
+
+  // 8. Kiểm tra xem chuỗi có chứa từ ngữ tự nhiên (tiếng Việt/đàm thoại) hay không
+  const tokens = text.split(/\s+/);
+  const hasText = tokens.some((tok) => isTextToken(tok));
+
+  // 9. Nếu KHÔNG có từ ngữ tự nhiên nào -> Biểu thức toán học thuần túy
+  if (!hasText) {
+    return `$${text}$`;
+  }
+
+  // 10. Chuỗi hỗn hợp: Gom cụm các token toán và bọc $...$ cho từng cụm
+  const resultParts: string[] = [];
+  const currentMath: string[] = [];
+
+  const flushMath = () => {
+    if (currentMath.length === 0) return;
+    let mStr = currentMath.join(" ").trim();
+    currentMath.length = 0;
+    if (!mStr) return;
+
+    if (/[\\^_{}√±×÷≤≥≠π0-9\+\-\*\/=]/.test(mStr)) {
+      const punctMatch = mStr.match(/([,\.\?\!;:]+)$/);
+      let punct = "";
+      if (punctMatch) {
+        punct = punctMatch[1];
+        mStr = mStr.slice(0, -punct.length).trim();
+      }
+      if (mStr) {
+        resultParts.push(`$${mStr}$${punct}`);
+      } else if (punct) {
+        resultParts.push(punct);
+      }
+    } else {
+      resultParts.push(mStr);
+    }
+  };
+
+  for (const tok of tokens) {
+    if (isTextToken(tok)) {
+      flushMath();
+      resultParts.push(tok);
+    } else {
+      currentMath.push(tok);
+    }
+  }
+
+  flushMath();
+
+  return resultParts.join(" ");
+}
+
 export function preprocessLaTeX(content: string): string {
   if (!content || typeof content !== "string") return content;
+  content = content.normalize("NFKC");
 
   // 1. Tách và bảo vệ các khối code (code block ```...``` và inline code `...`)
   const codeBlocks: { id: string; code: string }[] = [];
@@ -105,18 +281,29 @@ export function preprocessLaTeX(content: string): string {
           const trimmedMath = rawMath.trim();
 
           if (trimmedMath.length > 0) {
-            // Kiểm tra ký tự liền trước dấu $ mở (trong chuỗi result hiện tại)
-            const prevChar = result.length > 0 ? result[result.length - 1] : "";
-            if (isWordChar(prevChar)) {
-              result += " ";
-            }
+            // Nếu bên trong dấu $ có chứa từ ngữ tự nhiên (tiếng Việt/đàm thoại),
+            // ví dụ như do tin nhắn bị bao $...$ toàn bộ: $Thầy ơi, bài tính lũy thừa 2^3 x 2^4 này làm sao ạ?$
+            // Ta cần giải phóng văn bản ra ngoài dấu $ và chỉ bọc $ cho biểu thức toán thực sự.
+            if (
+              hasNaturalLanguage(trimmedMath) ||
+              /\\(?:text|mathrm|textrm|textsf|textbf|textit|mathbf|mathit)\s*\{/.test(trimmedMath)
+            ) {
+              const formatted = formatLatexForChat(trimmedMath);
+              result += formatted;
+            } else {
+              // Kiểm tra ký tự liền trước dấu $ mở (trong chuỗi result hiện tại)
+              const prevChar = result.length > 0 ? result[result.length - 1] : "";
+              if (isWordChar(prevChar)) {
+                result += " ";
+              }
 
-            result += `$${trimmedMath}$`;
+              result += `$${trimmedMath}$`;
 
-            // Kiểm tra ký tự liền sau dấu $ đóng
-            const nextChar = closeIdx + 1 < line.length ? line[closeIdx + 1] : "";
-            if (isWordChar(nextChar)) {
-              result += " ";
+              // Kiểm tra ký tự liền sau dấu $ đóng
+              const nextChar = closeIdx + 1 < line.length ? line[closeIdx + 1] : "";
+              if (isWordChar(nextChar)) {
+                result += " ";
+              }
             }
           } else {
             result += "$$";
@@ -218,7 +405,7 @@ export function cleanLatexForDisplay(content: string | null | undefined, maxLeng
   // Tách số và chữ tiếng Việt nếu bị dính nhau (VD: "23bằng" -> "23 bằng")
   t = t.replace(/([0-9])([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ])/gi, "$1 $2");
   // Khắc phục tách chữ tiếng Việt nếu có (VD: "b ằng mấy" -> "bằng mấy")
-  t = t.replace(/\b([a-zA-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ])/gi, "$1$2");
+  t = t.replace(/(^|\s)([b-df-hj-np-tv-zB-DF-HJ-NP-TV-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ])/gi, "$1$2$3");
 
   if (maxLength && t.length > maxLength) {
     return t.slice(0, maxLength) + "...";
