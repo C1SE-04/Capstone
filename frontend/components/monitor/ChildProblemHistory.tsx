@@ -733,7 +733,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                               <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#8C4905] min-w-0 break-words overflow-visible">
                                 <ReactMarkdown
                                   remarkPlugins={[remarkMath, remarkGfm]}
-                                  rehypePlugins={[rehypeKatex]}
+                                  rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
                                 >
                                   {preprocessLaTeX(msg.content)}
                                 </ReactMarkdown>
@@ -742,7 +742,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                               <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#1C1917] min-w-0 break-words overflow-visible">
                                 <ReactMarkdown
                                   remarkPlugins={[remarkMath, remarkGfm]}
-                                  rehypePlugins={[rehypeKatex]}
+                                  rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
                                 >
                                   {preprocessLaTeX(msg.content)}
                                 </ReactMarkdown>
