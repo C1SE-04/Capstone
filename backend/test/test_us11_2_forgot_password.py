@@ -280,6 +280,64 @@ def test_forgot_password_verify_and_reset_invalid_otp_and_lockout(test_users_set
     assert "khóa" in res5.json()["detail"]
 
 
+def test_forgot_password_verify_otp_step2_flow(test_users_setup):
+    """
+    [Bug #414]: Kiểm tra API xác thực OTP ở Bước 2 (/auth/forgot-password/verify-otp):
+    1. Nhập sai OTP -> 400 báo rõ số lần thử còn lại.
+    2. Nhập đúng OTP -> 200 thành công cho phép chuyển sang bước mật khẩu mới.
+    """
+    from datetime import timedelta
+    client = TestClient(app)
+    suffix = uuid.uuid4().hex[:6]
+    test_email = f"parent_verify_{suffix}@example.com"
+
+    # Tạo user và mã OTP trong DB
+    db = SessionLocal()
+    user = models.User(
+        id=f"parent-v-{suffix}",
+        email=test_email,
+        username=f"user_v_{suffix}",
+        hashed_password=auth.hash_password("Pass123"),
+        role="MONITOR",
+    )
+    otp = models.EmailOtp(
+        email=test_email.lower(),
+        otp_code="987654",
+        purpose="PARENT_RESET_PASSWORD",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        attempts=0,
+        is_used=False,
+    )
+    db.add(user)
+    db.add(otp)
+    db.commit()
+    db.close()
+
+    # 1. Nhập sai OTP -> 400 và báo còn 4 lần thử
+    res_wrong = client.post(
+        "/auth/forgot-password/verify-otp",
+        json={"email": test_email, "otp_code": "111111"}
+    )
+    assert res_wrong.status_code == 400
+    assert "Bạn còn 4 lần thử" in res_wrong.json()["detail"]
+
+    # 2. Nhập đúng OTP -> 200 thành công
+    res_correct = client.post(
+        "/auth/forgot-password/verify-otp",
+        json={"email": test_email, "otp_code": "987654"}
+    )
+    assert res_correct.status_code == 200
+    assert res_correct.json()["success"] is True
+    assert "chính xác" in res_correct.json()["message"]
+
+    # Dọn dẹp
+    db = SessionLocal()
+    db.query(models.EmailOtp).filter_by(email=test_email.lower()).delete()
+    db.query(models.User).filter_by(id=f"parent-v-{suffix}").delete()
+    db.commit()
+    db.close()
+
+
 def test_forgot_password_verify_and_reset_success_and_session_version(test_users_setup):
     """
     [Task 1 & AC4]: Nhập đúng OTP -> Cập nhật mật khẩu mới, tăng session_version, thu hồi refresh token.

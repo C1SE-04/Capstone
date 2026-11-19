@@ -887,6 +887,89 @@ async def _clear_otp_lockout(email: str) -> None:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# US 11.2 (Bug #414): API Xác thực OTP ở Bước 2 cho Phụ huynh
+# ────────────────────────────────────────────────────────────────────────────
+
+@router.post("/auth/forgot-password/verify-otp", response_model=schemas.ForgotPasswordVerifyOtpResponse)
+@router.post("/forgot-password/verify-otp", response_model=schemas.ForgotPasswordVerifyOtpResponse)
+async def forgot_password_verify_otp(
+    payload: schemas.ForgotPasswordVerifyOtpInput,
+    db: Session = Depends(get_db),
+):
+    """
+    US 11.2 - API xác thực mã OTP ở Bước 2 trước khi chuyển sang bước đặt mật khẩu mới:
+    1. Kiểm tra khóa chống brute-force (khóa tạm 15 phút sau 5 lần nhập sai).
+    2. Tra cứu mã OTP còn hiệu lực cho PARENT_RESET_PASSWORD.
+    3. Kiểm tra số lần thử sai (tối đa 5 lần thử; khóa 15 phút nếu >= 5 lần).
+    4. Trả về thông báo thành công và số lần thử nếu sai.
+    """
+    normalized_email = payload.email.lower().strip()
+    clean_otp = payload.otp_code.strip()
+
+    if len(clean_otp) != 6 or not clean_otp.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mã OTP phải gồm đúng 6 chữ số."
+        )
+
+    # 1. Kiểm tra khóa chống brute-force 15 phút
+    await _check_otp_lockout(normalized_email)
+
+    # 2. Tìm mã OTP hợp lệ
+    now = datetime.now(timezone.utc)
+    otp_record = (
+        db.query(models.EmailOtp)
+        .filter(
+            models.EmailOtp.email == normalized_email,
+            models.EmailOtp.purpose == "PARENT_RESET_PASSWORD",
+            models.EmailOtp.is_used.is_(False),
+            models.EmailOtp.expires_at > now,
+        )
+        .order_by(models.EmailOtp.created_at.desc())
+        .first()
+    )
+
+    if not otp_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mã OTP không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu gửi lại mã mới."
+        )
+
+    # 3. Kiểm tra số lần nhập sai trên mã OTP này
+    if otp_record.attempts >= OTP_MAX_ATTEMPTS:
+        otp_record.is_used = True
+        db.commit()
+        await _set_otp_lockout(normalized_email)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 15 phút."
+        )
+
+    # 4. Xác thực mã OTP
+    if otp_record.otp_code != clean_otp:
+        otp_record.attempts += 1
+        db.commit()
+        remaining = OTP_MAX_ATTEMPTS - otp_record.attempts
+        if remaining <= 0:
+            otp_record.is_used = True
+            db.commit()
+            await _set_otp_lockout(normalized_email)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mã OTP đã bị khóa do nhập sai quá {OTP_MAX_ATTEMPTS} lần. Tài khoản bị tạm khóa 15 phút."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Mã OTP không đúng. Bạn còn {remaining} lần thử."
+        )
+
+    return schemas.ForgotPasswordVerifyOtpResponse(
+        success=True,
+        message="Mã OTP chính xác. Vui lòng thiết lập mật khẩu mới."
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # US 11.2 (Task 1): API Xác thực OTP & Đổi mật khẩu Phụ huynh
 # ────────────────────────────────────────────────────────────────────────────
 

@@ -38,6 +38,22 @@ class ForgotPasswordOtpRequestInput(BaseModel):
     email: EmailStr                       # Email tài khoản Phụ huynh cần khôi phục mật khẩu
 
 
+class ForgotPasswordVerifyOtpInput(BaseModel):
+    """
+    US 11.2: Payload xác thực mã OTP ở Bước 2 trước khi đặt mật khẩu mới.
+    """
+    email: EmailStr                       # Email tài khoản Phụ huynh
+    otp_code: str                         # Mã OTP 6 chữ số
+
+
+class ForgotPasswordVerifyOtpResponse(BaseModel):
+    """
+    US 11.2: Phản hồi xác thực mã OTP thành công.
+    """
+    success: bool = True
+    message: str
+
+
 class ForgotPasswordVerifyAndResetInput(BaseModel):
     """
     US 11.2: Payload xác thực OTP và đổi mật khẩu mới cho Phụ huynh.
