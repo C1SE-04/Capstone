@@ -81,11 +81,13 @@ class StudentLookupInput(BaseModel):
 
 class StudentLookupResponse(BaseModel):
     """
-    US 11.2: Phản hồi tra cứu học sinh kèm email phụ huynh đã che mờ.
+    US 11.2 & Bug #416: Phản hồi tra cứu học sinh kèm danh sách email phụ huynh đã che mờ.
     """
     success: bool = True
     student_username: str
-    parent_email_masked: str
+    parent_email_masked: str = ""                         # Email phụ huynh đầu tiên (giữ tương thích ngược)
+    parent_emails_masked: list[str] = Field(default_factory=list) # Danh sách tất cả email phụ huynh đã che mờ
+    parent_count: int = 0                                 # Số lượng phụ huynh bảo trợ
     notification_sent: bool = False
     message: str
 

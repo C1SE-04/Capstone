@@ -1147,34 +1147,53 @@ async def student_lookup_forgot_password(
             detail="Tên tài khoản này không thuộc về học sinh. Nếu bạn là Phụ huynh, vui lòng chọn tab 'Phụ huynh' để khôi phục mật khẩu bằng email."
         )
 
-    # 2. Tra cứu liên kết bảo trợ gia đình
-    link = (
+    # 2. Tra cứu liên kết bảo trợ gia đình (hỗ trợ học sinh liên kết nhiều phụ huynh - Bug #416)
+    links = (
         db.query(models.ParentStudentLink)
         .filter(models.ParentStudentLink.student_id == student.id)
-        .first()
+        .all()
     )
-    if not link:
+    if not links:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tài khoản học sinh này chưa được liên kết với tài khoản Phụ huynh nào. Bé hãy nhờ Bố/Mẹ vào tài khoản Phụ huynh để kết nối nhé."
         )
 
-    # 3. Tra cứu thông tin phụ huynh bảo trợ
-    parent = db.query(models.User).filter(models.User.id == link.parent_id).first()
-    if not parent or not parent.email:
+    # 3. Tra cứu thông tin tất cả phụ huynh bảo trợ hợp lệ
+    parent_ids = [l.parent_id for l in links]
+    parents = (
+        db.query(models.User)
+        .filter(models.User.id.in_(parent_ids))
+        .all()
+    )
+
+    # Lọc danh sách phụ huynh có email hợp lệ và loại bỏ trùng lặp (nếu có)
+    unique_parents = []
+    seen_emails = set()
+    for p in parents:
+        if p.email and p.email.strip():
+            clean_email = p.email.strip().lower()
+            if clean_email not in seen_emails:
+                seen_emails.add(clean_email)
+                unique_parents.append(p)
+
+    if not unique_parents:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Phụ huynh bảo trợ chưa cập nhật địa chỉ email nhận thông báo trong hệ thống."
+            detail="Các Phụ huynh bảo trợ chưa cập nhật địa chỉ email nhận thông báo trong hệ thống."
         )
 
-    masked_parent_email = mask_email(parent.email)
+    masked_parent_emails = [mask_email(p.email) for p in unique_parents]
+    primary_masked_email = masked_parent_emails[0]
 
     # 4. Nếu chưa yêu cầu gửi email thông báo -> chỉ trả về thông tin tra cứu
     if not payload.send_notification:
         return schemas.StudentLookupResponse(
             success=True,
             student_username=student.username or clean_username,
-            parent_email_masked=masked_parent_email,
+            parent_email_masked=primary_masked_email,
+            parent_emails_masked=masked_parent_emails,
+            parent_count=len(masked_parent_emails),
             notification_sent=False,
             message="Đã tìm thấy tài khoản học sinh. Bạn có thể bấm 'Gửi thông báo tới Bố/Mẹ' để gửi email nhắc nhở."
         )
@@ -1202,46 +1221,47 @@ async def student_lookup_forgot_password(
             detail=f"Thông báo đã được gửi tới Phụ huynh cách đây ít phút. Vui lòng đợi {ram_ttl} giây trước khi gửi lại."
         )
 
-    # 6. Gửi email thông báo nhắc nhở phụ huynh qua Brevo SMTP
+    # 6. Gửi email thông báo nhắc nhở tới TẤT CẢ phụ huynh bảo trợ qua Brevo SMTP (Bug #416)
     subject = f"[SocraticKid] Bé {student.username} cần Bố/Mẹ cấp lại mật khẩu"
-    text_content = (
-        f"Kính gửi Quý phụ huynh,\n\n"
-        f"Bé nhà mình có tài khoản là '{student.username}' vừa gửi yêu cầu hỗ trợ cấp lại mật khẩu đăng nhập trên nền tảng SocraticKid.\n\n"
-        f"Để cấp lại mật khẩu cho con, Quý phụ huynh vui lòng thực hiện theo các bước sau:\n"
-        f"1. Đăng nhập vào SocraticKid bằng tài khoản Phụ huynh ({parent.email}).\n"
-        f"2. Truy cập trang Giám sát con (/dashboard/monitor).\n"
-        f"3. Tại thẻ của bé '{student.username}', bấm nút '🔑 Cấp lại mật khẩu' để nhập mật khẩu mới cho con.\n\n"
-        f"Sau khi lưu, bé có thể sử dụng mật khẩu mới này để đăng nhập ngay lập tức.\n"
-        f"Nếu không phải bé nhà mình yêu cầu, Quý phụ huynh có thể bỏ qua thông báo này.\n\n"
-        f"Trân trọng,\nĐội ngũ SocraticKid"
-    )
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px;">
-        <h2 style="color: #2b6cb0; margin-top: 0;">SocraticKid - Nhắc Nhở Cấp Mật Khẩu Cho Con</h2>
-        <p>Kính gửi Quý phụ huynh,</p>
-        <p>Bé nhà mình với tên tài khoản <strong>{student.username}</strong> vừa gửi yêu cầu hỗ trợ cấp lại mật khẩu đăng nhập trên nền tảng <strong>SocraticKid</strong>.</p>
-        <div style="background-color: #f7fafc; border-left: 4px solid #3182ce; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
-            <p style="margin: 0; font-weight: bold; color: #2d3748;">Hướng dẫn cấp lại mật khẩu cho con:</p>
-            <ol style="margin: 8px 0 0 0; padding-left: 20px;">
-                <li>Đăng nhập tài khoản Phụ huynh trên SocraticKid.</li>
-                <li>Truy cập trang <strong>Giám sát con</strong> (<code>/dashboard/monitor</code>).</li>
-                <li>Tại thẻ của bé <strong>{student.username}</strong>, nhấn nút <strong>🔑 Cấp lại mật khẩu</strong>.</li>
-                <li>Nhập mật khẩu mới và bấm Lưu để bé đăng nhập ngay lập tức.</li>
-            </ol>
+    for parent in unique_parents:
+        text_content = (
+            f"Kính gửi Quý phụ huynh,\n\n"
+            f"Bé nhà mình có tài khoản là '{student.username}' vừa gửi yêu cầu hỗ trợ cấp lại mật khẩu đăng nhập trên nền tảng SocraticKid.\n\n"
+            f"Để cấp lại mật khẩu cho con, Quý phụ huynh vui lòng thực hiện theo các bước sau:\n"
+            f"1. Đăng nhập vào SocraticKid bằng tài khoản Phụ huynh ({parent.email}).\n"
+            f"2. Truy cập trang Giám sát con (/dashboard/monitor).\n"
+            f"3. Tại thẻ của bé '{student.username}', bấm nút '🔑 Cấp lại mật khẩu' để nhập mật khẩu mới cho con.\n\n"
+            f"Sau khi lưu, bé có thể sử dụng mật khẩu mới này để đăng nhập ngay lập tức.\n"
+            f"Nếu không phải bé nhà mình yêu cầu, Quý phụ huynh có thể bỏ qua thông báo này.\n\n"
+            f"Trân trọng,\nĐội ngũ SocraticKid"
+        )
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px;">
+            <h2 style="color: #2b6cb0; margin-top: 0;">SocraticKid - Nhắc Nhở Cấp Mật Khẩu Cho Con</h2>
+            <p>Kính gửi Quý phụ huynh,</p>
+            <p>Bé nhà mình với tên tài khoản <strong>{student.username}</strong> vừa gửi yêu cầu hỗ trợ cấp lại mật khẩu đăng nhập trên nền tảng <strong>SocraticKid</strong>.</p>
+            <div style="background-color: #f7fafc; border-left: 4px solid #3182ce; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; font-weight: bold; color: #2d3748;">Hướng dẫn cấp lại mật khẩu cho con:</p>
+                <ol style="margin: 8px 0 0 0; padding-left: 20px;">
+                    <li>Đăng nhập tài khoản Phụ huynh trên SocraticKid ({parent.email}).</li>
+                    <li>Truy cập trang <strong>Giám sát con</strong> (<code>/dashboard/monitor</code>).</li>
+                    <li>Tại thẻ của bé <strong>{student.username}</strong>, nhấn nút <strong>🔑 Cấp lại mật khẩu</strong>.</li>
+                    <li>Nhập mật khẩu mới và bấm Lưu để bé đăng nhập ngay lập tức.</li>
+                </ol>
+            </div>
+            <p style="color: #718096; font-size: 13px;">Nếu không phải bé nhà mình yêu cầu, Quý phụ huynh có thể yên tâm bỏ qua email này.</p>
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+            <p style="color: #a0aec0; font-size: 12px; margin: 0;">Email tự động từ hệ thống SocraticKid. Vui lòng không trả lời thư này.</p>
         </div>
-        <p style="color: #718096; font-size: 13px;">Nếu không phải bé nhà mình yêu cầu, Quý phụ huynh có thể yên tâm bỏ qua email này.</p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-        <p style="color: #a0aec0; font-size: 12px; margin: 0;">Email tự động từ hệ thống SocraticKid. Vui lòng không trả lời thư này.</p>
-    </div>
-    """
+        """
 
-    send_email(
-        to_email=parent.email,
-        subject=subject,
-        text_content=text_content,
-        html_content=html_content,
-        category="PARENT_RESET_NOTIFICATION"
-    )
+        send_email(
+            to_email=parent.email,
+            subject=subject,
+            text_content=text_content,
+            html_content=html_content,
+            category="PARENT_RESET_NOTIFICATION"
+        )
 
     # 7. Kích hoạt giới hạn cooldown 60s
     try:
@@ -1252,12 +1272,20 @@ async def student_lookup_forgot_password(
         pass
     _fallback_memory_limiter.set_lockout(cooldown_key, STUDENT_NOTIF_COOLDOWN_SECONDS)
 
+    success_msg = (
+        "Đã gửi thư nhắc nhở đến các hòm thư bảo trợ của em thành công!"
+        if len(unique_parents) > 1
+        else f"Đã gửi email thông báo nhắc nhở tới Bố/Mẹ ({primary_masked_email}). Bé hãy báo Bố/Mẹ kiểm tra hòm thư nhé!"
+    )
+
     return schemas.StudentLookupResponse(
         success=True,
         student_username=student.username or clean_username,
-        parent_email_masked=masked_parent_email,
+        parent_email_masked=primary_masked_email,
+        parent_emails_masked=masked_parent_emails,
+        parent_count=len(masked_parent_emails),
         notification_sent=True,
-        message=f"Đã gửi email thông báo nhắc nhở tới Bố/Mẹ ({masked_parent_email}). Bé hãy báo Bố/Mẹ kiểm tra hòm thư nhé!"
+        message=success_msg
     )
 
 

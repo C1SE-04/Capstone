@@ -56,11 +56,12 @@ export default function ForgotPasswordModal({
 
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // ── State Luồng Học sinh (Task #371 / T11.1.8 & AC-PW-05) ──
+  // ── State Luồng Học sinh (Task #371 / T11.1.8, AC-PW-05 & Bug #416) ──
   // studentStep: 1 = Nhập Username tra cứu, 2 = Đã tìm thấy Phụ huynh, 3 = Đã gửi email thông báo thành công
   const [studentStep, setStudentStep] = useState<1 | 2 | 3>(1);
   const [studentUsername, setStudentUsername] = useState<string>("");
   const [parentEmailMasked, setParentEmailMasked] = useState<string>("");
+  const [parentEmailsMasked, setParentEmailsMasked] = useState<string[]>([]);
   const [isStudentLoading, setIsStudentLoading] = useState<boolean>(false);
   const [studentError, setStudentError] = useState<string | null>(null);
   const [isSendingNotif, setIsSendingNotif] = useState<boolean>(false);
@@ -85,6 +86,7 @@ export default function ForgotPasswordModal({
       setStudentStep(1);
       setStudentUsername("");
       setParentEmailMasked("");
+      setParentEmailsMasked([]);
       setIsStudentLoading(false);
       setStudentError(null);
       setIsSendingNotif(false);
@@ -393,7 +395,14 @@ export default function ForgotPasswordModal({
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data.success) {
-        setParentEmailMasked(data.parent_email_masked);
+        const emails: string[] =
+          Array.isArray(data.parent_emails_masked) && data.parent_emails_masked.length > 0
+            ? data.parent_emails_masked
+            : data.parent_email_masked
+            ? [data.parent_email_masked]
+            : [];
+        setParentEmailsMasked(emails);
+        setParentEmailMasked(data.parent_email_masked || emails[0] || "");
         setStudentStep(2);
       } else {
         setStudentError(
@@ -999,10 +1008,10 @@ export default function ForgotPasswordModal({
                 </div>
               )}
 
-              {/* ── BƯỚC 2: Hiển thị email Phụ huynh che mờ & Nút Bắn Email (AC-PW-05) ── */}
+              {/* ── BƯỚC 2: Hiển thị email Phụ huynh che mờ & Nút Bắn Email (AC-PW-05 & Bug #416) ── */}
               {studentStep === 2 && (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-2.5">
+                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-3">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                       <span className="font-extrabold text-[#8C4905]">
@@ -1010,17 +1019,43 @@ export default function ForgotPasswordModal({
                       </span>
                     </div>
 
-                    <p className="leading-relaxed text-zinc-700">
-                      Đừng lo lắng nhé! Tài khoản của em đang được Bố/Mẹ bảo trợ qua địa chỉ email:
-                    </p>
+                    {parentEmailsMasked.length > 1 ? (
+                      <>
+                        <p className="leading-relaxed text-zinc-700 font-medium">
+                          Tài khoản của em đang được bảo trợ bởi các phụ huynh:
+                        </p>
 
-                    <div className="p-3 bg-white border border-[#F1CCA6] rounded-xl font-mono font-extrabold text-center text-sm text-[#8C4905] tracking-wide shadow-2xs">
-                      {parentEmailMasked}
-                    </div>
+                        <div className="space-y-1.5 p-3 bg-white border border-[#F1CCA6] rounded-xl shadow-2xs">
+                          {parentEmailsMasked.map((email, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center gap-2 font-mono font-bold text-xs sm:text-sm text-[#8C4905]"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#C1762A] shrink-0" />
+                              <span>{email}</span>
+                            </div>
+                          ))}
+                        </div>
 
-                    <p className="text-[11px] text-[#78716C] leading-relaxed">
-                      Em hãy nhờ Bố/Mẹ mở ứng dụng SocraticKid (mục <em>"Giám sát con"</em>) để cấp lại mật khẩu mới cho em, hoặc bấm nút dưới đây để hệ thống gửi email nhắc nhở Bố/Mẹ ngay:
-                    </p>
+                        <p className="text-[11px] text-[#78716C] leading-relaxed">
+                          Em đừng lo nhé! Khi bấm nút dưới đây, hệ thống sẽ gửi thông báo đến cả Bố và Mẹ để ai rảnh có thể hỗ trợ em nhanh nhất!
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="leading-relaxed text-zinc-700">
+                          Đừng lo lắng nhé! Tài khoản của em đang được Bố/Mẹ bảo trợ qua địa chỉ email:
+                        </p>
+
+                        <div className="p-3 bg-white border border-[#F1CCA6] rounded-xl font-mono font-extrabold text-center text-sm text-[#8C4905] tracking-wide shadow-2xs">
+                          {parentEmailsMasked[0] || parentEmailMasked}
+                        </div>
+
+                        <p className="text-[11px] text-[#78716C] leading-relaxed">
+                          Em hãy nhờ Bố/Mẹ mở ứng dụng SocraticKid (mục <em>"Giám sát con"</em>) để cấp lại mật khẩu mới cho em, hoặc bấm nút dưới đây để hệ thống gửi email nhắc nhở Bố/Mẹ ngay:
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   {/* Nút bấm Gửi thông báo tới Bố/Mẹ */}
@@ -1034,7 +1069,7 @@ export default function ForgotPasswordModal({
                       {isSendingNotif ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Đang gửi email thông báo tới Bố/Mẹ...</span>
+                          <span>Đang gửi thông báo...</span>
                         </>
                       ) : (
                         <>
@@ -1058,18 +1093,34 @@ export default function ForgotPasswordModal({
                 </div>
               )}
 
-              {/* ── BƯỚC 3: Gửi thông báo thành công (AC-PW-05) ── */}
+              {/* ── BƯỚC 3: Gửi thông báo thành công (AC-PW-05 & Bug #416) ── */}
               {studentStep === 3 && (
                 <div className="text-center space-y-4 py-4 animate-in zoom-in-95 duration-300">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 shadow-sm">
                     <CheckCircle2 className="w-10 h-10" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-lg font-black text-emerald-900">
-                      Đã Gửi Thông Báo Tới Bố/Mẹ Thành Công!
+                    <h3 className="text-base sm:text-lg font-black text-emerald-900 leading-tight">
+                      {parentEmailsMasked.length > 1
+                        ? "Đã gửi thư nhắc nhở đến các hòm thư bảo trợ của em thành công!"
+                        : "Đã Gửi Thông Báo Tới Bố/Mẹ Thành Công!"}
                     </h3>
                     <p className="text-xs text-zinc-600 max-w-sm mx-auto leading-relaxed">
-                      Hệ thống đã gửi một bức thư nhắc nhở về hòm thư của Bố/Mẹ: <strong className="font-mono text-[#8C4905]">{parentEmailMasked}</strong>.
+                      {parentEmailsMasked.length > 1 ? (
+                        <>
+                          Hệ thống đã gửi thư nhắc nhở đến các hòm thư phụ huynh bảo trợ:{" "}
+                          <strong className="font-mono text-[#8C4905]">
+                            {parentEmailsMasked.join(", ")}
+                          </strong>.
+                        </>
+                      ) : (
+                        <>
+                          Hệ thống đã gửi một bức thư nhắc nhở về hòm thư của Bố/Mẹ:{" "}
+                          <strong className="font-mono text-[#8C4905]">
+                            {parentEmailsMasked[0] || parentEmailMasked}
+                          </strong>.
+                        </>
+                      )}
                     </p>
                     <p className="text-xs text-zinc-600 max-w-sm mx-auto leading-relaxed">
                       Em hãy nhắn Bố/Mẹ mở email hoặc vào trang <strong>Giám sát con</strong> trên SocraticKid để cấp lại mật khẩu mới cho em nhé!

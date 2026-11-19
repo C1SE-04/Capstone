@@ -456,6 +456,73 @@ def test_student_lookup_masked_email_and_send_notification(test_users_setup):
     assert "Thông báo đã được gửi" in res_cooldown.json()["detail"]
 
 
+def test_student_lookup_multiple_parents_flow():
+    """
+    [Bug #416]: Kiểm tra tra cứu học sinh có nhiều phụ huynh bảo trợ:
+    1. Hiển thị đầy đủ danh sách email che mờ của tất cả phụ huynh liên kết.
+    2. Khi bấm gửi thông báo -> gửi email nhắc nhở tới TẤT CẢ các phụ huynh liên kết.
+    """
+    suffix = uuid.uuid4().hex[:6]
+    db = SessionLocal()
+
+    student_id = f"st-multi-{suffix}"
+    student_name = f"kid_multi_{suffix}"
+    p1_id = f"p1-{suffix}"
+    p1_email = f"father_{suffix}@example.com"
+    p2_id = f"p2-{suffix}"
+    p2_email = f"mother_{suffix}@example.com"
+
+    student = models.User(id=student_id, username=student_name, role="STUDENT", grade=5)
+    p1 = models.User(id=p1_id, username=f"dad_{suffix}", email=p1_email, role="MONITOR", hashed_password=auth.hash_password("Pass123"))
+    p2 = models.User(id=p2_id, username=f"mom_{suffix}", email=p2_email, role="MONITOR", hashed_password=auth.hash_password("Pass123"))
+
+    # Commit Users trước để thỏa mãn Foreign Key Constraint
+    db.add_all([student, p1, p2])
+    db.commit()
+
+    link1 = models.ParentStudentLink(parent_id=p1_id, student_id=student_id, student_nickname="Con iu 1")
+    link2 = models.ParentStudentLink(parent_id=p2_id, student_id=student_id, student_nickname="Con iu 2")
+
+    db.add_all([link1, link2])
+    db.commit()
+    db.close()
+
+    client = TestClient(app)
+
+    # 1. Tra cứu học sinh: phải trả về cả 2 email phụ huynh che mờ
+    res_lookup = client.post(
+        "/auth/forgot-password/student-lookup",
+        json={"username": student_name, "send_notification": False}
+    )
+    assert res_lookup.status_code == 200
+    data = res_lookup.json()
+    assert data["success"] is True
+    assert data["parent_count"] == 2
+    assert len(data["parent_emails_masked"]) == 2
+
+    # 2. Gửi thông báo: phải gửi thư tới cả 2 phụ huynh
+    clear_sent_emails()
+    res_notify = client.post(
+        "/auth/forgot-password/student-lookup",
+        json={"username": student_name, "send_notification": True}
+    )
+    assert res_notify.status_code == 200
+    assert res_notify.json()["notification_sent"] is True
+
+    sent_emails = get_sent_emails()
+    sent_recipients = {item["to_email"] for item in sent_emails}
+    assert len(sent_recipients) == 2
+    assert p1_email.lower() in sent_recipients
+    assert p2_email.lower() in sent_recipients
+
+    # Dọn dẹp DB
+    db = SessionLocal()
+    db.query(models.ParentStudentLink).filter_by(student_id=student_id).delete()
+    db.query(models.User).filter(models.User.id.in_([student_id, p1_id, p2_id])).delete(synchronize_session=False)
+    db.commit()
+    db.close()
+
+
 def test_student_lookup_unlinked_student():
     """Học sinh chưa liên kết với phụ huynh nào -> trả về lỗi 400 hướng dẫn."""
     db = SessionLocal()
