@@ -19,14 +19,28 @@ class RoutingResult(TypedDict):
     emotion_flag: str
 
 def _detect_uncovered_claim(message: str) -> bool:
-    """Trả về True nếu học sinh biện hộ rằng chưa học/chưa được dạy chủ đề nào đó."""
-    # Công thức: (Từ phủ định) + (từ đệm tùy chọn) + (học/dạy/thấy/gặp/nghe)
-    pattern = r"(chưa|chx|không|ko|k|hk)\s+(được\s+|đc\s+|dc\s+|từng\s+|bao giờ\s+|bao h\s+|cs\s+|có\s+)?(hc|học|dạy|nghe|biết tới|bt tới|bt|biết)|(lần đầu|mới|ms).{0,10}(gặp|thấy|nghe)|(chưa|chx)\s+quen"
-    # Cộng thêm các cụm từ viết tắt quá dị của Gen Z mà Regex khó gom nhóm
-    gen_z_slang = ("e ch hc", "chưa hỉu", "chx hỉu")
-    msg_lower = message.lower()
-    if re.search(pattern, msg_lower) or any(s in msg_lower for s in gen_z_slang):
-        return True
+    """
+    US 11.6: Nhận diện cơ bản các tín hiệu học sinh than chưa học/bỡ ngỡ
+    để hỗ trợ phân luồng nhanh trong Orchestrator sang SCAFFOLDING.
+    Toàn bộ ngữ nghĩa sâu, sắc thái tinh tế (teencode, ví von, cô bỏ qua...)
+    được giao cho Gemini (LLM) tự đọc hiểu trong prompt mà không gò bó vào từ ngữ.
+    """
+    msg_lower = message.lower().strip()
+
+    # 1. Bảo vệ chống False Positive: học sinh khẳng định 'không lạ', 'quen rồi', 'biết làm'
+    if re.search(r"(không|ko|chẳng|chả)\s+(thấy\s+)?(lạ|bỡ ngỡ)", msg_lower):
+        return False
+    if re.search(r"(quen\s+lắm|quen\s+rồi|dễ\s+ợt|biết\s+làm\s+rồi)", msg_lower):
+        return False
+
+    # 2. Nhận diện các tín hiệu chưa học, lạ lẫm hoặc thầy cô bỏ qua bài
+    core_pattern = (
+        r"(chưa|chx|không|ko|k|hk|ch)\s+.*(học|hc|dạy|nghe|biết|gặp|thấy|nhìn|đụng|va\s*chạm|sờ|tiếp\s*xúc|nhắc|đả\s*động|nói|quen)|"
+        r"\b(lạ|mới\s+toanh|mới\s+tinh|lần\s+đầu|quái\s+lạ|bỏ\s+qua|lướt\s+qua|skip|nhảy\s+cóc|giảm\s+tải)\b|"
+        r"\b(chx\s+bh|chx\s+từng|e\s+ch\s+hc)\b"
+    )
+    return bool(re.search(core_pattern, msg_lower))
+
     return False
 
 def _normalize_curriculum_text(text: str) -> str:
@@ -88,9 +102,13 @@ def _has_probe_already_completed(history_text: str) -> bool:
             "thầy cô đã dạy đến",
             "học đến phần nào rồi",
             "học đến bài nào rồi",
+            "đang học đến bài nào",
+            "đang học tới bài nào",
             "dạy đến bài này chưa",
             "dạy đến bài",
             "học tới bài này chưa",
+            "đã học qua chưa",
+            "học qua chưa",
             "thầy cô dạy tới đâu rồi",
             "học trước kiến thức",
             "ôn lại bài năm vừa rồi",
@@ -182,7 +200,9 @@ def _build_task_description(
                 f"Hãy chia nhỏ bước giải hơn nữa hoặc gợi ý một phép tính nhẩm cực kỳ đơn giản để học sinh tự tin trả lời."
             )
 
-        # US 9.3 (Task T9.11 & T9.13): Đưa dòng thời gian và Kịch bản thăm dò Socratic chuyên sâu vào task_description
+        # US 9.3 (Task T9.11 & T9.13) + US 11.6 (T401):
+        # Đưa dòng thời gian và Kịch bản thăm dò Socratic chuyên sâu vào task_description
+        # Probe mới (US 11.6): hỏi cụ thể tên bài học sinh đang học tới + tên bài được hỏi
         curr_grade = student_grade or 7
         try:
             from agents.agent_prompts import build_timeline_context_for_prompt
@@ -193,13 +213,31 @@ def _build_task_description(
             hk2_topics = tl.get("topics_hk2", [])
             hk1_str = "; ".join(hk1_topics[:8]) + ("..." if len(hk1_topics) > 8 else "")
             hk2_str = "; ".join(hk2_topics[:8]) + ("..." if len(hk2_topics) > 8 else "")
+            # --- US 11.6: Inject danh sách đầy đủ theo thứ tự vào prompt để Gemini tự so thứ tự ---
+            hk1_ordered = "; ".join(f"[{i+1}] {t}" for i, t in enumerate(hk1_topics))
+            hk2_ordered = "; ".join(f"[{i+1}] {t}" for i, t in enumerate(hk2_topics))
             return (
                 f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'.\n"
                 f"[{timeline_label}] CHƯƠNG TRÌNH LỚP {curr_grade}:\n"
-                f"- HK1: [{hk1_str}]\n"
-                f"- HK2: [{hk2_str}]\n\n"
-                f"CHỈ ĐẠO SƯ PHẠM BẮT BUỘC (SOCRATIC PROBE GUIDELINES):\n"
+                f"- HK1 (thứ tự): {hk1_ordered}\n"
+                f"- HK2 (thứ tự): {hk2_ordered}\n\n"
+                f"CHỈ ĐẠO SƯ PHẠM BẮT BUỘC (US 11.6 - SOCRATIC BRIDGE PROBE GUIDELINES):\n"
                 f"{scenario_guide}\n\n"
+                f"=== US 11.6 - CÂU HỎI THĂM DÒ TIẾN ĐỘ NÂNG CAO ===\n"
+                f"Khi cần hỏi thăm dò (bài thuộc HK1 vùng xám hoặc HK2 đang học), BẮT BUỘC hỏi theo mẫu:\n"
+                f"'Em cho thầy biết trên trường hiện tại em đang học đến bài nào rồi?\n"
+                f" Bài [TÊN BÀI HỌC SINH VỪA HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+                f"(Điền tên bài cụ thể mà học sinh đang hỏi vào [TÊN BÀI HỌC SINH VỪA HỎI])\n\n"
+                f"=== US 11.6 - XỬ LÝ KHI HỌC SINH TRẢ LỜI THĂM DÒ ===\n"
+                f"Khi học sinh trả lời 'học đến bài X' — TỰ ĐỐI CHIẾU với danh sách thứ tự HK1/HK2 bên trên:\n"
+                f"● Nếu bài X đứng TRƯỚC bài học sinh hỏi (index X < index bài hỏi)\n"
+                f"  → HỌC SINH THỰC SỰ CHƯA HỌC: Dùng Kịch bản B (hướng dẫn từ gốc rễ Socratic).\n"
+                f"● Nếu bài X đứng SAU bài học sinh hỏi (index X > index bài hỏi)\n"
+                f"  → HỌC SINH ĐÃ HỌC NHƯNG QUÊN: Dùng Kịch bản A với câu mở:\n"
+                f"    'Hiện tại nếu em đã học đến [Tên bài X] rồi thì với chương trình HK lớp {curr_grade},\n"
+                f"     em đã học [Tên bài được hỏi] rồi. Có lẽ em đã quên nên thầy sẽ nhắc lại cách làm bài này...'\n"
+                f"● Nếu học sinh nói 'cô/thầy bỏ qua/không dạy/nhảy cóc/giảm tải'\n"
+                f"  → Kịch bản B với lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!'\n\n"
                 f"NGUYÊN TẮC QUAN TRỌNG: Nếu rơi vào trường hợp cần hỏi thăm dò tiến độ trường học hoặc kỳ nghỉ hè, "
                 f"BẠN PHẢI DỪNG LẠI Ở CÂU HỎI THĂM DÒ VÀ GẮN THẺ ẨN <!-- PROBE_PENDING --> (HOẶC [PROBE_PENDING]) Ở CUỐI CÂU TRẢ LỜI, "
                 f"TUYỆT ĐỐI KHÔNG GIẢI BÀI HOẶC ĐẶT PHÉP TÍNH TOÁN NGAY TRONG LƯỢT NÀY!"
@@ -297,9 +335,13 @@ def _detect_probe_in_history(history_text: str) -> Optional[str]:
         "thầy cô đã dạy đến",
         "học đến phần nào rồi",
         "học đến bài nào rồi",
+        "đang học đến bài nào",
+        "đang học tới bài nào",
         "dạy đến bài này chưa",
         "dạy đến bài",
         "học tới bài này chưa",
+        "đã học qua chưa",
+        "học qua chưa",
         "thầy cô dạy tới đâu rồi",
     )
     if any(s in last_ai_msg for s in school_probe_signals):
@@ -316,6 +358,195 @@ def _detect_probe_in_history(history_text: str) -> Optional[str]:
         return "SUMMER_PROBE"
     
     return None
+
+
+def _detect_teacher_skipped_phrase(message: str) -> bool:
+    """
+    US 11.6 (T400/T401) - Phát hiện học sinh báo giáo viên bỏ qua / không dạy bài đó.
+    Ví dụ: "cô em không dạy bài đó", "thầy bỏ qua bài này", "nhảy cóc", "giảm tải"
+    """
+    msg_lower = message.lower()
+    skip_signals = (
+        "cô bỏ qua", "thầy bỏ qua", "bỏ qua bài", "nhảy cóc",
+        "giảm tải", "không dạy bài", "ko dạy bài", "k dạy bài",
+        "cô không dạy", "thầy không dạy", "cô ko dạy", "thầy ko dạy",
+        "lướt qua bài", "cô lướt qua", "thầy lướt qua",
+        "cô em lướt qua", "thầy em lướt qua", "cô em bỏ qua", "thầy em bỏ qua",
+        "cô skip", "thầy skip", "cô em skip", "thầy em skip", "skip bài",
+        "cô em không dạy", "cô em ko dạy", "thầy em không dạy",
+        "bỏ bài", "cắt bài", "không học bài đó", "ko học bài đó",
+        "trường em không học", "trường em ko học",
+        "cô hay bỏ", "thầy hay bỏ",
+    )
+    return any(s in msg_lower for s in skip_signals)
+
+
+def _detect_semester_for_grade(
+    text: str,
+    grade: int,
+    default_sem: int = 1,
+) -> int:
+    """
+    US 11.6: Tự động xác định học kỳ (1 hoặc 2) của khối lớp dựa trên
+    tên bài học xuất hiện trong đoạn hội thoại / đề bài.
+    """
+    try:
+        from agents.agent_prompts import _load_curriculum
+        curriculum = _load_curriculum()
+        g_data = curriculum.get(str(grade), {})
+        text_norm = _normalize_curriculum_text(text)
+        # Kiểm tra HK2 trước
+        topics_hk2 = g_data.get("2", [])
+        for t in topics_hk2:
+            t_norm = _normalize_curriculum_text(t)
+            if t_norm and len(t_norm) >= 4 and t_norm in text_norm:
+                return 2
+        # Kiểm tra HK1
+        topics_hk1 = g_data.get("1", [])
+        for t in topics_hk1:
+            t_norm = _normalize_curriculum_text(t)
+            if t_norm and len(t_norm) >= 4 and t_norm in text_norm:
+                return 1
+    except Exception:
+        pass
+    return default_sem
+
+
+def _find_best_topic_index(topic_name_mentioned: str, topics: list[str]) -> int:
+    """Tìm vị trí phù hợp nhất trong danh sách chuyên đề."""
+    norm_mentioned = _normalize_curriculum_text(topic_name_mentioned)
+    if not norm_mentioned:
+        return -1
+
+    words_mentioned = set(norm_mentioned.split())
+    best_idx = -1
+    best_score = 0.0
+
+    for i, t in enumerate(topics):
+        norm_t = _normalize_curriculum_text(t)
+        words_t = set(norm_t.split())
+
+        # Phân biệt ngữ nghĩa toán học: "số nguyên tố" vs "số nguyên" (integers)
+        if "tố" in words_t and "tố" not in words_mentioned:
+            continue
+        if "tố" in words_mentioned and "tố" not in words_t:
+            continue
+
+        # 1. Khớp hoàn toàn
+        if norm_t == norm_mentioned:
+            return i
+
+        score = 0.0
+        # 2. Khớp cụm từ chính xác (word boundary substring)
+        if re.search(rf"\b{re.escape(norm_mentioned)}\b", norm_t):
+            score += 50.0
+        elif norm_mentioned in norm_t:
+            score += 30.0
+
+        # 3. Điểm giao thoa từ vựng (Token Overlap)
+        common = words_mentioned & words_t
+        if common:
+            overlap_ratio = len(common) / len(words_mentioned)
+            score += overlap_ratio * 30.0
+
+        if score > best_score and (score >= 30.0 or len(common) >= min(2, len(words_mentioned))):
+            best_score = score
+            best_idx = i
+
+    return best_idx
+
+
+def _get_topic_position_in_curriculum(
+    topic_name_mentioned: str,
+    grade: int,
+    semester: Optional[int] = None,
+) -> int:
+    """
+    US 11.6 (T401): Tìm vị trí (index 0-based) của tên bài học sinh đề cập
+    trong danh sách curriculum theo thứ tự (HK1 hoặc HK2).
+    Sử dụng thuật toán xếp hạng độ khớp tốt nhất (Best Match Ranking).
+    Trả về -1 nếu không tìm thấy.
+    """
+    try:
+        from agents.agent_prompts import _load_curriculum
+        curriculum = _load_curriculum()
+        g_data = curriculum.get(str(grade), {})
+        target_sem = semester if semester in (1, 2) else 1
+        topics = g_data.get(str(target_sem), [])
+        idx = _find_best_topic_index(topic_name_mentioned, topics)
+        if idx != -1:
+            return idx
+        # Nếu không tìm thấy trong kỳ đã chọn, kiểm tra kỳ còn lại
+        other_sem = 2 if target_sem == 1 else 1
+        other_topics = g_data.get(str(other_sem), [])
+        idx_other = _find_best_topic_index(topic_name_mentioned, other_topics)
+        if idx_other != -1:
+            return idx_other
+        return -1
+    except Exception:
+        return -1
+
+
+def _classify_probe_reply_with_curriculum(
+    message: str,
+    asked_topic: str,
+    grade: int,
+    semester: int,
+) -> str:
+    """
+    US 11.6 (T401) - Phân loại thông minh phản hồi probe dựa trên vị trí bài trong curriculum.
+
+    So sánh vị trí của bài học sinh nói họ đang học (student_current_topic)
+    so với bài được hỏi (asked_topic) trong danh sách curriculum đã sắp xếp theo thứ tự.
+
+    Trả về:
+    - 'LEARN_NEW': student_pos < asked_pos → học sinh thực sự chưa học tới bài đó
+    - 'FORGOT_OLD': student_pos > asked_pos → học sinh đã học qua bài đó (có thể quên)
+    - 'CURRICULUM_SAME': student_pos == asked_pos → đang học đúng bài đó
+    - 'UNCLEAR': không xác định được vị trí
+    """
+    msg_lower = message.lower()
+
+    # Phát hiện câu "cô/thầy bỏ qua" → ưu tiên LEARN_NEW ngay
+    if _detect_teacher_skipped_phrase(message):
+        return "TEACHER_SKIPPED"
+
+    # Trích xuất tên bài học sinh nhắc tới ("học đến bài lũy thừa", "học tới phân số", ...)
+    # Pattern: "học (tới|đến|đến bài|tới bài) <tên bài>"
+    student_topic_match = re.search(
+        r"(?:học|hc)\s+(?:tới|đến|đến bài|tới bài|đến phần|tới phần)?\s+(?:bài\s+)?(.+?)(?:\s*(?:rồi|r|ạ|á|nhé|thôi|nha|thầy|cô)|$)",
+        msg_lower,
+        re.IGNORECASE,
+    )
+    student_topic_raw = student_topic_match.group(1).strip() if student_topic_match else ""
+
+    # Thử tìm thêm nếu học sinh nói "mới học bài X" / "đang học bài X"
+    if not student_topic_raw:
+        m2 = re.search(
+            r"(?:mới học|ms học|đang học|học đến|học tới)\s+(?:bài\s+)?(.+?)(?:\s*(?:rồi|r|ạ|á|nhé|thôi|nha|thầy|cô)|$)",
+            msg_lower,
+            re.IGNORECASE,
+        )
+        if m2:
+            student_topic_raw = m2.group(1).strip()
+
+    # Nếu không trích được tên bài → fallback sang classify thủ công cũ
+    if not student_topic_raw or len(student_topic_raw) < 3:
+        return _classify_probe_reply(message)
+
+    asked_pos = _get_topic_position_in_curriculum(asked_topic, grade, semester)
+    student_pos = _get_topic_position_in_curriculum(student_topic_raw, grade, semester)
+
+    if asked_pos == -1 or student_pos == -1:
+        # Không tìm được vị trí → fallback
+        return _classify_probe_reply(message)
+
+    if student_pos < asked_pos:
+        return "LEARN_NEW"
+    elif student_pos > asked_pos:
+        return "FORGOT_OLD"
+    else:
+        return "CURRICULUM_SAME"
 
 
 def _classify_probe_reply(message: str) -> str:
@@ -372,7 +603,7 @@ class OrchestratorAgent:
     PROFANITY_LIST: tuple = (
         "đm", "dcm", "dm", "vcl", "vl", "đĩ", "cặc", "lồn","chó chết", "ngu ngốc", "chết đi", "cút đi", "mẹ mày","thằng chó", "địt", 
         "mẹ kiếp", "đệt", "đệch", "đậu má", "dmm", "dkm", "đkm", "đklm", "loz", "lòn", "cẹc", "buồi", "dái", "clgt", "cc", "qq", "ml",
-         "sml", "vml", "cđm", "vkl","đụ mẹ", "đụ má", "đĩ mẹ", "đù má", "đù mẹ", "đụ", "cút", "biến", "xéo", "cái đệt",
+         "sml", "vml", "cđm", "vkl","đụ mẹ", "đụ má", "đĩ mẹ", "đù má", "đù mẹ", "đụ", "cút", "biến đi", "xéo", "cái đệt",
         "địt mẹ", "địt con mẹ", "địt cụ", "địt mợ", "địt tổ sư", "địt mả bố","địt mẹ mày", "đụ mẹ mày", "đm mày", "đm nó", "địt con lồn mẹ", 
         "đcmm", "dcmm", "con đĩ mẹ","vãi", "vãi lồn", "vãi cả lồn", "vãi lìn", "vãi lon", "vãi l","vãi đái", "vãi nhái", "vãi chưởng", "vãi nồi",
         "cái lồn gì thế", "cái lồn gì vậy", "cái lồn", "mặt lồn", "hãm lồn", "xạo lồn", "con lồn", "thằng lồn", "sấp mặt lồn",
@@ -1267,8 +1498,9 @@ class OrchestratorAgent:
                 emotion_flag="WARNING",
             )
 
-        # 1.2 Off-topic tuyệt đối
-        if any(s in text_clean for s in self.OFFTOPIC_SIGNALS):
+        # 1.2 Off-topic (chỉ kích hoạt khi không chứa tín hiệu học tập / toán học)
+        has_offtopic = any(re.search(rf"\b{re.escape(s)}\b", text_clean) for s in self.OFFTOPIC_SIGNALS)
+        if has_offtopic and self._no_study_intent(text_clean):
             return RoutingResult(
                 selected_agent="SAFETY",
                 task_description=_build_task_description("SAFETY", original_message),
@@ -1289,16 +1521,65 @@ class OrchestratorAgent:
                 emotion_flag="GUIDING",
             )
 
-        # 1.3c [Task T9.14 & T9.15]: Nhận diện học sinh phản hồi sau câu hỏi thăm dò (Follow-up Turn & Safe Fallback)
+        # 1.3c [Task T9.14 & T9.15 / US 11.6 T401]: Nhận diện học sinh phản hồi sau câu hỏi thăm dò (Follow-up Turn & Safe Fallback)
         probe_type = _detect_probe_in_history(history_text)
         if probe_type:
-            reply_intent = _classify_probe_reply(text_clean)
+            curr_grade = student_grade or 7
+            try:
+                from agents.agent_prompts import get_semester_from_month, get_effective_curriculum_month
+                curr_month = get_effective_curriculum_month()
+                curr_sem = get_semester_from_month(curr_month)
+                base_sem = curr_sem if curr_sem else 1
+            except Exception:
+                curr_month = 9
+                base_sem = 1
+
+            # US 11.6: Tự động xác định học kỳ 1 hay 2 dựa trên bối cảnh bài học đang thảo luận
+            context_corpus = original_message + " " + (history_text or "") + (" " + problem_context.get("problem_text", "") if problem_context else "")
+            active_sem = _detect_semester_for_grade(context_corpus, curr_grade, default_sem=base_sem) if curr_grade else base_sem
+
+            # US 11.6: Phân loại intent hỗ trợ scratchpad và routing
+            if _detect_teacher_skipped_phrase(text_clean):
+                reply_intent = "TEACHER_SKIPPED"
+            elif student_grade:
+                try:
+                    reply_intent = _classify_probe_reply_with_curriculum(
+                        text_clean, "", student_grade, active_sem
+                    )
+                except Exception:
+                    reply_intent = _classify_probe_reply(text_clean)
+            else:
+                reply_intent = _classify_probe_reply(text_clean)
+
             praise_summer = "Nếu học sinh xác nhận đang tự học trước trong kỳ nghỉ hè, hãy bắt đầu bằng một lời khen ngợi tinh thần tự giác của em! " if probe_type == "SUMMER_PROBE" else ""
             summer_unclear_note = " (LƯU Ý MÙA HÈ - AC 9.3.7: Học sinh có tâm lý xả hơi hè, tuyệt đối không gặng hỏi hay truy cứu, hãy động viên ấm áp và giảng giải từng bước nhỏ từ gốc rễ theo Kịch bản B)." if probe_type == "SUMMER_PROBE" else ""
-            
+
+            # US 11.6: Inject danh sách curriculum theo thứ tự để AI tự so sánh vị trí bài
+            curriculum_order_note = ""
+            if student_grade:
+                try:
+                    from agents.agent_prompts import _load_curriculum
+                    _curriculum = _load_curriculum()
+                    _g_data = _curriculum.get(str(student_grade), {})
+                    _topics = _g_data.get(str(active_sem), [])
+                    if _topics:
+                        _ordered = "; ".join(f"[{i+1}] {t}" for i, t in enumerate(_topics))
+                        curriculum_order_note = (
+                            f"\n\n=== US 11.6 CURRICULUM ORDER (HK{active_sem} Lớp {student_grade}) ===\n"
+                            f"Danh sách bài theo thứ tự chương trình (INDEX BÀI TỪ NHỎ ĐẾN LỚN = THỨ TỰ HỌC):\n"
+                            f"{_ordered}\n"
+                            f"Hãy TỰ SO SÁNH vị trí bài học sinh đang học và bài học sinh hỏi:\n"
+                            f"● Bài học sinh đang học [X] < Bài được hỏi [Y] → Học sinh CHƯA HỌC TỚI → BẮT BUỘC ÁP DỤNG KỊCH BẢN B (Coi học sinh là 'tờ giấy trắng').\n"
+                            f"● Bài học sinh đang học [X] > Bài được hỏi [Y] → Học sinh ĐÃ HỌC NHƯNG QUÊN → BẮT BUỘC ÁP DỤNG KỊCH BẢN A với câu:\n"
+                            f"  'Hiện tại nếu em đã học đến [Tên bài X] rồi thì với chương trình HK{active_sem} lớp {student_grade}, em đã học bài [Tên bài Y] rồi. Có lẽ em đã quên nên thầy sẽ nhắc lại cách làm bài này...'\n"
+                            f"● Học sinh nói 'cô/thầy bỏ qua/không dạy/nhảy cóc' → BẮT BUỘC ÁP DỤNG KỊCH BẢN B kèm lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!'"
+                        )
+                except Exception:
+                    curriculum_order_note = ""
+
             guide_instruction = (
                 f"HỌC SINH ĐANG PHẢN HỒI CÂU HỎI THĂM DÒ TIẾN ĐỘ ({probe_type}): '{original_message[:80]}'.\n"
-                f"BẠN LÀ THẦY GIÁO SOCRATIC. Hãy đọc hiểu câu trả lời thực tế của học sinh trong ngữ cảnh hội thoại để rẽ nhánh sư phạm chuẩn xác nhất:\n\n"
+                f"BẠN LÀ THẦY GIÁO SOCRATIC TRÍ TUỆ & THẤU CẢM. Hãy đọc hiểu câu trả lời thực tế của học sinh trong ngữ cảnh hội thoại để rẽ nhánh sư phạm chuẩn xác nhất:\n\n"
                 f"1. NẾU HỌC SINH CHƯA HỌC TỚI / HỌC TRƯỚC BÀI MỚI (chưa học, cô chưa dạy, mới học tới bài trước, hoặc tự học trước hè):\n"
                 f"   -> BẮT BUỘC ÁP DỤNG KỊCH BẢN B (DẪN DẮT TỪ GỐC RỄ):\n"
                 f"   - Coi học sinh là 'tờ giấy trắng', tuyệt đối không ép học sinh phải nhớ công thức mới.\n"
@@ -1308,12 +1589,15 @@ class OrchestratorAgent:
                 f"   - Đồng cảm nhẹ nhàng (quên là bình thường sau một thời gian), KHÔNG giảng lại từ đầu.\n"
                 f"   - Nhắc lại tên công thức hoặc quy tắc tổng quát, gợi mở để học sinh tự nhớ lại.\n\n"
                 f"3. NẾU HỌC SINH NÓI LẤP LỬNG / BÍ BÀI / KHÔNG BIẾT ('em ko bt', 'bí quá'):\n"
-                f"   -> Áp dụng Kịch bản B (hướng dẫn kiên nhẫn từ bước đơn giản nhất, không truy cứu hay phán xét).{summer_unclear_note}"
+                f"   -> Áp dụng Kịch bản B (hướng dẫn kiên nhẫn từ bước đơn giản nhất, không truy cứu hay phán xét).{summer_unclear_note}\n\n"
+                f"4. NẾU HỌC SINH BÁO THẦY CÔ BỎ QUA / KHÔNG DẠY / NHẢY CÓC / GIẢM TẢI / LƯỚT QUA BÀI NÀY:\n"
+                f"   -> BẮT BUỘC ÁP DỤNG KỊCH BẢN B kèm lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!' rồi hướng dẫn từ nền tảng đơn giản nhất."
+                f"{curriculum_order_note}"
             )
             return RoutingResult(
                 selected_agent="SCAFFOLDING",
                 task_description=guide_instruction,
-                routing_scratchpad=f"[Trụ1] Follow-up Probe -> Socratic Decision Framework ({probe_type}) [{reply_intent}]",
+                routing_scratchpad=f"[Trụ1] Follow-up Probe -> Socratic Decision Framework ({probe_type}) [{reply_intent}] [US11.6]",
                 emotion_flag="GUIDING",
             )
 
