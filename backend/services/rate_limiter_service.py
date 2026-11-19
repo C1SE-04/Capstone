@@ -398,7 +398,7 @@ class RateLimiterService:
     # 4. CHỐNG TẤN CÔNG DÒ MẬT KHẨU ĐA TẦNG (ANTI-BRUTE-FORCE 3 LỚP) - TASK #360
     # --------------------------------------------------------------------------
     MAX_LOGIN_ATTEMPTS = 5             # Tối đa 5 lần thử sai theo (Username + IP)
-    LOGIN_LOCKOUT_SECONDS = 900        # Tạm khóa 15 phút (900s)
+    LOGIN_LOCKOUT_SECONDS = 180        # Tạm khóa 3 phút (180s) theo yêu cầu người dùng
     MAX_FAILED_LOGINS_PER_IP = 20      # Tối đa 20 lần thử sai từ 1 IP trên toàn hệ thống
     IP_LOCKOUT_SECONDS = 1800          # Tạm khóa IP 30 phút (1800s)
     MULTI_IP_FAILURE_THRESHOLD = 10    # Ngưỡng phát hiện botnet xoay IP

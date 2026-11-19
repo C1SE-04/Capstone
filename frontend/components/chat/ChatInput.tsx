@@ -46,6 +46,7 @@ export interface ChatInputProps {
   onSendMessage: (message: string, image?: File) => void;
   isLoading?: boolean;
   isOffline?: boolean;
+  cooldownSeconds?: number;
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -141,6 +142,7 @@ export function ChatInput({
   onSendMessage,
   isLoading,
   isOffline = false,
+  cooldownSeconds = 0,
 }: ChatInputProps) {
   // ── State ──
   const [hasContent, setHasContent] = useState(false);
@@ -535,11 +537,12 @@ export function ChatInput({
   const canSend =
     (hasContent || attachment !== null) &&
     !isLoading &&
-    !isOffline;
+    !isOffline &&
+    (!cooldownSeconds || cooldownSeconds <= 0);
 
   const handleSend = () => {
-    // Chặn tuyệt đối nếu hệ thống đang phản hồi hoặc mất kết nối
-    if (isLoading || isOffline) return;
+    // Chặn tuyệt đối nếu hệ thống đang phản hồi, mất kết nối hoặc đang trong thời gian chờ cooldown
+    if (isLoading || isOffline || (cooldownSeconds && cooldownSeconds > 0)) return;
 
     const mf = mathfieldRef.current as any;
     const rawVal = mf?.value || "";
@@ -789,7 +792,11 @@ export function ChatInput({
             <div
               className="absolute left-1 top-1/2 -translate-y-1/2 text-[#8C4905]/50 pointer-events-none text-xs sm:text-sm font-medium truncate select-none"
             >
-              {isOffline ? (
+              {cooldownSeconds && cooldownSeconds > 0 ? (
+                <span className="text-[#C1762A] font-semibold flex items-center gap-1">
+                  <span>Vui lòng đợi {cooldownSeconds}s trước khi gửi tiếp... ⏳</span>
+                </span>
+              ) : isOffline ? (
                 "Mất kết nối. Đang chờ kết nối lại..."
               ) : isLoading ? (
                 <span className="flex items-center gap-1.5 text-[#C1762A] animate-pulse">
@@ -852,7 +859,9 @@ export function ChatInput({
               : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed opacity-60"
           )}
           title={
-            isOffline
+            cooldownSeconds && cooldownSeconds > 0
+              ? `Vui lòng đợi ${cooldownSeconds}s trước khi gửi tiếp`
+              : isOffline
               ? "Không thể gửi khi mất kết nối"
               : isLoading
               ? "SocraticKid đang phản hồi, vui lòng đợi..."
@@ -861,6 +870,10 @@ export function ChatInput({
         >
           {isLoading ? (
             <div className="w-5 h-5 border-2 border-[#8C4905]/30 border-t-[#C1762A] rounded-full animate-spin" />
+          ) : cooldownSeconds && cooldownSeconds > 0 ? (
+            <span className="text-xs font-bold text-[#8C4905] min-w-[20px] text-center">
+              {cooldownSeconds}s
+            </span>
           ) : (
             <Send size={20} className={cn(canSend && !isOffline && "ml-0.5")} />
           )}

@@ -44,7 +44,15 @@ function createMessageId(prefix: string = "msg") {
 /* ──────────────────────────────────────────────
    Modal: Thông báo hết lượt dùng thử (US 4.3)
 ────────────────────────────────────────────── */
-function TrialExpiredModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => void }) {
+function TrialExpiredModal({
+  onLogin,
+  onClose,
+  maxLimit = 10,
+}: {
+  onLogin: () => void;
+  onClose: () => void;
+  maxLimit?: number;
+}) {
   const [owlData, setOwlData] = useState<object | null>(null);
 
   useEffect(() => {
@@ -125,7 +133,7 @@ function TrialExpiredModal({ onLogin, onClose }: { onLogin: () => void; onClose:
             </h2>
             <p className="text-sm text-[#C1762A] font-medium leading-relaxed max-w-xs">
               Bạn đã dùng hết{" "}
-              <strong className="text-[#8C4905]">10 câu hỏi</strong> dùng thử
+              <strong className="text-[#8C4905]">{maxLimit} câu hỏi</strong> dùng thử
               hôm nay. Quay lại sau{" "}
               <strong className="text-[#8C4905]">24 tiếng</strong> để được cấp
               thêm lượt mới — hoặc{" "}
@@ -195,7 +203,8 @@ export default function TryPage() {
   const [showTrialExpired, setShowTrialExpired] = useState(false);
   const [showAuthForm, setShowAuthForm] = useState(false);
 
-  // US 4.3: Quản lý giới hạn 10 câu hỏi dùng thử & chống spam
+  // US 4.3 & US 11.1: Quản lý giới hạn câu hỏi dùng thử & chống spam
+  const [guestLimit, setGuestLimit] = useState(10);
   const [trialCount, setTrialCount] = useState(0);
   const [isTrialExpired, setIsTrialExpired] = useState(false);
 
@@ -204,11 +213,29 @@ export default function TryPage() {
   const router = useRouter();
   const [sessionId, setSessionId] = useState("");
 
-  // Task 89 - US 4.3: Lấy hoặc tạo Guest ID từ localStorage
-  // và kiểm tra số câu đã dùng (persistent trong 24h)
+  // Task 89 - US 4.3 & US 11.1: Lấy hoặc tạo Guest ID từ localStorage
+  // và đồng bộ giới hạn guest_rate_limit từ hệ thống
   useEffect(() => {
     const guestId = getOrCreateGuestId();
     if (guestId) setSessionId(guestId);
+
+    const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    fetch(`${BACKEND_URL}/chat/limits`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.guest_rate_limit === "number") {
+          const limit = data.guest_rate_limit;
+          setGuestLimit(limit);
+          if (typeof window !== "undefined") {
+            const stored = parseInt(localStorage.getItem("sk_trial_count") || "0", 10);
+            if (stored >= limit) {
+              setIsTrialExpired(true);
+              setShowTrialExpired(true);
+            }
+          }
+        }
+      })
+      .catch(() => {});
 
     if (typeof window !== "undefined") {
       const storedCount = parseInt(
@@ -228,7 +255,7 @@ export default function TryPage() {
         setIsTrialExpired(false);
       } else {
         setTrialCount(storedCount);
-        if (storedCount >= 10) {
+        if (storedCount >= guestLimit) {
           setIsTrialExpired(true);
           setShowTrialExpired(true);
         }
@@ -250,8 +277,8 @@ export default function TryPage() {
     const trimmed = text.trim();
     if (!trimmed || isTyping) return;
 
-    // Chặn gửi nếu đã hết lượt dùng thử (10 câu)
-    if (isTrialExpired || trialCount >= 10) {
+    // Chặn gửi nếu đã hết lượt dùng thử theo cấu hình động
+    if (isTrialExpired || trialCount >= guestLimit) {
       setIsTrialExpired(true);
       setShowTrialExpired(true);
       return;
@@ -270,7 +297,7 @@ export default function TryPage() {
       }
     }
 
-    if (currentCount >= 10) {
+    if (currentCount >= guestLimit) {
       setIsTrialExpired(true);
     }
 
@@ -310,7 +337,7 @@ export default function TryPage() {
         setIsTrialExpired(true);
         setShowTrialExpired(true);
         if (typeof window !== "undefined") {
-          localStorage.setItem("sk_trial_count", "10");
+          localStorage.setItem("sk_trial_count", guestLimit.toString());
         }
         return;
       }
@@ -357,7 +384,7 @@ export default function TryPage() {
       );
     } finally {
       setIsTyping(false);
-      if (currentCount >= 10) {
+      if (currentCount >= guestLimit) {
         setShowTrialExpired(true);
       } else {
         inputRef.current?.focus();
@@ -507,7 +534,7 @@ export default function TryPage() {
         {isTrialExpired && (
           <div className="mb-3 px-4 py-2.5 bg-amber-50 border border-[#F1CCA6] rounded-2xl flex items-center justify-between text-xs text-[#8C4905] animate-in fade-in shadow-sm">
             <span>
-              Bạn đã sử dụng hết <strong>10/10 lượt dùng thử</strong> hôm nay.
+              Bạn đã sử dụng hết <strong>{guestLimit}/{guestLimit} lượt dùng thử</strong> hôm nay.
             </span>
             <button
               onClick={handleOpenAuth}
@@ -541,8 +568,8 @@ export default function TryPage() {
             onKeyDown={handleKeyDown}
             placeholder={
               isTrialExpired
-                ? "Đã hết 10 lượt dùng thử — Vui lòng đăng nhập để tiếp tục"
-                : `Hỏi SocraticKid bất cứ điều gì... (${trialCount}/10 lượt)`
+                ? `Đã hết ${guestLimit} lượt dùng thử — Vui lòng đăng nhập để tiếp tục`
+                : `Hỏi SocraticKid bất cứ điều gì... (${trialCount}/${guestLimit} lượt)`
             }
             className={`flex-1 bg-transparent text-stone-900 placeholder:text-[#8C4905]/40 outline-none font-medium text-sm ${
               isTrialExpired ? "cursor-not-allowed select-none" : ""
@@ -575,6 +602,7 @@ export default function TryPage() {
       {/* ── Modal: Hết lượt dùng thử (US 4.3 - Task 113) ── */}
       {showTrialExpired && (
         <TrialExpiredModal
+          maxLimit={guestLimit}
           onLogin={handleOpenAuth}
           onClose={() => setShowTrialExpired(false)}
         />

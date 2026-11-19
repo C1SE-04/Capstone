@@ -1472,14 +1472,14 @@ export default function AdminSettingsPage() {
                         guest_rate_limit: parseInt(e.target.value, 10) || 5,
                       })
                     }
-                    className="w-full bg-white border border-[#F1CCA6] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] pr-18"
+                    className="w-full bg-white border border-[#F1CCA6] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] pr-20"
                   />
                   <span className="absolute right-3.5 top-2.5 text-xs text-[#7A3E04] font-semibold pointer-events-none">
-                    tin / 5 phút
+                    câu / ngày
                   </span>
                 </div>
                 <p className="text-[11px] text-[#7A3E04]">
-                  Áp dụng cho học sinh chưa đăng nhập tài khoản.
+                  Số câu hỏi dùng thử miễn phí trong ngày cho học sinh chưa đăng nhập.
                 </p>
               </div>
 
@@ -1490,7 +1490,7 @@ export default function AdminSettingsPage() {
                 <div className="relative">
                   <input
                     type="number"
-                    min="5"
+                    min="1"
                     max="120"
                     value={settings.student_rate_limit}
                     onChange={(e) =>
@@ -1499,14 +1499,14 @@ export default function AdminSettingsPage() {
                         student_rate_limit: parseInt(e.target.value, 10) || 30,
                       })
                     }
-                    className="w-full bg-white border border-[#F1CCA6] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] pr-18"
+                    className="w-full bg-white border border-[#F1CCA6] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#1C1917] focus:outline-hidden focus:border-[#C1762A] pr-20"
                   />
                   <span className="absolute right-3.5 top-2.5 text-xs text-[#7A3E04] font-semibold pointer-events-none">
-                    tin / 5 phút
+                    câu / phút
                   </span>
                 </div>
                 <p className="text-[11px] text-[#7A3E04]">
-                  Áp dụng cho tài khoản học sinh đã kích hoạt và liên kết phụ huynh.
+                  Số câu hỏi tối đa trong 1 phút (cửa sổ trượt 60s) cho học sinh đã đăng nhập.
                 </p>
               </div>
             </div>

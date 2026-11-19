@@ -29,6 +29,8 @@ interface ChatWindowProps {
   onNotUnderstood?: () => void;
   /** US4.1: So lan nhan Chua hieu (quan ly o ChatPage de tranh bi reset khi remount) */
   notUnderstoodCount?: number;
+  /** US11.1 (AC3): Số giây đếm ngược khi bị rate limit cooldown */
+  cooldownSeconds?: number;
   /**
    * Key tăng mỗi khi người dùng chọn một cuộc hội thoại cũ từ Sidebar.
    * Khi key thay đổi, ChatWindow sẽ scroll ngay xuống tin nhắn mới nhất.
@@ -48,6 +50,7 @@ export function ChatWindow({
   onUnderstood,
   onNotUnderstood,
   notUnderstoodCount = 0,
+  cooldownSeconds = 0,
   selectedChatKey = 0,
   sessionId,
 }: ChatWindowProps) {
@@ -341,6 +344,7 @@ export function ChatWindow({
             onSendMessage={(message, image) => handleSendMessage(message, false, image)}
             isLoading={isTyping}
             isOffline={!isOnline}
+            cooldownSeconds={cooldownSeconds}
           />
         </div>
       </div>
