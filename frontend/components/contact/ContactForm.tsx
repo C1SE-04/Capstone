@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, ChangeEvent, DragEvent } from "react";
 import { useSession } from "next-auth/react";
+import { FileTooLargeToast } from "@/components/chat/FileTooLargeToast";
 import {
   Send,
   Loader2,
@@ -106,6 +107,16 @@ export default function ContactForm() {
     type: "error" | "info";
   } | null>(null);
 
+  // Trạng thái thông báo nổi khi upload ảnh lỗi (>5MB hoặc quá số lượng) như trong chat học sinh
+  const [fileToastState, setFileToastState] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message?: string;
+    sizeMb?: number;
+  }>({
+    isOpen: false,
+  });
+
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
 
@@ -162,7 +173,7 @@ export default function ContactForm() {
       case "message": {
         const trimmed = value.trim();
         if (!trimmed) return "Vui lòng chia sẻ nội dung bạn muốn gửi tới SocraticKid.";
-        if (trimmed.length < 10) return "Nội dung cần tối thiểu 10 ký tự để chúng mình hiểu rõ vấn đề.";
+        if (trimmed.length < 10) return "Nội dung cần tối thiểu 10 ký tự để đội ngũ hỗ trợ hiểu rõ vấn đề.";
         if (trimmed.length > MAX_MESSAGE_LENGTH) return `Nội dung không được vượt quá ${MAX_MESSAGE_LENGTH} ký tự.`;
         return undefined;
       }
@@ -201,8 +212,16 @@ export default function ContactForm() {
   const handleFiles = (incomingFiles: FileList | File[]) => {
     const fileArray = Array.from(incomingFiles);
 
+    // Kiểm tra tổng số lượng ảnh vượt quá 2 ảnh
     if (images.length + fileArray.length > MAX_IMAGE_COUNT) {
-      showToast(`Bạn chỉ có thể đính kèm tối đa ${MAX_IMAGE_COUNT} ảnh minh họa.`);
+      setFileToastState({
+        isOpen: true,
+        title: "Vượt quá số lượng ảnh cho phép!",
+        message: `Hệ thống chỉ hỗ trợ đính kèm tối đa ${MAX_IMAGE_COUNT} ảnh chụp màn hình. Vui lòng xóa bớt ảnh cũ trước khi tải thêm.`,
+      });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       return;
     }
 
@@ -211,13 +230,23 @@ export default function ContactForm() {
     for (const file of fileArray) {
       // Kiểm tra định dạng
       if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-        showToast(`Định dạng "${file.name}" không hợp lệ. Chỉ chấp nhận JPG, PNG hoặc WEBP.`);
+        setFileToastState({
+          isOpen: true,
+          title: "Định dạng ảnh không hợp lệ!",
+          message: `Tệp "${file.name}" không hợp lệ. Hệ thống chỉ chấp nhận ảnh có định dạng PNG, JPG, JPEG hoặc WEBP.`,
+        });
         continue;
       }
 
       // Kiểm tra dung lượng <= 5MB
       if (file.size > MAX_FILE_SIZE_BYTES) {
-        showToast(`Ảnh "${file.name}" vượt quá 5MB. Vui lòng chọn ảnh dung lượng nhẹ hơn.`);
+        const sizeMb = file.size / (1024 * 1024);
+        setFileToastState({
+          isOpen: true,
+          title: "Dung lượng ảnh vượt quá 5MB!",
+          sizeMb,
+          message: `Ảnh "${file.name}" có dung lượng ${sizeMb.toFixed(1)}MB, vượt quá giới hạn 5MB của hệ thống. Vui lòng chọn hoặc nén ảnh dưới 5MB.`,
+        });
         continue;
       }
 
@@ -234,6 +263,11 @@ export default function ContactForm() {
 
     if (newUploaded.length > 0) {
       setImages((prev) => [...prev, ...newUploaded].slice(0, MAX_IMAGE_COUNT));
+    }
+
+    // Reset value input để có thể chọn lại file cùng tên nếu muốn
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -577,7 +611,7 @@ export default function ContactForm() {
             value={formData.message}
             onChange={(e) => handleChange("message", e.target.value)}
             onBlur={() => handleBlur("message")}
-            placeholder="Hãy mô tả chi tiết trải nghiệm, bài toán hoặc lỗi bạn gặp phải để chúng mình hỗ trợ nhanh nhất nhé..."
+            placeholder="Hãy mô tả chi tiết trải nghiệm, bài toán hoặc lỗi bạn gặp phải để đội ngũ hỗ trợ kịp thời..."
             maxLength={MAX_MESSAGE_LENGTH}
             disabled={isSubmitting}
             className={`w-full px-4 py-3 rounded-2xl text-xs sm:text-sm bg-white text-[#1C1917] placeholder:text-[#C1762A]/40 border resize-none transition-all duration-150 focus:outline-hidden ${
@@ -689,7 +723,7 @@ export default function ContactForm() {
             </>
           ) : (
             <>
-              <span>Gửi thông tin cho chúng mình</span>
+              <span>Gửi thông tin phản hồi</span>
               <Send className="w-4 h-4 transition-transform group-hover:translate-x-1 group-hover:-translate-y-0.5" />
             </>
           )}
@@ -717,6 +751,15 @@ export default function ContactForm() {
           của Google.
         </p>
       </div>
+
+      {/* Thông báo nổi khi dung lượng ảnh vượt quá 5MB hoặc quá 2 ảnh (đồng bộ với Chat học sinh) */}
+      <FileTooLargeToast
+        isOpen={fileToastState.isOpen}
+        title={fileToastState.title}
+        fileSizeMb={fileToastState.sizeMb}
+        message={fileToastState.message}
+        onClose={() => setFileToastState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </form>
   );
 }

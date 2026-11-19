@@ -60,7 +60,7 @@ export default function ContactHero({ onCtaClick }: ContactHeroProps) {
             onClick={handleScrollToForm}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-2xl bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold text-sm md:text-base shadow-md hover:shadow-xl hover:brightness-105 active:scale-95 transition-all duration-200 cursor-pointer group"
           >
-            <span>Gửi góp ý cho chúng mình</span>
+            <span>Gửi góp ý & phản hồi</span>
             <Send className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </button>
 
