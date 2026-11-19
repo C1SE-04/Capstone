@@ -222,9 +222,9 @@ def test_scenario_2_student_lag_report(setup_realistic_errors):
             "const SSE_CLIENT_TIMEOUT_MS = 60000;   // Nâng timeout lên 60s chống mạng lag\n"
             "const HEARTBEAT_INTERVAL_MS = 15000;  // Gửi heartbeat ping mỗi 15s"
         ),
-        file_path="frontend/hooks/useChat.ts",
-        line_number=85,
-        confidence_score=0.92,
+        file_path=None,
+        line_number=None,
+        confidence_score=0.85,
         model_used="gemini-3.5-flash",
     )
 

@@ -323,8 +323,8 @@ function AdminErrorsPageInner() {
 
   // Fetch API thật 100%: GET /admin/errors (AC 9.5.2 & AC 9.5.3)
   const fetchErrors = useCallback(
-    async (pageToLoad = currentPage) => {
-      setIsRefreshing(true);
+    async (pageToLoad = currentPage, isSilent = false) => {
+      if (!isSilent) setIsRefreshing(true);
       try {
         const backendUrl =
           process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -365,12 +365,18 @@ function AdminErrorsPageInner() {
           }
         }
 
-        setConnectionError(`Máy chủ Backend phản hồi mã lỗi ${res.status}. Vui lòng kiểm tra quyền Admin hoặc server.`);
+        if (!isSilent) {
+          setConnectionError(`Máy chủ Backend phản hồi mã lỗi ${res.status}. Vui lòng kiểm tra quyền Admin hoặc server.`);
+        }
       } catch {
-        setConnectionError("Không thể kết nối đến máy chủ Backend (http://127.0.0.1:8000). Vui lòng đảm bảo Backend FastAPI đang chạy.");
+        if (!isSilent) {
+          setConnectionError("Không thể kết nối đến máy chủ Backend (http://127.0.0.1:8000). Vui lòng đảm bảo Backend FastAPI đang chạy.");
+        }
       } finally {
-        setIsRefreshing(false);
-        setIsLoading(false);
+        if (!isSilent) {
+          setIsRefreshing(false);
+          setIsLoading(false);
+        }
       }
     },
     [session, debouncedSearch, severityFilter, errorTypeFilter, statusFilter, pageSize, currentPage]
@@ -378,6 +384,25 @@ function AdminErrorsPageInner() {
 
   useEffect(() => {
     fetchErrors(currentPage);
+  }, [fetchErrors, currentPage]);
+
+  // US 11.3: Polling ngầm mỗi 30s đồng bộ thời gian thực với Chuông thông báo (Zero UI Flash)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchErrors(currentPage, true);
+    }, 30000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchErrors(currentPage, true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [fetchErrors, currentPage]);
 
   const handleLoadDemoData = () => {
@@ -417,7 +442,7 @@ function AdminErrorsPageInner() {
         return;
       }
 
-      // 3. Nếu không có trong trang hiện tại, gọi API GET /admin/errors/{error_id} lấy chi tiết
+      // 3. Nếu không có trong danh sách hiện tại, gọi API GET /admin/errors/{error_id} lấy chi tiết
       try {
         const backendUrl =
           process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -433,6 +458,15 @@ function AdminErrorsPageInner() {
           setSelectedError(detailItem);
           setIsDrawerOpen(true);
           markErrorAsRead(detailItem.id);
+
+          // Tự động thêm lỗi mới vào đầu danh sách để hiển thị ngay trên bảng
+          setErrorsList((prev) => {
+            if (prev.some((e) => e.id === detailItem.id || e.error_code === detailItem.error_code)) {
+              return prev;
+            }
+            return [detailItem, ...prev];
+          });
+          setTotalItems((prev) => prev + 1);
         }
       } catch (err) {
         console.warn("[AdminErrors] Không thể tải chi tiết sự cố theo deep link:", err);
@@ -441,10 +475,13 @@ function AdminErrorsPageInner() {
 
     openTargetError();
 
+    // Đồng thời gọi làm mới ngầm danh sách trang 1 để đồng bộ bảng
+    fetchErrors(1, true);
+
     return () => {
       isSubscribed = false;
     };
-  }, [targetErrorId, errorsList, session]);
+  }, [targetErrorId, session]);
 
   const handleOpenDrawer = (item: SystemErrorItem) => {
     setSelectedError(item);

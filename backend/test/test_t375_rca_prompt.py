@@ -152,3 +152,25 @@ def test_parse_rca_output_corrupted_fallback():
     assert isinstance(result, AiDiagnosisData)
     assert "không thể phân tích cú pháp JSON" in result.root_cause
     assert result.confidence_score == 0.5
+
+
+def test_parse_rca_output_hallucinated_file_filtered():
+    """Kiểm tra cơ chế Anti-Hallucination: Tự động gạt bỏ file không tồn tại (như useChat.ts)."""
+    raw_response_with_fake_file = """
+    {
+      "root_cause": "Học sinh báo mạng giật lag",
+      "resolution_summary": "Tăng timeout client",
+      "fix_steps": ["Kiểm tra kết nối Wifi"],
+      "code_patch": null,
+      "file_path": "frontend/hooks/useChat.ts",
+      "line_number": 85,
+      "confidence_score": 0.92,
+      "model_used": "gemini-3.5-flash"
+    }
+    """
+    result = parse_rca_output(raw_response_with_fake_file)
+
+    assert isinstance(result, AiDiagnosisData)
+    # File frontend/hooks/useChat.ts không tồn tại trong repo -> Bắt buộc bị lọc về None
+    assert result.file_path is None
+    assert result.line_number is None

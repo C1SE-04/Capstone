@@ -309,7 +309,7 @@ export default function MonitorSidebar({
                           ? "hover:bg-white/20 text-white"
                           : "hover:bg-[#F1CCA6] text-[#C1762A]"
                       )}
-                      title="🔑 Cấp lại mật khẩu cho con"
+                      title="Cấp lại mật khẩu cho con"
                     >
                       <KeyRound size={14} />
                     </button>

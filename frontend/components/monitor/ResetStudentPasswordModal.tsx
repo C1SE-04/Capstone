@@ -177,7 +177,7 @@ export default function ResetStudentPasswordModal({
 
             <div className="space-y-2">
               <h3 className="text-lg font-black text-emerald-950">
-                Cấp Lại Mật Khẩu Thành Công! 🎉
+                Cấp Lại Mật Khẩu Thành Công!
               </h3>
               <p className="text-xs text-zinc-600 leading-relaxed max-w-xs mx-auto">
                 {successMessage}
