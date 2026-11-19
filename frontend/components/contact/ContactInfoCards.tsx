@@ -1,9 +1,18 @@
 "use client";
 
-import React from "react";
-import { Mail, MessageCircle, Clock, ArrowUpRight, ShieldCheck } from "lucide-react";
+import React, { useState } from "react";
+import { Mail, MessageCircle, Clock, ArrowUpRight, ShieldCheck, Copy, Check } from "lucide-react";
 
 export default function ContactInfoCards() {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyEmail = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText("socratickidsupport@gmail.com");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
   return (
     <section className="w-full max-w-4xl mx-auto">
       {/* ── Grid 2 Cột Thẻ Thông Tin Cân Đối ── */}
@@ -26,14 +35,37 @@ export default function ContactInfoCards() {
             </p>
           </div>
 
-          <div className="pt-4 border-t border-[#F1CCA6]/40">
+          <div className="pt-4 border-t border-[#F1CCA6]/40 flex items-center justify-between gap-2">
             <a
-              href="mailto:hello@socratickid.edu.vn"
+              href="https://mail.google.com/mail/?view=cm&fs=1&to=socratickidsupport@gmail.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Soạn thư qua Gmail"
               className="inline-flex items-center gap-1.5 text-sm font-bold text-[#8C4905] hover:text-[#C1762A] group/link transition-colors break-all sm:break-normal"
             >
-              <span>hello@socratickid.edu.vn</span>
+              <span>socratickidsupport@gmail.com</span>
               <ArrowUpRight className="w-4 h-4 shrink-0 transition-transform group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5" />
             </a>
+
+            <button
+              type="button"
+              onClick={handleCopyEmail}
+              title={copied ? "Đã sao chép!" : "Sao chép địa chỉ email"}
+              aria-label="Sao chép địa chỉ email"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F7ECE1] hover:bg-[#F1CCA6]/60 active:scale-95 text-[#8C4905] text-xs font-semibold transition-all shrink-0 cursor-pointer"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-green-600" />
+                  <span className="text-green-700">Đã chép</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Sao chép</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -56,7 +88,7 @@ export default function ContactInfoCards() {
 
           <div className="pt-4 border-t border-[#F1CCA6]/40">
             <a
-              href="https://zalo.me/g/socratickid-beta"
+              href="https://zalo.me/g/tgkucw4fziik7yss32uz"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm font-bold text-[#10B981] hover:text-[#059669] group/link transition-colors"

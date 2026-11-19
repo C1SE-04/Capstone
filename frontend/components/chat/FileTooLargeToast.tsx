@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 interface FileTooLargeToastProps {
   isOpen: boolean;
   onClose: () => void;
+  title?: string;
   message?: string;
   fileSizeMb?: number;
   duration?: number;
@@ -15,6 +16,7 @@ interface FileTooLargeToastProps {
 export function FileTooLargeToast({
   isOpen,
   onClose,
+  title,
   message,
   fileSizeMb,
   duration = 5000,
@@ -41,7 +43,7 @@ export function FileTooLargeToast({
         <div className="flex-1 min-w-0 pt-0.5">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-bold text-amber-900">
-              Dung lượng ảnh vượt quá 5MB!
+              {title || "Dung lượng ảnh vượt quá 5MB!"}
             </h4>
             {fileSizeMb && (
               <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
@@ -51,7 +53,7 @@ export function FileTooLargeToast({
           </div>
           <p className="text-xs text-amber-800/90 mt-1 leading-relaxed">
             {message ||
-              "Hệ thống chỉ hỗ trợ tải lên hình ảnh bài tập có kích thước tối đa 5MB. Vui lòng chụp lại hoặc chọn ảnh nhẹ hơn nhé!"}
+              "Hệ thống chỉ hỗ trợ tải lên hình ảnh bài tập có kích thước tối đa 5MB. Vui lòng chọn ảnh có dung lượng nhẹ hơn."}
           </p>
         </div>
 

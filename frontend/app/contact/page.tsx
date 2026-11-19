@@ -49,10 +49,10 @@ export default function ContactPage() {
                 Biểu Mẫu Góp Ý & Báo Lỗi
               </span>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1C1917] tracking-tight mb-3">
-                Gửi Thắc Mắc Hoặc Báo Lỗi Cho Chúng Mình
+                Gửi Thắc Mắc Hoặc Báo Cáo Sự Cố
               </h2>
               <p className="text-xs sm:text-sm text-[#7A3E04] leading-relaxed">
-                Hãy cho chúng mình biết trải nghiệm học tập của bạn cùng SocraticKid. Đội ngũ kỹ sư và sư phạm sẽ phản hồi qua email sớm nhất có thể.
+                Hãy chia sẻ trải nghiệm học tập của bạn cùng SocraticKid. Đội ngũ kỹ sư và sư phạm sẽ phản hồi qua email trong thời gian sớm nhất.
               </p>
             </div>
 

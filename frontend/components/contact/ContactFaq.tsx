@@ -52,7 +52,7 @@ const SUPPORT_FAQ_DATA: FaqItem[] = [
     icon: School,
     question: "Nhà trường hoặc Giáo viên muốn liên hệ hợp tác thử nghiệm thì làm thế nào?",
     answer:
-      "SocraticKid luôn chào đón Quý Thầy Cô và các đơn vị giáo dục cùng đồng hành ứng dụng phương pháp gợi mở Socratic trong lớp học. Bạn hãy chọn danh mục 'Hợp tác nhà trường & Nghiên cứu giáo dục' tại biểu mẫu góp ý bên trên, hoặc gửi thư trực tiếp đến email hello@socratickid.edu.vn kèm thông tin liên hệ của trường.",
+      "SocraticKid luôn chào đón Quý Thầy Cô và các đơn vị giáo dục cùng đồng hành ứng dụng phương pháp gợi mở Socratic trong lớp học. Bạn hãy chọn danh mục 'Hợp tác nhà trường & Nghiên cứu giáo dục' tại biểu mẫu góp ý bên trên, hoặc gửi thư trực tiếp đến email socratickidsupport@gmail.com kèm thông tin liên hệ của trường.",
   },
   {
     id: "faq-privacy",
