@@ -216,8 +216,8 @@ export default function ForgotPasswordModal({
     // Chỉ nhận ký tự số
     const cleaned = value.replace(/\D/g, "");
 
-    // Hỗ trợ paste chuỗi nhiều số qua onChange
-    if (cleaned.length > 1) {
+    // Hỗ trợ paste chuỗi nhiều số qua onChange (ví dụ người dùng dán hoặc autofill từ 3 số trở lên)
+    if (cleaned.length > 2) {
       const pasteDigits = cleaned.slice(0, 6).split("");
       const nextDigits = [...otpDigits];
       pasteDigits.forEach((digit, i) => {
@@ -233,13 +233,15 @@ export default function ForgotPasswordModal({
       return;
     }
 
+    // Nếu gõ đè lên ô đã có sẵn số (length = 2), lấy ký tự mới nhất (ký tự cuối)
+    const singleDigit = cleaned.slice(-1);
     const nextDigits = [...otpDigits];
-    nextDigits[index] = cleaned;
+    nextDigits[index] = singleDigit;
     setOtpDigits(nextDigits);
     setErrorMessage(null);
 
     // Tự động nhảy sang ô tiếp theo khi nhập
-    if (cleaned && index < 5) {
+    if (singleDigit && index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     }
   };
@@ -256,8 +258,9 @@ export default function ForgotPasswordModal({
   };
 
   const handleVerifyOtpStep = async () => {
-    const fullOtp = otpDigits.join("");
-    if (fullOtp.length !== 6 || fullOtp.includes("")) {
+    const fullOtp = otpDigits.join("").trim();
+    // Thông báo nhập đủ 6 chữ số CHỈ hiển thị khi người dùng nhập thiếu (ví dụ mới nhập 3 số rồi bấm Enter/nút)
+    if (fullOtp.length !== 6 || otpDigits.some((d) => !d.trim())) {
       setErrorMessage("Vui lòng nhập đủ 6 chữ số mã OTP xác nhận.");
       return;
     }
@@ -745,6 +748,7 @@ export default function ForgotPasswordModal({
                           inputMode="numeric"
                           maxLength={6}
                           value={digit}
+                          onFocus={(e) => e.target.select()}
                           onPaste={handleOtpPaste}
                           onChange={(e) => handleOtpDigitChange(index, e.target.value)}
                           onKeyDown={(e) => handleOtpKeyDown(index, e)}
@@ -779,7 +783,7 @@ export default function ForgotPasswordModal({
                   <button
                     type="button"
                     onClick={handleVerifyOtpStep}
-                    disabled={isLoading || otpDigits.join("").length !== 6}
+                    disabled={isLoading}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-[#C1762A] hover:bg-[#8C4905] text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 active:scale-98"
                   >
                     {isLoading ? (
