@@ -75,7 +75,7 @@ export default function ContactFaq() {
   return (
     <section
       id="faq"
-      className="w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mb-16 scroll-mt-24"
+      className="w-full max-w-3xl mx-auto scroll-mt-24"
     >
       {/* ── Tiêu đề Section FAQ Hỗ Trợ ── */}
       <div className="text-center max-w-2xl mx-auto mb-10">

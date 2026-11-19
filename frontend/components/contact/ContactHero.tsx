@@ -21,7 +21,7 @@ export default function ContactHero({ onCtaClick }: ContactHeroProps) {
   };
 
   return (
-    <section className="relative w-full pt-12 pb-10 md:pt-16 md:pb-14 px-4 sm:px-6 lg:px-8 text-center overflow-hidden">
+    <section className="relative w-full pt-8 pb-6 md:pt-12 md:pb-10 text-center overflow-hidden">
       {/* Nền trang trí trừu tượng dạng gradient blur nhẹ */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-gradient-to-r from-[#F7AD62]/20 via-[#F1CCA6]/30 to-[#C1762A]/15 blur-3xl rounded-full pointer-events-none -z-10" />
 
@@ -39,7 +39,7 @@ export default function ContactHero({ onCtaClick }: ContactHeroProps) {
         </div>
 
         {/* Tiêu đề chính lớn H1 */}
-        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-[#1C1917] tracking-tight leading-[1.15] mb-5">
+        <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-[#1C1917] tracking-tight leading-[1.2] mb-5 break-words">
           Đồng Hành & Lắng Nghe{" "}
           <span className="bg-gradient-to-r from-[#C1762A] to-[#8C4905] bg-clip-text text-transparent">
             Cùng SocraticKid

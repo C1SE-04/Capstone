@@ -5,7 +5,7 @@ import { Mail, MessageCircle, Clock, ArrowUpRight, ShieldCheck } from "lucide-re
 
 export default function ContactInfoCards() {
   return (
-    <section className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 mb-12">
+    <section className="w-full max-w-4xl mx-auto">
       {/* ── Grid 2 Cột Thẻ Thông Tin Cân Đối ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
         
@@ -29,10 +29,10 @@ export default function ContactInfoCards() {
           <div className="pt-4 border-t border-[#F1CCA6]/40">
             <a
               href="mailto:hello@socratickid.edu.vn"
-              className="inline-flex items-center gap-1.5 text-sm font-bold text-[#8C4905] hover:text-[#C1762A] group/link transition-colors"
+              className="inline-flex items-center gap-1.5 text-sm font-bold text-[#8C4905] hover:text-[#C1762A] group/link transition-colors break-all sm:break-normal"
             >
               <span>hello@socratickid.edu.vn</span>
-              <ArrowUpRight className="w-4 h-4 transition-transform group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5" />
+              <ArrowUpRight className="w-4 h-4 shrink-0 transition-transform group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5" />
             </a>
           </div>
         </div>
