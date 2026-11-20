@@ -469,12 +469,12 @@ export default function AiDiagnosisCard({
                 {appliedNote ? (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-white" />
-                    <span>Đã Điền Vào Ghi Chú ✓</span>
+                    <span>Đã Điền Vào Ghi Chú</span>
                   </>
                 ) : (
                   <>
                     <Zap className="w-4 h-4 text-amber-200" />
-                    <span>⚡ Điền Nhanh Vào Ghi Chú</span>
+                    <span>Điền Nhanh Vào Ghi Chú</span>
                   </>
                 )}
               </button>

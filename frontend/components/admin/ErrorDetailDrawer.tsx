@@ -549,7 +549,7 @@ export default function ErrorDetailDrawer({
                       {isNoteHighlighted && (
                         <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          Đã tự động điền từ AI ✓
+                          Đã tự động điền từ AI
                         </span>
                       )}
                     </div>
