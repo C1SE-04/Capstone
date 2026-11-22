@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { migrateLocalStorageBadgesToDB } from "@/lib/badgeStorage";
+import ForgotPasswordModal from "@/components/ForgotPasswordModal";
 
 interface AuthFormProps {
   onClose?: () => void;
@@ -11,67 +13,130 @@ interface AuthFormProps {
 export default function AuthForm({ onClose }: AuthFormProps = {}) {
   const router = useRouter();
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");     // Đăng nhập: Tên tài khoản hoặc Email
+  const [username, setUsername] = useState("");         // Đăng ký: Tên tài khoản
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<'student' | 'monitor' | null>(null);
-  const [grade, setGrade] = useState<number | null>(null);
+  const [confirmPassword, setConfirmPassword] = useState(""); // Đăng ký: Xác nhận mật khẩu
   const [isLoading, setIsLoading] = useState(false);
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
+  const [isRedirecting, setIsRedirecting] = useState(false);  // Trạng thái chuyển cảnh mượt mà chống nháy
+  const [lockoutCountdown, setLockoutCountdown] = useState<number>(0); // US 11.1: Đếm ngược khi bị tạm khóa (Task #362)
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false); // US 11.1: Mở Modal Quên mật khẩu (Task #372 / AC-PW-01)
+
+  // US 11.1: Tự động kiểm tra và phục hồi countdown khóa tài khoản theo từng username
+  useEffect(() => {
+    if (!isLoginMode) return;
+    const cleanId = identifier.trim().toLowerCase();
+    if (!cleanId) {
+      setLockoutCountdown(0);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(`sk_auth_lockout_${cleanId}`);
+      if (stored) {
+        const remaining = Math.ceil((parseInt(stored, 10) - Date.now()) / 1000);
+        if (remaining > 0) {
+          setLockoutCountdown(remaining);
+        } else {
+          localStorage.removeItem(`sk_auth_lockout_${cleanId}`);
+          setLockoutCountdown(0);
+        }
+      } else {
+        setLockoutCountdown(0);
+      }
+    }
+  }, [identifier, isLoginMode]);
+
+  // US 11.1: Đếm lùi thời gian khóa tài khoản chuẩn xác theo mốc thời gian thực (wall-clock timestamp)
+  React.useEffect(() => {
+    if (lockoutCountdown <= 0) return;
+    const cleanId = identifier.trim().toLowerCase();
+    const timer = setInterval(() => {
+      if (typeof window !== "undefined" && cleanId) {
+        const stored = localStorage.getItem(`sk_auth_lockout_${cleanId}`);
+        if (stored) {
+          const remaining = Math.ceil((parseInt(stored, 10) - Date.now()) / 1000);
+          if (remaining <= 0) {
+            localStorage.removeItem(`sk_auth_lockout_${cleanId}`);
+            setLockoutCountdown(0);
+            setErrors({});
+            clearInterval(timer);
+            return;
+          }
+          setLockoutCountdown(remaining);
+          return;
+        }
+      }
+      setLockoutCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setErrors({});
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutCountdown, identifier]);
 
   const [errors, setErrors] = useState<{
-    email?: string;
+    identifier?: string;
+    username?: string;
     password?: string;
     confirmPassword?: string;
-    role?: string;
-    grade?: string;
     form?: string;
   }>({});
 
   const toggleMode = () => {
     setIsLoginMode((prev) => !prev);
     setErrors({});
-    setEmail("");
+    setLockoutCountdown(0);
+    setIdentifier("");
+    setUsername("");
     setPassword("");
     setConfirmPassword("");
-    setGrade(null);
   };
 
   const validateForm = () => {
     let hasError = false;
     const newErrors: typeof errors = {};
 
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      newErrors.email = "Email/SDT không được bỏ trống";
-      hasError = true;
-    } else if (!trimmedEmail.includes("@")) {
-      newErrors.email = "Vui lòng nhập đúng định dạng email";
-      hasError = true;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(trimmedEmail)) {
-      newErrors.email = "Vui lòng nhập đúng định dạng email";
-      hasError = true;
-    }
+    if (isLoginMode) {
+      const trimmedIdentifier = identifier.trim();
+      if (!trimmedIdentifier) {
+        newErrors.identifier = "Tên tài khoản không được bỏ trống";
+        hasError = true;
+      }
 
-    if (!password) {
-      newErrors.password = "Mật khẩu không được bỏ trống";
-      hasError = true;
-    }
+      if (!password) {
+        newErrors.password = "Mật khẩu không được bỏ trống";
+        hasError = true;
+      }
+    } else {
+      // Validate đăng ký: Tên tài khoản (3-20 ký tự chữ, số, gạch dưới) + Mật khẩu (>= 6 ký tự) + Xác nhận mật khẩu
+      const trimmedUsername = username.trim();
+      if (!trimmedUsername) {
+        newErrors.username = "Tên tài khoản không được bỏ trống";
+        hasError = true;
+      } else if (!/^[a-zA-Z0-9_]{3,20}$/.test(trimmedUsername)) {
+        newErrors.username = "Tên tài khoản phải từ 3-20 ký tự, chỉ gồm chữ, số và dấu gạch dưới";
+        hasError = true;
+      }
 
-    if (!isLoginMode && password !== confirmPassword) {
-      newErrors.confirmPassword = "Mật khẩu xác nhận không khớp";
-      hasError = true;
-    }
+      if (!password) {
+        newErrors.password = "Mật khẩu không được bỏ trống";
+        hasError = true;
+      } else if (password.length < 6) {
+        newErrors.password = "Mật khẩu phải có ít nhất 6 ký tự";
+        hasError = true;
+      }
 
-    if (!isLoginMode && !role) {
-      newErrors.role = "Vui lòng chọn vai trò";
-      hasError = true;
-    }
-
-    if (!isLoginMode && role === 'student' && !grade) {
-      newErrors.grade = "Vui lòng chọn lớp học";
-      hasError = true;
+      if (!confirmPassword) {
+        newErrors.confirmPassword = "Vui lòng xác nhận lại mật khẩu";
+        hasError = true;
+      } else if (password !== confirmPassword) {
+        newErrors.confirmPassword = "Mật khẩu xác nhận không khớp";
+        hasError = true;
+      }
     }
 
     if (hasError) {
@@ -93,60 +158,147 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
 
     try {
       if (isLoginMode) {
-        // Dùng NextAuth Credentials để tạo session
+        // Dùng NextAuth Credentials để tạo session với username hoặc email
         const result = await signIn("credentials", {
           redirect: false,
-          email,
+          email: identifier.trim(),
           password,
         });
 
         if (result?.error) {
-          throw new Error("Sai email hoặc mật khẩu");
+          let parsed: any = null;
+          try {
+            parsed = JSON.parse(result.error);
+          } catch {
+            parsed = { message: result.error };
+          }
+
+          // US 11.1 (Task #362): Xử lý phản hồi lỗi Brute-Force & Rate Limiting
+          if (
+            parsed?.status === 429 ||
+            parsed?.error === "rate_limit_exceeded" ||
+            parsed?.reason === "AUTH_BRUTE_FORCE" ||
+            parsed?.reason === "IP_LOCKOUT"
+          ) {
+            const retrySeconds = parsed.retry_after_seconds || parsed.retry_after || 180;
+            const expireAt = Date.now() + retrySeconds * 1000;
+            if (typeof window !== "undefined") {
+              const cleanId = identifier.trim().toLowerCase();
+              if (cleanId) {
+                localStorage.setItem(`sk_auth_lockout_${cleanId}`, expireAt.toString());
+              }
+            }
+            setLockoutCountdown(retrySeconds);
+            setErrors({
+              form: parsed.message || "Tài khoản của bạn tạm thời bị khóa do nhập sai mật khẩu 5 lần liên tiếp."
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          if (parsed?.remaining_attempts !== undefined) {
+            setErrors({
+              form: parsed.message || `Tên tài khoản hoặc mật khẩu không chính xác. Bạn còn ${parsed.remaining_attempts} lần thử trước khi bị tạm khóa.`
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          throw new Error(parsed?.message || "Tên tài khoản hoặc mật khẩu không chính xác");
         }
 
-        setToastMessage("Đăng nhập thành công!");
-        setShowSuccessToast(true);
-        setTimeout(async () => {
-          if (onClose) onClose();
-          
-          // Lấy session mới nhất để kiểm tra role
-          const currentSession = await getSession();
-          const userRole = (currentSession?.user as any)?.role;
-          
-          if (userRole === "ADMIN") {
-            router.push("/admin");
-          } else if (userRole === "MONITOR") {
-            router.push("/dashboard/monitor");
-          } else {
-            router.push("/dashboard/chat");
+        // Đăng nhập thành công -> Xóa cờ khóa tạm (nếu có)
+        if (typeof window !== "undefined") {
+          const cleanId = identifier.trim().toLowerCase();
+          if (cleanId) {
+            localStorage.removeItem(`sk_auth_lockout_${cleanId}`);
           }
-        }, 1500);
+        }
+
+        // Bật trạng thái chuyển cảnh mượt mà ngay lập tức
+        setIsRedirecting(true);
+
+        // Lấy session ngay để điều hướng đúng trang đích
+        const currentSession = await getSession();
+        const userRole = (currentSession?.user as any)?.role;
+        const isNewUser = (currentSession as any)?.is_new_user || (currentSession?.user as any)?.is_new_user;
+
+        const loggedUserId = (currentSession?.user as any)?.id || (currentSession?.user as any)?.email;
+        if (loggedUserId) {
+          // US 9.2 (T9.8b): Migrate badge cũ trong localStorage lên DB sau khi đăng nhập
+          migrateLocalStorageBadgesToDB(loggedUserId).catch((err) => {
+            console.warn("[AuthForm] Lỗi migrate badge sau đăng nhập:", err);
+          });
+        }
+
+        let targetUrl = "/dashboard/chat";
+        if (userRole === "PENDING" || isNewUser) {
+          targetUrl = "/onboarding";
+        } else if (userRole === "ADMIN") {
+          targetUrl = "/admin";
+        } else if (userRole === "MONITOR") {
+          targetUrl = "/dashboard/monitor";
+        }
+
+        // Chuyển hướng trực tiếp không đóng modal trước để tránh nhấp nháy lộ trang chủ
+        router.replace(targetUrl);
+
+        // Fallback tự đóng modal sau 2.5s phòng hờ route change hoàn tất
+        setTimeout(() => {
+          if (onClose) onClose();
+        }, 2500);
+
       } else {
-        // Tích hợp API Đăng ký — gửi email lowercase về DB
-        const endpoint = role === 'student' ? '/register/student' : '/register/monitor';
+        // US 9.1 (T9.3): Đăng ký tài khoản mới bằng username + password (role='PENDING')
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
-        const response = await fetch(`${backendUrl}${endpoint}`, {
+        const response = await fetch(`${backendUrl}/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.toLowerCase(), password, grade })
+          body: JSON.stringify({
+            username: username.trim(),
+            password,
+          }),
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || "Đã có lỗi xảy ra khi đăng ký");
+          const errorData = await response.json().catch(() => ({}));
+          const detail = errorData.detail || "Đã có lỗi xảy ra khi đăng ký";
+
+          // AC 9.1.2: Báo lỗi trùng Username màu đỏ
+          if (typeof detail === "string" && (detail.toLowerCase().includes("tồn tại") || detail.toLowerCase().includes("sử dụng"))) {
+            setErrors({
+              username: "Tên tài khoản đã được sử dụng, vui lòng chọn tên khác",
+            });
+            setIsLoading(false);
+            return;
+          }
+          throw new Error(detail);
         }
 
-        // Đăng ký xong → chuyển sang tab đăng nhập
-        setIsLoginMode(true);
-        setEmail("");
-        setPassword("");
-        setConfirmPassword("");
-        setRole(null);
-        setGrade(null);
-        setToastMessage("Đăng ký thành công! Vui lòng đăng nhập.");
-        setShowSuccessToast(true);
-        setTimeout(() => setShowSuccessToast(false), 3000);
-        setIsLoading(false);
+        // Tự động đăng nhập vào NextAuth phiên làm việc
+        const signInResult = await signIn("credentials", {
+          redirect: false,
+          email: username.trim(),
+          password,
+        });
+
+        if (signInResult?.error) {
+          setIsLoginMode(true);
+          setIdentifier(username.trim());
+          setPassword("");
+          setConfirmPassword("");
+          setErrors({ form: "✅ Đăng ký thành công! Vui lòng đăng nhập để tiếp tục." });
+          setIsLoading(false);
+          return;
+        }
+
+        // Chuyển cảnh mượt mà sang trang onboarding
+        setIsRedirecting(true);
+        router.replace("/onboarding");
+
+        setTimeout(() => {
+          if (onClose) onClose();
+        }, 2500);
       }
     } catch (err) {
       setErrors({ form: err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định" });
@@ -155,28 +307,14 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      {/* Success Toast */}
-      {showSuccessToast && (
-        <div className="fixed top-4 right-4 z-[60] bg-white border border-emerald-200/80 shadow-lg rounded-xl px-5 py-3.5 animate-fade-in-down flex items-center gap-3">
-          <div className="bg-emerald-50 rounded-full p-1 text-emerald-600">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <p className="text-stone-800 text-sm font-medium">{toastMessage}</p>
-        </div>
-      )}
-
-      {/* Background form nhạt hơn F1CCA6 để lỗi dễ đọc hơn */}
-      <div className="relative w-full max-w-md bg-[#F1CCA6] rounded-3xl overflow-hidden p-8 shadow-xl">
-
-        {/* Close Button */}
-        {onClose && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 transition-all">
+      <div className="relative w-full max-w-md bg-[#F1CCA6] rounded-3xl overflow-hidden p-8 shadow-2xl transition-all">
+        {/* Close Button (ẩn khi đang chuyển trang để tránh ngắt quãng) */}
+        {onClose && !isRedirecting && (
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 text-[#8C4905] hover:text-[#CB6600] transition-colors cursor-pointer"
+            className="absolute top-4 right-4 p-2 text-[#8C4905] hover:text-[#8C4905] transition-colors cursor-pointer"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -184,195 +322,253 @@ export default function AuthForm({ onClose }: AuthFormProps = {}) {
           </button>
         )}
 
-        {/* Avatar Placeholder */}
-        <div className="flex justify-center mb-6">
-          <div className="w-20 h-20 bg-[#D9D9D9] rounded-full flex items-center justify-center shadow-inner">
-          </div>
-        </div>
-
-        {/* Title */}
-        <h2 className="text-4xl font-bold text-center text-[#8C4905] mb-8 italic tracking-wide">
-          {isLoginMode ? "Welcome!" : "Sign up"}
-        </h2>
-
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          {/* Email / Phone */}
-          <div>
-            <label className="block text-[#8C4905] text-sm font-bold mb-1">Email/SDT</label>
-            <input
-              type="text"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.email ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
-                }`}
-              disabled={isLoading}
-            />
-            {errors.email && (
-              <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.email}</p>
-            )}
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="block text-[#8C4905] text-sm font-bold mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.password ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
-                }`}
-              disabled={isLoading}
-            />
-            {errors.password && (
-              <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.password}</p>
-            )}
-          </div>
-
-          {/* Confirm Password (Only in Sign up) */}
-          {!isLoginMode && (
-            <div>
-              <label className="block text-[#8C4905] text-sm font-bold mb-1">Xác Nhận Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]' : 'focus:ring-[#F7AD62] border-transparent'
-                  }`}
-                disabled={isLoading}
-              />
-              {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.confirmPassword}</p>
-              )}
+        {/* Màn hình chuyển cảnh mượt mà (Smooth Redirecting View - Chống nhấp nháy web) */}
+        {isRedirecting ? (
+          <div className="py-10 flex flex-col items-center justify-center text-center animate-fade-in">
+            <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-md border-2 border-[#C1762A]/40 mb-6 animate-pulse">
+              <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
             </div>
-          )}
-
-          {/* Role Selection (Only in Sign up) */}
-          {!isLoginMode && (
-            <div className="flex gap-4 pt-2">
-              <button
-                type="button"
-                onClick={() => setRole('student')}
-                className={`flex-1 py-2 rounded-xl font-bold transition-all cursor-pointer ${role === 'student'
-                    ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
-                    : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
-                  }`}
-                disabled={isLoading}
-              >
-                Học sinh
-              </button>
-              <button
-                type="button"
-                onClick={() => { setRole('monitor'); setGrade(null); }}
-                className={`flex-1 py-2 rounded-xl font-bold transition-all cursor-pointer ${role === 'monitor'
-                    ? 'bg-[#8C4905] text-[#F7ECE1] shadow-md'
-                    : 'bg-[#F7ECE1] text-[#8C4905] opacity-80 hover:opacity-100'
-                  }`}
-                disabled={isLoading}
-              >
-                Người giám sát
-              </button>
-            </div>
-          )}
-
-          {/* Grade Dropdown — chỉ hiện khi chọn Học sinh */}
-          {!isLoginMode && role === 'student' && (
-            <div className="pt-1">
-              <label className="block text-[#8C4905] text-sm font-bold mb-1">
-                Lớp học <span className="text-[#CB6600]">*</span>
-              </label>
-              <select
-                value={grade ?? ""}
-                onChange={(e) => setGrade(e.target.value ? Number(e.target.value) : null)}
-                disabled={isLoading}
-                className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 cursor-pointer ${
-                  errors.grade
-                    ? 'border-2 border-[#CB6600] focus:ring-[#CB6600]'
-                    : 'focus:ring-[#F7AD62] border-transparent'
-                }`}
-              >
-                <option value="" disabled>-- Chọn lớp --</option>
-                {[4, 5, 6, 7, 8, 9].map((g) => (
-                  <option key={g} value={g}>Lớp {g}</option>
-                ))}
-              </select>
-              {errors.grade && (
-                <p className="mt-1 text-sm text-[#CB6600] font-bold">{errors.grade}</p>
-              )}
-            </div>
-          )}
-          {errors.role && !isLoginMode && (
-            <p className="mt-1 text-sm text-[#CB6600] font-bold text-center">{errors.role}</p>
-          )}
-
-          {/* Login Options */}
-          {isLoginMode && (
-            <div className="flex items-center justify-between mt-2 px-1">
-              <label className="flex items-center text-xs font-bold text-[#8C4905] cursor-pointer">
-                <input type="checkbox" className="mr-2 rounded text-[#8C4905] focus:ring-[#F7AD62] cursor-pointer" disabled={isLoading} />
-                Nhớ tôi
-              </label>
-              <a href="#" className="text-xs font-bold text-[#8C4905] hover:text-[#CB6600] transition-colors cursor-pointer">
-                Quên mật khẩu?
-              </a>
-            </div>
-          )}
-
-          {/* Form Level Message (Error or Success) */}
-          {errors.form && (
-            <div className="mt-2 text-center">
-              <p className={`text-sm font-bold ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#CB6600]'
-                }`}>
-                {errors.form}
-              </p>
-            </div>
-          )}
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full mt-4 bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold py-3.5 rounded-xl hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-md cursor-pointer"
-          >
-            {isLoading ? (
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <div className="flex items-center gap-2.5 mb-2 text-[#8C4905]">
+              <svg className="w-5 h-5 animate-spin text-[#C1762A]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-            ) : isLoginMode ? "Đăng Nhập" : "Đăng Ký"}
-          </button>
-        </form>
-
-        {/* Social Login & Toggle Mode */}
-        {isLoginMode && (
-          <div className="mt-6 text-center hidden">
-            <div className="flex justify-center mb-4">
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={() => signIn("google")}
-                className="w-12 h-12 bg-[#F7ECE1] rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-md disabled:opacity-70 disabled:cursor-not-allowed p-2 cursor-pointer"
-              >
-                <img src="/google-logo.svg" alt="Google Login" className="w-full h-full object-contain" />
-              </button>
+              <h3 className="text-xl font-bold tracking-tight">
+                {isLoginMode ? "Đăng nhập thành công!" : "Đăng ký thành công!"}
+              </h3>
             </div>
+            <p className="text-sm font-medium text-[#8C4905]/80">
+              Đang chuẩn bị không gian học tập cho bạn...
+            </p>
           </div>
-        )}
+        ) : (
+          <>
+            {/* Logo SocraticKid */}
+            <div className="flex justify-center mb-6">
+              <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-md border-2 border-[#C1762A]/30">
+                <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
+              </div>
+            </div>
 
-        <div className="mt-4 text-center">
-          <p className="text-xs font-bold text-[#8C4905]">
-            {isLoginMode ? "Không có tài khoản ? " : "Đã có tài khoản ? "}
+            {/* Title */}
+            <h2 className="text-4xl font-bold text-center text-[#8C4905] mb-8 italic tracking-wide">
+              {isLoginMode ? "Welcome!" : "Sign up"}
+            </h2>
+
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              {/* Ô nhập thông tin định danh */}
+              {isLoginMode ? (
+                /* Đăng nhập: Tên tài khoản */
+                <div>
+                  <label className="block text-[#8C4905] text-sm font-bold mb-1">
+                    Tên tài khoản
+                  </label>
+                  <input
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => {
+                      setIdentifier(e.target.value);
+                      if (errors.identifier) setErrors((prev) => ({ ...prev, identifier: undefined }));
+                    }}
+                    placeholder="Nhập tên tài khoản..."
+                    className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.identifier
+                      ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                      : 'focus:ring-[#F7AD62] border-transparent'
+                      }`}
+                    disabled={isLoading || lockoutCountdown > 0}
+                  />
+                  {errors.identifier && (
+                    <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.identifier}</p>
+                  )}
+                </div>
+              ) : (
+                /* Đăng ký: Tên tài khoản */
+                <div>
+                  <label className="block text-[#8C4905] text-sm font-bold mb-1">
+                    Tên tài khoản
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      if (errors.username) setErrors((prev) => ({ ...prev, username: undefined }));
+                    }}
+                    placeholder="VD: socratic_kid (3-20 ký tự, chữ, số, _)"
+                    className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.username
+                      ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                      : 'focus:ring-[#F7AD62] border-transparent'
+                      }`}
+                    disabled={isLoading}
+                  />
+                  {errors.username && (
+                    <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.username}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Mật khẩu */}
+              <div>
+                <label className="block text-[#8C4905] text-sm font-bold mb-1">Mật khẩu</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                  }}
+                  placeholder="Nhập mật khẩu..."
+                  className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.password
+                    ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                    : 'focus:ring-[#F7AD62] border-transparent'
+                    }`}
+                  disabled={isLoading || lockoutCountdown > 0}
+                />
+                {errors.password && (
+                  <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.password}</p>
+                )}
+              </div>
+
+              {/* Xác nhận mật khẩu (Chỉ hiển thị khi Đăng ký) */}
+              {!isLoginMode && (
+                <div>
+                  <label className="block text-[#8C4905] text-sm font-bold mb-1">
+                    Xác nhận mật khẩu
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                    }}
+                    placeholder="Nhập lại mật khẩu..."
+                    className={`w-full px-4 py-3 rounded-xl bg-[#F7ECE1] text-stone-900 focus:outline-none focus:ring-2 ${errors.confirmPassword
+                      ? 'border-2 border-[#EF4444] focus:ring-[#EF4444]'
+                      : 'focus:ring-[#F7AD62] border-transparent'
+                      }`}
+                    disabled={isLoading}
+                  />
+                  {errors.confirmPassword && (
+                    <p className="mt-1 text-sm text-[#EF4444] font-bold">{errors.confirmPassword}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Login Options (Chỉ khi đăng nhập) */}
+              {isLoginMode && (
+                <div className="flex items-center justify-between mt-2 px-1">
+                  <label className="flex items-center text-xs font-bold text-[#8C4905] cursor-pointer">
+                    <input type="checkbox" className="mr-2 rounded text-[#8C4905] focus:ring-[#F7AD62] cursor-pointer" disabled={isLoading || lockoutCountdown > 0} />
+                    Nhớ tôi
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsForgotPasswordOpen(true)}
+                    disabled={isLoading || lockoutCountdown > 0}
+                    className="text-xs font-bold text-[#8C4905] hover:text-[#C1762A] hover:underline transition-colors cursor-pointer focus:outline-none disabled:opacity-50"
+                  >
+                    Quên mật khẩu?
+                  </button>
+                </div>
+              )}
+
+              {/* Lỗi chung Form & Thông báo Tạm Khóa Anti-Brute-Force (US 11.1 - Task #362) */}
+              {lockoutCountdown > 0 ? (
+                <div className="mt-3 p-3.5 rounded-xl bg-red-100/90 border border-red-300 text-left">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-xl select-none">🔒</span>
+                    <div>
+                      <p className="text-xs font-bold text-red-800">
+                        Tài khoản tạm thời bị khóa do nhập sai mật khẩu 5 lần liên tiếp.
+                      </p>
+                      <p className="text-xs text-red-700 mt-1 font-medium">
+                        Vui lòng thử lại sau:{" "}
+                        <span className="font-bold text-red-950 font-mono">
+                          {Math.floor(lockoutCountdown / 60)} phút {String(lockoutCountdown % 60).padStart(2, "0")} giây
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : errors.form ? (
+                <div className="mt-2 text-center p-2.5 rounded-lg bg-red-50/90 border border-red-200">
+                  <p className={`text-xs font-bold ${errors.form.startsWith('✅') ? 'text-[#8C4905]' : 'text-[#EF4444]'}`}>
+                    {errors.form}
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isLoading || lockoutCountdown > 0}
+                className="w-full mt-4 bg-[#C1762A] hover:bg-[#8C4905] text-white font-semibold py-3.5 rounded-xl active:scale-[0.98] transition-all duration-150 ease-out flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed shadow-xs focus-visible:outline-2 focus-visible:outline-[#C1762A] cursor-pointer"
+              >
+                {isLoading ? (
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : lockoutCountdown > 0 ? (
+                  `Tạm khóa (${Math.floor(lockoutCountdown / 60)}:${String(lockoutCountdown % 60).padStart(2, "0")})`
+                ) : isLoginMode ? (
+                  "Đăng Nhập"
+                ) : (
+                  "Đăng Ký"
+                )}
+              </button>
+            </form>
+
+            {/* Social Login (Google OAuth US 8.3) */}
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-[#8C4905]/20" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-[#F1CCA6] px-3 font-semibold text-[#8C4905]">
+                  Hoặc tiếp tục với
+                </span>
+              </div>
+            </div>
+
             <button
               type="button"
-              onClick={toggleMode}
               disabled={isLoading}
-              className="text-[#CB6600] hover:underline focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed ml-1 cursor-pointer"
+              onClick={() => signIn("google", { callbackUrl: "/onboarding" })}
+              className="w-full flex items-center justify-center gap-3 py-3 bg-white text-[#1C1917] rounded-xl font-semibold text-sm shadow-xs hover:border-[#C1762A] transition-all duration-150 ease-out border border-[#F1CCA6] cursor-pointer hover:bg-[#F7ECE1]/60 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {isLoginMode ? "Đăng ký" : "Đăng nhập"}
+              <img src="/google-logo.svg" alt="Google Login" className="w-5 h-5 object-contain" />
+              <span>Đăng nhập bằng Google</span>
             </button>
-          </p>
-        </div>
 
+            <div className="mt-4 text-center">
+              <p className="text-xs font-bold text-[#8C4905]">
+                {isLoginMode ? "Không có tài khoản ? " : "Đã có tài khoản ? "}
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  disabled={isLoading}
+                  className="text-[#C1762A] hover:text-[#8C4905] hover:underline focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed ml-1 cursor-pointer"
+                >
+                  {isLoginMode ? "Đăng ký" : "Đăng nhập"}
+                </button>
+              </p>
+            </div>
+          </>
+        )}
       </div>
+
+      {/* Modal Khôi phục mật khẩu đa vai trò (US 11.1 - Task #372 / AC-PW-01) */}
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+        onSwitchToLogin={() => {
+          setIsForgotPasswordOpen(false);
+          setIsLoginMode(true);
+        }}
+        initialRole={identifier.includes("@") ? "parent" : "student"}
+      />
     </div>
   );
 }

@@ -31,6 +31,7 @@ app.dependency_overrides[dependencies.get_current_user] = mock_get_current_user
 
 
 def setup_test_data(db):
+    app.dependency_overrides[dependencies.get_current_user] = mock_get_current_user
     db.query(models.IndependenceScore).filter(
         models.IndependenceScore.student_id == TEST_STUDENT_ID
     ).delete()

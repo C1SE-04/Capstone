@@ -45,15 +45,15 @@ class TestIndependenceAlgorithm(unittest.TestCase):
         self.assertIn("Tự lập tốt", res.level)
 
     def test_many_struggles_need_support(self):
-        """Dùng 2 hints + bấm 'Chưa hiểu' 7 lần: 100 - 10 - 70 = 20 điểm (< 40đ) -> Cần thêm hỗ trợ."""
+        """Dùng 2 hints + bấm 'Chưa hiểu' 7 lần: 100 - 10 - 70 = 20 -> bảo toàn sàn tối thiểu 30đ (US 9.2)."""
         res = evaluate_independence(hints_used=2, not_understood_count=7, solving_time_seconds=400)
-        self.assertEqual(res.score, 20)
+        self.assertEqual(res.score, 30)
         self.assertIn("Cần thêm hỗ trợ", res.level)
 
     def test_floor_score_limit(self):
-        """Dùng quá nhiều gợi ý (10 hints, 10 chưa hiểu) -> điểm không âm, giữ sàn 10 điểm."""
+        """Dùng quá nhiều gợi ý (10 hints, 10 chưa hiểu) -> điểm không âm, giữ sàn tối thiểu 30 điểm (US 9.2)."""
         res = evaluate_independence(hints_used=10, not_understood_count=10, solving_time_seconds=500)
-        self.assertEqual(res.score, 10)
+        self.assertEqual(res.score, 30)
         self.assertIn("Cần thêm hỗ trợ", res.level)
 
     def test_time_penalty_over_15_minutes(self):

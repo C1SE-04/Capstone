@@ -475,6 +475,15 @@ def calculate_student_streak(student_id: str, db: Session) -> tuple[int, int]:
         if row.d:
             all_dates.add(row.d)
 
+    return _compute_streak_from_dates(all_dates)
+
+
+def _compute_streak_from_dates(all_dates: set[date]) -> tuple[int, int]:
+    """
+    Tính (current_streak, max_streak) từ tập hợp các ngày có hoạt động học tập.
+    - current_streak: Tính từ hôm nay hoặc hôm qua lùi về trước.
+    - max_streak: Chuỗi ngày học liên tục dài nhất trong toàn bộ lịch sử.
+    """
     if not all_dates:
         return 0, 0
 
@@ -482,10 +491,6 @@ def calculate_student_streak(student_id: str, db: Session) -> tuple[int, int]:
     today = date.today()
     yesterday = today - timedelta(days=1)
 
-    # 4. Tính current_streak:
-    # Nếu ngày học gần nhất là hôm nay: đếm từ hôm nay lùi về trước.
-    # Nếu ngày học gần nhất là hôm qua: đếm từ hôm qua lùi về trước (vì ngày hôm nay vẫn đang diễn ra).
-    # Nếu ngày gần nhất < hôm qua: streak đã đứt (current_streak = 0).
     current_streak = 0
     if sorted_dates[0] == today:
         current_streak = 1
@@ -508,7 +513,6 @@ def calculate_student_streak(student_id: str, db: Session) -> tuple[int, int]:
     else:
         current_streak = 0
 
-    # 5. Tính max_streak (chuỗi ngày liên tiếp kỷ lục trong toàn bộ lịch sử)
     asc_dates = sorted(all_dates)
     max_streak = 1
     running = 1
@@ -521,6 +525,166 @@ def calculate_student_streak(student_id: str, db: Session) -> tuple[int, int]:
             running = 1
 
     return current_streak, max(max_streak, current_streak)
+
+
+# ==============================================================================
+# US 8.2: BẢNG XẾP HẠNG CHUỖI NGÀY HỌC (STREAK LEADERBOARD)
+# ==============================================================================
+
+@router.get("/metrics/streak-leaderboard", response_model=schemas.StreakLeaderboardResponse)
+def get_streak_leaderboard(
+    grade: Optional[int] = Query(None, ge=4, le=9, description="Lọc theo khối lớp (Lớp 4 - 9). Bỏ trống để xem Toàn Server"),
+    limit: int = Query(50, ge=1, le=100, description="Số lượng học sinh trong top (mặc định 50, tối đa 100)"),
+    search: Optional[str] = Query(None, description="Tìm kiếm học sinh theo tên hiển thị hoặc username"),
+    current_user: dict = Depends(dependencies.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Bảng xếp hạng chuỗi ngày học liên tục (Streak Leaderboard) - US 8.2.
+    - Hỗ trợ lọc theo Khối lớp (Lớp 4 - 9) hoặc xem Toàn Server.
+    - Bảo vệ riêng tư: Chỉ hiện Tên hiển thị (display_name), Avatar, Khối lớp, Số ngày Streak và Rank.
+    - Xác định vị trí xếp hạng của học sinh đang đăng nhập (current_user_entry).
+    - Tối ưu hóa truy vấn dạng batch (tránh N+1 queries).
+    - Sắp xếp: Kỷ lục chuỗi ngày học (max_streak) giảm dần, số ngày streak hiện tại giảm dần.
+    """
+    query = db.query(models.User).filter(models.User.role == "STUDENT")
+    if grade is not None:
+        query = query.filter(models.User.grade == grade)
+
+    students = query.all()
+    if not students:
+        return schemas.StreakLeaderboardResponse(
+            scope=f"GRADE_{grade}" if grade is not None else "ALL",
+            grade=grade,
+            total_participants=0,
+            leaderboard=[],
+            current_user_entry=None,
+        )
+
+    student_ids = [s.id for s in students]
+    student_map = {s.id: s for s in students}
+
+    # Batch query tất cả ngày học của danh sách học sinh (3 queries duy nhất)
+    user_dates: dict[str, set[date]] = {sid: set() for sid in student_ids}
+
+    # 1. Từ intervals
+    for r in (
+        db.query(
+            models.SessionActiveInterval.user_id,
+            cast(models.SessionActiveInterval.start_time, Date).label("d")
+        )
+        .filter(models.SessionActiveInterval.user_id.in_(student_ids))
+        .distinct()
+        .all()
+    ):
+        if r.user_id and r.d:
+            user_dates[r.user_id].add(r.d)
+
+    # 2. Từ independence_scores
+    for r in (
+        db.query(
+            models.IndependenceScore.student_id,
+            cast(models.IndependenceScore.created_at, Date).label("d")
+        )
+        .filter(models.IndependenceScore.student_id.in_(student_ids))
+        .distinct()
+        .all()
+    ):
+        if r.student_id and r.d:
+            user_dates[r.student_id].add(r.d)
+
+    # 3. Từ sessions
+    for r in (
+        db.query(
+            models.Session.user_id,
+            cast(models.Session.created_at, Date).label("d")
+        )
+        .filter(models.Session.user_id.in_(student_ids))
+        .distinct()
+        .all()
+    ):
+        if r.user_id and r.d:
+            user_dates[r.user_id].add(r.d)
+
+    # Tính streak cho từng học sinh
+    ranked_list = []
+    current_uid = current_user.get("id")
+
+    for sid in student_ids:
+        cur_streak, m_streak = _compute_streak_from_dates(user_dates[sid])
+        s_obj = student_map[sid]
+
+        # Tên hiển thị bảo vệ riêng tư: Ưu tiên username của học sinh, fallback về phần trước @ của email
+        resolved_name = s_obj.username or (s_obj.email.split("@")[0] if s_obj.email else "Học sinh")
+        avatar_url = f"https://api.dicebear.com/7.x/bottts/svg?seed={sid}"
+
+        ranked_list.append({
+            "student_id": sid,
+            "username": s_obj.username or "",
+            "display_name": resolved_name,
+            "avatar": avatar_url,
+            "grade": s_obj.grade,
+            "streak_days": cur_streak,
+            "max_streak": m_streak,
+            "created_at": s_obj.created_at,
+        })
+
+    # Sắp xếp theo Kỷ Lục (max_streak) giảm dần; nếu bằng nhau thì xét chuỗi hiện tại (streak_days) giảm dần, created_at tăng dần
+    ranked_list.sort(
+        key=lambda x: (
+            -x["max_streak"],
+            -x["streak_days"],
+            x["created_at"] or datetime.min,
+        )
+    )
+
+    total_participants = len(ranked_list)
+    current_user_entry: Optional[schemas.StreakLeaderboardItem] = None
+
+    all_ranked_items: list[schemas.StreakLeaderboardItem] = []
+    for idx, item in enumerate(ranked_list, start=1):
+        is_cur = (item["student_id"] == current_uid)
+        entry = schemas.StreakLeaderboardItem(
+            rank=idx,
+            student_id=item["student_id"],
+            username=item.get("username"),
+            display_name=item["display_name"],
+            avatar=item["avatar"],
+            grade=item["grade"],
+            streak_days=item["streak_days"],
+            max_streak=item["max_streak"],
+            is_current_user=is_cur,
+        )
+        if is_cur:
+            current_user_entry = entry
+        all_ranked_items.append(entry)
+
+    # Lọc tìm kiếm nếu có query param search (US 9.4 - T9.15)
+    # Lọc không phân biệt hoa thường (ilike) theo cả display_name và username của bảng dữ liệu users
+    # Bảo toàn thứ hạng gốc (rank) của học sinh trên bảng tổng sắp toàn server
+    if search and search.strip():
+        search_kw = search.strip().lower()
+        filtered = [
+            it for it, raw in zip(all_ranked_items, ranked_list)
+            if (
+                search_kw in it.display_name.lower()
+                or search_kw in raw.get("username", "").lower()
+            )
+        ]
+        leaderboard_items = filtered[:limit]
+    else:
+        leaderboard_items = all_ranked_items[:limit]
+
+    scope_name = f"GRADE_{grade}" if grade is not None else "ALL"
+
+    return schemas.StreakLeaderboardResponse(
+        scope=scope_name,
+        grade=grade,
+        total_participants=total_participants,
+        leaderboard=leaderboard_items,
+        current_user_entry=current_user_entry,
+    )
+
 
 
 @router.get("/metrics/heatmap", response_model=schemas.ActivityHeatmapResponse)
@@ -677,7 +841,7 @@ def get_summary_metrics(
         prev_start = None
         prev_end = None
 
-    # 2. Tổng số bài toán hoàn thành từ bảng independence_scores
+    # 2. Tổng số bài toán hoàn thành từ bảng independence_scores (US 9.2: Ghi nhận cả bài giải lại)
     completed_problems = (
         db.query(func.count(models.IndependenceScore.id))
         .filter(
@@ -859,11 +1023,13 @@ def get_child_problems(
     if not link:
         raise HTTPException(status_code=403, detail="Bạn không có quyền xem dữ liệu của học sinh này.")
 
-    # --- Query cơ bản ---
+    # --- Query cơ bản (US 9.2: Ghi nhận cả bài giải lại lặp đề) ---
     base_query = (
         db.query(models.IndependenceScore, models.Session)
         .join(models.Session, models.IndependenceScore.session_id == models.Session.id)
-        .filter(models.IndependenceScore.student_id == student_id)
+        .filter(
+            models.IndependenceScore.student_id == student_id,
+        )
     )
 
     # --- Áp dụng bộ lọc ---
@@ -900,6 +1066,9 @@ def get_child_problems(
         "Hoc sinh chua hieu cach giai thich tren. Hay giai thich lai theo cach khac, don gian va de hieu hon.",
         "Hoc sinh van chua hieu sau nhieu lan giai thich. Hay dua ra dap an chinh xac va giai thich tung buoc that ro rang.",
     )
+
+    student_user = db.query(models.User).filter(models.User.id == student_id).first()
+    student_grade = (student_user.grade if student_user and student_user.grade else 5)
 
     items: list[schemas.ChildProblemItem] = []
 
@@ -1002,6 +1171,8 @@ def get_child_problems(
         user_messages = [m for m in valid_messages if m.sender_type == "USER"]
         summary_parts = [msg.content for msg in user_messages if msg.content]
         chat_summary: Optional[str] = " | ".join(summary_parts[:5]) if summary_parts else None
+        if not chat_summary and score.problem_text:
+            chat_summary = score.problem_text
 
         # Danh sách đầy đủ các bước đối thoại giữa con và hệ thống
         dialogue_messages = [
@@ -1032,11 +1203,74 @@ def get_child_problems(
         if eval_text in EVAL_MAP:
             eval_text = EVAL_MAP[eval_text]
 
+        # ── US 8.1 (Task T8.4): Xác định tên bài toán hiển thị cho Phụ Huynh ──
+        # Quy tắc:
+        # 1. Nếu bài đó học sinh CÓ lưu vào sổ tay & tự gõ tên riêng (custom_title):
+        #    -> Hiển thị đúng tên con tự đặt (để tôn trọng cảm xúc và cách tư duy của con)
+        # 2. Nếu bài đó học sinh KHÔNG bấm lưu vào sổ tay (hoặc có lưu nhưng để trống tên):
+        #    -> Tự động dùng tên chuẩn sư phạm do AI sinh ra (friendly_parent_title)
+        resolved_custom_title: Optional[str] = None
+        if score.custom_title and score.custom_title.strip():
+            resolved_custom_title = score.custom_title.strip()
+        else:
+            # Tra cứu từ bảng problem_bookmarks xem học sinh có bookmark bài này và đặt tên riêng không
+            matching_bms = (
+                db.query(models.ProblemBookmark)
+                .filter(
+                    models.ProblemBookmark.student_id == student_id,
+                    models.ProblemBookmark.session_id == session.id,
+                )
+                .all()
+            )
+            for bm in matching_bms:
+                if bm.title and bm.title.strip():
+                    bm_title = bm.title.strip()
+                    # Phân biệt tên do con tự đặt vs tên mẫu sư phạm mặc định
+                    # Tên AI chuẩn sư phạm luôn có dạng: [Lớp X] ... – ...
+                    is_ai_pattern = bm_title.startswith("[Lớp ") and " – " in bm_title
+                    if not is_ai_pattern:
+                        resolved_custom_title = bm_title
+                        break
+
+        # Tên chuẩn sư phạm (friendly_parent_title) do AI sinh ra
+        resolved_friendly_title: str = ""
+        if score.friendly_parent_title and score.friendly_parent_title.strip():
+            resolved_friendly_title = score.friendly_parent_title.strip()
+        else:
+            from agents.problem_title_generator import generate_friendly_problem_title
+            prob_text = (
+                score.problem_text
+                or (summary_parts[0] if summary_parts else None)
+                or session.title
+                or "Bài toán"
+            )
+            try:
+                auto_title_obj = generate_friendly_problem_title(
+                    problem_text=prob_text,
+                    grade=student_grade
+                )
+                resolved_friendly_title = auto_title_obj.friendly_parent_title
+            except Exception:
+                resolved_friendly_title = f"[Lớp {student_grade}] Bài toán – Luyện tập chung"
+
+            # Cache lại vào database để các lần gọi sau không cần sinh lại
+            score.friendly_parent_title = resolved_friendly_title
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+
+        # Tiêu đề bài toán hiển thị: Ưu tiên tên con tự đặt, fallback về tên AI chuẩn sư phạm
+        display_title = resolved_custom_title if resolved_custom_title else resolved_friendly_title
+
         items.append(
             schemas.ChildProblemItem(
                 id=score.id,
                 session_id=session.id,
-                session_title=session.title,
+                session_title=display_title,
+                problem_title=display_title,
+                custom_title=resolved_custom_title,
+                friendly_parent_title=resolved_friendly_title,
                 completed_at=score.created_at,
                 score=score.score,
                 hints_used=score.hints_used,
@@ -1044,6 +1278,12 @@ def get_child_problems(
                 evaluation=eval_text,
                 attachment_url=attachment_url,
                 chat_summary=chat_summary,
+                problem_text=score.problem_text or (summary_parts[0] if summary_parts else None),
+                category=getattr(score, "category", None) or "NEW_TOPIC",
+                is_duplicate=bool(getattr(score, "is_duplicate", False)),
+                repeat_count=getattr(score, "repeat_count", 1) or 1,
+                max_score=getattr(score, "max_score", 100) or 100,
+                repeat_warning=getattr(score, "repeat_warning", None),
                 dialogue_messages=dialogue_messages,
             )
         )

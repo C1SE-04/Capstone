@@ -20,7 +20,7 @@ def ensure_single_admin() -> models.User:
 
         # Nếu có nhiều hơn 1 admin, xóa các tài khoản thừa hoặc hạ role để đảm bảo DUY NHẤT 1 admin
         if len(existing_admins) > 1:
-            print(f"⚠️ Phát hiện {len(existing_admins)} tài khoản ADMIN. Đang giữ lại duy nhất {ADMIN_EMAIL}...")
+            print(f"[WARNING] Phát hiện {len(existing_admins)} tài khoản ADMIN. Đang giữ lại duy nhất {ADMIN_EMAIL}...")
             for a in existing_admins:
                 if a.email.lower() != ADMIN_EMAIL:
                     db.delete(a)
@@ -35,7 +35,7 @@ def ensure_single_admin() -> models.User:
             admin.hashed_password = auth.hash_password(ADMIN_PASSWORD)
             db.commit()
             db.refresh(admin)
-            print(f"✅ Đã cập nhật tài khoản ADMIN duy nhất:")
+            print(f"[SUCCESS] Đã cập nhật tài khoản ADMIN duy nhất:")
             print(f"   Email:    {admin.email}")
             print(f"   Password: {ADMIN_PASSWORD}")
             print(f"   ID:       {admin.id}")
@@ -50,7 +50,7 @@ def ensure_single_admin() -> models.User:
             db.add(admin)
             db.commit()
             db.refresh(admin)
-            print(f"🎉 Đã tạo thành công tài khoản ADMIN duy nhất:")
+            print(f"[SUCCESS] Đã tạo thành công tài khoản ADMIN duy nhất:")
             print(f"   Email:    {admin.email}")
             print(f"   Password: {ADMIN_PASSWORD}")
             print(f"   ID:       {admin.id}")

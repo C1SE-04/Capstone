@@ -64,8 +64,14 @@ def generate_flashcard_content(
         return _fallback_flashcard(problem_text=first_user_msg)
 
     genai.configure(api_key=key)
-    # Đồng bộ model qua biến môi trường GEMINI_MODEL
-    model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+
+    # US 10.3 (Task T10.3.3): Đọc flashcard_model động từ SystemConfigService
+    try:
+        from services.system_config_service import get_system_settings
+        sys_config = get_system_settings()
+        model_name = sys_config.get("flashcard_model") or os.getenv("GEMINI_FLASHCARD_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    except Exception:
+        model_name = os.getenv("GEMINI_FLASHCARD_MODEL") or os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     formatted_chat = _format_chat_for_flashcard(messages)
 
@@ -91,7 +97,8 @@ Chỉ trả về JSON thuần túy theo cấu trúc:
             system_instruction=FLASHCARD_EXTRACTION_SYSTEM_INSTRUCTION,
             generation_config={"temperature": 0.2, "response_mime_type": "application/json"}
         )
-        response = model.generate_content(prompt)
+        from middleware.gemini_telemetry import generate_with_telemetry
+        response = generate_with_telemetry(model, prompt, model_name, "Flashcard")
         raw_text = response.text.strip()
 
         if raw_text.startswith("```json"):

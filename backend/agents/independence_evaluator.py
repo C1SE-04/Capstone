@@ -48,21 +48,24 @@ def evaluate_independence(
     hints_used: int = 0,
     not_understood_count: int = 0,
     solving_time_seconds: int = 0,
+    repeat_count: int = 1,
 ) -> IndependenceEvaluation:
     """
     Thuật toán ngầm cốt lõi đánh giá điểm tự lực (Independence Score).
     
-    Quy tắc barem:
+    Quy tắc barem (US 9.2 - T9.6b):
     - Điểm gốc: 100đ
     - Mỗi hint dùng thêm: -5đ
     - Mỗi lần bấm 'Chưa hiểu': -10đ
     - Ngâm bài quá lâu (>15p): -5đ, (>30p): -10đ
-    - Điểm sàn: 10đ, Điểm trần: 100đ
+    - Điểm sàn: 30đ, Điểm trần: 100đ
+    - Hệ số phạt trần bài giải trùng (Anti-Spam Mastery):
+      max_score = max(30, 100 - (repeat_count - 1) * 10)
     """
     safe_hints = max(0, hints_used)
     safe_not_understood = max(0, not_understood_count)
     safe_time = max(0, solving_time_seconds)
-    #Dùng max ở đây để tránh dự liệu âm vào, sẽ chọn 0
+    safe_repeat = max(1, repeat_count)
     
     hint_penalty = safe_hints * 5
     struggle_penalty = safe_not_understood * 10
@@ -71,8 +74,9 @@ def evaluate_independence(
     total_deduction = hint_penalty + struggle_penalty + time_penalty
     raw_score = 100 - total_deduction
 
-    # Điểm sàn 10đ, trần 100đ
-    score = max(10, min(100, raw_score))
+    # US 9.2: Áp dụng hệ số phạt trần bài giải trùng và giữ điểm sàn 30đ
+    max_score = max(30, 100 - (safe_repeat - 1) * 10)
+    score = max(30, min(max_score, raw_score))
 
     level = classify_mastery_level(score)
     quick_warning = (safe_time < 15 and safe_hints == 0) if safe_time > 0 else False
@@ -94,14 +98,22 @@ def calculate_independence_score(
     hints_used: int = 0,
     not_understood_count: int = 0,
     solving_time_seconds: int = 0,
+    repeat_count: int = 1,
 ) -> Dict[str, Any]:
     """
     Hàm giao diện tiện ích (Helper) trả về dict nhanh cho các module khác.
+    Hỗ trợ tham số repeat_count để đồng bộ với cơ chế phạt bài trùng (US 9.2).
     """
+    safe_repeat = max(1, repeat_count)
+    max_score = max(30, 100 - (safe_repeat - 1) * 10)
+    is_repeat = safe_repeat > 1
+    repeat_warning = f"Bài giải lại, điểm tối đa là {max_score}đ" if is_repeat else None
+
     res = evaluate_independence(
         hints_used=hints_used,
         not_understood_count=not_understood_count,
         solving_time_seconds=solving_time_seconds,
+        repeat_count=safe_repeat,
     )
     return {
         "score": res.score,
@@ -115,6 +127,10 @@ def calculate_independence_score(
             "time_penalty": res.time_penalty,
         },
         "quick_answer_warning": res.quick_answer_warning,
+        "repeat_count": safe_repeat,
+        "max_score": max_score,
+        "is_repeat": is_repeat,
+        "repeat_warning": repeat_warning,
     }
 
 # Đường dẫn tới file rubric JSON
@@ -141,7 +157,7 @@ def load_independence_rubric() -> Dict[str, Any]:
                 {"threshold_seconds": 1800, "penalty": 10},
                 {"threshold_seconds": 900, "penalty": 5},
             ],
-            "floor_score": 10,
+            "floor_score": 30,
             "ceiling_score": 100,
         },
         "mastery_levels": [

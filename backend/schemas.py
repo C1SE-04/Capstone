@@ -1,21 +1,240 @@
 # schemas.py
-from pydantic import BaseModel, EmailStr
-from typing import Optional
+import json
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Optional, Dict, Any, List, Union
 from datetime import datetime
 
-# Dữ liệu gửi lên khi Đăng ký & Đăng nhập
+# Dữ liệu gửi lên khi Đăng ký & Đăng nhập (schema cũ — giữ để không phá các endpoint cũ)
 class AuthInput(BaseModel):
-    email: EmailStr
+    email: Optional[EmailStr] = None  # US 9.1: email không còn bắt buộc (học sinh đăng ký bằng username)
     password: str
     grade: Optional[int] = None  # Lớp học (4-9), chỉ bắt buộc cho STUDENT
+
+
+# ─── US 9.1 (T9.1): Schema đăng ký mới (username + password) ──────────────────
+class RegisterInput(BaseModel):
+    """
+    Schema đăng ký tài khoản mới cho US 9.1:
+    - Học sinh: Chỉ cần username + password. Không bắt buộc email.
+    - Phụ huynh: Đăng ký xong → nhập email ở bước Onboarding → xác thực OTP.
+    """
+    username: str                         # Tên tài khoản (3-30 ký tự, chữ/số/gạch dưới)
+    password: str                         # Mật khẩu
+
+
+class OtpRequestInput(BaseModel):
+    """
+    Payload yêu cầu gửi OTP qua email (US 9.1 - T9.2).
+    Dùng cho đăng ký Phụ huynh, đổi email trong Cài đặt, hoặc quên mật khẩu.
+    """
+    email: EmailStr                       # Email sẽ nhận mã OTP
+    purpose: str = "PARENT_REGISTER"     # "PARENT_REGISTER" | "PARENT_CHANGE_EMAIL" | "PARENT_RESET_PASSWORD"
+
+
+class ForgotPasswordOtpRequestInput(BaseModel):
+    """
+    US 11.2: Payload yêu cầu gửi mã OTP khôi phục mật khẩu Phụ huynh.
+    """
+    email: EmailStr                       # Email tài khoản Phụ huynh cần khôi phục mật khẩu
+
+
+class ForgotPasswordVerifyOtpInput(BaseModel):
+    """
+    US 11.2: Payload xác thực mã OTP ở Bước 2 trước khi đặt mật khẩu mới.
+    """
+    email: EmailStr                       # Email tài khoản Phụ huynh
+    otp_code: str                         # Mã OTP 6 chữ số
+
+
+class ForgotPasswordVerifyOtpResponse(BaseModel):
+    """
+    US 11.2: Phản hồi xác thực mã OTP thành công.
+    """
+    success: bool = True
+    message: str
+
+
+class ForgotPasswordVerifyAndResetInput(BaseModel):
+    """
+    US 11.2: Payload xác thực OTP và đổi mật khẩu mới cho Phụ huynh.
+    """
+    email: EmailStr                       # Email tài khoản Phụ huynh
+    otp_code: str                         # Mã OTP 6 chữ số
+    new_password: str                     # Mật khẩu mới
+
+
+class ForgotPasswordResetResponse(BaseModel):
+    """
+    US 11.2: Phản hồi sau khi đổi mật khẩu thành công.
+    """
+    success: bool = True
+    message: str
+
+
+class StudentLookupInput(BaseModel):
+    """
+    US 11.2: Payload tra cứu học sinh và gửi thông báo tới Phụ huynh.
+    """
+    username: str                         # Tên tài khoản học sinh
+    send_notification: bool = False       # True nếu học sinh bấm "Gửi thông báo tới Bố/Mẹ"
+
+
+class StudentLookupResponse(BaseModel):
+    """
+    US 11.2 & Bug #416: Phản hồi tra cứu học sinh kèm danh sách email phụ huynh đã che mờ.
+    """
+    success: bool = True
+    student_username: str
+    parent_email_masked: str = ""                         # Email phụ huynh đầu tiên (giữ tương thích ngược)
+    parent_emails_masked: list[str] = Field(default_factory=list) # Danh sách tất cả email phụ huynh đã che mờ
+    parent_count: int = 0                                 # Số lượng phụ huynh bảo trợ
+    notification_sent: bool = False
+    message: str
+
+
+class ParentResetStudentPasswordInput(BaseModel):
+    """
+    US 11.2: Payload Phụ huynh cấp lại mật khẩu cho con.
+    """
+    new_password: str                     # Mật khẩu mới cấp cho con
+
+
+class ParentResetStudentPasswordResponse(BaseModel):
+    """
+    US 11.2: Phản hồi Phụ huynh cấp lại mật khẩu cho con.
+    """
+    success: bool = True
+    message: str
+    student_id: str
+    student_username: Optional[str] = None
+
+
+# ==============================================================================
+# US 11.5: Schema Liên hệ & Đóng góp ý kiến (Feedback & Contact Hub)
+# ==============================================================================
+
+class ContactSubmitInput(BaseModel):
+    """
+    US 11.5: Payload gửi thông tin liên hệ / báo lỗi / góp ý tính năng.
+    Hỗ trợ alias theo camelCase từ Frontend Next.js (fullName, category, message, attachedImagesCount).
+    """
+    full_name: Optional[str] = Field(None, max_length=255)
+    fullName: Optional[str] = None
+
+    email: EmailStr
+
+    role: Optional[str] = "GUEST"                                 # STUDENT | PARENT | GUEST | OTHER
+
+    topic: Optional[str] = None                                   # BUG | FEATURE | PEDAGOGY | COOPERATION | OTHER
+    category: Optional[str] = None                                # Alias từ FE
+
+    content: Optional[str] = None                                 # Tối đa 500 ký tự theo AC3
+    message: Optional[str] = None                                 # Alias từ FE
+
+    attachment_urls: Optional[List[str]] = Field(default_factory=list)
+    attachedImagesCount: Optional[int] = 0
+
+    recaptcha_token: Optional[str] = None
+    recaptcha_score: Optional[float] = None
+
+    def get_resolved_full_name(self) -> str:
+        name = self.full_name or self.fullName or ""
+        return name.strip()
+
+    def get_resolved_topic(self) -> str:
+        raw = self.topic or self.category or "FEEDBACK"
+        mapping = {
+            "BUG_REPORT": "BUG",
+            "FEATURE_REQUEST": "FEATURE",
+            "PEDAGOGY": "PEDAGOGY",
+            "COOPERATION": "COOPERATION",
+            "OTHER": "OTHER",
+        }
+        return mapping.get(raw.upper(), raw.upper())
+
+    def get_resolved_content(self) -> str:
+        text_content = self.content or self.message or ""
+        return text_content.strip()
+
+
+class ContactSubmitResponse(BaseModel):
+    """
+    US 11.5: Phản hồi gửi liên hệ thành công.
+    """
+    success: bool = True
+    message: str
+    request_id: str
+    created_at: str
+
+
+class ContactRequestItemResponse(BaseModel):
+    """
+    US 11.5: Chi tiết một yêu cầu liên hệ / phản hồi trong quản trị.
+    """
+    id: str
+    full_name: str
+    email: str
+    role: str
+    topic: str
+    content: str
+    attachment_urls: List[str] = Field(default_factory=list)
+    recaptcha_score: Optional[float] = None
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ContactStatusUpdateInput(BaseModel):
+    """
+    US 11.5: Quản trị viên cập nhật trạng thái phản hồi.
+    """
+    status: str  # PENDING | IN_PROGRESS | RESOLVED | REJECTED
+
+
+class OtpVerifyInput(BaseModel):
+    """
+    Payload xác thực mã OTP (US 9.1 - T9.2).
+    """
+    email: EmailStr                       # Email đã nhận OTP
+    otp_code: str                         # Mã OTP 6 chữ số người dùng nhập
+    purpose: str = "PARENT_REGISTER"     # Phải khớp với purpose lúc request
+
+
+class OtpVerifyResponse(BaseModel):
+    """Phản hồi sau khi xác thực OTP thành công."""
+    success: bool
+    message: str
+
+
+class ParentChangeEmailRequest(BaseModel):
+    """
+    Payload đổi email nhận thông báo của Phụ huynh (Cài đặt - US 9.1 - T9.5).
+    Bước 1: Gửi OTP tới email mới.
+    """
+    new_email: EmailStr                   # Email mới muốn đổi sang
+
+
+class ParentChangeEmailVerify(BaseModel):
+    """
+    Payload xác nhận đổi email Phụ huynh bằng OTP (Cài đặt - US 9.1 - T9.5).
+    Bước 2: Nhập OTP nhận được ở email mới để xác nhận đổi.
+    """
+    new_email: EmailStr                   # Email mới (phải khớp với bước 1)
+    otp_code: str                         # Mã OTP 6 chữ số
 
 # Dữ liệu trả về khi Đăng ký thành công
 class UserResponse(BaseModel):
     id: str
-    email: EmailStr
+    email: Optional[str] = None           # US 9.1: email có thể null (học sinh không có email)
+    username: Optional[str] = None        # US 9.1: tên tài khoản
+    email_verified: Optional[bool] = False  # US 9.1: True sau khi Phụ huynh xác thực OTP
     role: str
-    grade: Optional[int] = None  # Trả về lớp học nếu có
-    session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
+    grade: Optional[int] = None           # Trả về lớp học nếu có
+    session_version: Optional[int] = 1    # US 6.2: phiên bản session của user
+    google_id: Optional[str] = None       # US 8.3: Google ID nếu liên kết
+    oauth_provider: Optional[str] = None  # US 8.3: 'google' hoặc None
 
     class Config:
         from_attributes = True
@@ -25,9 +244,44 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    username: Optional[str] = None  # Tên tài khoản định danh duy nhất
     grade: Optional[int] = None  # Task #132: trả thêm grade_level về FE sau login
     session_version: Optional[int] = 1  # US 6.2: phiên bản session của user
-    
+
+
+# --- US 8.3: Google OAuth Schemas (Task T8.19) ---
+
+class GoogleCallbackRequest(BaseModel):
+    """Payload gửi lên từ NextAuth khi người dùng đăng nhập bằng Google (US 8.3 - T8.19)."""
+    email: EmailStr
+    google_id: Optional[str] = None       # ID người dùng Google (sub)
+    sub: Optional[str] = None             # Alias hỗ trợ nếu FE gửi sub
+    name: Optional[str] = None            # Tên hiển thị từ Google profile
+    avatar_url: Optional[str] = None      # Avatar URL từ Google
+    role: Optional[str] = None            # Vai trò nếu FE gửi sẵn (STUDENT / MONITOR)
+    grade: Optional[int] = None           # Lớp học nếu FE gửi sẵn (4-9)
+
+
+class GoogleAuthResponse(BaseModel):
+    """Phản hồi sau khi xác thực Google OAuth thành công (US 8.3 - T8.19) hoặc hoàn tất Onboarding."""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    is_new_user: bool                     # True nếu tài khoản mới hoặc chưa onboarding, False nếu đã onboarding
+    user_id: str
+    username: Optional[str] = None        # Tên tài khoản định danh duy nhất (từ DB)
+    email: Optional[str] = None           # US 9.1: Học sinh đăng ký bằng username có email = None
+    role: str
+    grade: Optional[int] = None
+    session_version: Optional[int] = 1
+
+
+class OnboardingRequest(BaseModel):
+    """Payload khi người dùng hoàn tất bước Onboarding (US 8.3 - T8.21)."""
+    role: str                             # "STUDENT" hoặc "MONITOR"
+    grade: Optional[int] = None           # Lớp học (4-9), bắt buộc nếu role == "STUDENT"
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 
@@ -144,6 +398,8 @@ class IndependenceRecordCreate(BaseModel):
     hints_used: Optional[int] = None
     not_understood_count: Optional[int] = None
     evaluation: Optional[str] = None
+    custom_title: Optional[str] = None
+    friendly_parent_title: Optional[str] = None
 
 
 class IndependenceRecordResponse(BaseModel):
@@ -154,7 +410,13 @@ class IndependenceRecordResponse(BaseModel):
     hints_used: int
     not_understood_count: int
     evaluation: Optional[str] = None
+    custom_title: Optional[str] = None
+    friendly_parent_title: Optional[str] = None
     created_at: datetime
+    repeat_count: Optional[int] = 1
+    max_score: Optional[int] = 100
+    is_duplicate: Optional[bool] = False
+    repeat_warning: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -266,6 +528,36 @@ class SummaryCardsResponse(BaseModel):
     avgMinutesPerDay: int
 
 
+# --- US 8.2: Streak Leaderboard Schemas ---
+
+class StreakLeaderboardItem(BaseModel):
+    """Thông tin một học sinh trên Bảng Xếp Hạng Chuỗi Ngày Học."""
+    rank: int
+    student_id: str
+    username: Optional[str] = None
+    display_name: str
+    avatar: Optional[str] = None
+    grade: Optional[int] = None
+    streak_days: int
+    max_streak: Optional[int] = None
+    is_current_user: bool = False
+
+    class Config:
+        from_attributes = True
+
+
+class StreakLeaderboardResponse(BaseModel):
+    """Phản hồi API GET /metrics/streak-leaderboard."""
+    scope: str  # "ALL" hoặc "GRADE_{grade}"
+    grade: Optional[int] = None
+    total_participants: int
+    leaderboard: list[StreakLeaderboardItem] = []
+    current_user_entry: Optional[StreakLeaderboardItem] = None
+
+    class Config:
+        from_attributes = True
+
+
 class CloudinaryUploadResponse(BaseModel):
     """Response trả về sau khi upload ảnh lên Cloudinary thành công."""
     success: bool
@@ -304,14 +596,23 @@ class ChildProblemItem(BaseModel):
     """Thông tin 1 bài toán con đã giải, trả về cho Dashboard Phụ Huynh."""
     id: Optional[str] = None                 # ID bản ghi IndependenceScore (duy nhất)
     session_id: str                          # ID session chứa bài toán
-    session_title: Optional[str] = None      # Tiêu đề phòng chat (nếu có)
+    session_title: Optional[str] = None      # Tiêu đề phòng chat / tiêu đề hiển thị (US 8.1: ưu tiên custom_title, fallback friendly_parent_title)
+    problem_title: Optional[str] = None      # Tên bài toán hiển thị cho phụ huynh
+    custom_title: Optional[str] = None       # Tên bài toán do học sinh tự đặt khi lưu Sổ tay (nếu có)
+    friendly_parent_title: Optional[str] = None # Tên chuẩn sư phạm do AI sinh ra
     completed_at: datetime                   # Thời điểm hoàn thành (timestamp IndependenceScore)
     score: int                               # Điểm tự lực (0–100)
     hints_used: int                          # Số gợi ý đã dùng
     not_understood_count: int                # Số lần bấm "Chưa hiểu"
     evaluation: Optional[str] = None        # Nhãn đánh giá mức độ ("Xuất sắc", "Khá", ...)
     attachment_url: Optional[str] = None    # Ảnh đề bài từ Cloudinary (nếu có)
-    chat_summary: Optional[str] = None      # Đoạn chat tóm tắt
+    chat_summary: Optional[str] = None       # Đoạn trích câu hỏi / tóm tắt các tin nhắn con gửi
+    problem_text: Optional[str] = None       # Đề bài toán gốc con gửi
+    category: Optional[str] = "NEW_TOPIC"   # US 8.1 - AC 8.1.2: NEW_TOPIC | ISOMORPHIC_PRACTICE | EXACT_DUPLICATE
+    is_duplicate: bool = False               # US 8.1 - AC 8.1.1: Đánh dấu bài trùng lặp
+    repeat_count: Optional[int] = 1          # US 9.2: Số lần giải bài (1 = lần đầu, >1 = giải lại)
+    max_score: Optional[int] = 100           # US 9.2: Điểm trần tối đa của lần giải này
+    repeat_warning: Optional[str] = None     # US 9.2: Cảnh báo bài trùng (VD: 'Bài giải lại, điểm tối đa là 90đ')
     dialogue_messages: list[ProblemDialogueMessage] = [] # Danh sách đầy đủ các bước đối thoại giữa con và hệ thống
 
     class Config:
@@ -327,13 +628,22 @@ class ChildProblemsResponse(BaseModel):
     items: list[ChildProblemItem] = []
 
 
-# --- US 7.2: Bookmark / Notebook Schema (Task T7.7) ---
+# --- US 7.2 & US 8.2: Bookmark / Notebook & Playlist Schemas ---
 
 class BookmarkCreate(BaseModel):
     """Body gửi lên khi học sinh lưu bài toán vào Sổ Tay."""
     session_id: str
     message_created_at: Optional[datetime] = None  # Thời điểm bài toán cần lưu (từ tin nhắn chúc mừng)
     note: Optional[str] = None                    # Ghi chú tuỳ ý của học sinh
+    title: Optional[str] = None                   # US 8.2: Tên bài toán do học sinh tự đặt hoặc AI gợi ý
+    playlist_ids: Optional[list[str]] = None      # US 8.2: Danh sách playlist muốn lưu bài vào
+
+
+class BookmarkUpdate(BaseModel):
+    """Body cập nhật tiêu đề, ghi chú hoặc danh sách playlist của bookmark (US 8.2)."""
+    title: Optional[str] = None
+    note: Optional[str] = None
+    playlist_ids: Optional[list[str]] = None
 
 
 class BookmarkResponse(BaseModel):
@@ -346,12 +656,56 @@ class BookmarkResponse(BaseModel):
     attachment_url: Optional[str] = None    # Ảnh đề bài Cloudinary
     chat_summary: Optional[str] = None      # Tóm tắt đoạn chat khi lưu
     independence_score: Optional[int] = None
+    title: Optional[str] = None             # US 8.2: Tên bài toán do học sinh đặt hoặc AI gợi ý
     note: Optional[str] = None
+    playlist_ids: list[str] = []            # US 8.2: Các playlist bài này đang thuộc về
     created_at: datetime
     dialogue_messages: list[ProblemDialogueMessage] = []
 
     class Config:
         from_attributes = True
+
+
+class PlaylistCreate(BaseModel):
+    """Body tạo mới Bookmark Playlist (YouTube-style) - US 8.2."""
+    name: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+    initial_bookmark_id: Optional[str] = None  # Tự động add bài toán này vào playlist sau khi tạo
+
+
+class PlaylistUpdate(BaseModel):
+    """Body cập nhật thông tin Bookmark Playlist - US 8.2."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+
+
+class PlaylistResponse(BaseModel):
+    """Thông tin trả về của một Playlist - US 8.2."""
+    id: str
+    student_id: str
+    name: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+    is_default: bool = False
+    item_count: int = 0
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PlaylistItemAdd(BaseModel):
+    """Body thêm bài toán vào Playlist - US 8.2."""
+    bookmark_id: str
+
+
+class PlaylistDetailResponse(PlaylistResponse):
+    """Chi tiết Playlist kèm danh sách các bài toán - US 8.2."""
+    items: list[BookmarkResponse] = []
+
 
 
 # ========================================================
@@ -512,6 +866,56 @@ class FlashcardContent(BaseModel):
         from_attributes = True
 
 
+# =========================================================================
+# --- US 8.1: Problem Deduplication & Classification Schemas (Task T8.1) ---
+# =========================================================================
+
+class ProblemClassificationResult(BaseModel):
+    """
+    Kết quả phân loại bài tập từ Gemini AI.
+    Phục vụ đánh giá năng lực thực chất (Deduplication) và nhận diện bài hỏi lại nhiều lần.
+    """
+    category: str                        # "NEW_TOPIC" | "ISOMORPHIC_PRACTICE" | "EXACT_DUPLICATE"
+    confidence_score: float = 1.0        # Độ tin cậy của phân loại (0.0 đến 1.0)
+    reasoning: str                       # Phân tích lý do sư phạm / giải thích kết quả
+    matched_problem: Optional[str] = None # Đề bài lịch sử có độ tương đồng/trùng khớp nhất (nếu có)
+    is_repeated_query: bool = False      # Học sinh có hỏi lại bài này/dạng này nhiều lần không
+    repeat_count: int = 1                # Số lần xuất hiện của bài này hoặc dạng bài này
+    gentle_reminder: Optional[str] = None # Lời nhắc nhở nhẹ nhàng nếu là EXACT_DUPLICATE hoặc hỏi lại nhiều lần
+    pedagogical_recommendation: str      # Khuyến nghị sư phạm cho hệ thống đánh giá
+    friendly_parent_title: Optional[str] = None # Tiêu đề chuẩn sư phạm gợi ý cho Sổ tay & Phụ huynh: [Lớp X] [Chủ đề] – [Tên dạng toán]
+    is_fallback: bool = False            # Đánh dấu nếu kết quả trả về từ Heuristic Fallback
+
+    class Config:
+        from_attributes = True
+
+# =========================================================================
+# --- US 8.1: Problem Friendly Title Generator Schemas (Task T8.3) ---
+# =========================================================================
+
+class ProblemTitleGenerateRequest(BaseModel):
+    """Body gửi lên yêu cầu AI gợi ý tên bài toán."""
+    problem_text: str                           # Nội dung đề bài toán (hoặc câu hỏi toán học)
+    grade: Optional[int] = None                 # Khối lớp của học sinh (4 - 9), nếu không có AI tự suy luận
+    session_id: Optional[str] = None            # ID phiên học (tùy chọn)
+
+
+class ProblemTitleResult(BaseModel):
+    """
+    Kết quả sinh tên bài toán mặc định (friendly_parent_title) chuẩn sư phạm (Task T8.3).
+    Dùng làm placeholder gợi ý khi học sinh bấm 'Lưu vào Sổ tay' và hiển thị cho phụ huynh.
+    Định dạng chuẩn: [Lớp X] [Chủ đề] – [Tên dạng toán]
+    """
+    friendly_parent_title: str                  # Tiêu đề chuẩn sư phạm, VD: "[Lớp 5] Phân số – Tìm phân số của một số"
+    grade: int                                  # Khối lớp xác định (4 - 9)
+    topic: str                                  # Tên chủ đề lớn (VD: "Phân số", "Hình học", "Chuyển động đều")
+    subtopic_type: str                          # Tên dạng toán chi tiết (VD: "Tìm phân số của một số")
+    short_summary: Optional[str] = None         # Tóm tắt siêu ngắn gọn đề bài (< 15 từ)
+    is_fallback: bool = False                   # True nếu trả về từ cơ chế Rule-based khi Gemini mất kết nối
+
+    class Config:
+        from_attributes = True
+        
 # ==============================================================================
 # US 7.3 - Task T7.31: Schemas cho Admin Portal & Mock Router (/admin/mock)
 # ==============================================================================
@@ -641,13 +1045,18 @@ class AdminSafetyLogItem(BaseModel):
     timestamp: str
     student_id: str
     student_email: str
+    user_id: Optional[str] = None
+    email: Optional[str] = None
     student_grade: Optional[int] = None
     message_snippet: str
-    violation_type: str  # TOXIC, JAILBREAK, OFF_TOPIC, SENSITIVE
-    severity: str        # LOW, MEDIUM, HIGH, CRITICAL
-    action_taken: str    # BLOCKED, WARNED, REDIRECTED
-    target_agent: str    # AGENT_TUTOR, AGENT_SAFETY, ORCHESTRATOR
-    flagged_reason: str
+    user_query: Optional[str] = None
+    violation_type: str = "OFF_TOPIC"  # TOXIC, JAILBREAK, OFF_TOPIC, SENSITIVE, SAFETY, ROUTING, PROFANITY
+    severity: str = "LOW"        # LOW, MEDIUM, HIGH, CRITICAL
+    action_taken: str = "RECORDED"    # BLOCKED, WARNED, REDIRECTED, NOTIFIED_PARENT, ROUTED, RECORDED
+    target_agent: str = "ORCHESTRATOR"    # AGENT_TUTOR, AGENT_SAFETY, ORCHESTRATOR, SAFETY_AGENT
+    flagged_reason: str = ""
+    notify_parent: Optional[bool] = False
+    parent_notified_at: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -659,6 +1068,11 @@ class AdminSafetyLogsResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# US 8.5 (Task T8.29B): Alias cho API Admin Logs lọc theo tài khoản
+AdminLogItem = AdminSafetyLogItem
+AdminLogsResponse = AdminSafetyLogsResponse
 
 
 class AdminDifficultTopicStat(BaseModel):
@@ -716,16 +1130,563 @@ class AdminTopicListResponse(BaseModel):
 
 
 class AdminSystemSettings(BaseModel):
-    model_name: str = "gemini-1.5-flash"
-    backup_model: str = "gemini-1.5-pro"
-    temperature: float = 0.4
-    max_output_tokens: int = 1024
-    safety_threshold: str = "BLOCK_MEDIUM_AND_ABOVE"
-    rate_limit_per_minute: int = 30
+    id: str = "current"
+    primary_model: str = "gemini-3.8-flash"
+    parent_insight_model: str = "gemini-3.5-flash"
+    classifier_model: str = "gemini-3.1-flash-lite"
+    email_model: str = "gemini-3.1-flash-lite"
+    flashcard_model: str = "gemini-3.5-flash-lite"
+    backup_model: str = "gemini-3.5-flash-lite"
+    model_name: Optional[str] = "gemini-3.8-flash"  # Backward compatibility
+
+    temperature: float = 0.35
+    top_p: float = 0.90
+    max_output_tokens: int = 512
+    socratic_strictness: str = "BALANCED"
+    enable_math_reviewer: bool = True
     enable_vision_support: bool = True
-    system_version: str = "v1.4.0"
-    last_updated_at: str
-    last_updated_by: str
+    safety_threshold: str = "BLOCK_MEDIUM_AND_ABOVE"
+    enable_parent_alert: bool = True
+    guest_rate_limit: int = 10
+    student_rate_limit: int = 30
+    rate_limit_per_minute: int = 30  # Backward compatibility
+    mock_curriculum_month: Optional[int] = None
+    system_version: str = "v1.7.0"
+    environment: str = "Production (Neon + Vercel)"
+    api_key_masked: Optional[str] = None
+    last_updated_at: Optional[str] = None
+    last_updated_by: Optional[str] = None
 
     class Config:
-        from_attributes = True
+        from_attributes = True
+
+
+class AdminSystemSettingsUpdate(BaseModel):
+    primary_model: Optional[str] = None
+    parent_insight_model: Optional[str] = None
+    classifier_model: Optional[str] = None
+    email_model: Optional[str] = None
+    flashcard_model: Optional[str] = None
+    backup_model: Optional[str] = None
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_output_tokens: Optional[int] = None
+    socratic_strictness: Optional[str] = None
+    enable_math_reviewer: Optional[bool] = None
+    enable_vision_support: Optional[bool] = None
+    safety_threshold: Optional[str] = None
+    enable_parent_alert: Optional[bool] = None
+    guest_rate_limit: Optional[int] = None
+    student_rate_limit: Optional[int] = None
+    mock_curriculum_month: Optional[int] = None
+    system_version: Optional[str] = None
+    environment: Optional[str] = None
+
+
+class AdminTestKeyResponse(BaseModel):
+    success: bool
+    status: str = "SUCCESS"
+    latency_ms: int
+    message: str
+    key_masked: str
+
+
+class AdminHealthServiceDetail(BaseModel):
+    status: str  # "ONLINE" | "STANDBY" | "DEGRADED" | "DOWN"
+    latency_ms: int
+    detail: str
+
+
+class AdminHealthResponse(BaseModel):
+    overall_status: str  # "HEALTHY" | "DEGRADED" | "DOWN"
+    timestamp: str
+    services: Dict[str, AdminHealthServiceDetail]
+
+
+class AdminPlaygroundRequest(BaseModel):
+    prompt: str
+    model_name: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    socratic_strictness: Optional[str] = None
+
+
+class AdminPlaygroundResponse(BaseModel):
+    response_text: str
+    latency_ms: int
+    prompt_tokens: int
+    completion_tokens: int
+    model_used: str
+    socratic_strictness: str
+
+
+class AdminModelOption(BaseModel):
+    id: str
+    name: str
+    display_name: str
+    description: str
+    speed: str
+    recommended_for: str
+
+
+class AdminAuditItemResponse(BaseModel):
+    id: str
+    changed_by: str
+    change_summary: str
+    previous_config: Dict[str, Any]
+    new_config: Dict[str, Any]
+    created_at: str
+
+
+# ========================================================
+# --- US 8.4: Curriculum Topics Schemas (Task T8.23) ---
+# ========================================================
+
+class CurriculumTopicBase(BaseModel):
+    grade: int
+    book_series: str = "Kết nối tri thức"
+    semester: Optional[int] = None
+    chapter_name: str
+    topic_name: str
+    order_index: int = 0
+    school_year: Optional[str] = None
+    is_active: bool = True
+    source_url: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CurriculumTopicCreate(CurriculumTopicBase):
+    pass
+
+
+class CurriculumTopicUpdate(BaseModel):
+    book_series: Optional[str] = None
+    semester: Optional[int] = None
+    chapter_name: Optional[str] = None
+    topic_name: Optional[str] = None
+    order_index: Optional[int] = None
+    school_year: Optional[str] = None
+    is_active: Optional[bool] = None
+    source_url: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CurriculumTopicToggle(BaseModel):
+    is_active: bool
+
+
+class CurriculumTopicResponse(CurriculumTopicBase):
+    id: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CurriculumTopicListResponse(BaseModel):
+    total: int
+    items: list[CurriculumTopicResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class SyncVietjackRequest(BaseModel):
+    """Tham số tùy chọn cho API POST /admin/curriculum/sync-vietjack"""
+    grades: Optional[list[int]] = [4, 5, 6, 7, 8, 9]
+    school_year: Optional[str] = "2024-2025"
+    force_fallback: Optional[bool] = False
+
+
+class SyncVietjackResult(BaseModel):
+    """
+    Kết quả đồng bộ mục lục VietJack (Task T8.25 - US 8.4).
+    Đồng bộ với frontend type SyncVietjackResult.
+    """
+    success: bool = True
+    total_synced: int
+    current_total_in_db: int
+    grades: list[int]
+    message: str
+    elapsed_seconds: float
+    source: str = "LIVE_CRAWL"  # "LIVE_CRAWL" | "FALLBACK_JSON"
+
+    class Config:
+        from_attributes = True
+
+SyncVietjackResponse = SyncVietjackResult
+
+# =========================================================================
+# --- US 8.1: Dual Email Alert System Schemas (Task T8.6) ---
+# =========================================================================
+
+class AcademicProblemSummary(BaseModel):
+    """Tóm tắt thông tin một bài toán gần đây của học sinh."""
+    problem_title: Optional[str] = "Bài toán không tên"
+    score: int                                      # Điểm tự lập (0 - 100)
+    hints_used: int = 0                             # Số gợi ý đã sử dụng
+    not_understood_count: int = 0                   # Số lần bấm "Chưa hiểu"
+    created_at: Optional[str] = None                # Ngày làm bài (YYYY-MM-DD)
+
+
+class AcademicAlertGenerateRequest(BaseModel):
+    """Dữ liệu đầu vào để AI sinh email Cảnh báo học tập yếu cho phụ huynh."""
+    student_id: str
+    student_name: str
+    grade: int                                      # Khối lớp (4 - 9)
+    trigger_reason: str = "Học sinh có điểm tự lập dưới 60 trong 3 bài liên tiếp"
+    consecutive_low_scores_count: int = 3
+    recent_problems: list[AcademicProblemSummary] = []
+    average_recent_score: float = 0.0
+    difficult_topics: list[str] = []
+
+
+class AcademicAlertEmailResult(BaseModel):
+    """
+    Kết quả cấu trúc Email Cảnh báo học tập yếu gửi cho Phụ huynh.
+    Được sinh ra từ Gemini và kiểm duyệt qua Pydantic.
+    """
+    alert_type: str = "ACADEMIC_ALERT"
+    email_subject: str                              # Tiêu đề email ấm áp, tinh tế
+    student_name: str
+    grade: int
+    trigger_reason: str                             # Lý do cảnh báo rõ ràng
+    summary: str                                    # Tóm tắt tình trạng học tập (2-3 câu)
+    strengths_observed: str                         # Điểm tích cực / nỗ lực kiên trì của con
+    learning_gap_analysis: str                      # Phân tích khúc mắc tư duy / dạng toán đang vướng
+    actionable_parent_advice: list[str] = []        # 2-3 lời khuyên hành động thiết thực tại nhà
+    suggested_conversation_opener: str              # Câu gợi ý mở lời nhẹ nhàng để cha mẹ hỏi han con
+    is_fallback: bool = False
+    fallback_reason: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SafetyAlertGenerateRequest(BaseModel):
+    """Dữ liệu đầu vào để AI sinh email Cảnh báo ngôn từ không phù hợp."""
+    student_id: str
+    student_name: str
+    grade: int                                      # Khối lớp (4 - 9)
+    violation_type: str = "TOXIC_LANGUAGE"          # "TOXIC_LANGUAGE" | "PROFANITY" | "DISRESPECT"
+    original_message: str                           # Câu nói thô của học sinh trong chat
+    conversation_context: Optional[str] = None      # Ngữ cảnh bài toán hoặc câu hỏi của trợ lý trước đó
+    incident_time: Optional[str] = None
+
+
+class SafetyAlertEmailResult(BaseModel):
+    """
+    Kết quả cấu trúc Email Cảnh báo ngôn từ gửi cho Phụ huynh.
+    Đảm bảo trích đoạn vi phạm đã được che mờ (masked) và định hướng tâm lý nhẹ nhàng.
+    """
+    alert_type: str = "SAFETY_ALERT"
+    email_subject: str                              # Tiêu đề email nhã nhặn, tôn trọng
+    student_name: str
+    grade: int
+    violation_category: str                         # "Ngôn từ không phù hợp" | "Chửi thề / Thô tục" | "Vô lễ"
+    censored_snippet: str                           # Trích đoạn vi phạm ĐÃ CHE MỜ (VD: "đ**", "v**")
+    context_analysis: str                           # Phân tích bối cảnh tâm lý (cáu gắt do bài khó, đùa vui...)
+    tone_guidance_for_parent: str                   # Lời khuyên giữ thái độ điềm tĩnh, lắng nghe
+    actionable_parent_advice: list[str] = []        # 2-3 chỉ dẫn giúp con làm chủ cảm xúc và văn hóa ứng xử
+    suggested_conversation_opener: str              # Câu gợi ý cha mẹ tâm sự cởi mở với con
+    is_fallback: bool = False
+    fallback_reason: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+# ==============================================================================
+# US 9.2 (T9.7): Đồng Bộ Thành Tựu & Huy Hiệu Đã Mở Khóa (User Badges)
+# ==============================================================================
+
+class UserBadgeItem(BaseModel):
+    id: str
+    user_id: str
+    badge_id: str
+    unlocked_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserBadgesListResponse(BaseModel):
+    success: bool = True
+    badge_ids: list[str] = []
+    badges: list[UserBadgeItem] = []
+
+
+class BadgeUnlockRequest(BaseModel):
+    badge_id: Optional[str] = None
+    badge_ids: Optional[list[str]] = None  # Đồng bộ hàng loạt từ localStorage
+
+
+class BadgeUnlockResponse(BaseModel):
+    success: bool = True
+    message: str = "Thành công"
+    unlocked_badge_ids: list[str] = []
+    newly_unlocked_ids: list[str] = []
+    is_first_time: bool = False
+
+
+# ==============================================================================
+# US 9.5 (Task T9.16 & T9.18): Trung Tâm Quản Trị Báo Lỗi & Sự Cố Hệ Thống
+# ==============================================================================
+
+class ReportUserIssueRequest(BaseModel):
+    """Payload học sinh gửi báo lỗi bài giải / sự cố AI từ nút cờ (US 9.5 - AC 9.5.1)."""
+    message_id: Optional[str] = None
+    session_id: Optional[str] = None
+    reason: str                                  # "AI giải sai kiến thức" | "AI bị đơ lag / timeout" | "Nội dung không phù hợp" | "Khác"
+    detail: Optional[str] = None                 # Mô tả bổ sung
+    endpoint: Optional[str] = "/chat/message"
+    client_context: Optional[dict] = None        # Thông tin trình duyệt, thiết bị
+
+
+class ReportUserIssueResponse(BaseModel):
+    """Phản hồi sau khi tiếp nhận báo lỗi của học sinh."""
+    success: bool = True
+    message: str = "Cảm ơn em đã gửi phản hồi!"
+    error_id: str
+    error_code: str
+
+
+class ResolveErrorRequest(BaseModel):
+    """Payload Admin đánh dấu xử lý sự cố."""
+    resolved_note: Optional[str] = None
+
+
+class AiDiagnosisData(BaseModel):
+    """
+    US 11.3 (Task T374 & T375): Cấu trúc dữ liệu phân tích nguyên nhân cốt lõi (RCA) và đề xuất sửa lỗi từ Trợ lý AI.
+    """
+    root_cause: Optional[str] = None           # Nguyên nhân cốt lõi gây ra lỗi
+    resolution_summary: Optional[str] = None   # Tóm tắt hướng khắc phục nhanh cho Admin
+    fix_steps: Optional[List[str]] = None       # Danh sách các bước thao tác khắc phục chi tiết
+    code_patch: Optional[str] = None           # Đoạn mã nguồn đề xuất sửa lỗi (diff/patch)
+    file_path: Optional[str] = None            # Tệp mã nguồn nghi vấn gây sự cố
+    line_number: Optional[int] = None          # Dòng mã nguồn nghi vấn
+    confidence_score: Optional[float] = None   # Độ tự tin của gợi ý AI (0.0 - 1.0)
+    model_used: Optional[str] = None           # Tên mô hình AI đã chẩn đoán (VD: gemini-2.5-pro)
+
+    class Config:
+        from_attributes = True
+
+
+class AiDiagnoseResponse(BaseModel):
+    """
+    US 11.3 (Task T377): Phản hồi API chẩn đoán lỗi bằng Trợ lý AI.
+    Hỗ trợ cờ cached để phân biệt kết quả lấy từ DB hay vừa gọi Gemini API.
+    """
+    success: bool = True
+    cached: bool = False
+    error_id: str
+    ai_diagnosis: AiDiagnosisData
+    ai_diagnosed_at: Optional[datetime] = None
+
+    @field_validator("ai_diagnosis", mode="before")
+    @classmethod
+    def parse_ai_diagnosis(cls, v):
+        """Đảm bảo chuỗi JSON thô hoặc dict trong DB được parse chuẩn xác."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return {"root_cause": f"Raw analysis: {v}"}
+        return v
+
+    class Config:
+        from_attributes = True
+
+
+class SystemErrorItemResponse(BaseModel):
+    """Thông tin chi tiết 1 sự cố hệ thống hoặc báo lỗi người dùng."""
+    id: str
+    error_code: str
+    error_type: str                              # CRASH_500 | AI_TIMEOUT | USER_REPORT | SMTP_ERROR
+    severity: str                                # CRITICAL | WARNING | INFO
+    message: str
+    stack_trace: Optional[str] = None
+    endpoint: Optional[str] = None
+    request_payload: Optional[str] = None
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    username: Optional[str] = None
+    status: str                                  # OPEN | RESOLVED
+    resolved_at: Optional[datetime] = None
+    resolved_by: Optional[str] = None
+    resolved_note: Optional[str] = None
+    created_at: datetime
+    # US 11.3 (Task T374): Trường lưu trữ chẩn đoán và thời gian chẩn đoán của AI
+    ai_diagnosis: Optional[Union[AiDiagnosisData, Dict[str, Any]]] = None
+    ai_diagnosed_at: Optional[datetime] = None
+
+    @field_validator("ai_diagnosis", mode="before")
+    @classmethod
+    def parse_ai_diagnosis(cls, v):
+        """Xử lý ngoại lệ nếu ai_diagnosis trong DB bị lưu dưới dạng JSON string thô hoặc text."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return {"root_cause": f"Raw analysis: {v}"}
+        return v
+
+    class Config:
+        from_attributes = True
+
+
+class SystemErrorsListResponse(BaseModel):
+    """Phản hồi danh sách sự cố phân trang cho Admin (US 9.5 - AC 9.5.2 & AC 9.5.3)."""
+    success: bool = True
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+    items: list[SystemErrorItemResponse]
+
+
+# ==============================================================================
+# US 10.4 - Task T10.4.4: Active Learning & Retrain Schemas
+# ==============================================================================
+
+class AuditFeedbackLogItem(BaseModel):
+    """Schema biểu diễn một bản ghi phản hồi phân luồng chờ duyệt."""
+    id: int
+    user_query: str
+    predicted_agent: str
+    suggested_agent: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuditFeedbackListResponse(BaseModel):
+    """Phản hồi danh sách nhật ký phân luồng phục vụ Active Learning Hub."""
+    success: bool = True
+    total: int
+    pending_count: int
+    approved_count: int = 0
+    rejected_count: int = 0
+    items: List[AuditFeedbackLogItem]
+
+
+class RetrainRequest(BaseModel):
+    """Payload gửi lên từ Admin để duyệt và tái huấn luyện mô hình."""
+    feedback_ids: List[int] = Field(
+        default_factory=list,
+        description="Danh sách ID các bản ghi AuditFeedbackLog cần duyệt và đưa vào huấn luyện lại"
+    )
+
+
+class RetrainResponse(BaseModel):
+    """Kết quả phản hồi sau khi tái huấn luyện mô hình và Hot-Reload vào RAM."""
+    success: bool = True
+    message: str
+    retrained_count: int
+    total_samples: int
+    approved_count: Optional[int] = None
+    total_samples_trained: Optional[int] = None
+
+
+class RejectFeedbacksRequest(BaseModel):
+    """Payload từ chối hoặc bỏ qua các mẫu câu spam, lỗi cú pháp."""
+    feedback_ids: List[int] = Field(
+        default_factory=list,
+        description="Danh sách ID các bản ghi AuditFeedbackLog cần từ chối"
+    )
+
+
+class RejectFeedbacksResponse(BaseModel):
+    """Kết quả phản hồi sau khi từ chối các mẫu câu."""
+    success: bool = True
+    message: str
+    rejected_count: int
+
+
+class UpdateFeedbackRequest(BaseModel):
+    """Payload Admin chỉnh sửa trực tiếp câu hỏi hoặc nhãn đề xuất trước khi duyệt (T10.4.5 UI)."""
+    user_query: Optional[str] = Field(None, min_length=1, max_length=1000, description="Câu hỏi của học sinh đã sửa")
+    suggested_agent: Optional[str] = Field(None, description="Nhãn Agent đề xuất đã hiệu chỉnh")
+
+
+class ActiveLearningStatsResponse(BaseModel):
+    """Thống kê tổng quan phục vụ các thẻ KPI trên giao diện Giám Sát Agent (T10.4.5 UI)."""
+    success: bool = True
+    pending_count: int
+    approved_count: int
+    rejected_count: int
+    total_feedbacks: int
+    total_training_samples: int
+    last_model_update: Optional[str] = None
+    intents_distribution: Dict[str, int] = {}
+
+
+class DeleteFeedbackResponse(BaseModel):
+    """Kết quả phản hồi khi xóa một bản ghi phản hồi khỏi hệ thống."""
+    success: bool = True
+    message: str = "Đã xóa bản ghi thành công"
+    deleted_id: int
+
+
+# ─── US 10.4 (T10.4.7): Nhật ký Tin nhắn ────────────────────────────────────
+
+class MessageLogItem(BaseModel):
+    """Một dòng trong bảng Nhật ký Tin nhắn."""
+    msg_id: str
+    student_question: str
+    msg_time: datetime
+    user_id: str
+    student_name: str
+    student_email: Optional[str] = None
+    grade: Optional[int] = None
+    session_id: str
+    session_title: Optional[str] = None
+    log_id: Optional[str] = None
+    target_agent: Optional[str] = None      # VD: "SCAFFOLDING_AGENT"
+    routing_reason: Optional[str] = None
+    notify_parent: Optional[bool] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MessageLogListResponse(BaseModel):
+    """Kết quả danh sách tin nhắn có phân trang."""
+    success: bool = True
+    total: int
+    page: int
+    page_size: int
+    items: List[MessageLogItem]
+
+
+class MessageLogStats(BaseModel):
+    """KPI cards cho trang Nhật ký Tin nhắn."""
+    total_today: int
+    total_all: int
+    agent_distribution: Dict[str, int]
+    parent_alerts_today: int
+    sessions_today: int = 0
+
+
+class MessageLogConversationItem(BaseModel):
+    """Một tin nhắn trong cuộc hội thoại chi tiết."""
+    msg_id: str
+    sender_type: str          # 'USER' | 'AI'
+    content: str
+    created_at: datetime
+    attachment_url: Optional[str] = None
+
+
+class MessageLogConversationResponse(BaseModel):
+    """Full cuộc hội thoại của 1 session."""
+    success: bool = True
+    session_id: str
+    session_title: Optional[str] = None
+    student_name: str
+    student_email: Optional[str] = None
+    grade: Optional[int] = None
+    messages: List[MessageLogConversationItem]
+

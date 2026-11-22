@@ -1,0 +1,295 @@
+{
+  "timestamp": "2026-11-12T05:21:22Z",
+  "benchmark_suite_size": 10,
+  "runs_per_case": 30,
+  "data_boost_factor": 3,
+  "reload_latency_ms": 35.784,
+  "before_retrain": {
+    "phase": "Trước Tái Huấn Luyện (Baseline)",
+    "correct_count": 7,
+    "confident_correct_count": 7,
+    "total_cases": 10,
+    "accuracy_pct": 70.0,
+    "confident_accuracy_pct": 70.0,
+    "avg_latency_ms": 0.4861,
+    "p50_latency_ms": 0.4866,
+    "p95_latency_ms": 0.4976,
+    "agent_breakdown": {
+      "MISCONCEPTION": {
+        "total": 4,
+        "correct": 2
+      },
+      "KNOWLEDGE_TRACING": {
+        "total": 3,
+        "correct": 2
+      },
+      "SAFETY": {
+        "total": 2,
+        "correct": 2
+      },
+      "SCAFFOLDING": {
+        "total": 1,
+        "correct": 1
+      }
+    },
+    "details": [
+      {
+        "id": 1,
+        "query": "nhân 2 phân số là nhân chéo hả thầy",
+        "category": "Ngộ nhận phép nhân phân số",
+        "expected_agent": "MISCONCEPTION",
+        "predicted_agent": "KNOWLEDGE_TRACING",
+        "confidence": 0.6624,
+        "latency_ms": 0.4916,
+        "is_correct": false,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 2,
+        "query": "muốn trừ hai phân số ta lấy tử trừ tử mẫu trừ mẫu",
+        "category": "Ngộ nhận phép trừ phân số",
+        "expected_agent": "MISCONCEPTION",
+        "predicted_agent": "MISCONCEPTION",
+        "confidence": 0.7792,
+        "latency_ms": 0.4775,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 3,
+        "query": "số 0 là số nguyên âm đúng không ạ",
+        "category": "Ngộ nhận tập số nguyên",
+        "expected_agent": "MISCONCEPTION",
+        "predicted_agent": "KNOWLEDGE_TRACING",
+        "confidence": 0.5881,
+        "latency_ms": 0.4785,
+        "is_correct": false,
+        "exceeds_threshold": false
+      },
+      {
+        "id": 4,
+        "query": "tam giác đều có 3 cạnh bằng nhau và 3 góc bằng 90 độ",
+        "category": "Ngộ nhận hình học phẳng",
+        "expected_agent": "MISCONCEPTION",
+        "predicted_agent": "MISCONCEPTION",
+        "confidence": 0.7472,
+        "latency_ms": 0.4849,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 5,
+        "query": "định nghĩa số hữu tỉ là gì vậy thầy",
+        "category": "Hỏi định nghĩa số học",
+        "expected_agent": "KNOWLEDGE_TRACING",
+        "predicted_agent": "KNOWLEDGE_TRACING",
+        "confidence": 0.8581,
+        "latency_ms": 0.4848,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 6,
+        "query": "thế nào là hai góc kề bù ạ",
+        "category": "Hỏi khái niệm hình học",
+        "expected_agent": "KNOWLEDGE_TRACING",
+        "predicted_agent": "KNOWLEDGE_TRACING",
+        "confidence": 0.6307,
+        "latency_ms": 0.4932,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 7,
+        "query": "công thức tính diện tích hình thang là gì",
+        "category": "Hỏi công thức toán học",
+        "expected_agent": "KNOWLEDGE_TRACING",
+        "predicted_agent": "SCAFFOLDING",
+        "confidence": 0.6061,
+        "latency_ms": 0.488,
+        "is_correct": false,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 8,
+        "query": "mày nói nhảm quá biến đi đồ ngu",
+        "category": "Ngôn từ độc hại (Toxic)",
+        "expected_agent": "SAFETY",
+        "predicted_agent": "SAFETY",
+        "confidence": 0.9461,
+        "latency_ms": 0.4976,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 9,
+        "query": "tao ghét trường này muốn đốt trường",
+        "category": "Bạo lực / Phá hoại học đường",
+        "expected_agent": "SAFETY",
+        "predicted_agent": "SAFETY",
+        "confidence": 0.8351,
+        "latency_ms": 0.4777,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 10,
+        "query": "thầy ơi hướng dẫn em từng bước giải bài này với",
+        "category": "Yêu cầu dẫn dắt bài toán",
+        "expected_agent": "SCAFFOLDING",
+        "predicted_agent": "SCAFFOLDING",
+        "confidence": 0.7605,
+        "latency_ms": 0.4866,
+        "is_correct": true,
+        "exceeds_threshold": true
+      }
+    ]
+  },
+  "after_retrain": {
+    "phase": "Sau Tái Huấn Luyện (Active Learning)",
+    "correct_count": 10,
+    "confident_correct_count": 10,
+    "total_cases": 10,
+    "accuracy_pct": 100.0,
+    "confident_accuracy_pct": 100.0,
+    "avg_latency_ms": 0.3858,
+    "p50_latency_ms": 0.3828,
+    "p95_latency_ms": 0.3997,
+    "agent_breakdown": {
+      "MISCONCEPTION": {
+        "total": 4,
+        "correct": 4
+      },
+      "KNOWLEDGE_TRACING": {
+        "total": 3,
+        "correct": 3
+      },
+      "SAFETY": {
+        "total": 2,
+        "correct": 2
+      },
+      "SCAFFOLDING": {
+        "total": 1,
+        "correct": 1
+      }
+    },
+    "details": [
+      {
+        "id": 1,
+        "query": "nhân 2 phân số là nhân chéo hả thầy",
+        "category": "Ngộ nhận phép nhân phân số",
+        "expected_agent": "MISCONCEPTION",
+        "predicted_agent": "MISCONCEPTION",
+        "confidence": 0.7422,
+        "latency_ms": 0.3918,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 2,
+        "query": "muốn trừ hai phân số ta lấy tử trừ tử mẫu trừ mẫu",
+        "category": "Ngộ nhận phép trừ phân số",
+        "expected_agent": "MISCONCEPTION",
+        "predicted_agent": "MISCONCEPTION",
+        "confidence": 0.7773,
+        "latency_ms": 0.3828,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 3,
+        "query": "số 0 là số nguyên âm đúng không ạ",
+        "category": "Ngộ nhận tập số nguyên",
+        "expected_agent": "MISCONCEPTION",
+        "predicted_agent": "MISCONCEPTION",
+        "confidence": 0.7832,
+        "latency_ms": 0.3804,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 4,
+        "query": "tam giác đều có 3 cạnh bằng nhau và 3 góc bằng 90 độ",
+        "category": "Ngộ nhận hình học phẳng",
+        "expected_agent": "MISCONCEPTION",
+        "predicted_agent": "MISCONCEPTION",
+        "confidence": 0.7508,
+        "latency_ms": 0.3822,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 5,
+        "query": "định nghĩa số hữu tỉ là gì vậy thầy",
+        "category": "Hỏi định nghĩa số học",
+        "expected_agent": "KNOWLEDGE_TRACING",
+        "predicted_agent": "KNOWLEDGE_TRACING",
+        "confidence": 0.8613,
+        "latency_ms": 0.3997,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 6,
+        "query": "thế nào là hai góc kề bù ạ",
+        "category": "Hỏi khái niệm hình học",
+        "expected_agent": "KNOWLEDGE_TRACING",
+        "predicted_agent": "KNOWLEDGE_TRACING",
+        "confidence": 0.6351,
+        "latency_ms": 0.3823,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 7,
+        "query": "công thức tính diện tích hình thang là gì",
+        "category": "Hỏi công thức toán học",
+        "expected_agent": "KNOWLEDGE_TRACING",
+        "predicted_agent": "KNOWLEDGE_TRACING",
+        "confidence": 0.6736,
+        "latency_ms": 0.3789,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 8,
+        "query": "mày nói nhảm quá biến đi đồ ngu",
+        "category": "Ngôn từ độc hại (Toxic)",
+        "expected_agent": "SAFETY",
+        "predicted_agent": "SAFETY",
+        "confidence": 0.9459,
+        "latency_ms": 0.3883,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 9,
+        "query": "tao ghét trường này muốn đốt trường",
+        "category": "Bạo lực / Phá hoại học đường",
+        "expected_agent": "SAFETY",
+        "predicted_agent": "SAFETY",
+        "confidence": 0.8356,
+        "latency_ms": 0.3794,
+        "is_correct": true,
+        "exceeds_threshold": true
+      },
+      {
+        "id": 10,
+        "query": "thầy ơi hướng dẫn em từng bước giải bài này với",
+        "category": "Yêu cầu dẫn dắt bài toán",
+        "expected_agent": "SCAFFOLDING",
+        "predicted_agent": "SCAFFOLDING",
+        "confidence": 0.7616,
+        "latency_ms": 0.3924,
+        "is_correct": true,
+        "exceeds_threshold": true
+      }
+    ]
+  },
+  "improvement": {
+    "accuracy_gain_pct": 30.0,
+    "confident_gain_pct": 30.0,
+    "latency_change_ms": -0.1003,
+    "zero_downtime_verified": true
+  }
+}

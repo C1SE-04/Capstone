@@ -29,6 +29,8 @@ interface ChatWindowProps {
   onNotUnderstood?: () => void;
   /** US4.1: So lan nhan Chua hieu (quan ly o ChatPage de tranh bi reset khi remount) */
   notUnderstoodCount?: number;
+  /** US11.1 (AC3): Số giây đếm ngược khi bị rate limit cooldown */
+  cooldownSeconds?: number;
   /**
    * Key tăng mỗi khi người dùng chọn một cuộc hội thoại cũ từ Sidebar.
    * Khi key thay đổi, ChatWindow sẽ scroll ngay xuống tin nhắn mới nhất.
@@ -48,6 +50,7 @@ export function ChatWindow({
   onUnderstood,
   onNotUnderstood,
   notUnderstoodCount = 0,
+  cooldownSeconds = 0,
   selectedChatKey = 0,
   sessionId,
 }: ChatWindowProps) {
@@ -264,11 +267,11 @@ export function ChatWindow({
         <div className="max-w-4xl mx-auto flex flex-col min-h-full">
           {/* Hiển thị màn hình khởi tạo khi chưa có tin nhắn (New Chat) */}
           {messages.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 py-16 text-center animate-in fade-in duration-300">
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 py-12 sm:py-16 px-4 text-center animate-in fade-in duration-300">
               <div className="w-16 h-16 bg-[#F1CCA6] rounded-2xl flex items-center justify-center text-[#8C4905] shadow-inner">
                 <Sparkles size={32} />
               </div>
-              <h2 className="text-2xl font-bold text-[#8C4905]">
+              <h2 className="text-xl sm:text-2xl font-bold text-[#8C4905]">
                 Bắt đầu phiên học mới với SocraticKid
               </h2>
               <p className="text-[#C1762A] max-w-md text-sm leading-relaxed">
@@ -316,7 +319,7 @@ export function ChatWindow({
         <div className="absolute bottom-24 right-6 md:right-10 z-20 animate-in fade-in zoom-in-95 duration-200">
           <button
             onClick={() => scrollToBottom("smooth")}
-            className="flex items-center gap-1.5 bg-[#C1762A] hover:bg-[#8C4905] text-white px-3.5 py-2 rounded-full shadow-lg transition-all transform hover:scale-105 active:scale-95 text-xs font-semibold"
+            className="flex items-center gap-1.5 bg-[#C1762A] hover:bg-[#8C4905] text-white px-3.5 py-2 rounded-full shadow-sm transition-all duration-150 ease-out active:scale-[0.98] text-xs font-semibold cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
             title="Cuộn xuống tin nhắn mới nhất"
           >
             <ArrowDown size={15} />
@@ -338,9 +341,10 @@ export function ChatWindow({
         <div className="flex-1 min-w-0">
           {/* [T6.20/T6.21] ChatInput: nhận text + ảnh đính kèm từ người dùng */}
           <ChatInput
-            onSendMessage={(message, image) => handleSendMessage(message, image)}
+            onSendMessage={(message, image) => handleSendMessage(message, false, image)}
             isLoading={isTyping}
             isOffline={!isOnline}
+            cooldownSeconds={cooldownSeconds}
           />
         </div>
       </div>

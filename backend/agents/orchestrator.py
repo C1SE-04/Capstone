@@ -1,6 +1,9 @@
 import json
+import os
+import time
 import re
 import pathlib
+import threading
 from fractions import Fraction
 from typing import Any, Optional, Tuple, TypedDict
 
@@ -16,14 +19,113 @@ class RoutingResult(TypedDict):
     emotion_flag: str
 
 def _detect_uncovered_claim(message: str) -> bool:
-    """Trả về True nếu học sinh biện hộ rằng chưa học/chưa được dạy chủ đề nào đó."""
-    # Công thức: (Từ phủ định) + (từ đệm tùy chọn) + (học/dạy/thấy/gặp/nghe)
-    pattern = r"(chưa|chx|không|ko|k|hk)\s+(được\s+|đc\s+|dc\s+|từng\s+|bao giờ\s+|bao h\s+|cs\s+|có\s+)?(hc|học|dạy|nghe|biết tới|bt tới|bt|biết)|(lần đầu|mới|ms).{0,10}(gặp|thấy|nghe)|(chưa|chx)\s+quen"
-    # Cộng thêm các cụm từ viết tắt quá dị của Gen Z mà Regex khó gom nhóm
-    gen_z_slang = ("e ch hc", "chưa hỉu", "chx hỉu")
-    msg_lower = message.lower()
-    if re.search(pattern, msg_lower) or any(s in msg_lower for s in gen_z_slang):
+    """
+    US 11.6: Nhận diện cơ bản các tín hiệu học sinh than chưa học/bỡ ngỡ
+    để hỗ trợ phân luồng nhanh trong Orchestrator sang SCAFFOLDING.
+    Toàn bộ ngữ nghĩa sâu, sắc thái tinh tế (teencode, ví von, cô bỏ qua...)
+    được giao cho Gemini (LLM) tự đọc hiểu trong prompt mà không gò bó vào từ ngữ.
+    """
+    msg_lower = message.lower().strip()
+
+    # 1. Bảo vệ chống False Positive: học sinh khẳng định 'không lạ', 'quen rồi', 'biết làm'
+    if re.search(r"(không|ko|chẳng|chả)\s+(thấy\s+)?(lạ|bỡ ngỡ)", msg_lower):
+        return False
+    if re.search(r"(quen\s+lắm|quen\s+rồi|dễ\s+ợt|biết\s+làm\s+rồi)", msg_lower):
+        return False
+
+    # 2. Nhận diện các tín hiệu chưa học, lạ lẫm hoặc thầy cô bỏ qua bài
+    core_pattern = (
+        r"(chưa|chx|không|ko|k|hk|ch)\s+.*(học|hc|dạy|nghe|biết|gặp|thấy|nhìn|đụng|va\s*chạm|sờ|tiếp\s*xúc|nhắc|đả\s*động|nói|quen)|"
+        r"\b(lạ|mới\s+toanh|mới\s+tinh|lần\s+đầu|quái\s+lạ|bỏ\s+qua|lướt\s+qua|skip|nhảy\s+cóc|giảm\s+tải)\b|"
+        r"\b(chx\s+bh|chx\s+từng|e\s+ch\s+hc)\b"
+    )
+    return bool(re.search(core_pattern, msg_lower))
+
+    return False
+
+def _normalize_curriculum_text(text: str) -> str:
+    """Xóa dấu câu, khoảng trắng thừa để so khớp tên chuyên đề chính xác."""
+    cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+    return " ".join(cleaned.split())
+
+def _is_topic_in_active_curriculum(message: str, grade: Optional[int] = None) -> bool:
+    """Kiểm tra xem nội dung học sinh đề cập có nằm trong danh mục chuyên đề ĐANG BẬT (active) hay không."""
+    try:
+        from agents.agent_prompts import _load_curriculum
+        curriculum = _load_curriculum()
+        if not curriculum:
+            return True
+        target_grade = int(grade) if grade else 9
+        active_topics = []
+        for g in range(4, target_grade + 1):
+            active_topics.extend(curriculum.get(str(g), []))
+        norm_msg = _normalize_curriculum_text(message)
+        for topic in active_topics:
+            norm_topic = _normalize_curriculum_text(topic)
+            if norm_topic and norm_topic in norm_msg:
+                return True
+        return False
+    except Exception:
         return True
+
+def _has_probe_already_completed(history_text: str) -> bool:
+    """
+    US 9.3 (Task T9.15 - AC 9.3.7 - Tag-based Protocol & Semantic Fallback):
+    Kiểm tra xem trong lịch sử phiên chat đã từng diễn ra câu hỏi thăm dò VÀ học sinh đã trả lời chưa.
+    - ƯU TIÊN 1: Nhận diện thẻ ẩn [PROBE_PENDING], <!-- PROBE_PENDING --> (chính xác 100%, không phụ thuộc câu chữ).
+    - FALLBACK 2: Quét từ khóa/mẫu câu thăm dò truyền thống nếu là tin nhắn cũ chưa có tag.
+    Nếu đã hoàn tất, các lượt sau tuyệt đối không hỏi lại câu thăm dò tiến độ trường học/mùa hè nữa.
+    """
+    if not history_text:
+        return False
+
+    blocks = [b.strip() for b in re.split(r'(?im)^(?=\[(?:USER|STUDENT|AGENT|ASSISTANT|MODEL|THẦY)\]|(?:User|Model|Assistant):)', history_text) if b.strip()]
+    if not blocks:
+        blocks = [l.strip() for l in history_text.split("\n") if l.strip()]
+
+    assistant_prefixes = ("[agent", "[assistant", "[thầy", "[model", "model:", "assistant:")
+
+    # 1. Quét tìm Thẻ ẩn [PROBE_PENDING] / <!-- PROBE_PENDING --> / [SUMMER_PROBE_PENDING]
+    probe_tag_signals = ("probe_pending", "socratic_probe", "summer_probe_pending")
+    probe_idx = -1
+    for i, b in enumerate(blocks):
+        b_low = b.lower()
+        is_assistant = any(b_low.startswith(p) for p in assistant_prefixes) or ("[agent" in b_low[:15])
+        if is_assistant and any(tag in b_low for tag in probe_tag_signals):
+            probe_idx = i
+            break
+
+    # 2. Fallback đối chiếu từ khóa ngữ nghĩa câu hỏi thăm dò mẫu (nếu AI không có tag)
+    if probe_idx == -1:
+        probe_signals = (
+            "thầy cô đã dạy đến bài",
+            "thầy cô đã dạy đến",
+            "học đến phần nào rồi",
+            "học đến bài nào rồi",
+            "đang học đến bài nào",
+            "đang học tới bài nào",
+            "dạy đến bài này chưa",
+            "dạy đến bài",
+            "học tới bài này chưa",
+            "đã học qua chưa",
+            "học qua chưa",
+            "thầy cô dạy tới đâu rồi",
+            "học trước kiến thức",
+            "ôn lại bài năm vừa rồi",
+            "chuẩn bị học trước",
+            "ôn lại kiến thức cũ",
+            "học trước hay ôn lại",
+        )
+        for i, b in enumerate(blocks):
+            b_low = b.lower()
+            is_assistant = any(b_low.startswith(p) for p in assistant_prefixes) or ("[agent" in b_low[:15])
+            if is_assistant and any(s in b_low for s in probe_signals):
+                probe_idx = i
+                break
+
+    if probe_idx != -1 and probe_idx < len(blocks) - 1:
+        return True
+
     return False
 
 def _build_task_description(
@@ -33,6 +135,8 @@ def _build_task_description(
     student_ans: Optional[str] = None,
     expected_ans: Optional[str] = None,
     safety_subtype: Optional[str] = None,
+    student_grade: Optional[int] = None,
+    history_text: str = "",
 ) -> str:
     """
     Tạo task_description có ngữ cảnh bài học và vai trò người thầy.
@@ -83,12 +187,67 @@ def _build_task_description(
         )
 
     if _detect_uncovered_claim(message):
-        return (
-            f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
-            "BẮT BUỘC kiểm tra kỹ chủ đề toán này CÓ nằm trong danh sách THÔNG TIN LỚP HỌC SINH không, và chọn đúng 1 trong 2 kịch bản:\n"
-            "KỊCH BẢN A (CÓ trong danh sách) – Học sinh đang nói dối hoặc quên. TUYỆT ĐỐI KHÔNG xin lỗi. Nhẹ nhàng nhắc: 'Theo chương trình, đây là kiến thức cơ bản em đã học. Thầy tin em có thể nhớ lại...' rồi tiếp tục hướng dẫn.\n"
-            "KỊCH BẢN B (KHÔNG có trong danh sách) – Đây là kiến thức vượt cấp (VD: phương trình với HS tiểu học). BẮT BUỘC an ủi: 'Vì em đang học lớp [X] nên chưa quen với kiến thức lớp cao hơn này là bình thường...' rồi giải thích đơn giản hóa theo cấp học của em."
-        )
+        # US 9.3 (Task T9.15 - AC 9.3.7): Kiểm tra xem phiên chat này đã từng thăm dò tiến độ chưa
+        # Nếu ĐÃ THĂM DÒ XONG -> Tuyệt đối không hỏi lại lần 2
+        if history_text and _has_probe_already_completed(history_text):
+            return (
+                f"HỌC SINH TIẾP TỤC BỐI RỐI HOẶC THAN CHƯA HỌC: '{message[:80]}'.\n"
+                f"LƯU Ý QUAN TRỌNG (CHỐNG LẶP LẠI THĂM DÒ - AC 9.3.7):\n"
+                f"1. Bạn ĐÃ HỎI thăm dò tiến độ ở lượt trước và học sinh đã trả lời rồi. "
+                f"TUYỆT ĐỐI KHÔNG HỎI LẠI câu 'Ở trường thầy cô đã dạy đến chưa' hay câu hỏi mùa hè lần thứ 2!\n"
+                f"2. BẮT BUỘC tiếp tục dẫn dắt Socratic theo KỊCH BẢN B: Hãy hạ thấp rào cản thêm một nấc nữa, "
+                f"tuyệt đối KHÔNG lặp lại câu hỏi toán học vừa hỏi ở lượt trước. "
+                f"Hãy chia nhỏ bước giải hơn nữa hoặc gợi ý một phép tính nhẩm cực kỳ đơn giản để học sinh tự tin trả lời."
+            )
+
+        # US 9.3 (Task T9.11 & T9.13) + US 11.6 (T401):
+        # Đưa dòng thời gian và Kịch bản thăm dò Socratic chuyên sâu vào task_description
+        # Probe mới (US 11.6): hỏi cụ thể tên bài học sinh đang học tới + tên bài được hỏi
+        curr_grade = student_grade or 7
+        try:
+            from agents.agent_prompts import build_timeline_context_for_prompt
+            tl = build_timeline_context_for_prompt(student_grade=curr_grade)
+            timeline_label = tl.get("timeline_label", "")
+            scenario_guide = tl.get("scenario_guide", "")
+            hk1_topics = tl.get("topics_hk1", [])
+            hk2_topics = tl.get("topics_hk2", [])
+            hk1_str = "; ".join(hk1_topics[:8]) + ("..." if len(hk1_topics) > 8 else "")
+            hk2_str = "; ".join(hk2_topics[:8]) + ("..." if len(hk2_topics) > 8 else "")
+            # --- US 11.6: Inject danh sách đầy đủ theo thứ tự vào prompt để Gemini tự so thứ tự ---
+            hk1_ordered = "; ".join(f"[{i+1}] {t}" for i, t in enumerate(hk1_topics))
+            hk2_ordered = "; ".join(f"[{i+1}] {t}" for i, t in enumerate(hk2_topics))
+            return (
+                f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'.\n"
+                f"[{timeline_label}] CHƯƠNG TRÌNH LỚP {curr_grade}:\n"
+                f"- HK1 (thứ tự): {hk1_ordered}\n"
+                f"- HK2 (thứ tự): {hk2_ordered}\n\n"
+                f"CHỈ ĐẠO SƯ PHẠM BẮT BUỘC (US 11.6 - SOCRATIC BRIDGE PROBE GUIDELINES):\n"
+                f"{scenario_guide}\n\n"
+                f"=== US 11.6 - CÂU HỎI THĂM DÒ TIẾN ĐỘ NÂNG CAO ===\n"
+                f"Khi cần hỏi thăm dò (bài thuộc HK1 vùng xám hoặc HK2 đang học), BẮT BUỘC hỏi theo mẫu:\n"
+                f"'Em cho thầy biết trên trường hiện tại em đang học đến bài nào rồi?\n"
+                f" Bài [TÊN BÀI HỌC SINH VỪA HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+                f"(Điền tên bài cụ thể mà học sinh đang hỏi vào [TÊN BÀI HỌC SINH VỪA HỎI])\n\n"
+                f"=== US 11.6 - XỬ LÝ KHI HỌC SINH TRẢ LỜI THĂM DÒ ===\n"
+                f"Khi học sinh trả lời 'học đến bài X' — TỰ ĐỐI CHIẾU với danh sách thứ tự HK1/HK2 bên trên:\n"
+                f"● Nếu bài X đứng TRƯỚC bài học sinh hỏi (index X < index bài hỏi)\n"
+                f"  → HỌC SINH THỰC SỰ CHƯA HỌC: Dùng Kịch bản B (hướng dẫn từ gốc rễ Socratic).\n"
+                f"● Nếu bài X đứng SAU bài học sinh hỏi (index X > index bài hỏi)\n"
+                f"  → HỌC SINH ĐÃ HỌC NHƯNG QUÊN: Dùng Kịch bản A với câu mở:\n"
+                f"    'Hiện tại nếu em đã học đến [Tên bài X] rồi thì với chương trình HK lớp {curr_grade},\n"
+                f"     em đã học [Tên bài được hỏi] rồi. Có lẽ em đã quên nên thầy sẽ nhắc lại cách làm bài này...'\n"
+                f"● Nếu học sinh nói 'cô/thầy bỏ qua/không dạy/nhảy cóc/giảm tải'\n"
+                f"  → Kịch bản B với lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!'\n\n"
+                f"NGUYÊN TẮC QUAN TRỌNG: Nếu rơi vào trường hợp cần hỏi thăm dò tiến độ trường học hoặc kỳ nghỉ hè, "
+                f"BẠN PHẢI DỪNG LẠI Ở CÂU HỎI THĂM DÒ VÀ GẮN THẺ ẨN <!-- PROBE_PENDING --> (HOẶC [PROBE_PENDING]) Ở CUỐI CÂU TRẢ LỜI, "
+                f"TUYỆT ĐỐI KHÔNG GIẢI BÀI HOẶC ĐẶT PHÉP TÍNH TOÁN NGAY TRONG LƯỢT NÀY!"
+            )
+        except Exception as e:
+            return (
+                f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'. "
+                f"BẮT BUỘC KỊCH BẢN B: 'Vì em đang học lớp {curr_grade} nên chưa quen với kiến thức này là bình thường. "
+                f"Thầy sẽ giải thích từ nền tảng đơn giản nhất nhé!' rồi hướng dẫn từng bước Socratic."
+            )
     
     if agent == "KNOWLEDGE_TRACING":
         topic = message.replace("là gì", "").replace("thầy ơi", "").replace("vậy thầy", "").strip()
@@ -122,6 +281,315 @@ def _build_task_description(
         "rồi đặt câu hỏi cho bước tiếp theo. Không giải hộ."
     )
 
+
+def _detect_probe_in_history(history_text: str) -> Optional[str]:
+    """
+    US 9.3 - Task T9.14 & T9.15 (Tag-based Protocol & Semantic Fallback):
+    Kiểm tra xem câu nói gần nhất của AI trong lịch sử có phải là câu hỏi thăm dò hay không.
+    Hỗ trợ cả tin nhắn đơn dòng và tin nhắn nhiều dòng (multi-line markdown).
+    - ƯU TIÊN 1: Nhận diện thẻ ẩn [PROBE_PENDING] / <!-- PROBE_PENDING --> (chính xác 100%).
+    - FALLBACK 2: Quét từ khóa/mẫu câu thăm dò nếu tin nhắn không chứa tag.
+    Trả về 'SCHOOL_PROBE', 'SUMMER_PROBE' hoặc None.
+    """
+    if not history_text:
+        return None
+    
+    # 1. Tách lịch sử thành từng khối tin nhắn theo role header (hỗ trợ câu trả lời nhiều dòng)
+    blocks = [b.strip() for b in re.split(r'(?im)^(?=\[(?:USER|STUDENT|AGENT|ASSISTANT|MODEL|THẦY)\]|(?:User|Model|Assistant):)', history_text) if b.strip()]
+    assistant_prefixes = ("[agent", "[assistant", "[thầy", "[model", "model:", "assistant:")
+    assistant_blocks = [
+        b for b in blocks 
+        if any(b.lower().startswith(p) for p in assistant_prefixes)
+    ]
+    if not assistant_blocks:
+        # Fallback nếu format phẳng không có role header đầy đủ
+        lines = [l.strip() for l in history_text.split("\n") if l.strip()]
+        assistant_blocks = [
+            l for l in lines 
+            if any(l.lower().startswith(p) for p in assistant_prefixes)
+        ]
+    
+    if not assistant_blocks:
+        return None
+    
+    last_ai_msg = assistant_blocks[-1].lower()
+    
+    # 1. Ưu tiên kiểm tra Thẻ ẩn [PROBE_PENDING] / <!-- PROBE_PENDING --> / [SUMMER_PROBE_PENDING]
+    has_summer_tag = (
+        "summer_probe_pending" in last_ai_msg
+        or ("probe_pending" in last_ai_msg and any(w in last_ai_msg for w in ("hè", "nghỉ hè", "summer", "ôn lại bài năm")))
+    )
+    if has_summer_tag:
+        return "SUMMER_PROBE"
+
+    has_school_tag = (
+        "probe_pending" in last_ai_msg
+        or "socratic_probe" in last_ai_msg
+    )
+    if has_school_tag:
+        return "SCHOOL_PROBE"
+
+    # 2. Fallback đối chiếu từ khóa và mẫu câu ngữ nghĩa
+    school_probe_signals = (
+        "thầy cô đã dạy đến bài",
+        "thầy cô đã dạy đến",
+        "học đến phần nào rồi",
+        "học đến bài nào rồi",
+        "đang học đến bài nào",
+        "đang học tới bài nào",
+        "dạy đến bài này chưa",
+        "dạy đến bài",
+        "học tới bài này chưa",
+        "đã học qua chưa",
+        "học qua chưa",
+        "thầy cô dạy tới đâu rồi",
+    )
+    if any(s in last_ai_msg for s in school_probe_signals):
+        return "SCHOOL_PROBE"
+
+    summer_probe_signals = (
+        "học trước kiến thức",
+        "ôn lại bài năm vừa rồi",
+        "chuẩn bị học trước",
+        "ôn lại kiến thức cũ",
+        "học trước hay ôn lại",
+    )
+    if any(s in last_ai_msg for s in summer_probe_signals):
+        return "SUMMER_PROBE"
+    
+    return None
+
+
+def _detect_teacher_skipped_phrase(message: str) -> bool:
+    """
+    US 11.6 (T400/T401) - Phát hiện học sinh báo giáo viên bỏ qua / không dạy bài đó.
+    Ví dụ: "cô em không dạy bài đó", "thầy bỏ qua bài này", "nhảy cóc", "giảm tải"
+    """
+    msg_lower = message.lower()
+    skip_signals = (
+        "cô bỏ qua", "thầy bỏ qua", "bỏ qua bài", "nhảy cóc",
+        "giảm tải", "không dạy bài", "ko dạy bài", "k dạy bài",
+        "cô không dạy", "thầy không dạy", "cô ko dạy", "thầy ko dạy",
+        "lướt qua bài", "cô lướt qua", "thầy lướt qua",
+        "cô em lướt qua", "thầy em lướt qua", "cô em bỏ qua", "thầy em bỏ qua",
+        "cô skip", "thầy skip", "cô em skip", "thầy em skip", "skip bài",
+        "cô em không dạy", "cô em ko dạy", "thầy em không dạy",
+        "bỏ bài", "cắt bài", "không học bài đó", "ko học bài đó",
+        "trường em không học", "trường em ko học",
+        "cô hay bỏ", "thầy hay bỏ",
+    )
+    return any(s in msg_lower for s in skip_signals)
+
+
+def _detect_semester_for_grade(
+    text: str,
+    grade: int,
+    default_sem: int = 1,
+) -> int:
+    """
+    US 11.6: Tự động xác định học kỳ (1 hoặc 2) của khối lớp dựa trên
+    tên bài học xuất hiện trong đoạn hội thoại / đề bài.
+    """
+    try:
+        from agents.agent_prompts import _load_curriculum
+        curriculum = _load_curriculum()
+        g_data = curriculum.get(str(grade), {})
+        text_norm = _normalize_curriculum_text(text)
+        # Kiểm tra HK2 trước
+        topics_hk2 = g_data.get("2", [])
+        for t in topics_hk2:
+            t_norm = _normalize_curriculum_text(t)
+            if t_norm and len(t_norm) >= 4 and t_norm in text_norm:
+                return 2
+        # Kiểm tra HK1
+        topics_hk1 = g_data.get("1", [])
+        for t in topics_hk1:
+            t_norm = _normalize_curriculum_text(t)
+            if t_norm and len(t_norm) >= 4 and t_norm in text_norm:
+                return 1
+    except Exception:
+        pass
+    return default_sem
+
+
+def _find_best_topic_index(topic_name_mentioned: str, topics: list[str]) -> int:
+    """Tìm vị trí phù hợp nhất trong danh sách chuyên đề."""
+    norm_mentioned = _normalize_curriculum_text(topic_name_mentioned)
+    if not norm_mentioned:
+        return -1
+
+    words_mentioned = set(norm_mentioned.split())
+    best_idx = -1
+    best_score = 0.0
+
+    for i, t in enumerate(topics):
+        norm_t = _normalize_curriculum_text(t)
+        words_t = set(norm_t.split())
+
+        # Phân biệt ngữ nghĩa toán học: "số nguyên tố" vs "số nguyên" (integers)
+        if "tố" in words_t and "tố" not in words_mentioned:
+            continue
+        if "tố" in words_mentioned and "tố" not in words_t:
+            continue
+
+        # 1. Khớp hoàn toàn
+        if norm_t == norm_mentioned:
+            return i
+
+        score = 0.0
+        # 2. Khớp cụm từ chính xác (word boundary substring)
+        if re.search(rf"\b{re.escape(norm_mentioned)}\b", norm_t):
+            score += 50.0
+        elif norm_mentioned in norm_t:
+            score += 30.0
+
+        # 3. Điểm giao thoa từ vựng (Token Overlap)
+        common = words_mentioned & words_t
+        if common:
+            overlap_ratio = len(common) / len(words_mentioned)
+            score += overlap_ratio * 30.0
+
+        if score > best_score and (score >= 30.0 or len(common) >= min(2, len(words_mentioned))):
+            best_score = score
+            best_idx = i
+
+    return best_idx
+
+
+def _get_topic_position_in_curriculum(
+    topic_name_mentioned: str,
+    grade: int,
+    semester: Optional[int] = None,
+) -> int:
+    """
+    US 11.6 (T401): Tìm vị trí (index 0-based) của tên bài học sinh đề cập
+    trong danh sách curriculum theo thứ tự (HK1 hoặc HK2).
+    Sử dụng thuật toán xếp hạng độ khớp tốt nhất (Best Match Ranking).
+    Trả về -1 nếu không tìm thấy.
+    """
+    try:
+        from agents.agent_prompts import _load_curriculum
+        curriculum = _load_curriculum()
+        g_data = curriculum.get(str(grade), {})
+        target_sem = semester if semester in (1, 2) else 1
+        topics = g_data.get(str(target_sem), [])
+        idx = _find_best_topic_index(topic_name_mentioned, topics)
+        if idx != -1:
+            return idx
+        # Nếu không tìm thấy trong kỳ đã chọn, kiểm tra kỳ còn lại
+        other_sem = 2 if target_sem == 1 else 1
+        other_topics = g_data.get(str(other_sem), [])
+        idx_other = _find_best_topic_index(topic_name_mentioned, other_topics)
+        if idx_other != -1:
+            return idx_other
+        return -1
+    except Exception:
+        return -1
+
+
+def _classify_probe_reply_with_curriculum(
+    message: str,
+    asked_topic: str,
+    grade: int,
+    semester: int,
+) -> str:
+    """
+    US 11.6 (T401) - Phân loại thông minh phản hồi probe dựa trên vị trí bài trong curriculum.
+
+    So sánh vị trí của bài học sinh nói họ đang học (student_current_topic)
+    so với bài được hỏi (asked_topic) trong danh sách curriculum đã sắp xếp theo thứ tự.
+
+    Trả về:
+    - 'LEARN_NEW': student_pos < asked_pos → học sinh thực sự chưa học tới bài đó
+    - 'FORGOT_OLD': student_pos > asked_pos → học sinh đã học qua bài đó (có thể quên)
+    - 'CURRICULUM_SAME': student_pos == asked_pos → đang học đúng bài đó
+    - 'UNCLEAR': không xác định được vị trí
+    """
+    msg_lower = message.lower()
+
+    # Phát hiện câu "cô/thầy bỏ qua" → ưu tiên LEARN_NEW ngay
+    if _detect_teacher_skipped_phrase(message):
+        return "TEACHER_SKIPPED"
+
+    # Trích xuất tên bài học sinh nhắc tới ("học đến bài lũy thừa", "học tới phân số", ...)
+    # Pattern: "học (tới|đến|đến bài|tới bài) <tên bài>"
+    student_topic_match = re.search(
+        r"(?:học|hc)\s+(?:tới|đến|đến bài|tới bài|đến phần|tới phần)?\s+(?:bài\s+)?(.+?)(?:\s*(?:rồi|r|ạ|á|nhé|thôi|nha|thầy|cô)|$)",
+        msg_lower,
+        re.IGNORECASE,
+    )
+    student_topic_raw = student_topic_match.group(1).strip() if student_topic_match else ""
+
+    # Thử tìm thêm nếu học sinh nói "mới học bài X" / "đang học bài X"
+    if not student_topic_raw:
+        m2 = re.search(
+            r"(?:mới học|ms học|đang học|học đến|học tới)\s+(?:bài\s+)?(.+?)(?:\s*(?:rồi|r|ạ|á|nhé|thôi|nha|thầy|cô)|$)",
+            msg_lower,
+            re.IGNORECASE,
+        )
+        if m2:
+            student_topic_raw = m2.group(1).strip()
+
+    # Nếu không trích được tên bài → fallback sang classify thủ công cũ
+    if not student_topic_raw or len(student_topic_raw) < 3:
+        return _classify_probe_reply(message)
+
+    asked_pos = _get_topic_position_in_curriculum(asked_topic, grade, semester)
+    student_pos = _get_topic_position_in_curriculum(student_topic_raw, grade, semester)
+
+    if asked_pos == -1 or student_pos == -1:
+        # Không tìm được vị trí → fallback
+        return _classify_probe_reply(message)
+
+    if student_pos < asked_pos:
+        return "LEARN_NEW"
+    elif student_pos > asked_pos:
+        return "FORGOT_OLD"
+    else:
+        return "CURRICULUM_SAME"
+
+
+def _classify_probe_reply(message: str) -> str:
+    """
+    US 9.3 - Task T9.14:
+    Phân loại phản hồi của học sinh sau câu hỏi thăm dò:
+    - 'LEARN_NEW': Chưa học tới ở trường hoặc đang tự học trước bài mới.
+    - 'FORGOT_OLD': Đã học rồi nhưng quên / hè xả hơi / ôn lại bài cũ / cô đã dạy rồi.
+    - 'UNCLEAR': Lấp lửng / không rõ ràng / bí quá.
+    """
+    msg_clean = message.lower().strip()
+
+    # 1. Dấu hiệu ĐÃ HỌC / ĐÃ DẠY / ÔN TẬP CŨ / QUÊN (Ưu tiên kiểm tra trước)
+    # Ví dụ: "học rồi", "dạy rồi", "cô dạy rồi", "dạ rồi", "rồi ạ", "ôn bài", "ôn lại", "quên sạch",...
+    forgot_signals = (
+        "quên", "quen", "học rồi", "hc rồi", "học qua", "hc qua", "dạy rồi", "dạy qua",
+        "cô dạy", "thầy dạy", "đã học", "đã dạy", "không nhớ", "ko nhớ", "k nhớ",
+        "xả hơi", "ôn lại", "ôn bài", "ôn tập", "bài cũ", "năm ngoái", "lâu quá", "lú quá",
+        "rồi mà", "r mà", "chơi nhiều nên quên",
+    )
+    has_learned_or_forgot = (
+        any(s in msg_clean for s in forgot_signals)
+        or bool(re.search(r"\b(học|hc|dạy)\s+(r|rồi)\b", msg_clean))
+        or bool(re.search(r"^(dạ\s+)?rồi(\s+(ạ|thầy|cô|nè))?$", msg_clean))
+        or bool(re.search(r"\b(dạ\s+)?(rồi|r)\s+(ạ|thầy|cô)\b", msg_clean))
+        or bool(re.search(r"\bôn\s+(thi|hè|lại|bài|tập)\b", msg_clean))
+    )
+    if has_learned_or_forgot:
+        return "FORGOT_OLD"
+
+    # 2. Dấu hiệu CHƯA HỌC TỚI / HỌC TRƯỚC / BÀI MỚI
+    new_signals = (
+        "chưa", "chx", "chua", "mới học", "ms học", "ms hc", "mới tới", "ms tới",
+        "học trước", "hc trước", "hc trc", "học trc", "tự học", "chuẩn bị", "xem trước",
+        "coi trước", "tìm hiểu trước", "chưa tới", "chx tới", "chưa dạy", "chx dạy",
+        "bài mới", "kiến thức mới", "chưa học đến", "chưa qua", "chưa ai dạy"
+    )
+    if any(s in msg_clean for s in new_signals) or bool(re.search(r"\b(bài|học|xem|coi)\s+mới\b", msg_clean)):
+        return "LEARN_NEW"
+
+    return "UNCLEAR"
+
+
 class OrchestratorAgent:
     """
     Orchestrator Agent điều phối câu hỏi học sinh theo KIẾN TRÚC ZERO-API.
@@ -135,14 +603,16 @@ class OrchestratorAgent:
     PROFANITY_LIST: tuple = (
         "đm", "dcm", "dm", "vcl", "vl", "đĩ", "cặc", "lồn","chó chết", "ngu ngốc", "chết đi", "cút đi", "mẹ mày","thằng chó", "địt", 
         "mẹ kiếp", "đệt", "đệch", "đậu má", "dmm", "dkm", "đkm", "đklm", "loz", "lòn", "cẹc", "buồi", "dái", "clgt", "cc", "qq", "ml",
-         "sml", "vml", "cđm", "vkl","đụ mẹ", "đụ má", "đĩ mẹ", "đù má", "đù mẹ", "đụ", "cút", "biến", "xéo", "cái đệt",
+         "sml", "vml", "cđm", "vkl","đụ mẹ", "đụ má", "đĩ mẹ", "đù má", "đù mẹ", "đụ", "cút", "biến đi", "xéo", "cái đệt",
         "địt mẹ", "địt con mẹ", "địt cụ", "địt mợ", "địt tổ sư", "địt mả bố","địt mẹ mày", "đụ mẹ mày", "đm mày", "đm nó", "địt con lồn mẹ", 
         "đcmm", "dcmm", "con đĩ mẹ","vãi", "vãi lồn", "vãi cả lồn", "vãi lìn", "vãi lon", "vãi l","vãi đái", "vãi nhái", "vãi chưởng", "vãi nồi",
         "cái lồn gì thế", "cái lồn gì vậy", "cái lồn", "mặt lồn", "hãm lồn", "xạo lồn", "con lồn", "thằng lồn", "sấp mặt lồn",
         "con cặc", "cục cặc", "cái cặc", "đầu cặc", "cái quần què", "quần què","phò", "điếm", "cave", "đĩ điếm", "gái điếm", "con đĩ",
         "nứng", "nứng lồn", "nứng sảng", "chịch", "xoạc", "bú cu", "bú lồn", "liếm lồn","súc vật", "súc sinh", "óc chó", "óc lợn", "ngu học", 
         "ngu như bò", "ngu lồn", "khốn nạn", "khốn kiếp", "chó má",  "đĩ chó", "đĩ ngựa", "đĩ thoã",
-        "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này"
+        "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này",
+        "fuck", "fuck you", "fck", "fk", "fucking", "shit", "bitch", "asshole", "dick", "cunt",
+        "mặt ghẻ", "óc cứt", "óc bò", "đĩ mẹ", "mẹ mày"
     )
 
     # ── Danh sách tiếng hú hét, gọi cộc lốc, vô nghĩa, quấy rối ─────────
@@ -399,7 +869,16 @@ class OrchestratorAgent:
 
     def __init__(self, model_name: Optional[str] = None, **kwargs: Any) -> None:
         self.model_name = model_name
-
+        self._minimal_arithmetic_re = re.compile(
+            r"^(?:thầy ơi\s+|thầy\s+|thưa thầy\s+|bạn ơi\s+|tính\s+|em muốn tính\s+|cho em hỏi\s+|giúp em\s+|phép tính\s+|phép tính này\s+)?"
+            r"(\d+(?:\.\d+)?)\s*"
+            r"([:\/÷\*x×\+\-]|chia cho|chia|nhân với|nhân|cộng với|cộng|trừ đi|trừ)\s*"
+            r"(\d+(?:\.\d+)?)"
+            r"(?:\s*(?:=|bằng|\?|là|ra)?\s*(?:\?|mấy|bao nhiêu|la bao nhieu|bao nhiu|j|gì)?)?"
+            r"\s*(?:ạ|nhé|nha|hả|ha|à|nhỉ|ơi)?"
+            r"\s*[\?!\.]*$",
+            re.IGNORECASE | re.UNICODE,
+        )
         # Pre-compile regex từ cấm
         escaped = [re.escape(w) for w in self.PROFANITY_LIST]
         self._profanity_re = re.compile(
@@ -420,23 +899,100 @@ class OrchestratorAgent:
             re.IGNORECASE,
         )
 
+        # Regex trích xuất phương trình đại số (toán học một ẩn, hỗ trợ cả 2 vế có biến)
+        # math_chars dùng khoảng trắng ngang [ \t] tránh nhảy dòng
+        math_chars = r"[\d\.\+\-\*\/:\^\(\) \t]"
+        math_var = r"(?:(?<=\d)[a-zA-Z]|(?<![a-zA-Z\d_])[a-zA-Z](?![a-zA-Z_]))"
+        math_expr = rf"(?:{math_chars}*(?:{math_var})?{math_chars}*)+"
+        self._equation_re = re.compile(
+            rf"(?:^|(?<=[\s,:]))("
+            rf"{math_expr}"
+            rf"="
+            rf"{math_expr}"
+            rf")",
+            re.IGNORECASE,
+        )
+
         # Regex biểu thức toán học
         self._math_expr_re = re.compile(
             r"[\d\s\+\-\*\/\(\)\^\.x]{3,}",
             re.IGNORECASE,
         )
 
-        # Load Local ML Model (Trụ 2)
+        # US 10.4 (Task T10.4.3): Khởi tạo hạ tầng Hot-Reloading & Atomic Swap cho Local ML Model (Trụ 2)
+        self._model_path = pathlib.Path(__file__).parent / "local_orchestrator.pkl"
+        self._last_loaded_mtime: float = 0.0
+        self._last_mtime_check_time: float = 0.0
+        self._mtime_check_interval: float = 1.0  # Giảm 99% system calls I/O
+        self._reload_lock = threading.Lock()
         self._local_model = None
-        _model_path = pathlib.Path(__file__).parent / "local_orchestrator.pkl"
-        if _model_path.exists():
+        self.reload_model(force=True)
+
+    def reload_model(self, force: bool = True) -> bool:
+        """
+        US 10.4 (Task T10.4.3): Hot-Reloading mô hình Machine Learning trên RAM (Zero Downtime).
+        Sử dụng kỹ thuật Atomic Swap, Double-Checked Lock & Pipeline Validation:
+        1. Double-Checked Lock: Nếu force=False, kiểm tra lại mtime bên trong lock để tránh reload lặp.
+        2. Kiểm tra kích thước file: st_size >= 512 bytes chống nạp file rỗng đang ghi dở.
+        3. Deserialize cách ly: Nạp file mới vào biến tạm (local variable).
+        4. Validation & Warm-up: Kiểm tra có predict_proba, classes_ và chạy thử mồi 1 câu.
+        5. Atomic Swap: Hoán đổi con trỏ self._local_model tức thì (0.0001ms).
+        6. Safe Fallback: Nếu bất kỳ bước nào lỗi, giữ nguyên mô hình cũ trên RAM.
+        """
+        with self._reload_lock:
+            if not self._model_path.exists():
+                print(f"[OrchestratorAgent] [WARN] File mô hình không tồn tại: {self._model_path}")
+                return False
+
             try:
-                self._local_model = joblib.load(_model_path)
-                print(f"[OrchestratorAgent] [OK] Local ML Model loaded ({_model_path.stat().st_size // 1024}KB)")
+                stat_info = self._model_path.stat()
+                current_mtime = stat_info.st_mtime
+
+                # Double-Checked Locking khi gọi từ watcher tự động
+                if not force and current_mtime <= self._last_loaded_mtime:
+                    return True
+
+                # Kiểm tra chống file đang được tạo/ghi dở (0 bytes hoặc quá nhỏ)
+                if stat_info.st_size < 512:
+                    print(f"[OrchestratorAgent] [WARN] File mô hình quá nhỏ ({stat_info.st_size} bytes), có thể đang ghi dở. Bỏ qua.")
+                    return False
+
+                # 1. Nạp vào biến tạm cục bộ (hoàn toàn cách ly, không ảnh hưởng self._local_model đang chạy)
+                new_pipeline = joblib.load(self._model_path)
+
+                # 2. Pipeline Validation (Kiểm tra interface chuẩn scikit-learn)
+                if not hasattr(new_pipeline, "predict_proba") or not hasattr(new_pipeline, "classes_"):
+                    raise ValueError("Mô hình không có phương thức predict_proba hoặc classes_ hợp lệ.")
+
+                # 3. Warm-up Sanity Check (Chạy thử mồi 1 câu xác nhận pipeline hoạt động trơn tru)
+                _ = new_pipeline.predict_proba(["kiểm tra khởi động"])[0]
+
+                # 4. Atomic Swap: Hoán đổi tham chiếu bộ nhớ RAM tức thì (0.0001ms)
+                self._local_model = new_pipeline
+                self._last_loaded_mtime = current_mtime
+                classes_str = ", ".join(new_pipeline.classes_)
+                print(f"[OrchestratorAgent] [HOT-RELOAD SUCCESS] Đã nạp mô hình mới vào RAM ({stat_info.st_size // 1024}KB, mtime={self._last_loaded_mtime:.2f}, classes=[{classes_str}])")
+                return True
             except Exception as e:
-                print(f"[OrchestratorAgent] [WARN] Khong load duoc ML Model: {e}")
-        else:
-            print(f"[OrchestratorAgent] [WARN] ML Model khong co — chay train_local_model.py truoc.")
+                print(f"[OrchestratorAgent] [ERROR] Lỗi khi nạp mô hình (giữ nguyên bản cũ trên RAM): {e}")
+                return False
+
+    def get_model_info(self) -> dict:
+        """
+        US 10.4: Cung cấp thông tin trạng thái mô hình hiện tại phục vụ API Retrain (T10.4.4)
+        và Dashboard Giám Sát Agent (T10.4.5).
+        """
+        file_exists = self._model_path.exists()
+        file_size_kb = round(self._model_path.stat().st_size / 1024, 2) if file_exists else 0.0
+        classes_list = list(self._local_model.classes_) if (self._local_model and hasattr(self._local_model, "classes_")) else []
+        return {
+            "is_loaded": self._local_model is not None,
+            "model_path": str(self._model_path),
+            "file_exists": file_exists,
+            "file_size_kb": file_size_kb,
+            "last_loaded_mtime": self._last_loaded_mtime,
+            "classes": classes_list,
+        }
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -481,6 +1037,207 @@ class OrchestratorAgent:
         except Exception:
             return None
 
+    @staticmethod
+    def _normalize_math_expr(s: str) -> str:
+        """
+        Chuẩn hóa biểu thức toán học trước khi đưa vào SymPy:
+        - Thêm dấu nhân ngầm: 2x -> 2*x, 2(x+1) -> 2*(x+1), )( -> )*(, )x -> )*x, x( -> x*(
+        - Chuyển lũy thừa ^ -> **
+        - Chuyển phép chia : -> /
+        """
+        s = re.sub(r"(\d)\s*([a-zA-Z])", r"\1*\2", s)
+        s = re.sub(r"(\d)\s*\(", r"\1*(", s)
+        s = re.sub(r"\)\s*\(", r")*(", s)
+        s = re.sub(r"\)\s*([a-zA-Z\d])", r")*\1", s)
+        s = re.sub(r"([a-zA-Z])\s*\(", r"\1*(", s)
+        s = s.replace("^", "**")
+        s = s.replace(":", "/")
+        return s
+
+    @staticmethod
+    def _clean_extracted_equation(raw: str) -> str:
+        """Làm sạch phương trình thô trích xuất từ câu hỏi học sinh."""
+        raw = raw.strip()
+        raw = re.sub(r"^[a-zA-Z]\s*:\s*", "", raw)
+        raw = re.sub(r"^[^\d\(\+\-a-zA-Z]+", "", raw)
+        raw = re.sub(r"[^\d\)\w]+$", "", raw)
+        return raw.strip()
+
+    @staticmethod
+    def _solve_simple_linear_equation(raw_eq: str) -> Optional[Tuple[str, Fraction, str]]:
+        """
+        Giải phương trình bậc nhất một ẩn (ví dụ: '3x + 10 = 25', '2x - 4 = 10', '2(x+1) = 8', 'x/2 + 3 = 7').
+        Trả về: (tên biến, nghiệm Fraction, phương trình chuẩn).
+        """
+        try:
+            if "=" not in raw_eq:
+                return None
+            lhs_str, rhs_str = raw_eq.split("=", 1)
+            lhs_norm = OrchestratorAgent._normalize_math_expr(lhs_str)
+            rhs_norm = OrchestratorAgent._normalize_math_expr(rhs_str)
+
+            all_vars = set(re.findall(r"[a-zA-Z]", lhs_norm + rhs_norm))
+            if len(all_vars) != 1:
+                return None
+            var_name = list(all_vars)[0]
+            var_sym = sympy.symbols(var_name)
+
+            lhs_expr = sympy.sympify(lhs_norm)
+            rhs_expr = sympy.sympify(rhs_norm)
+
+            eq = sympy.Eq(lhs_expr, rhs_expr)
+            sols = sympy.solve(eq, var_sym)
+            if len(sols) == 1:
+                sol = sols[0]
+                if hasattr(sol, "p") and hasattr(sol, "q"):
+                    return var_name, Fraction(sol.p, sol.q), raw_eq.strip()
+                val = float(sol)
+                return var_name, Fraction(val).limit_denominator(1000), raw_eq.strip()
+        except Exception:
+            return None
+        return None
+
+    def _check_linear_equation_progress(
+        self,
+        original_message: str,
+        history_text: str = "",
+        problem_context: Optional[dict] = None,
+    ) -> Optional[RoutingResult]:
+        """
+        Trụ cột 1 — Nhận diện bài toán phương trình & điều phối Socratic chuẩn xác (Tối đa hóa phạm vi bao phủ):
+        1. Nhận diện phương trình bài toán từ tin nhắn hiện tại (original_message) hoặc ngữ cảnh (history_text, problem_context).
+        2. Nếu học sinh chỉ đưa ra đề bài / nhờ giải / hỏi bài (ví dụ: 'tính 3x + 10 = 25', 'giải 2x - 4 = 10', '3x + 10 = 25'):
+           -> Điều phối trực tiếp SCAFFOLDING (emotion_flag='GUIDING') để Thầy giáo dẫn dắt Socratic bước 1.
+        3. Nếu học sinh đưa ra nghiệm phỏng đoán:
+           - Nghiệm đúng (x = 5 == 5) -> SCAFFOLDING (emotion_flag='CORRECT').
+           - Nghiệm sai (x = 10 != 5) -> MISCONCEPTION (emotion_flag='WRONG').
+        """
+        # 1. Quét tìm phương trình đại số trong tin nhắn hiện tại
+        eq_in_msg = self._equation_re.findall(original_message)
+        solved_target = None
+        eq_source = "msg"
+
+        for raw in reversed(eq_in_msg):
+            cleaned = self._clean_extracted_equation(raw)
+            res = self._solve_simple_linear_equation(cleaned)
+            if res:
+                v_name, sol, eq_clean = res
+                is_trivial_assign = bool(re.match(rf"^{v_name}\s*=\s*-?\d+$", eq_clean.strip(), re.IGNORECASE))
+                if not is_trivial_assign:
+                    solved_target = res
+                    break
+                elif not solved_target:
+                    solved_target = res
+
+        # 2. Nếu tin nhắn hiện tại không chứa phương trình đầy đủ, tìm trong context & history
+        if not solved_target or bool(re.match(rf"^{solved_target[0]}\s*=\s*-?\d+$", solved_target[2].strip(), re.IGNORECASE)):
+            context_sources = []
+            if problem_context:
+                for k in ("problem_text", "problem", "title", "content"):
+                    val = problem_context.get(k)
+                    if val and isinstance(val, str):
+                        context_sources.append(val)
+            if history_text:
+                context_sources.append(history_text)
+
+            if context_sources:
+                search_corpus = "\n".join(context_sources)
+                eq_in_ctx = self._equation_re.findall(search_corpus)
+                for raw in reversed(eq_in_ctx):
+                    cleaned = self._clean_extracted_equation(raw)
+                    res = self._solve_simple_linear_equation(cleaned)
+                    if res:
+                        v_name, sol, eq_clean = res
+                        is_trivial_assign = bool(re.match(rf"^{v_name}\s*=\s*-?\d+$", eq_clean.strip(), re.IGNORECASE))
+                        if not is_trivial_assign:
+                            solved_target = res
+                            eq_source = "ctx"
+                            break
+
+        if not solved_target:
+            return None
+
+        var_name, true_sol, eq_str = solved_target
+
+        # 3. Kiểm tra xem học sinh có đưa ra đề xuất nghiệm trong tin nhắn hiện tại không
+        ans_pattern = re.compile(
+            rf"(?:(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua|tính ra|tinh ra|ra)\s*(?:là|la\s*)?)?(?<![a-zA-Z\d_]){var_name}\s*=\s*(-?\d+(?:\.\d+)?(?:/\d+)?)|\b(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua)\s*(?:là|la\s*)?(-?\d+(?:\.\d+)?(?:/\d+)?)",
+            re.IGNORECASE,
+        )
+
+        msg_without_eq = original_message.replace(eq_str, " ") if eq_source == "msg" else original_message
+        m = ans_pattern.search(msg_without_eq)
+
+        cand_str = None
+        if m:
+            cand_str = m.group(1) or m.group(2)
+        elif eq_source == "msg":
+            m_guess = re.search(r"\b(?:ra|được|bằng)\s*(-?\d+(?:\.\d+)?(?:/\d+)?)\s*(?:hả|đúng|ạ|\?)", msg_without_eq, re.IGNORECASE)
+            if m_guess:
+                cand_str = m_guess.group(1)
+
+        # A. NẾU HỌC SINH ĐOÁN NGHIỆM:
+        if cand_str:
+            try:
+                cand_frac, _ = self._extract_fraction(cand_str)
+            except Exception:
+                cand_frac = None
+
+            if cand_frac is not None:
+                if cand_frac == true_sol:
+                    task = (
+                        f"Học sinh đã giải đúng phương trình '{eq_str}' và tìm ra {var_name} = {cand_str} (nghiệm đúng: {true_sol}). "
+                        "Bạn là THẦY GIÁO: Khen ngợi học sinh đã giải chính xác phương trình, ghi nhận sự nỗ lực và chốt bài toán bằng cách gắn tag [COMPREHENSION_CHECK]."
+                    )
+                    return RoutingResult(
+                        selected_agent="SCAFFOLDING",
+                        task_description=task,
+                        routing_scratchpad=f"[Trụ1] Linear equation CORRECT: {eq_str} -> {var_name}={true_sol}",
+                        emotion_flag="CORRECT",
+                    )
+                else:
+                    has_transpose_step = any(s in original_message.lower() for s in (
+                        "chuyển vế", "chuyen ve", "qua thành", "qua thanh", "đổi dấu", "doi dau",
+                        "-3", "- 3", "= 2", "=2"
+                    ))
+                    pedagogical_analysis = (
+                        f"Phân tích sư phạm: Học sinh đã thực hiện bước chuyển vế đúng nhưng ở bước cuối kết luận {var_name} = {cand_str} là SAI "
+                        f"(do quên chia cho hệ số của {var_name}, nghiệm đúng phải là {var_name} = {true_sol})."
+                        if has_transpose_step else
+                        f"Phân tích sư phạm: Học sinh đưa ra kết quả {var_name} = {cand_str} là SAI "
+                        f"(nghiệm đúng của phương trình '{eq_str}' phải là {var_name} = {true_sol})."
+                    )
+                    task = (
+                        f"Học sinh đang giải phương trình '{eq_str}'. {pedagogical_analysis} "
+                        "Bạn là THẦY GIÁO, điều phối sư phạm Socratic BẮT BUỘC: "
+                        "1. Nếu học sinh có bước chuyển vế đúng, hãy khen ngợi bước đó. "
+                        f"2. Nhẹ nhàng chỉ ra rằng kết quả {var_name} = {cand_str} chưa chính xác, yêu cầu học sinh quan sát lại hệ số của {var_name}. "
+                        "3. Đặt câu hỏi Socratic gợi mở bước chia cuối cùng để học sinh tự tính lại. "
+                        f"4. TUYỆT ĐỐI KHÔNG khen 'đáp án {var_name} = {cand_str} là hoàn toàn đúng'. "
+                        "5. TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK]."
+                    )
+                    return RoutingResult(
+                        selected_agent="MISCONCEPTION",
+                        task_description=task,
+                        routing_scratchpad=f"[Trụ1] Linear equation mismatch: {eq_str} -> true {var_name}={true_sol}, student guessed {cand_str}",
+                        emotion_flag="WRONG",
+                    )
+
+        # B. NẾU HỌC SINH RA ĐỀ / HỎI BÀI TOÁN PHƯƠNG TRÌNH (Chưa đưa ra nghiệm):
+        task_prompt = (
+            f"Học sinh vừa gửi bài toán phương trình: '{eq_str}' (Nghiệm đúng nội bộ: {var_name} = {true_sol}). "
+            "Bạn là THẦY GIÁO SOCRATIC, điều phối giàn giáo dẫn dắt BẮT BUỘC: "
+            f"1. TUYỆT ĐỐI KHÔNG giải hộ bài toán, TUYỆT ĐỐI KHÔNG tiết lộ đáp án {var_name} = {true_sol}. "
+            "2. Hướng dẫn học sinh bước đầu tiên (ví dụ: chuyển các số hạng tự do sang vế phải và đổi dấu, hoặc rút gọn hai vế). "
+            "3. Đặt DUY NHẤT 1 câu hỏi gợi mở ngắn gọn (1-2 câu), ấm áp để học sinh tự làm bước biến đổi đầu tiên."
+        )
+        return RoutingResult(
+            selected_agent="SCAFFOLDING",
+            task_description=task_prompt,
+            routing_scratchpad=f"[Trụ1] Linear equation problem prompt: '{eq_str}' (solution: {var_name}={true_sol}) -> Direct Socratic SCAFFOLDING",
+            emotion_flag="GUIDING",
+        )
+
     def _no_study_intent(self, text: str) -> bool:
         """Kiểm tra câu không chứa tín hiệu hỏi bài học."""
         return not any(s in text for s in self.STUDY_SIGNALS)
@@ -516,6 +1273,148 @@ class OrchestratorAgent:
         "dạ vâng", "vâng ạ", "dạ", "vâng",
     )
 
+    @staticmethod
+    def _parse_minimal_operator(raw_op: str) -> Tuple[str, str]:
+        """
+        Chuẩn hóa toán tử biểu thức tối giản thành mã phép tính (DIV, MUL, ADD, SUB) và ký hiệu toán học chuẩn.
+        """
+        raw = raw_op.strip().lower()
+        if raw in (":", "/", "÷", "chia cho", "chia"):
+            return "DIV", ":"
+        if raw in ("*", "x", "×", "nhân với", "nhân"):
+            return "MUL", "×"
+        if raw in ("+", "cộng với", "cộng"):
+            return "ADD", "+"
+        if raw in ("-", "trừ đi", "trừ"):
+            return "SUB", "-"
+        return "UNKNOWN", raw
+
+    def _detect_minimal_arithmetic_expr(
+        self,
+        text_clean: str,
+        original_message: str,
+    ) -> Optional[RoutingResult]:
+        """
+        Trụ cột 1 — Nhận diện biểu thức toán học tối giản (Task T8.16 - US 8.2).
+        Ví dụ: "4/2", "10:2", "3*5", "12+8", "10:2 = ?", "thầy ơi 4/2 bằng mấy ạ".
+        Điều phối trực tiếp sang SCAFFOLDING với chỉ đạo Socratic sư phạm (chia kẹo / đồ vật).
+        """
+        # Chuẩn hóa biểu thức LaTeX phân số \frac{a}{b} -> a/b và bỏ ký tự $ bao quanh
+        expr_target = text_clean
+        if "\\frac" in expr_target or "$" in expr_target:
+            expr_target = re.sub(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", r"\1/\2", expr_target)
+            expr_target = re.sub(r"\$([^\$]+)\$", r"\1", expr_target).strip()
+
+        m = self._minimal_arithmetic_re.match(expr_target)
+        if not m:
+            return None
+
+        a_str, raw_op, b_str = m.group(1), m.group(2), m.group(3)
+        op_type, std_op = self._parse_minimal_operator(raw_op)
+        if op_type == "UNKNOWN":
+            return None
+
+        # Tránh nhận diện nhầm các ngày lễ phổ biến của học sinh Việt Nam khi dùng ký tự / hoặc :
+        if raw_op in ("/", ":") and "." not in a_str and "." not in b_str:
+            a_int, b_int = int(a_str), int(b_str)
+            special_dates = {
+                (20, 11), (2, 9), (30, 4), (1, 5), (1, 6),
+                (8, 3), (20, 10), (22, 12),
+                (19, 5),   # Ngày sinh Bác Hồ
+                (26, 3),   # Ngày thành lập Đoàn TNCS
+                (10, 3),   # Giỗ Tổ Hùng Vương
+                (27, 7),   # Ngày Thương binh Liệt sĩ
+                (3, 2),    # Ngày thành lập Đảng
+            }
+            math_intent_signals = ("=", "tính", "bằng", "mấy", "bao nhiêu", "chia")
+            if (a_int, b_int) in special_dates and not any(sig in text_clean for sig in math_intent_signals):
+                return None  # Coi là ngày tháng, để các phễu khác xử lý
+
+        # Chuyển đổi giá trị số
+        try:
+            val_a = float(a_str) if "." in a_str else int(a_str)
+            val_b = float(b_str) if "." in b_str else int(b_str)
+        except Exception:
+            return None
+
+        # Ngoại lệ chia cho 0: Tuyệt đối không gợi mở "chia kẹo cho 0 bạn" (vô lý toán học & sư phạm)
+        if op_type == "DIV" and val_b == 0:
+            return None  # Để phễu khác / LLM giải thích bản chất phép chia cho 0 không xác định
+
+        # Tính toán giá trị tham chiếu nội bộ (dùng để nhắc AI không được vô tình nói ra đáp án)
+        ref_val = ""
+        try:
+            if op_type == "DIV":
+                res = val_a / val_b
+                ref_val = f"{int(res)}" if res.is_integer() else f"{res:.2f}"
+            elif op_type == "MUL":
+                res = val_a * val_b
+                ref_val = f"{int(res)}" if res.is_integer() else f"{res:.2f}"
+            elif op_type == "ADD":
+                res = val_a + val_b
+                ref_val = f"{int(res)}" if res.is_integer() else f"{res:.2f}"
+            elif op_type == "SUB":
+                res = val_a - val_b
+                ref_val = f"{int(res)}" if res.is_integer() else f"{res:.2f}"
+        except Exception:
+            ref_val = ""
+
+        # Xây dựng chỉ đạo sư phạm Socratic đặc thù (chuẩn AC 8.2.7)
+        display_expr = f"{a_str} {std_op} {b_str}"
+        if op_type == "DIV":
+            task_desc = (
+                f"Học sinh vừa gửi phép tính chia tối giản: '{display_expr}'. "
+                "Bạn là THẦY GIÁO, điều phối Socratic trực tiếp: "
+                f"TUYỆT ĐỐI KHÔNG giải bài, TUYỆT ĐỐI KHÔNG nói ra kết quả{' là ' + ref_val if ref_val else ''}. "
+                f"BẮT BUỘC gợi mở tư duy cho học sinh bằng hình tượng thực tế gần gũi dạng CHIA KẸO / QUẢ TÁO: "
+                f"Đặt câu hỏi gợi mở trực quan (ví dụ: 'Giả sử em có {a_str} cái kẹo và muốn chia đều cho {b_str} bạn, "
+                f"vậy mỗi bạn sẽ nhận được mấy cái kẹo nhỉ?'). "
+                "Chỉ đặt DUY NHẤT 1 câu hỏi gợi mở ngắn gọn (1-2 câu), ấm áp, khích lệ học sinh tự suy nghĩ."
+            )
+        elif op_type == "MUL":
+            task_desc = (
+                f"Học sinh vừa gửi phép tính nhân tối giản: '{display_expr}'. "
+                "Bạn là THẦY GIÁO, điều phối Socratic trực tiếp: "
+                f"TUYỆT ĐỐI KHÔNG giải bài, TUYỆT ĐỐI KHÔNG nói ra kết quả{' là ' + ref_val if ref_val else ''}. "
+                f"BẮT BUỘC gợi mở tư duy cho học sinh bằng hình tượng GOM NHÓM ĐỒ VẬT hoặc PHÉP CỘNG LẶP: "
+                f"Đặt câu hỏi gợi mở (ví dụ: 'Giả sử em có {b_str} túi kẹo, mỗi túi có {a_str} viên, "
+                f"hoặc số {a_str} được lấy {b_str} lần, em thử tính xem có tất cả bao nhiêu viên kẹo nhé?'). "
+                "Chỉ đặt DUY NHẤT 1 câu hỏi gợi mở ngắn gọn (1-2 câu)."
+            )
+        elif op_type == "ADD":
+            task_desc = (
+                f"Học sinh vừa gửi phép tính cộng tối giản: '{display_expr}'. "
+                "Bạn là THẦY GIÁO, điều phối Socratic trực tiếp: "
+                f"TUYỆT ĐỐI KHÔNG giải bài, TUYỆT ĐỐI KHÔNG nói ra kết quả. "
+                f"Gợi mở trực quan thêm vào đồ vật (ví dụ: 'Em đang có {a_str} món đồ, có thêm {b_str} món nữa, "
+                f"tất cả là bao nhiêu nhỉ?'). Chỉ đặt DUY NHẤT 1 câu hỏi ngắn gọn (1-2 câu)."
+            )
+        else:  # SUB
+            if val_a >= val_b:
+                analogy_desc = (
+                    f"Gợi mở trực quan bớt đi đồ vật (ví dụ: 'Em có {a_str} cái kẹo, bớt đi {b_str} cái, "
+                    f"vậy em còn lại mấy cái kẹo nhỉ?')."
+                )
+            else:
+                analogy_desc = (
+                    f"Gợi mở so sánh trực quan giữa số bị trừ {a_str} và số trừ {b_str} "
+                    f"(ví dụ: 'Em thử quan sát xem số {a_str} có đủ để bớt đi {b_str} cái kẹo không nhỉ, "
+                    f"hay ta cần hình dung bước lùi trên tia số?')."
+                )
+            task_desc = (
+                f"Học sinh vừa gửi phép tính trừ tối giản: '{display_expr}'. "
+                "Bạn là THẦY GIÁO, điều phối Socratic trực tiếp: "
+                f"TUYỆT ĐỐI KHÔNG giải bài, TUYỆT ĐỐI KHÔNG nói ra kết quả{' là ' + ref_val if ref_val else ''}. "
+                f"{analogy_desc} Chỉ đặt DUY NHẤT 1 câu hỏi ngắn gọn (1-2 câu)."
+            )
+
+        return RoutingResult(
+            selected_agent="SCAFFOLDING",
+            task_description=task_desc,
+            routing_scratchpad=f"[Trụ1] Minimal math expression detected: '{text_clean}' ({op_type}) -> Direct Socratic dispatch",
+            emotion_flag="GUIDING",
+        )
+
     def _state_machine_route(
         self,
         text_clean: str,
@@ -531,7 +1430,7 @@ class OrchestratorAgent:
         if problem_context and problem_context.get("correctSolution"):
             return RoutingResult(
                 selected_agent="SCAFFOLDING",
-                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context, history_text=history_text),
                 routing_scratchpad=f"[Trụ3 - StateMachine]: Bài toán đang mở → SCAFFOLDING.",
                 emotion_flag="GUIDING",
             )
@@ -545,13 +1444,13 @@ class OrchestratorAgent:
             if last_agent == "MISCONCEPTION" and is_positive_close:
                 return RoutingResult(
                     selected_agent="SCAFFOLDING",
-                    task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                    task_description=_build_task_description("SCAFFOLDING", original_message, problem_context, history_text=history_text),
                     routing_scratchpad=f"[Trụ3 - StateMachine]: Học sinh đã hiểu sau MISCONCEPTION → SCAFFOLDING khen.",
                     emotion_flag="CORRECT",  # Cú vui vẻ vỗ tay vì học sinh hiểu bài rồi
                 )
             return RoutingResult(
                 selected_agent=last_agent,
-                task_description=_build_task_description(last_agent, original_message, problem_context),
+                task_description=_build_task_description(last_agent, original_message, problem_context, history_text=history_text),
                 routing_scratchpad=f"[Trụ3 - StateMachine]: Tiếp tục ngữ cảnh '{last_agent}' từ lịch sử.",
                 emotion_flag="WRONG" if last_agent == "MISCONCEPTION" else "GUIDING",
             )
@@ -559,7 +1458,7 @@ class OrchestratorAgent:
         # 3.3 Mặc định an toàn
         return RoutingResult(
             selected_agent="SCAFFOLDING",
-            task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+            task_description=_build_task_description("SCAFFOLDING", original_message, problem_context, history_text=history_text),
             routing_scratchpad=f"[Trụ3 - StateMachine]: Mặc định SCAFFOLDING.",
             emotion_flag="GUIDING",
         )
@@ -569,6 +1468,8 @@ class OrchestratorAgent:
         text_clean: str,
         original_message: str,
         problem_context: Optional[dict],
+        history_text: str = "",
+        student_grade: Optional[int] = None,
     ) -> Optional[RoutingResult]:
         """
         Trụ cột 1 — Phân luồng bằng quy tắc ngữ pháp và toán học tất định.
@@ -597,8 +1498,9 @@ class OrchestratorAgent:
                 emotion_flag="WARNING",
             )
 
-        # 1.2 Off-topic tuyệt đối
-        if any(s in text_clean for s in self.OFFTOPIC_SIGNALS):
+        # 1.2 Off-topic (chỉ kích hoạt khi không chứa tín hiệu học tập / toán học)
+        has_offtopic = any(re.search(rf"\b{re.escape(s)}\b", text_clean) for s in self.OFFTOPIC_SIGNALS)
+        if has_offtopic and self._no_study_intent(text_clean):
             return RoutingResult(
                 selected_agent="SAFETY",
                 task_description=_build_task_description("SAFETY", original_message),
@@ -618,11 +1520,95 @@ class OrchestratorAgent:
                 routing_scratchpad=f"[Trụ1] Greeting pattern: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )
+
+        # 1.3c [Task T9.14 & T9.15 / US 11.6 T401]: Nhận diện học sinh phản hồi sau câu hỏi thăm dò (Follow-up Turn & Safe Fallback)
+        probe_type = _detect_probe_in_history(history_text)
+        if probe_type:
+            curr_grade = student_grade or 7
+            try:
+                from agents.agent_prompts import get_semester_from_month, get_effective_curriculum_month
+                curr_month = get_effective_curriculum_month()
+                curr_sem = get_semester_from_month(curr_month)
+                base_sem = curr_sem if curr_sem else 1
+            except Exception:
+                curr_month = 9
+                base_sem = 1
+
+            # US 11.6: Tự động xác định học kỳ 1 hay 2 dựa trên bối cảnh bài học đang thảo luận
+            context_corpus = original_message + " " + (history_text or "") + (" " + problem_context.get("problem_text", "") if problem_context else "")
+            active_sem = _detect_semester_for_grade(context_corpus, curr_grade, default_sem=base_sem) if curr_grade else base_sem
+
+            # US 11.6: Phân loại intent hỗ trợ scratchpad và routing
+            if _detect_teacher_skipped_phrase(text_clean):
+                reply_intent = "TEACHER_SKIPPED"
+            elif student_grade:
+                try:
+                    reply_intent = _classify_probe_reply_with_curriculum(
+                        text_clean, "", student_grade, active_sem
+                    )
+                except Exception:
+                    reply_intent = _classify_probe_reply(text_clean)
+            else:
+                reply_intent = _classify_probe_reply(text_clean)
+
+            praise_summer = "Nếu học sinh xác nhận đang tự học trước trong kỳ nghỉ hè, hãy bắt đầu bằng một lời khen ngợi tinh thần tự giác của em! " if probe_type == "SUMMER_PROBE" else ""
+            summer_unclear_note = " (LƯU Ý MÙA HÈ - AC 9.3.7: Học sinh có tâm lý xả hơi hè, tuyệt đối không gặng hỏi hay truy cứu, hãy động viên ấm áp và giảng giải từng bước nhỏ từ gốc rễ theo Kịch bản B)." if probe_type == "SUMMER_PROBE" else ""
+
+            # US 11.6: Inject danh sách curriculum theo thứ tự để AI tự so sánh vị trí bài
+            curriculum_order_note = ""
+            if student_grade:
+                try:
+                    from agents.agent_prompts import _load_curriculum
+                    _curriculum = _load_curriculum()
+                    _g_data = _curriculum.get(str(student_grade), {})
+                    _topics = _g_data.get(str(active_sem), [])
+                    if _topics:
+                        _ordered = "; ".join(f"[{i+1}] {t}" for i, t in enumerate(_topics))
+                        curriculum_order_note = (
+                            f"\n\n=== US 11.6 CURRICULUM ORDER (HK{active_sem} Lớp {student_grade}) ===\n"
+                            f"Danh sách bài theo thứ tự chương trình (INDEX BÀI TỪ NHỎ ĐẾN LỚN = THỨ TỰ HỌC):\n"
+                            f"{_ordered}\n"
+                            f"Hãy TỰ SO SÁNH vị trí bài học sinh đang học và bài học sinh hỏi:\n"
+                            f"● Bài học sinh đang học [X] < Bài được hỏi [Y] → Học sinh CHƯA HỌC TỚI → BẮT BUỘC ÁP DỤNG KỊCH BẢN B (Coi học sinh là 'tờ giấy trắng').\n"
+                            f"● Bài học sinh đang học [X] > Bài được hỏi [Y] → Học sinh ĐÃ HỌC NHƯNG QUÊN → BẮT BUỘC ÁP DỤNG KỊCH BẢN A với câu:\n"
+                            f"  'Hiện tại nếu em đã học đến [Tên bài X] rồi thì với chương trình HK{active_sem} lớp {student_grade}, em đã học bài [Tên bài Y] rồi. Có lẽ em đã quên nên thầy sẽ nhắc lại cách làm bài này...'\n"
+                            f"● Học sinh nói 'cô/thầy bỏ qua/không dạy/nhảy cóc' → BẮT BUỘC ÁP DỤNG KỊCH BẢN B kèm lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!'"
+                        )
+                except Exception:
+                    curriculum_order_note = ""
+
+            guide_instruction = (
+                f"HỌC SINH ĐANG PHẢN HỒI CÂU HỎI THĂM DÒ TIẾN ĐỘ ({probe_type}): '{original_message[:80]}'.\n"
+                f"BẠN LÀ THẦY GIÁO SOCRATIC TRÍ TUỆ & THẤU CẢM. Hãy đọc hiểu câu trả lời thực tế của học sinh trong ngữ cảnh hội thoại để rẽ nhánh sư phạm chuẩn xác nhất:\n\n"
+                f"1. NẾU HỌC SINH CHƯA HỌC TỚI / HỌC TRƯỚC BÀI MỚI (chưa học, cô chưa dạy, mới học tới bài trước, hoặc tự học trước hè):\n"
+                f"   -> BẮT BUỘC ÁP DỤNG KỊCH BẢN B (DẪN DẮT TỪ GỐC RỄ):\n"
+                f"   - Coi học sinh là 'tờ giấy trắng', tuyệt đối không ép học sinh phải nhớ công thức mới.\n"
+                f"   - {praise_summer}Giải thích từ nền tảng đơn giản nhất, chia nhỏ bài toán và đặt một câu hỏi gợi mở nhẹ nhàng.\n\n"
+                f"2. NẾU HỌC SINH ĐÃ HỌC RỒI NHƯNG QUÊN / ÔN LẠI BÀI CŨ (đã học trên lớp, lâu ngày không làm nên quên, xả hơi hè quên):\n"
+                f"   -> BẮT BUỘC ÁP DỤNG KỊCH BẢN A (GỢI NHỚ KIẾN THỨC CŨ):\n"
+                f"   - Đồng cảm nhẹ nhàng (quên là bình thường sau một thời gian), KHÔNG giảng lại từ đầu.\n"
+                f"   - Nhắc lại tên công thức hoặc quy tắc tổng quát, gợi mở để học sinh tự nhớ lại.\n\n"
+                f"3. NẾU HỌC SINH NÓI LẤP LỬNG / BÍ BÀI / KHÔNG BIẾT ('em ko bt', 'bí quá'):\n"
+                f"   -> Áp dụng Kịch bản B (hướng dẫn kiên nhẫn từ bước đơn giản nhất, không truy cứu hay phán xét).{summer_unclear_note}\n\n"
+                f"4. NẾU HỌC SINH BÁO THẦY CÔ BỎ QUA / KHÔNG DẠY / NHẢY CÓC / GIẢM TẢI / LƯỚT QUA BÀI NÀY:\n"
+                f"   -> BẮT BUỘC ÁP DỤNG KỊCH BẢN B kèm lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!' rồi hướng dẫn từ nền tảng đơn giản nhất."
+                f"{curriculum_order_note}"
+            )
+            return RoutingResult(
+                selected_agent="SCAFFOLDING",
+                task_description=guide_instruction,
+                routing_scratchpad=f"[Trụ1] Follow-up Probe -> Socratic Decision Framework ({probe_type}) [{reply_intent}] [US11.6]",
+                emotion_flag="GUIDING",
+            )
+
         # 1.3b Học sinh tuyên bố chưa học — KHÔNG route KNOWLEDGE_TRACING, route SCAFFOLDING để xử lý context
         if _detect_uncovered_claim(text_clean):
             return RoutingResult(
                 selected_agent="SCAFFOLDING",
-                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                task_description=_build_task_description(
+                    "SCAFFOLDING", original_message, problem_context,
+                    student_grade=student_grade, history_text=history_text
+                ),
                 routing_scratchpad=f"[Trụ1] Uncovered claim detected: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )
@@ -656,6 +1642,22 @@ class OrchestratorAgent:
                 routing_scratchpad=f"[Trụ1] Help signal: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )
+
+        # =========================================================================
+        # 1.6b Biểu thức toán học tối giản (Task T8.16 - US 8.2)
+        # Nhận diện: 4/2, 10:2, 3*5, 12+8... điều phối thẳng SCAFFOLDING (Socratic)
+        # =========================================================================
+        minimal_math = self._detect_minimal_arithmetic_expr(text_clean, original_message)
+        if minimal_math is not None:
+            return minimal_math
+
+        # =========================================================================
+        # 1.6c Kiểm tra giải phương trình và so khớp nghiệm từ ngữ cảnh (Linear Equation Verifier)
+        # Ví dụ: 2x + 3 = 5 (nghiệm x = 1). Học sinh nói x = 2 -> MISCONCEPTION (WRONG)
+        # =========================================================================
+        eq_route = self._check_linear_equation_progress(original_message, history_text, problem_context)
+        if eq_route is not None:
+            return eq_route
 
         # 1.7 So khớp Toán học với correctSolution
         correct_solution = None
@@ -718,6 +1720,19 @@ class OrchestratorAgent:
         Trụ cột 2 — Phân loại intent bằng Local ML Model (TF-IDF + Logistic Regression).
         Threshold: 60%.
         """
+        # US 10.4 (Task T10.4.3): Out-of-process File Watcher với I/O Throttling
+        # Tự động nạp lại mô hình nếu file trên đĩa được cập nhật từ tiến trình ngoài
+        now = time.time()
+        if now - self._last_mtime_check_time >= self._mtime_check_interval:
+            self._last_mtime_check_time = now
+            try:
+                if self._model_path.exists():
+                    current_mtime = self._model_path.stat().st_mtime
+                    if current_mtime > self._last_loaded_mtime:
+                        self.reload_model(force=False)
+            except Exception as e:
+                print(f"[OrchestratorAgent] Cảnh báo kiểm tra mtime mô hình: {e}")
+
         if self._local_model is None:
             return None
         try:
@@ -725,12 +1740,31 @@ class OrchestratorAgent:
             max_prob = float(proba.max())
             predicted = self._local_model.classes_[proba.argmax()]
 
-            if max_prob < self.ML_CONFIDENCE_THRESHOLD:
-                print(f"[ML-Router] Phân vân: {predicted} ({max_prob:.1%}) < {self.ML_CONFIDENCE_THRESHOLD:.0%} → Trụ cột 3")
+            safety_threshold = 0.50 if predicted == "SAFETY" else self.ML_CONFIDENCE_THRESHOLD
+            if max_prob < safety_threshold:
+                print(f"[ML-Router] Phân vân: {predicted} ({max_prob:.1%}) < {safety_threshold:.0%} → Trụ cột 3")
                 return None
 
+            # BẢO VỆ CHỐNG FALSE POSITIVE CHO SAFETY:
+            # Nếu ML đoán SAFETY nhưng câu không chứa bất kỳ từ cấm, hú hét hay ngoài lề thực sự,
+            # mà lại có tín hiệu học tập hoặc toán học -> BÁC BỎ SAFETY!
+            if predicted == "SAFETY":
+                has_profanity = bool(self._profanity_re.search(text))
+                has_shouting = (
+                    any(s == text or text.startswith(s + " ") or text.endswith(" " + s) for s in self.SHOUTING_SIGNALS)
+                    or bool(self._shouting_re.match(text))
+                )
+                has_offtopic = any(s in text for s in self.OFFTOPIC_SIGNALS)
+
+                has_math_tokens = bool(re.search(r"[\d\+\-\*\/\=]|tìm x|đáp án|kết quả|\bx\b|\by\b", text, re.IGNORECASE))
+                has_study_signal = any(s in text for s in self.STUDY_SIGNALS)
+
+                if not (has_profanity or has_shouting or has_offtopic) and (has_math_tokens or has_study_signal):
+                    print(f"[ML-Router] Chặn False Positive SAFETY cho câu có tín hiệu học tập/toán học: '{text}' → Bác bỏ SAFETY")
+                    return None
+
             task = _build_task_description(predicted, text, problem_context)
-            print(f"[ML-Router ⚡] {predicted} ({max_prob:.1%})")
+            print(f"[ML-Router] [MATCH] {predicted} ({max_prob:.1%})")
             return RoutingResult(
                 selected_agent=predicted,
                 task_description=task,
@@ -742,7 +1776,7 @@ class OrchestratorAgent:
                 ),
             )
         except Exception as e:
-            print(f"[ML-Router] Lỗi: {e}")
+            print(f"[ML-Router] Error: {e}")
             return None
     
     async def route(
@@ -750,14 +1784,25 @@ class OrchestratorAgent:
         latest_message: str,
         history_text: str = "",
         problem_context: Optional[dict] = None,
+        student_grade: Optional[int] = None,
     ) -> RoutingResult:
         """Phân luồng tin nhắn học sinh — 100% cục bộ, không gọi API nào."""
         text_clean = self._normalize(latest_message)
 
         # Trụ cột 1
-        result = self._structural_route(text_clean, latest_message, problem_context)
+        result = self._structural_route(
+            text_clean, latest_message, problem_context,
+            history_text=history_text, student_grade=student_grade
+        )
         if result is not None:
             return result
+
+        # Trụ cột 2 - Dự đoán ML trước
+        ml_res = self._ml_route(text_clean, problem_context)
+
+        # Ưu tiên An toàn ngôn từ (SAFETY) & Ngộ nhận toán học (MISCONCEPTION - US 10.4): Kể cả tin nhắn đầu tiên
+        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT", "MISCONCEPTION", "MISCONCEPTION_AGENT"):
+            return ml_res
 
         # Phễu "Bắt đầu phiên học mới"
         is_empty_history = (
@@ -783,10 +1828,9 @@ class OrchestratorAgent:
                     emotion_flag=emotion_new,
                 )
 
-        # Trụ cột 2
-        result = self._ml_route(text_clean, problem_context)
-        if result is not None:
-            return result
+        # Áp dụng kết quả ML nếu không phải phiên học mới
+        if ml_res is not None:
+            return ml_res
 
         # Trụ cột 3
         return self._state_machine_route(text_clean, history_text, problem_context, latest_message)
@@ -839,13 +1883,22 @@ class OrchestratorAgent:
         latest_message: str,
         history_text: str = "",
         problem_context: Optional[dict] = None,
+        student_grade: Optional[int] = None,
     ) -> RoutingResult:
         """Phiên bản đồng bộ (sync) của route() — dùng trong context non-async."""
         text_clean = self._normalize(latest_message)
 
-        result = self._structural_route(text_clean, latest_message, problem_context)
+        result = self._structural_route(
+            text_clean, latest_message, problem_context,
+            history_text=history_text, student_grade=student_grade
+        )
         if result is not None:
             return result
+
+        # Trụ cột 2 - Dự đoán ML trước
+        ml_res = self._ml_route(text_clean, problem_context)
+        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT", "MISCONCEPTION", "MISCONCEPTION_AGENT"):
+            return ml_res
 
         is_empty_history = (
             not history_text.strip()

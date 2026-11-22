@@ -12,6 +12,8 @@ import {
   LogOut,
   X,
   ShieldCheck,
+  AlertTriangle,
+  Bot,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -47,20 +49,26 @@ const NAV_GROUPS: NavGroup[] = [
   {
     groupTitle: "Quản lý hệ thống",
     items: [
-      {
-        name: "Quản lý Users",
-        href: "/admin/users",
-        icon: Users,
-      },
+      // Tạm thời ẩn quản lý user theo yêu cầu UI
+      // {
+      //   name: "Quản lý Users",
+      //   href: "/admin/users",
+      //   icon: Users,
+      // },
       {
         name: "Học liệu Toán 4-9",
         href: "/admin/content",
         icon: BookOpen,
       },
       {
-        name: "Giám sát Safety AI",
+        name: "Giám sát Agent",
         href: "/admin/safety",
-        icon: ShieldAlert,
+        icon: Bot,
+      },
+      {
+        name: "Quản trị Báo Lỗi",
+        href: "/admin/errors",
+        icon: AlertTriangle,
       },
     ],
   },
@@ -166,7 +174,7 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
                       {item.badge && (
                         <div className="flex-shrink-0 ml-2">
                           {item.badge.variant === "danger" && (
-                            <span className="bg-[#D93829] text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                            <span className="bg-[#EF4444] text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-xs">
                               {item.badge.text}
                             </span>
                           )}
@@ -186,7 +194,7 @@ export default function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
                               className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
                                 active
                                   ? "bg-white text-[#C1762A]"
-                                  : "bg-[#2A8C4A] text-white"
+                                  : "bg-[#10B981] text-white"
                               }`}
                             >
                               {item.badge.text}

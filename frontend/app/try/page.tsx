@@ -10,7 +10,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User } from "lucide-react";
+import Link from "next/link";
+import { Send, Bot, User, ArrowLeft } from "lucide-react";
 import Lottie from "lottie-react";
 import { useRouter } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
@@ -20,6 +21,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+import { preprocessLaTeX } from "@/lib/latex";
 
 const SUGGESTIONS = [
   "Phân số là gì?",
@@ -42,7 +44,15 @@ function createMessageId(prefix: string = "msg") {
 /* ──────────────────────────────────────────────
    Modal: Thông báo hết lượt dùng thử (US 4.3)
 ────────────────────────────────────────────── */
-function TrialExpiredModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => void }) {
+function TrialExpiredModal({
+  onLogin,
+  onClose,
+  maxLimit = 10,
+}: {
+  onLogin: () => void;
+  onClose: () => void;
+  maxLimit?: number;
+}) {
   const [owlData, setOwlData] = useState<object | null>(null);
 
   useEffect(() => {
@@ -123,7 +133,7 @@ function TrialExpiredModal({ onLogin, onClose }: { onLogin: () => void; onClose:
             </h2>
             <p className="text-sm text-[#C1762A] font-medium leading-relaxed max-w-xs">
               Bạn đã dùng hết{" "}
-              <strong className="text-[#8C4905]">10 câu hỏi</strong> dùng thử
+              <strong className="text-[#8C4905]">{maxLimit} câu hỏi</strong> dùng thử
               hôm nay. Quay lại sau{" "}
               <strong className="text-[#8C4905]">24 tiếng</strong> để được cấp
               thêm lượt mới — hoặc{" "}
@@ -193,7 +203,8 @@ export default function TryPage() {
   const [showTrialExpired, setShowTrialExpired] = useState(false);
   const [showAuthForm, setShowAuthForm] = useState(false);
 
-  // US 4.3: Quản lý giới hạn 10 câu hỏi dùng thử & chống spam
+  // US 4.3 & US 11.1: Quản lý giới hạn câu hỏi dùng thử & chống spam
+  const [guestLimit, setGuestLimit] = useState(10);
   const [trialCount, setTrialCount] = useState(0);
   const [isTrialExpired, setIsTrialExpired] = useState(false);
 
@@ -202,11 +213,29 @@ export default function TryPage() {
   const router = useRouter();
   const [sessionId, setSessionId] = useState("");
 
-  // Task 89 - US 4.3: Lấy hoặc tạo Guest ID từ localStorage
-  // và kiểm tra số câu đã dùng (persistent trong 24h)
+  // Task 89 - US 4.3 & US 11.1: Lấy hoặc tạo Guest ID từ localStorage
+  // và đồng bộ giới hạn guest_rate_limit từ hệ thống
   useEffect(() => {
     const guestId = getOrCreateGuestId();
     if (guestId) setSessionId(guestId);
+
+    const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    fetch(`${BACKEND_URL}/chat/limits`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.guest_rate_limit === "number") {
+          const limit = data.guest_rate_limit;
+          setGuestLimit(limit);
+          if (typeof window !== "undefined") {
+            const stored = parseInt(localStorage.getItem("sk_trial_count") || "0", 10);
+            if (stored >= limit) {
+              setIsTrialExpired(true);
+              setShowTrialExpired(true);
+            }
+          }
+        }
+      })
+      .catch(() => {});
 
     if (typeof window !== "undefined") {
       const storedCount = parseInt(
@@ -226,7 +255,7 @@ export default function TryPage() {
         setIsTrialExpired(false);
       } else {
         setTrialCount(storedCount);
-        if (storedCount >= 10) {
+        if (storedCount >= guestLimit) {
           setIsTrialExpired(true);
           setShowTrialExpired(true);
         }
@@ -248,8 +277,8 @@ export default function TryPage() {
     const trimmed = text.trim();
     if (!trimmed || isTyping) return;
 
-    // Chặn gửi nếu đã hết lượt dùng thử (10 câu)
-    if (isTrialExpired || trialCount >= 10) {
+    // Chặn gửi nếu đã hết lượt dùng thử theo cấu hình động
+    if (isTrialExpired || trialCount >= guestLimit) {
       setIsTrialExpired(true);
       setShowTrialExpired(true);
       return;
@@ -268,7 +297,7 @@ export default function TryPage() {
       }
     }
 
-    if (currentCount >= 10) {
+    if (currentCount >= guestLimit) {
       setIsTrialExpired(true);
     }
 
@@ -308,7 +337,7 @@ export default function TryPage() {
         setIsTrialExpired(true);
         setShowTrialExpired(true);
         if (typeof window !== "undefined") {
-          localStorage.setItem("sk_trial_count", "10");
+          localStorage.setItem("sk_trial_count", guestLimit.toString());
         }
         return;
       }
@@ -355,7 +384,7 @@ export default function TryPage() {
       );
     } finally {
       setIsTyping(false);
-      if (currentCount >= 10) {
+      if (currentCount >= guestLimit) {
         setShowTrialExpired(true);
       } else {
         inputRef.current?.focus();
@@ -375,13 +404,23 @@ export default function TryPage() {
     <div className="min-h-screen bg-[#F7ECE1] font-sans flex flex-col">
       {/* ── Header ── */}
       <header className="w-full px-6 py-4 flex items-center justify-between border-b border-[#C1762A]/10 bg-[#F7ECE1]/80 backdrop-blur-sm sticky top-0 z-10">
-        {/* Logo */}
-        <div
-          className="w-10 h-10 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold text-sm cursor-pointer hover:bg-[#F1CCA6] transition-colors shadow-inner"
-          onClick={() => router.push("/")}
+        {/* Quay lại Trang chủ & Logo */}
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-[#8C4905] hover:text-[#C1762A] group transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A] rounded-xl px-1.5 py-1"
+          title="Về Trang chủ"
+          aria-label="Về Trang chủ"
         >
-          SK
-        </div>
+          <div className="p-1 rounded-lg group-hover:bg-[#F1CCA6]/60 transition-colors">
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+          </div>
+          <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] border border-[#C1762A]/30 shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+            <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
+          </div>
+          <span className="hidden sm:inline font-extrabold text-[#C1762A] text-sm group-hover:text-[#8C4905] transition-colors">
+            SocraticKid
+          </span>
+        </Link>
 
         {/* Status label */}
         <span className="text-xs text-[#8C4905]/60 font-medium">
@@ -417,30 +456,37 @@ export default function TryPage() {
 
             {/* Bubble */}
             <div
-              className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
+              className={`max-w-[80%] px-5 py-3.5 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
                 msg.role === "user"
                   ? "bg-[#C1762A] text-white rounded-tr-sm whitespace-pre-wrap"
-                  : "bg-white text-[#1a1a1a] rounded-tl-sm border border-[#C1762A]/10"
-              } ${msg.content === "" ? "animate-pulse bg-gray-100 text-gray-400 italic" : ""}`}
+                  : "bg-white text-[#1C1917] rounded-tl-sm border border-[#C1762A]/10"
+              } ${msg.content === "" ? "animate-pulse bg-[#F1CCA6]/30 text-[#8C4905]/40 italic" : ""}`}
             >
               {msg.content === "" ? (
                 "Đang soạn..."
               ) : msg.role === "user" ? (
-                msg.content
+                <div className="break-words [&>p]:m-0 [&_.katex]:text-white [&_.katex-html]:text-white">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkMath, remarkGfm]}
+                    rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
+                  >
+                    {preprocessLaTeX(msg.content)}
+                  </ReactMarkdown>
+                </div>
               ) : (
-                <div className="markdown-prose prose-sm max-w-none
+                <div className="markdown-prose prose-sm max-w-none min-w-0 break-words overflow-visible
                   prose-p:leading-relaxed prose-p:mb-2
-                  prose-pre:bg-gray-100 prose-pre:p-3 prose-pre:rounded-lg
-                  prose-code:text-[#CB6600] prose-code:bg-[#F1CCA6]/40 prose-code:px-1 prose-code:rounded
+                  prose-pre:bg-[#F1CCA6]/30 prose-pre:p-3 prose-pre:rounded-lg
+                  prose-code:text-[#8C4905] prose-code:bg-[#F1CCA6]/40 prose-code:px-1 prose-code:rounded
                   prose-ul:list-disc prose-ul:ml-4 prose-ul:mb-2
                   prose-ol:list-decimal prose-ol:ml-4 prose-ol:mb-2
                   prose-strong:text-[#8C4905]"
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkMath, remarkGfm]}
-                    rehypePlugins={[rehypeKatex]}
+                    rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
                   >
-                    {msg.content}
+                    {preprocessLaTeX(msg.content)}
                   </ReactMarkdown>
                 </div>
               )}
@@ -488,7 +534,7 @@ export default function TryPage() {
         {isTrialExpired && (
           <div className="mb-3 px-4 py-2.5 bg-amber-50 border border-[#F1CCA6] rounded-2xl flex items-center justify-between text-xs text-[#8C4905] animate-in fade-in shadow-sm">
             <span>
-              Bạn đã sử dụng hết <strong>10/10 lượt dùng thử</strong> hôm nay.
+              Bạn đã sử dụng hết <strong>{guestLimit}/{guestLimit} lượt dùng thử</strong> hôm nay.
             </span>
             <button
               onClick={handleOpenAuth}
@@ -507,7 +553,7 @@ export default function TryPage() {
           }}
           className={`flex items-center bg-white border rounded-full px-5 py-3 shadow-sm transition-all gap-3 ${
             isTrialExpired
-              ? "bg-gray-100/90 border-gray-300 opacity-70 cursor-not-allowed"
+              ? "bg-[#F7ECE1] border-[#F1CCA6] opacity-70 cursor-not-allowed"
               : "border-[#C1762A]/20 focus-within:border-[#C1762A] focus-within:shadow-md"
           }`}
         >
@@ -522,8 +568,8 @@ export default function TryPage() {
             onKeyDown={handleKeyDown}
             placeholder={
               isTrialExpired
-                ? "Đã hết 10 lượt dùng thử — Vui lòng đăng nhập để tiếp tục"
-                : `Hỏi SocraticKid bất cứ điều gì... (${trialCount}/10 lượt)`
+                ? `Đã hết ${guestLimit} lượt dùng thử — Vui lòng đăng nhập để tiếp tục`
+                : `Hỏi SocraticKid bất cứ điều gì... (${trialCount}/${guestLimit} lượt)`
             }
             className={`flex-1 bg-transparent text-stone-900 placeholder:text-[#8C4905]/40 outline-none font-medium text-sm ${
               isTrialExpired ? "cursor-not-allowed select-none" : ""
@@ -542,7 +588,7 @@ export default function TryPage() {
             disabled={(!inputValue.trim() && !isTrialExpired) || isTyping}
             className={`p-2 rounded-full transition-all ${
               isTrialExpired
-                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                ? "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed"
                 : inputValue.trim() && !isTyping
                 ? "bg-[#C1762A] text-white hover:bg-[#8C4905] hover:scale-105 cursor-pointer"
                 : "text-[#C1762A]/30 cursor-not-allowed"
@@ -556,6 +602,7 @@ export default function TryPage() {
       {/* ── Modal: Hết lượt dùng thử (US 4.3 - Task 113) ── */}
       {showTrialExpired && (
         <TrialExpiredModal
+          maxLimit={guestLimit}
           onLogin={handleOpenAuth}
           onClose={() => setShowTrialExpired(false)}
         />

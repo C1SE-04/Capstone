@@ -1,54 +1,234 @@
 from typing import Optional
 import json
 import os
+import re
+import time
+import logging
 
-def _load_curriculum() -> dict:
-    """Tai grade_curriculum.json mot lan khi khoi dong module."""
+logger = logging.getLogger(__name__)
+
+# =========================================================================
+# US 8.4 - Task T8.26: In-memory Cache & Dynamic DB Loader cho Curriculum
+# =========================================================================
+_CURRICULUM_CACHE: dict[str, list[str]] = {}
+_LAST_FETCH_TIME: float = 0.0
+_CACHE_TTL_SECONDS: int = 300  # Thời gian sống của cache: 5 phút (300 giây)
+
+
+def _load_curriculum_from_file() -> dict[str, dict[str, list[str]]]:
+    """
+    US 9.3 (Task T9.12):
+    Nạp danh mục chuyên đề từ grade_curriculum.json theo cấu trúc nhóm học kỳ:
+    {
+        "4": {"1": [...], "2": [...]},
+        ...
+    }
+    """
     json_path = os.path.join(os.path.dirname(__file__), "grade_curriculum.json")
     try:
         with open(json_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
+            data = json.load(f)
+            if isinstance(data, dict):
+                normalized = {}
+                for k, v in data.items():
+                    if isinstance(v, dict):
+                        normalized[str(k)] = {
+                            "1": [str(t).strip() for t in v.get("1", [])],
+                            "2": [str(t).strip() for t in v.get("2", [])],
+                        }
+                    elif isinstance(v, list):
+                        # Hỗ trợ backward compatibility nếu dữ liệu cũ còn dạng list
+                        half = max(1, len(v) // 2)
+                        normalized[str(k)] = {
+                            "1": [str(t).strip() for t in v[:half]],
+                            "2": [str(t).strip() for t in v[half:]],
+                        }
+                return normalized
+            return {}
+    except Exception as e:
+        logger.warning(f"[_load_curriculum_from_file] Không đọc được file {json_path}: {e}")
         return {}
 
-# Cache curriculum khi module duoc load (khong doc file nhieu lan)
+
+def _load_curriculum(force_refresh: bool = False) -> dict[str, dict[str, list[str]]]:
+    """
+    Tải danh mục chuyên đề tinh gọn phục vụ Prompt AI (Cache RAM 5 phút).
+    Đồng bộ trạng thái Giảm tải (Admin Toggle) từ Neon DB.
+    """
+    global _CURRICULUM_CACHE, _LAST_FETCH_TIME
+
+    current_time = time.time()
+    if not force_refresh and _CURRICULUM_CACHE and (current_time - _LAST_FETCH_TIME < _CACHE_TTL_SECONDS):
+        return _CURRICULUM_CACHE
+
+    curriculum = _load_curriculum_from_file()
+
+    if curriculum:
+        try:
+            from database import SessionLocal
+            import models
+            import re
+            import unicodedata
+
+            db = SessionLocal()
+            try:
+                inactive_topics = (
+                    db.query(models.CurriculumTopic.grade, models.CurriculumTopic.topic_name)
+                    .filter(models.CurriculumTopic.is_active == False)
+                    .all()
+                )
+                if inactive_topics:
+                    disabled_set = set()
+                    for grade, topic_name in inactive_topics:
+                        clean_name = re.sub(
+                            r"^(?:Giáo án\s+Toán\s+\d+\s+)?(?:Bài\s*\d+:\s*)?",
+                            "",
+                            topic_name,
+                            flags=re.IGNORECASE
+                        ).strip()
+                        disabled_set.add((str(grade), unicodedata.normalize('NFC', clean_name.lower())))
+
+                    # Lọc bài tắt trên cả học kỳ 1 và 2
+                    for g_str in curriculum:
+                        for sem_key in ("1", "2"):
+                            curriculum[g_str][sem_key] = [
+                                t for t in curriculum[g_str][sem_key]
+                                if (g_str, unicodedata.normalize('NFC', t.lower())) not in disabled_set
+                            ]
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"[_load_curriculum] Không truy vấn được bài tắt từ DB: {e}. Giữ nguyên file JSON.")
+
+    if curriculum:
+        _CURRICULUM_CACHE = curriculum
+        _LAST_FETCH_TIME = current_time
+
+    return _CURRICULUM_CACHE or curriculum
+
+
+# Khởi tạo cache ban đầu khi import module và hỗ trợ tương thích ngược
 _CURRICULUM = _load_curriculum()
+
+
+def get_curriculum_by_grade_and_semester(grade: int, semester: Optional[int] = None) -> list[str]:
+    """
+    US 9.3 (Phục vụ trực tiếp T9.11 & T9.13):
+    Lấy danh sách các chuyên đề của một khối lớp theo học kỳ chỉ định (1 hoặc 2).
+    Nếu semester=None -> Trả về toàn bộ chuyên đề của lớp đó (HK1 + HK2).
+    """
+    curriculum = _load_curriculum()
+    grade_data = curriculum.get(str(grade), {})
+    if semester in (1, 2):
+        return grade_data.get(str(semester), [])
+    return grade_data.get("1", []) + grade_data.get("2", [])
 
 
 def _get_grade_context(grade_level: Optional[int]) -> str:
     """
+    US 9.3 (Task T9.11) - Phiên bản nâng cấp:
     Xây dựng đoạn text ngữ cảnh kiến thức tích lũy theo lớp.
-
-    Nguyên tắc tích lũy: Lớp 7 biết hết kiến thức lớp 4 + 5 + 6 + 7.
-    Nếu grade_level=None → trả về chuỗi rỗng (không ảnh hưởng prompt).
+    Nhúng timeline học kỳ thực tế (tháng máy chủ hoặc mock) để Gemini
+    tự đối chiếu bài học sinh hỏi với danh sách HK1/HK2 và chọn đúng kịch bản sư phạm.
     """
-    if not grade_level or not _CURRICULUM:
+    if not grade_level:
+        return ""
+
+    curriculum = _load_curriculum()
+    if not curriculum:
         return ""
 
     grade = int(grade_level)
-    all_topics = []
-    for lvl in range(4, grade + 1):
-        for topic in _CURRICULUM.get(str(lvl), []):
-            all_topics.append(f"  - [Lớp {lvl}] {topic}")
 
-    if not all_topics:
-        return ""
+    # === Lấy timeline học kỳ hiện tại ===
+    curr_month = get_effective_curriculum_month()
+    server_sem = get_semester_from_month(curr_month)
+    is_summer = server_sem is None
 
-    topics_text = "\n".join(all_topics)
+    # === Xây dựng danh sách bài của lớp hiện tại chia theo học kỳ (ĐÁNH SỐ THỨ TỰ TUẦN TỰ) ===
+    g_data = curriculum.get(str(grade), {})
+    topics_hk1 = g_data.get("1", [])
+    topics_hk2 = g_data.get("2", [])
+
+    hk1_text = "\n".join(f"  [{i+1}] {t}" for i, t in enumerate(topics_hk1)) if topics_hk1 else "  (không có dữ liệu)"
+    hk2_text = "\n".join(f"  [{i+1}] {t}" for i, t in enumerate(topics_hk2)) if topics_hk2 else "  (không có dữ liệu)"
+
+    # === Tóm tắt kiến thức các lớp trước (lớp 4 → grade-1) — rút gọn để giảm token ===
+    prev_grades_range = list(range(4, grade))
+    if len(prev_grades_range) == 1:
+        prev_text = f"  Học sinh đã hoàn thành chương trình Lớp {prev_grades_range[0]}."
+    elif len(prev_grades_range) > 1:
+        prev_text = f"  Học sinh đã hoàn thành chương trình Lớp {prev_grades_range[0]}–{prev_grades_range[-1]}."
+    else:
+        prev_text = "  (không có dữ liệu)"
+
+    # === Xác định nhãn kỳ hiện tại và chỉ đạo sư phạm (GIAO CHO GEMINI TỰ ĐỌC HIỂU NGỮ NGHĨA) ===
+    if is_summer:
+        timeline_info = f"Tháng {curr_month} — Kỳ nghỉ hè (Tháng 6–8)"
+        hk1_label = "HỌC KỲ 1"
+        hk2_label = "HỌC KỲ 2"
+        uncovered_guide = (
+            f"Đây là kỳ nghỉ hè. Khi học sinh bộc lộ ý chưa học (bằng bất kỳ từ ngữ nào): "
+            f"Hỏi thăm tự nhiên: 'Kỳ nghỉ hè này em đang học trước kiến thức mới, hay ôn lại bài năm vừa rồi? <!-- SUMMER_PROBE_PENDING -->' "
+            f"Nếu học trước → Kịch bản B (hướng dẫn từ căn bản, khen ngợi tinh thần tự giác). "
+            f"Nếu ôn bài cũ → Kịch bản A (từ khóa gợi nhớ, đồng cảm). "
+            f"Nếu không rõ → Hướng dẫn từ gốc rễ, tuyệt đối không phán xét."
+        )
+    elif server_sem == 1:
+        timeline_info = f"Tháng {curr_month} — Đang Học kỳ 1 (Tháng 9–1)"
+        hk1_label = "HỌC KỲ 1 (học sinh ĐANG học - danh sách theo thứ tự tuần tự)"
+        hk2_label = "HỌC KỲ 2 (học sinh CHƯA học — chưa đến kỳ)"
+        uncovered_guide = (
+            f"NGUYÊN TẮC ĐỌC HIỂU TỰ NHIÊN (LLM-CENTRIC): Hãy đọc hiểu ngữ cảnh tự nhiên của học sinh mà không bị gò bó vào từ ngữ cụ thể. "
+            f"Bất cứ khi nào học sinh bộc lộ cảm giác chưa học, kiến thức lạ lẫm, bỡ ngỡ, mới toanh, lần đầu gặp, cô lướt qua bài, v.v. (dù dùng teencode, ví von hay câu từ nào):\n"
+            f"▶ 1. Nếu bài thuộc HK2 (học sinh chưa học thật sự vì đang HK1) → Áp dụng KỊCH BẢN B ngay: "
+            f"'Bài này thuộc Học kỳ 2 nên em chưa quen là bình thường! Thầy sẽ hướng dẫn em từ nền tảng dễ hiểu nhất nhé.' rồi hướng dẫn từng bước nhỏ từ gốc rễ.\n"
+            f"▶ 2. Nếu bài thuộc HK1 (vùng xám: trường có thể chưa dạy tới hoặc đã dạy qua nhưng học sinh quên) → "
+            f"BẮT BUỘC DỪNG LẠI HỎI THĂM DÒ TIẾN ĐỘ THỰC TẾ (gắn thẻ <!-- PROBE_PENDING --> ở cuối câu trả lời, tuyệt đối không giải hộ ngay):\n"
+            f"  'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+            f"▶ 3. Khi học sinh trả lời tiến độ trường học (ví dụ: 'học đến bài X'): "
+            f"TỰ SO SÁNH số thứ tự [i] của bài X với bài học sinh đang hỏi trong DANH SÁCH HK1 bên trên:\n"
+            f"  - Nếu số thứ tự bài X < bài được hỏi (trường chưa dạy tới bài này) → BẮT BUỘC ÁP DỤNG KỊCH BẢN B (hướng dẫn chi tiết, dễ hiểu từng bước từ gốc rễ).\n"
+            f"  - Nếu số thứ tự bài X > bài được hỏi (trường đã dạy qua bài này rồi) → BẮT BUỘC ÁP DỤNG KỊCH BẢN A (gợi nhớ kiến thức cũ):\n"
+            f"    'Hiện tại nếu em đã học đến [Tên bài X] rồi thì với chương trình học kỳ 1 hiện tại, em đã học bài [Tên bài được hỏi] rồi. Có lẽ em đã quên nên thầy sẽ nhắc lại cách làm bài này như sau: ...'\n"
+            f"  - Nếu học sinh báo cô/thầy bỏ qua/không dạy/nhảy cóc/lướt qua bài → KỊCH BẢN B kèm lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!'"
+        )
+    else:
+        timeline_info = f"Tháng {curr_month} — Đang Học kỳ 2 (Tháng 2–5)"
+        hk1_label = "HỌC KỲ 1 (học sinh ĐÃ học — kỳ trước)"
+        hk2_label = "HỌC KỲ 2 (học sinh ĐANG học - danh sách theo thứ tự tuần tự)"
+        uncovered_guide = (
+            f"NGUYÊN TẮC ĐỌC HIỂU TỰ NHIÊN (LLM-CENTRIC): Tự đọc hiểu ngữ cảnh học sinh bộc lộ chưa học/lạ lẫm/quên bài:\n"
+            f"▶ 1. Nếu bài thuộc HK1 (kiến thức kỳ trước đã học) → ÁP DỤNG KỊCH BẢN A: "
+            f"'Theo chương trình, đây là kiến thức HK1 em đã học rồi. Thầy tin em có thể nhớ lại...' và cung cấp từ khóa gợi nhớ.\n"
+            f"▶ 2. Nếu bài thuộc HK2 → BẮT BUỘC DỪNG LẠI HỎI THĂM DÒ (gắn thẻ <!-- PROBE_PENDING --> ở cuối câu trả lời):\n"
+            f"  'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+            f"  - Tự so sánh số thứ tự bài X và bài được hỏi trong HK2:\n"
+            f"    * Index bài X < bài được hỏi → KỊCH BẢN B (chưa học tới, hướng dẫn từ đầu).\n"
+            f"    * Index bài X > bài được hỏi → KỊCH BẢN A ('Hiện tại nếu em đã học đến [Bài X] rồi thì em đã học bài này rồi, có lẽ em quên...').\n"
+            f"    * Thầy cô bỏ qua bài → KỊCH BẢN B kèm lời an ủi, đồng cảm."
+        )
 
     return f"""
 ─── THÔNG TIN LỚP HỌC SINH (QUAN TRỌNG) ───
 Học sinh đang học: Lớp {grade}
-Các kiến thức đã được học (tích lũy từ lớp 4 đến lớp {grade}):
-{topics_text}
+{timeline_info}
+
+CHUONG TRINH LOP {grade} — {hk1_label}:
+{hk1_text}
+
+CHUONG TRINH LOP {grade} — {hk2_label}:
+{hk2_text}
+
+KIEN THUC CAC LOP TRUOC — hoc sinh da hoc:
+{prev_text}
 
 BẮT BUỘC xử lý các tình huống liên quan đến THÔNG TIN LỚP HỌC SINH:
 1. Khi học sinh hỏi "em đang lớp mấy", "em học lớp mấy": BẮT BUỘC trả lời rõ ràng "Em đang học lớp {grade}".
-2. KHI VÀ CHỈ KHI học sinh CHỦ ĐỘNG than phiền "em chưa học", "em không hiểu", "lạ quá": Phải CẨN THẬN đối chiếu khái niệm đang học với danh sách kiến thức ở trên để phản hồi:
-   - KỊCH BẢN A (CÓ trong danh sách): Học sinh đã học rồi. Nhẹ nhàng nhắc: "Theo chương trình, đây là kiến thức mà em đã học. Thầy tin em có thể nhớ lại...".
-   - KỊCH BẢN B (KHÔNG CÓ trong danh sách - kiến thức vượt cấp): BẮT BUỘC an ủi bằng cách nhắc đến lớp hiện tại: "Vì em đang học lớp {grade} nên chưa quen với kiến thức lớp cao hơn này là chuyện bình thường, đừng lo nhé. Thầy sẽ giải thích thật đơn giản...".
-3. NẾU học sinh CHỈ HỎI BÀI BÌNH THƯỜNG (cho dù bài đó là vượt cấp): TUYỆT ĐỐI KHÔNG được tự ý đề cập đến lớp học hay nói "đây là kiến thức lớp lớn". Hãy cứ hướng dẫn Socratic bình thường như mọi bài khác!
+2. {uncovered_guide}
+3. NẾU học sinh CHỈ HỎI BÀI BÌNH THƯỜNG (không than chưa học): TUYỆT ĐỐI KHÔNG tự ý đề cập lớp học hay nói "đây là kiến thức lớp lớn". Hãy cứ hướng dẫn Socratic bình thường!
 """
+
 
 _JSON_RULE = (
     "QUAN TRỌNG: Chỉ trả về JSON thuần túy. "
@@ -238,6 +418,9 @@ Vai trò của bạn: {role_description}
   - ⚠️ JSON ESCAPE QUAN TRỌNG: Khi viết LaTeX trong JSON string, dấu \\ phải được viết là \\\\ (double backslash).
     VÍ DỤ ĐÚNG trong JSON: "draft_response": "Em thử tính $\\\\frac{{1}}{{2}}$ nhé?"
     VÍ DỤ SAI trong JSON: "draft_response": "Em thử tính $\\frac{{1}}{{2}}$ nhé?" (sẽ gây lỗi parse)
+  - ⚠️ KHOẢNG CÁCH GIỮA CHỮ VÀ CÔNG THỨC: Luôn có khoảng cách (dấu cách) giữa từ ngữ tiếng Việt và công thức/con số kẹp giữa dấu $.
+    ✅ ĐÚNG: "xem tử số $12$ chia cho mẫu số $3$"
+    ❌ SAI: "xem tử số$12$chia cho mẫu số$3$" (dính liền chữ và số)
 
 • ⚠️ NGUYÊN TẮC QUY ĐỒNG PHÂN SỐ (TOÁN LỚP 4–9):
   - BẮT BUỘC hướng dẫn học sinh tìm MẪU SỐ CHUNG NHỎ NHẤT (BCNN).
@@ -279,5 +462,149 @@ Vai trò của bạn: {role_description}
   "knowledge_level_estimate": "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
 }}"""
 
+# =========================================================================
+# US 9.3 - Task T9.11: Module Đối Chiếu Dòng Thời Gian Học Kỳ (Curriculum Timeline)
+# Thiết kế Hybrid:
+#   Python  → Xác định tháng thực tế / mock → HK1 / HK2 / Hè (Deterministic, 0ms).
+#   Gemini  → Tự đối chiếu câu hỏi học sinh với danh sách HK trong prompt → Chọn kịch bản.
+# =========================================================================
+
+def get_effective_curriculum_month(override_month: Optional[int] = None) -> int:
+    """
+    Lấy tháng hiệu lực để đối chiếu dòng thời gian học kỳ:
+    1. Ưu tiên override_month truyền trực tiếp (phục vụ test / mock).
+    2. Kiểm tra MOCK_SETTINGS trong routers.admin_mock nếu có mock_curriculum_month.
+    3. Kiểm tra biến môi trường MOCK_CURRICULUM_MONTH.
+    4. Mặc định lấy tháng thực tế của hệ thống máy chủ (datetime.now().month).
+    """
+    if override_month is not None and 1 <= override_month <= 12:
+        return override_month
+
+    try:
+        from routers.admin_mock import MOCK_SETTINGS
+        mock_val = MOCK_SETTINGS.get("mock_curriculum_month")
+        if mock_val is not None:
+            try:
+                m_int = int(mock_val)
+                if 1 <= m_int <= 12:
+                    return m_int
+            except (ValueError, TypeError):
+                pass
+    except Exception:
+        pass
+
+    env_val = os.getenv("MOCK_CURRICULUM_MONTH")
+    if env_val:
+        try:
+            m_int = int(env_val)
+            if 1 <= m_int <= 12:
+                return m_int
+        except (ValueError, TypeError):
+            pass
+
+    from datetime import datetime
+    return datetime.now().month
 
 
+def get_semester_from_month(month: int) -> Optional[int]:
+    """
+    Xác định học kỳ theo phân phối năm học chuẩn Bộ GD&ĐT:
+    - Tháng 9, 10, 11, 12, 1 -> Học kỳ 1 (semester = 1).
+    - Tháng 2, 3, 4, 5       -> Học kỳ 2 (semester = 2).
+    - Tháng 6, 7, 8          -> Nghỉ hè  (trả về None).
+    """
+    if month in (9, 10, 11, 12, 1):
+        return 1
+    elif month in (2, 3, 4, 5):
+        return 2
+    return None
+
+
+def build_timeline_context_for_prompt(
+    student_grade: Optional[int] = None,
+    override_month: Optional[int] = None,
+) -> dict:
+    """
+    US 9.3 (Task T9.11):
+    Xây dựng context dòng thời gian học kỳ để Orchestrator nhúng vào task_description.
+
+    Nguyên tắc thiết kế:
+    - Python chỉ làm 2 việc tất định: (1) xác định tháng → HK1/HK2/Hè,
+      (2) cung cấp danh sách bài HK1 / HK2 của lớp.
+    - Gemini tự đọc danh sách đó, tự đối chiếu bài học sinh hỏi, tự chọn kịch bản.
+
+    Trả về dict:
+    {
+        "current_month": int,
+        "server_semester": 1 | 2 | None,   # None = hè
+        "is_summer": bool,
+        "grade": int,
+        "topics_hk1": list[str],
+        "topics_hk2": list[str],
+        "timeline_label": str,
+        "scenario_guide": str,             # Hướng dẫn kịch bản để chèn vào task_description
+    }
+    """
+    grade = int(student_grade) if student_grade else 8
+    curr_month = get_effective_curriculum_month(override_month)
+    server_sem = get_semester_from_month(curr_month)
+    is_summer = server_sem is None
+
+    curriculum = _load_curriculum()
+    g_data = curriculum.get(str(grade), {})
+    topics_hk1 = g_data.get("1", [])
+    topics_hk2 = g_data.get("2", [])
+
+    hk1_list_str = "; ".join(topics_hk1[:6]) + ("..." if len(topics_hk1) > 6 else "")
+    hk2_list_str = "; ".join(topics_hk2[:6]) + ("..." if len(topics_hk2) > 6 else "")
+
+    if is_summer:
+        timeline_label = f"Tháng {curr_month} — Kỳ nghỉ hè (Tháng 6–8)"
+        scenario_guide = (
+            f"BỐI CẢNH MÙA HÈ: Hiện tại đang là kỳ nghỉ hè (Tháng {curr_month}). "
+            f"Học sinh đang hỏi bài toán thuộc chương trình Lớp {grade}. "
+            f"KHI HỌC SINH THAN CHƯA HỌC: BẠN BẮT BUỘC PHẢI DỪNG LẠI ĐÚNG 1 NHỊP VÀ ĐẶT CÂU HỎI THĂM DÒ MÙA HÈ (SUMMER PROBE):\n"
+            f"'Thầy thấy trên tài khoản em đang chọn Lớp {grade}. Kỳ nghỉ hè này em đang chuẩn bị học trước kiến thức lớp {grade}, hay em đang ôn lại bài năm vừa rồi vậy em? Nói thầy nghe để thầy hướng dẫn cho vừa sức em nhất nhé! <!-- SUMMER_PROBE_PENDING -->'\n"
+            f"BẮT BUỘC: Bạn PHẢI gắn thẻ ẩn <!-- SUMMER_PROBE_PENDING --> (hoặc [PROBE_PENDING]) ở CUỐI CÙNG của câu trả lời. "
+            f"TUYỆT ĐỐI KHÔNG giải bài hoặc đưa ra phép tính toán học ngay trong lượt này. Hãy lắng nghe học sinh phản hồi trước."
+        )
+    elif server_sem == 1:
+        timeline_label = f"Tháng {curr_month} — Đang Học kỳ 1 (Tháng 9–1)"
+        scenario_guide = (
+            f"BỐI CẢNH HỌC KỲ 1 (Tháng {curr_month}):\n"
+            f"- Danh mục HK1 Lớp {grade}: [{hk1_list_str}]\n"
+            f"- Danh mục HK2 Lớp {grade} (CHƯA HỌC): [{hk2_list_str}]\n"
+            f"KHI HỌC SINH THAN CHƯA HỌC: BẠN BẮT BUỘC TỰ ĐỐI CHIẾU VỚI DANH MỤC TRÊN:\n"
+            f"1. NẾU BÀI KHỚP HK2 (Chưa học thật sự) -> ÁP DỤNG KỊCH BẢN B NGAY:\n"
+            f"   'Bài này thuộc học kỳ 2 nên em chưa quen là bình thường! Thầy sẽ hướng dẫn em từ nền tảng dễ hiểu nhất nhé.' rồi hướng dẫn từng bước nhỏ từ gốc rễ.\n"
+            f"2. NẾU BÀI KHỚP HK1 (Vùng xám - trường có thể chưa dạy tới hoặc đã học mà quên) -> BẮT BUỘC DỪNG LẠI 1 NHỊP VÀ HỎI THĂM DÒ TIẾN ĐỘ TRƯỜNG HỌC (SOCRATIC PROBE):\n"
+            f"   'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+            f"   (Điền tên dạng bài toán cụ thể học sinh đang hỏi vào)\n"
+            f"   BẮT BUỘC: Gắn thẻ ẩn <!-- PROBE_PENDING --> (hoặc [PROBE_PENDING]) ở CUỐI CÙNG của câu trả lời.\n"
+            f"   TUYỆT ĐỐI KHÔNG giải bài hay đưa ra gợi ý bước tính tiếp theo ngay trong lượt này!"
+        )
+    else:
+        timeline_label = f"Tháng {curr_month} — Đang Học kỳ 2 (Tháng 2–5)"
+        scenario_guide = (
+            f"BỐI CẢNH HỌC KỲ 2 (Tháng {curr_month}):\n"
+            f"- Danh mục HK1 Lớp {grade} (ĐÃ HỌC KỲ TRƯỚC): [{hk1_list_str}]\n"
+            f"- Danh mục HK2 Lớp {grade} (ĐANG HỌC): [{hk2_list_str}]\n"
+            f"KHI HỌC SINH THAN CHƯA HỌC: BẠN BẮT BUỘC TỰ ĐỐI CHIẾU:\n"
+            f"1. NẾU BÀI KHỚP HK1 (Kiến thức kỳ trước đã học) -> ÁP DỤNG KỊCH BẢN A:\n"
+            f"   'Theo chương trình, đây là kiến thức HK1 em đã học rồi. Thầy tin em có thể nhớ lại...' và cung cấp từ khóa gợi nhớ nhẹ nhàng.\n"
+            f"2. NẾU BÀI KHỚP HK2 -> BẮT BUỘC DỪNG LẠI 1 NHỊP VÀ HỎI THĂM DÒ TIẾN ĐỘ TRƯỜNG HỌC:\n"
+            f"   'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+            f"   BẮT BUỘC: Gắn thẻ ẩn <!-- PROBE_PENDING --> (hoặc [PROBE_PENDING]) ở CUỐI CÙNG của câu trả lời.\n"
+            f"   TUYỆT ĐỐI KHÔNG giải bài ngay trong lượt này!"
+        )
+
+    return {
+        "current_month": curr_month,
+        "server_semester": server_sem,
+        "is_summer": is_summer,
+        "grade": grade,
+        "topics_hk1": topics_hk1,
+        "topics_hk2": topics_hk2,
+        "timeline_label": timeline_label,
+        "scenario_guide": scenario_guide,
+    }

@@ -1,6 +1,6 @@
 # models.py
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index, Integer
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Index, Integer, Text, BigInteger, Numeric, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -9,11 +9,27 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    role = Column(String, nullable=False)
+
+    # US 9.1 (T9.0): username – định danh đăng nhập chính. Unique, index.
+    # Được sinh tự động từ email cho user cũ; bắt buộc với user mới đăng ký bằng mật khẩu.
+    # Google OAuth user nhận username auto-gen (prefix email + 4 số ngẫu nhiên).
+    username = Column(String, unique=True, index=True, nullable=True)  # nullable để migration an toàn, sau đó NOT NULL
+
+    # US 9.1 (T9.0): email trở thành nullable — học sinh nhỏ tuổi không bắt buộc có email
+    email = Column(String, unique=True, index=True, nullable=True)
+
+    hashed_password = Column(String, nullable=True)  # US 8.3 (T8.18): Nullable cho tài khoản Google OAuth
+    role = Column(String, nullable=False, default="STUDENT")
     grade = Column(Integer, nullable=True)  # Chỉ dùng cho STUDENT (lớp 4-9)
     session_version = Column(Integer, default=1, nullable=False, server_default="1")  # US 6.2 (T6.10): version để đồng bộ session giữa các tab
+
+    # US 8.3 (T8.18): Google OAuth fields
+    google_id = Column(String, unique=True, index=True, nullable=True)  # ID người dùng từ Google (sub)
+    oauth_provider = Column(String, nullable=True)  # 'google' hoặc None nếu đăng ký bằng mật khẩu
+
+    # US 9.1 (T9.1): email_verified – True sau khi Phụ huynh xác thực OTP thành công
+    email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Quan hệ Phụ huynh - Học sinh
@@ -69,6 +85,12 @@ class OrchestratorLog(Base):
     target_agent = Column(String, nullable=False)
     reason = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # US 8.1 - Task T8.7: Cảnh báo kép tự động cho phụ huynh & tra cứu log theo tài khoản
+    notify_parent = Column(Boolean, default=False, nullable=False, server_default="false", index=True)
+    parent_notified_at = Column(DateTime(timezone=True), nullable=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    session_id = Column(String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True)
 
 class Session(Base):
     __tablename__ = "sessions"
@@ -207,11 +229,33 @@ class IndependenceScore(Base):
     hints_used = Column(Integer, default=0, nullable=False)
     not_understood_count = Column(Integer, default=0, nullable=False)
     evaluation = Column(String, nullable=True)
+    # Nội dung đề bài toán trích xuất từ phiên học
+    problem_text = Column(String, nullable=True)
+    # Mã băm SHA-256 của đề bài đã chuẩn hóa (dùng cho Fast-path deduplication)
+    problem_hash = Column(String(64), nullable=True, index=True)
+    # Phân loại: NEW_TOPIC | ISOMORPHIC_PRACTICE | EXACT_DUPLICATE
+    category = Column(String, default="NEW_TOPIC", nullable=True)
+    # Cờ đánh dấu bài trùng lặp (nếu True: chặn không cộng dồn vào total_completed)
+    is_duplicate = Column(Boolean, default=False, nullable=False)
+    # Lời nhắc nhở nhẹ nhàng nếu là bài trùng lặp EXACT_DUPLICATE
+    gentle_reminder = Column(String, nullable=True)
+    # Tên bài toán do học sinh tự đặt khi lưu Sổ tay (US 8.1 - T8.4)
+    custom_title = Column(String, nullable=True)
+    # Tên bài toán chuẩn sư phạm do AI sinh ra ([Lớp X] [Chủ đề] – [Dạng toán])
+    friendly_parent_title = Column(String, nullable=True)
+    # US 9.2 (T9.6): Cơ chế phạt bài giải trùng (Anti-Spam Mastery)
+    # repeat_count: Số lần đã giải bài toán này (1 = lần đầu, 2 = trùng lần 1, 3 = trùng lần 2, ...)
+    repeat_count = Column(Integer, default=1, nullable=False, server_default="1")
+    # max_score: Điểm trần tối đa cho phép đạt được = max(30, 100 - (repeat_count - 1) * 10)
+    max_score = Column(Integer, default=100, nullable=False, server_default="100")
+    # repeat_warning: Thông điệp cảnh báo bài giải trùng hiển thị cho học sinh
+    repeat_warning = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_independence_student_created", "student_id", "created_at"),
         Index("ix_independence_session_created", "session_id", "created_at"),
+        Index("ix_independence_student_hash", "student_id", "problem_hash"),
     )
 
     session = relationship("Session", back_populates="independence_records")
@@ -252,6 +296,8 @@ class ProblemBookmark(Base):
     chat_summary = Column(String, nullable=True)
     # Điểm tự lực (Independence Score) tại thời điểm lưu
     independence_score = Column(Integer, nullable=True)
+    # Tên bài toán do học sinh tự đặt hoặc AI gợi ý (US 8.2)
+    title = Column(String, nullable=True)
     # Ghi chú tuỳ ý của học sinh
     note = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -264,6 +310,82 @@ class ProblemBookmark(Base):
 
     student = relationship("User", backref="bookmarks")
     session = relationship("Session", backref="bookmarks")
+    playlist_items = relationship(
+        "BookmarkPlaylistItem",
+        back_populates="bookmark",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class BookmarkPlaylist(Base):
+    """
+    US 8.2: Danh sách phát / Thư mục Sổ Tay (Bookmark Playlist) phong cách YouTube.
+    Học sinh có thể tạo nhiều playlist (Yêu thích, Ôn thi HK1, ...) để gom nhóm bài toán.
+    """
+    __tablename__ = "bookmark_playlists"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    student_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    color = Column(String, nullable=True)        # Mã màu HEX phân loại (VD: #F59E0B)
+    is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_bookmark_playlists_student_created", "student_id", "created_at"),
+        Index("ix_bookmark_playlists_student_name", "student_id", "name"),
+    )
+
+    student = relationship("User", backref="bookmark_playlists")
+    items = relationship(
+        "BookmarkPlaylistItem",
+        back_populates="playlist",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="BookmarkPlaylistItem.added_at.desc()",
+    )
+
+
+class BookmarkPlaylistItem(Base):
+    """
+    US 8.2: Bảng liên kết N-N giữa BookmarkPlaylist và ProblemBookmark.
+    Một bài toán có thể thuộc nhiều playlist (checkbox YouTube-style).
+    """
+    __tablename__ = "bookmark_playlist_items"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    playlist_id = Column(
+        String,
+        ForeignKey("bookmark_playlists.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    bookmark_id = Column(
+        String,
+        ForeignKey("problem_bookmarks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position = Column(Integer, default=0, nullable=False)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_playlist_items_unique", "playlist_id", "bookmark_id", unique=True),
+        Index("ix_playlist_items_playlist", "playlist_id", "added_at"),
+        Index("ix_playlist_items_bookmark", "bookmark_id"),
+    )
+
+    playlist = relationship("BookmarkPlaylist", back_populates="items")
+    bookmark = relationship("ProblemBookmark", back_populates="playlist_items")
+
 
 
 class ParentAiInsight(Base):
@@ -359,4 +481,438 @@ class StudentBadge(Base):
         Index("ix_student_badges_unique", "student_id", "badge_key", unique=True),
         Index("ix_student_badges_student", "student_id", "unlocked_at"),
     )
-
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 8.4: Chương Trình Học Linh Động (Curriculum Topics)
+# ────────────────────────────────────────────────────────────────────────────
+
+class CurriculumTopic(Base):
+    """
+    US 8.4 - Task T8.23:
+    Bảng lưu danh mục chuyên đề & bài học chuẩn SGK (môn Toán lớp 4 - 9).
+    - Hỗ trợ crawler VietJack tự động bóc tách và upsert vào DB.
+    - Hỗ trợ Admin Portal (admin/content) xem danh mục, lọc theo lớp, toggle Bật/Tắt (is_active).
+    - Hỗ trợ AI Engine (agent_prompts.py) tải động chương trình học theo khối lớp.
+    """
+    __tablename__ = "curriculum_topics"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    grade = Column(Integer, nullable=False, index=True)                          # Khối lớp (4 - 9)
+    book_series = Column(String, nullable=False, default="Kết nối tri thức")     # Bộ SGK: "Kết nối tri thức", "Cánh diều", "Chân trời sáng tạo"
+    semester = Column(Integer, nullable=True)                                    # Học kỳ (1 hoặc 2)
+    chapter_name = Column(String, nullable=False)                                # Tên Chủ đề / Chương lớn (VD: "Chương 1: Phân số")
+    topic_name = Column(String, nullable=False)                                  # Tên bài học / chuyên đề (VD: "Bài 1: Khái niệm phân số")
+    order_index = Column(Integer, default=0, nullable=False)                     # Thứ tự bài học trong chương/học kỳ
+    school_year = Column(String, nullable=True)                                  # Niên khóa (VD: "2024-2025")
+    is_active = Column(Boolean, default=True, nullable=False)                    # Trạng thái Bật/Tắt giảm tải của Admin
+    source_url = Column(String, nullable=True)                                   # URL nguồn VietJack cào dữ liệu
+    description = Column(String, nullable=True)                                  # Mô tả tóm tắt nội dung bài học
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        # Composite Unique Index chống trùng lặp khi crawler chạy đồng bộ nhiều lần
+        Index("ix_curriculum_unique_topic", "grade", "book_series", "chapter_name", "topic_name", unique=True),
+        # Index tối ưu cho AI prompt query chuyên đề đang bật theo khối lớp
+        Index("ix_curriculum_grade_active", "grade", "is_active"),
+        # Index tối ưu hiển thị danh mục theo chương và thứ tự bài học
+        Index("ix_curriculum_grade_chapter_order", "grade", "chapter_name", "order_index"),
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 8.1: Lịch Sử Gửi Email Cảnh Báo Phụ Huynh (Parent Alert Logs)
+# ────────────────────────────────────────────────────────────────────────────
+
+class ParentAlertLog(Base):
+    """
+    US 8.1 - Task T8.7:
+    Ghi vết lịch sử email cảnh báo học tập (Academic Alert) và ngôn từ (Safety Alert)
+    gửi cho phụ huynh, tránh gửi trùng lặp nhiều lần trong chu kỳ 5 phút.
+    """
+    __tablename__ = "parent_alert_logs"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    student_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    alert_type = Column(String, nullable=False)  # "ACADEMIC" hoặc "SAFETY"
+    recipient_email = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    email_body = Column(String, nullable=True)
+    trigger_reason = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    __table_args__ = (
+        Index("ix_parent_alert_logs_student_created", "student_id", "created_at"),
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 9.1 (T9.1): Bảng OTP xác thực Email cho Phụ huynh
+# ────────────────────────────────────────────────────────────────────────────
+
+class EmailOtp(Base):
+    """
+    US 9.1 - Task T9.1:
+    Lưu mã OTP 6 chữ số gửi qua email để xác thực tài khoản Phụ huynh.
+
+    Luồng sử dụng:
+      1. POST /auth/request-otp  → Sinh OTP, lưu vào bảng này, gửi email.
+      2. POST /auth/verify-otp   → Kiểm tra OTP, tăng attempts nếu sai,
+                                   đánh dấu is_used = True nếu đúng.
+
+    Bảo mật:
+      - Rate-limit: last_sent_at → chặn gửi lại trong vòng 60s.
+      - Max attempts: attempts >= 5 → mã bị vô hiệu hóa tự động.
+      - TTL: expires_at → mã tự động hết hạn sau 5 phút.
+      - Tạo mã mới → các mã cũ cùng email+purpose bị đánh dấu is_used = True.
+    """
+    __tablename__ = "email_otps"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+
+    # Email gửi OTP đến (dùng cho cả tạo tài khoản lẫn đổi email phụ huynh)
+    email = Column(String, nullable=False, index=True)
+
+    # Mã OTP 6 chữ số (lưu dạng plain string — OTP ngắn hạn, không cần hash)
+    otp_code = Column(String(6), nullable=False)
+
+    # Mục đích của OTP: "PARENT_REGISTER" | "PARENT_CHANGE_EMAIL" | "PARENT_RESET_PASSWORD"
+    purpose = Column(String, nullable=False, default="PARENT_REGISTER")
+
+    # Số lần nhập sai mã (>= 5 → mã bị vô hiệu hóa)
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
+
+    # Thời điểm hết hạn (5 phút kể từ khi tạo)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+    # Đánh dấu mã đã dùng hoặc bị hủy
+    is_used = Column(Boolean, nullable=False, default=False, server_default="false")
+
+    # Thời điểm gửi lần cuối (phục vụ rate-limit 60s)
+    last_sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Index tra cứu OTP theo email + purpose để invalidate mã cũ nhanh
+        Index("ix_email_otps_email_purpose", "email", "purpose"),
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 9.2 (T9.7): Bảng Đồng Bộ Thành Tựu & Huy Hiệu Đã Mở Khóa (User Badges)
+# ────────────────────────────────────────────────────────────────────────────
+
+class UserUnlockedBadge(Base):
+    """
+    US 9.2 - Task T9.7:
+    Lưu trữ danh sách huy hiệu / thành tựu đã mở khóa của từng người dùng trong Database.
+    Thay thế cơ chế lưu localStorage cục bộ, đồng bộ trạng thái xuyên suốt các thiết bị
+    và ngăn chặn việc bắn lại popup chúc mừng khi đăng nhập ở máy mới / tab ẩn danh.
+    """
+    __tablename__ = "user_unlocked_badges"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    user_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    badge_id = Column(String, nullable=False, index=True)
+    unlocked_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        # Đảm bảo mỗi user chỉ mở khóa 1 badge_id một lần duy nhất (idempotent)
+        Index("ix_user_unlocked_badges_user_badge", "user_id", "badge_id", unique=True),
+    )
+
+    user = relationship("User", backref="unlocked_badges")
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 9.5 (Task T9.16): Trung Tâm Quản Trị Báo Lỗi & Sự Cố Hệ Thống (System Errors)
+# ────────────────────────────────────────────────────────────────────────────
+
+class SystemError(Base):
+    """
+    US 9.5 - Task T9.16:
+    Lưu trữ sự cố hệ thống và phản ánh báo lỗi từ người dùng:
+      - id: Khóa chính UUID hex
+      - error_code: Mã định danh lỗi (VD: ERR_500_..., ERR_TIMEOUT_..., UR_...)
+      - error_type: Phân loại sự cố (CRASH_500 | AI_TIMEOUT | USER_REPORT | SMTP_ERROR | DB_ERROR)
+      - severity: Mức độ nghiêm trọng (CRITICAL | WARNING | INFO)
+      - message: Tóm tắt thông điệp lỗi hoặc nội dung phản ánh
+      - stack_trace: Toàn bộ stack trace (File, Line, Exception type)
+      - endpoint: API endpoint gặp sự cố (VD: POST /chat/message)
+      - request_payload: Dữ liệu gửi lên (đã được lọc mask mật khẩu nhạy cảm)
+      - user_id: ID người dùng gặp lỗi (hoặc người gửi báo cáo), nullable nếu là anonymous
+      - user_email: Email snapshot của người dùng để search nhanh
+      - status: Trạng thái xử lý (OPEN | RESOLVED)
+      - resolved_at: Thời điểm đánh dấu đã xử lý
+      - resolved_by: ID Admin đã xử lý
+      - resolved_note: Ghi chú xử lý kỹ thuật của Admin
+      - created_at: Thời điểm phát sinh lỗi
+    """
+    __tablename__ = "system_errors"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    error_code = Column(String(64), nullable=False, index=True)
+    error_type = Column(String(32), nullable=False, index=True)  # CRASH_500 | AI_TIMEOUT | USER_REPORT | SMTP_ERROR
+    severity = Column(String(16), nullable=False, index=True)    # CRITICAL | WARNING | INFO
+    message = Column(Text, nullable=False)
+    stack_trace = Column(Text, nullable=True)
+    endpoint = Column(String(255), nullable=True, index=True)
+    request_payload = Column(Text, nullable=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_email = Column(String(255), nullable=True, index=True)
+    status = Column(String(16), nullable=False, default="OPEN", server_default="OPEN", index=True)  # OPEN | RESOLVED
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    resolved_note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    # US 11.3 (Task T374): Mở rộng lưu trữ chẩn đoán AI Root Cause Analysis
+    ai_diagnosis = Column(JSON, nullable=True)
+    ai_diagnosed_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    __table_args__ = (
+        Index("ix_system_errors_status_created", "status", "created_at"),
+        Index("ix_system_errors_type_created", "error_type", "created_at"),
+        Index("ix_system_errors_severity_created", "severity", "created_at"),
+    )
+
+    user = relationship("User", foreign_keys=[user_id], backref="system_errors")
+    resolver = relationship("User", foreign_keys=[resolved_by])
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# US 10.2 (Task T10.2.0): Bảng Hệ Thống KPI Telemetry & Giám Sát Hiệu Năng
+# ────────────────────────────────────────────────────────────────────────────
+
+class SystemMetricsHourly(Base):
+    """
+    US 10.2 - Task T10.2.0:
+    Lưu trữ tổng hợp hiệu năng toàn hệ thống theo từng giờ (Hourly Rollup).
+    Phục vụ các biểu đồ Throughput (RPM/RPH), Token tiêu thụ, Độ trễ phân vị (P50/P95/P99),
+    Time To First Token (TTFT), và phân bổ mã trạng thái HTTP (2xx, 4xx, 5xx, 429).
+    """
+    __tablename__ = "system_metrics_hourly"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    bucket_timestamp = Column(DateTime(timezone=True), nullable=False, unique=True, index=True)
+
+    # Throughput theo nhóm API
+    total_requests = Column(Integer, default=0, nullable=False)
+    chat_requests = Column(Integer, default=0, nullable=False)
+    eval_requests = Column(Integer, default=0, nullable=False)
+    auth_requests = Column(Integer, default=0, nullable=False)
+    other_requests = Column(Integer, default=0, nullable=False)
+
+    # Tiêu thụ Token & Chi phí
+    prompt_tokens = Column(BigInteger, default=0, nullable=False)
+    completion_tokens = Column(BigInteger, default=0, nullable=False)
+    total_tokens = Column(BigInteger, default=0, nullable=False)
+    estimated_cost_usd = Column(Numeric(12, 6), default=0.0, nullable=False)
+
+    # Latency & SLA (ms)
+    avg_latency_ms = Column(Integer, default=0, nullable=False)
+    p50_latency_ms = Column(Integer, default=0, nullable=False)
+    p95_latency_ms = Column(Integer, default=0, nullable=False)
+    p99_latency_ms = Column(Integer, default=0, nullable=False)
+    avg_ttft_ms = Column(Integer, default=0, nullable=False)
+
+    # HTTP Status Distribution
+    status_2xx_count = Column(Integer, default=0, nullable=False)
+    status_4xx_count = Column(Integer, default=0, nullable=False)
+    status_5xx_count = Column(Integer, default=0, nullable=False)
+    gemini_429_count = Column(Integer, default=0, nullable=False)
+    failover_count = Column(Integer, default=0, nullable=False)
+
+    # Hạ tầng & Bộ đệm
+    redis_cache_hits = Column(Integer, default=0, nullable=False)
+    redis_cache_misses = Column(Integer, default=0, nullable=False)
+    peak_concurrent_sse = Column(Integer, default=0, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SystemAgentMetricsHourly(Base):
+    """
+    US 10.2 - Task T10.2.0:
+    Phân rã lưu lượng và mức độ sử dụng token theo 6 phân hệ (Agent) và model AI cụ thể.
+    Agent: Chat, Classifier, Flashcard, ParentReport, Email, Fallback
+    Model:
+      - gemini-2.5-flash      (Chat chính)
+      - gemini-2.0-flash      (Chat dự phòng)
+      - gemini-2.0-flash-lite (Sub-Agent: Classifier, Rubric)
+      - gemini-1.5-pro        (Parent Insights - context 2M tokens)
+    """
+    __tablename__ = "system_agent_metrics_hourly"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    bucket_timestamp = Column(DateTime(timezone=True), nullable=False)
+    agent_name = Column(String(64), nullable=False)
+    model_name = Column(String(64), nullable=False)
+
+    request_count = Column(Integer, default=0, nullable=False)
+    prompt_tokens = Column(BigInteger, default=0, nullable=False)
+    completion_tokens = Column(BigInteger, default=0, nullable=False)
+    total_cost_usd = Column(Numeric(12, 6), default=0.0, nullable=False)
+    avg_latency_ms = Column(Integer, default=0, nullable=False)
+    error_count = Column(Integer, default=0, nullable=False)
+
+    __table_args__ = (
+        Index("ix_agent_metrics_bucket_agent", "bucket_timestamp", "agent_name"),
+        Index("uq_agent_metrics_bucket_agent_model", "bucket_timestamp", "agent_name", "model_name", unique=True),
+    )
+
+
+class SystemIncidentLog(Base):
+    """
+    US 10.2 - Task T10.2.0:
+    Nhật ký cảnh báo vi phạm ngưỡng SLA (5xx > 2%, P95 > 1800ms, Quota 429...)
+    Dùng hiển thị banner đỏ trực quan trên Admin Dashboard khi status = 'ACTIVE'.
+    """
+    __tablename__ = "system_incidents_log"
+
+    id = Column(String(64), primary_key=True, default=lambda: uuid.uuid4().hex)
+    incident_type = Column(String(32), nullable=False)  # HIGH_LATENCY | ERROR_SPIKE | QUOTA_EXCEEDED | DB_POOL_EXHAUSTED
+    severity = Column(String(16), nullable=False)       # WARNING | CRITICAL
+    metric_name = Column(String(64), nullable=False)    # p95_latency_ms, status_5xx_rate, etc.
+    threshold_value = Column(Numeric(12, 2), nullable=False)
+    actual_value = Column(Numeric(12, 2), nullable=False)
+    message = Column(Text, nullable=False)
+    status = Column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE")  # ACTIVE | RESOLVED
+    triggered_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_incidents_active_triggered", "status", "triggered_at"),
+    )
+
+
+class SystemSettings(Base):
+    """
+    US 10.3 - Task T10.3.0:
+    Bảng cấu hình hệ thống duy nhất (Singleton Pattern: id = 'current').
+    Lưu trữ cấu hình 6 model AI tương ứng 6 phân hệ, tham số sư phạm,
+    rate limit và mốc thời gian học kỳ giả lập (US 9.3 Mock Month).
+    BẢO MẬT: TUYỆT ĐỐI KHÔNG lưu API Key vào DB (đã xóa api_key_override & multi_key_pool).
+    """
+    __tablename__ = "system_settings"
+
+    id = Column(String(32), primary_key=True, default="current", server_default="current")
+
+    # 6 Cột Model AI mới cho 6 phân hệ (Tab 1 Model Gateway)
+    primary_model = Column(String(64), nullable=False, default="gemini-3.8-flash", server_default="gemini-3.8-flash")
+    parent_insight_model = Column(String(64), nullable=False, default="gemini-3.5-flash", server_default="gemini-3.5-flash")
+    classifier_model = Column(String(64), nullable=False, default="gemini-3.1-flash-lite", server_default="gemini-3.1-flash-lite")
+    email_model = Column(String(64), nullable=False, default="gemini-3.1-flash-lite", server_default="gemini-3.1-flash-lite")
+    flashcard_model = Column(String(64), nullable=False, default="gemini-3.5-flash-lite", server_default="gemini-3.5-flash-lite")
+    backup_model = Column(String(64), nullable=False, default="gemini-3.5-flash-lite", server_default="gemini-3.5-flash-lite")
+
+    # Tham số sinh văn bản (Generation Config)
+    temperature = Column(Numeric(3, 2), nullable=False, default=0.35, server_default="0.35")
+    top_p = Column(Numeric(3, 2), nullable=False, default=0.90, server_default="0.90")
+    max_output_tokens = Column(Integer, nullable=False, default=512, server_default="512")
+
+    # Tham số Sư phạm & An toàn (Pedagogical & Safety)
+    socratic_strictness = Column(String(20), nullable=False, default="BALANCED", server_default="BALANCED")
+    enable_math_reviewer = Column(Boolean, nullable=False, default=True, server_default="true")
+    enable_vision_support = Column(Boolean, nullable=False, default=True, server_default="true")
+    safety_threshold = Column(String(32), nullable=False, default="BLOCK_MEDIUM_AND_ABOVE", server_default="BLOCK_MEDIUM_AND_ABOVE")
+    enable_parent_alert = Column(Boolean, nullable=False, default=True, server_default="true")
+
+    # Giới hạn tần suất (Rate Limiting - tin / 5 phút)
+    guest_rate_limit = Column(Integer, nullable=False, default=10, server_default="10")
+    student_rate_limit = Column(Integer, nullable=False, default=30, server_default="30")
+
+    # Giả lập thời gian học kỳ (US 9.3 Mock Month: NULL = giờ thực, 1-12 = mock tháng)
+    mock_curriculum_month = Column(Integer, nullable=True)
+
+    # Thông tin quản trị
+    system_version = Column(String(32), nullable=False, default="v1.7.0", server_default="v1.7.0")
+    environment = Column(String(32), nullable=False, default="Production (Neon + Vercel)", server_default="Production (Neon + Vercel)")
+    last_updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    last_updated_by = Column(String(255), nullable=False, default="admin@socratickid.edu.vn", server_default="admin@socratickid.edu.vn")
+
+
+class SystemSettingAudit(Base):
+    """
+    US 10.3 - Task T10.3.0:
+    Bảng lưu lịch sử thay đổi cấu hình hệ thống (Audit Trail) phục vụ Rollback 1-Click.
+    """
+    __tablename__ = "system_setting_audits"
+
+    id = Column(String(64), primary_key=True, default=lambda: uuid.uuid4().hex)
+    changed_by = Column(String(255), nullable=False)
+    change_summary = Column(Text, nullable=False)
+    previous_config = Column(JSON, nullable=False)
+    new_config = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_setting_audits_created_at", "created_at"),
+    )
+
+
+# ==============================================================================
+# US 10.4 - Task T10.4.0: Active Learning & Self-Reflective Feedback Model
+# ==============================================================================
+
+class AuditFeedbackLog(Base):
+    """
+    US 10.4 - Task T10.4.0:
+    Bảng lưu nhật ký phản hồi phân luồng Agent sai (Active Learning & Hidden Tag Protocol).
+    Ghi nhận câu hỏi học sinh, nhãn ban đầu (predicted_agent) và nhãn Gemini đề xuất (suggested_agent)
+    ở trạng thái PENDING để Quản trị viên duyệt và tái huấn luyện mô hình (T10.4.4 & T10.4.5).
+    """
+    __tablename__ = "audit_feedback_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_query = Column(Text, nullable=False)
+    predicted_agent = Column(String(64), nullable=False)
+    suggested_agent = Column(String(64), nullable=False)
+    status = Column(String(20), nullable=False, default="PENDING", server_default="PENDING")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_audit_feedback_logs_status_created", "status", "created_at"),
+        Index("ix_audit_feedback_logs_created_at", "created_at"),
+    )
+
+
+# ==============================================================================
+# US 11.5 - Task T11.5.0: Contact Requests (Feedback & Contact Hub)
+# ==============================================================================
+
+class ContactRequest(Base):
+    """
+    US 11.5 - Task T11.5.0:
+    Bảng lưu trữ thông tin liên hệ và đóng góp ý kiến (Feedback & Contact Hub).
+    Hỗ trợ phân loại báo lỗi (BUG) và góp ý tính năng (FEATURE/FEEDBACK) để bắn Webhook tới đội ngũ Dev/PM.
+    """
+    __tablename__ = "contact_requests"
+
+    id = Column(String(64), primary_key=True, default=lambda: uuid.uuid4().hex)
+    full_name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False, index=True)
+    role = Column(String(50), nullable=False, default="GUEST", server_default="GUEST")        # STUDENT | PARENT | GUEST | OTHER
+    topic = Column(String(50), nullable=False, default="FEEDBACK", server_default="FEEDBACK") # BUG | FEATURE | PEDAGOGY | COOPERATION | OTHER
+    content = Column(Text, nullable=False)
+    attachment_urls = Column(JSON, nullable=True, default=list)                               # Danh sách URL ảnh đính kèm (Cloudinary)
+    recaptcha_score = Column(Numeric(3, 2), nullable=True)                                    # Điểm Google reCAPTCHA v3 (0.00 -> 1.00)
+    status = Column(String(50), nullable=False, default="PENDING", server_default="PENDING")  # PENDING | IN_PROGRESS | RESOLVED | REJECTED
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_contact_requests_topic_status", "topic", "status"),
+        Index("ix_contact_requests_created_at_desc", created_at.desc()),
+    )
+
+
+
+

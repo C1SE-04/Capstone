@@ -11,10 +11,6 @@ export type OwlEmotion =
   | "correct"
   | "incorrect";
 
-interface AssistantOwlProps {
-  emotion?: OwlEmotion;
-}
-
 // Map emotion -> đường dẫn file JSON trong public/
 const EMOTION_SRC: Record<OwlEmotion, string> = {
   idle: "/lottie/owl_idle.json",
@@ -114,7 +110,7 @@ export function AssistantOwl({ emotion = "idle" }: AssistantOwlProps) {
 
   return (
     <div
-      className="block relative self-start mt-4 ml-2 md:ml-0 md:mt-0 md:self-end shrink-0 w-[62px] h-[62px] md:w-[90px] md:h-[90px] md:mb-6 pointer-events-none"
+      className="block relative self-end mb-4 ml-1 md:ml-0 md:mb-6 shrink-0 w-[54px] h-[54px] sm:w-[64px] sm:h-[64px] md:w-[90px] md:h-[90px] pointer-events-none transition-all duration-200"
       style={{
         // Hiệu ứng fade: opacity đổi mượt mà trong 200ms khi chuyển trạng thái
         opacity: isFading ? 0 : 1,
@@ -129,4 +125,8 @@ export function AssistantOwl({ emotion = "idle" }: AssistantOwlProps) {
       />
     </div>
   );
+}
+
+interface AssistantOwlProps {
+  emotion?: OwlEmotion;
 }

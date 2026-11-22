@@ -6,6 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Conversation } from "@/types/chat";
+import { cleanLatexForTitle } from "@/lib/latex";
 // T6.5 – US 6.1: Thanh tiến trình Mastery tự lực
 import { MasteryProgressBar } from "./MasteryProgressBar";
 
@@ -13,6 +14,7 @@ interface ChatSidebarProps {
   className?: string;
   isMobileOpen: boolean;
   setIsMobileOpen: (open: boolean) => void;
+  isCollapsed?: boolean;
   conversations: Conversation[];
   activeChatId: string | null;
   onSelectChat: (id: string) => void;
@@ -24,6 +26,7 @@ export function ChatSidebar({
   className,
   isMobileOpen,
   setIsMobileOpen,
+  isCollapsed = false,
   conversations,
   activeChatId,
   onSelectChat,
@@ -56,11 +59,17 @@ export function ChatSidebar({
       {/* Sidebar container trượt mượt mà */}
       <aside
         className={cn(
-          "fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#F1CCA6] flex flex-col h-full transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-[#C1762A]/20 flex-shrink-0",
+          "fixed md:static inset-y-0 left-0 z-50 bg-[#F1CCA6] flex flex-col h-full flex-shrink-0 border-r border-[#C1762A]/20",
+          "transition-[width,transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          "w-64",
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          isCollapsed
+            ? "md:w-0 md:opacity-0 md:pointer-events-none md:border-r-0 md:overflow-hidden"
+            : "md:w-64 md:opacity-100",
           className
         )}
       >
+        <div className="relative w-64 min-w-[16rem] flex flex-col h-full">
         {/* Mobile close button */}
         <div className="md:hidden flex justify-end p-4 pb-0">
           <button onClick={() => setIsMobileOpen(false)} className="text-[#8C4905]">
@@ -69,13 +78,13 @@ export function ChatSidebar({
         </div>
 
         {/* Top Area (Logo & New Chat) */}
-        <div className="p-4 flex flex-col gap-4">
+        <div className="p-4 flex flex-col gap-3">
           <div
-            className="flex items-center gap-3 mb-2 cursor-pointer"
+            className="flex items-center gap-3 mb-1 cursor-pointer group"
             onClick={() => router.push("/")}
           >
-            <div className="w-10 h-10 bg-[#D9D9D9] rounded-xl flex items-center justify-center text-[#8C4905] font-bold text-sm shadow-inner">
-              SK
+            <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-xs group-hover:opacity-85 transition-opacity">
+              <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
             </div>
             <h2 className="font-extrabold italic text-xl text-[#8C4905] tracking-tight">
               SocraticKid
@@ -84,7 +93,7 @@ export function ChatSidebar({
 
           <button
             onClick={onNewChat}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-white text-[#8C4905] rounded-2xl font-bold shadow-sm hover:shadow transition-all border border-[#F1CCA6] cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 py-3 bg-white text-[#8C4905] rounded-xl font-bold shadow-xs hover:border-[#C1762A] transition-all duration-150 ease-out active:scale-[0.98] border border-[#F1CCA6] focus-visible:outline-2 focus-visible:outline-[#C1762A] cursor-pointer"
           >
             <Plus size={18} />
             New chat
@@ -92,7 +101,7 @@ export function ChatSidebar({
 
           <button
             onClick={() => router.push("/dashboard/notebook")}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#F7ECE1]/90 hover:bg-[#F7ECE1] text-[#8C4905] rounded-2xl font-bold text-xs shadow-xs transition-all border border-[#F1CCA6] cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#F7ECE1]/90 hover:bg-[#F7ECE1] text-[#8C4905] rounded-xl font-semibold text-xs shadow-xs transition-all duration-150 ease-out active:scale-[0.98] border border-[#F1CCA6] focus-visible:outline-2 focus-visible:outline-[#C1762A] cursor-pointer"
             title="Xem Sổ tay bài toán yêu thích"
           >
             <BookMarked size={15} className="text-[#C1762A]" />
@@ -117,10 +126,10 @@ export function ChatSidebar({
                       "group flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-all",
                       activeChatId === chat.id
                         ? "bg-white text-[#8C4905] shadow-sm font-semibold"
-                        : "text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#CB6600]"
+                        : "text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#8C4905]"
                     )}
                   >
-                    <span className="truncate flex-1 text-sm">{chat.title}</span>
+                    <span className="truncate flex-1 text-sm">{cleanLatexForTitle(chat.title)}</span>
                     {onDeleteChat && activeChatId === chat.id && (
                       <div className="flex gap-2 text-[#C1762A]">
                         <button
@@ -186,6 +195,7 @@ export function ChatSidebar({
           >
             <Settings size={20} />
           </button>
+        </div>
         </div>
       </aside>
     </>

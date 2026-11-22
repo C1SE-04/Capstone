@@ -17,7 +17,8 @@ import { AIInsightsCard } from "@/components/monitor/AIInsightsCard";
 import { TimeRangeFilter, TimeRange } from "@/components/monitor/TimeRangeFilter";
 import { IndependenceChart, IndependencePoint } from "@/components/monitor/IndependenceChart";
 import { ChildProblemHistory } from "@/components/monitor/ChildProblemHistory";
-import { UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import ResetStudentPasswordModal from "@/components/monitor/ResetStudentPasswordModal";
+import { UserPlus, ChevronLeft, ChevronRight, KeyRound } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -67,6 +68,9 @@ export default function MonitorPage() {
 
   // State bộ lọc thời gian (T6.8: 7 ngày / 30 ngày)
   const [timeRange, setTimeRange] = useState<TimeRange>("7d");
+
+  // State mở modal cấp lại mật khẩu cho con (US 11.1 - Task #372 / AC-PW-06)
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
 
   // State quản lý tuần đang xem (0: tuần hiện tại, -1: tuần trước, v.v...)
   const [weekOffset, setWeekOffset] = useState(0);
@@ -286,9 +290,21 @@ export default function MonitorPage() {
               {displayName.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h1 className="text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
-                {displayName}
-              </h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-extrabold text-[#8C4905] tracking-tight leading-none">
+                  {displayName}
+                </h1>
+                {/* Nút Cấp lại mật khẩu (AC-PW-06) */}
+                <button
+                  type="button"
+                  onClick={() => setIsResetPasswordOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#F7ECE1] text-[#8C4905] border border-[#F1CCA6] rounded-xl font-bold text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer active:scale-98"
+                  title="Cấp lại mật khẩu cho con"
+                >
+                  <KeyRound size={14} className="text-[#C1762A]" />
+                  <span>Cấp lại mật khẩu</span>
+                </button>
+              </div>
               <p className="text-sm text-[#C1762A] mt-1">{selectedStudent.email}</p>
             </div>
           </div>
@@ -323,16 +339,16 @@ export default function MonitorPage() {
         </div>
 
         {/* Weekly Navigation Controls */}
-        <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-[#F1CCA6] shadow-sm self-start sm:self-auto">
+        <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-[#F1CCA6] shadow-xs self-start sm:self-auto">
           <button
             onClick={handlePrevWeek}
             aria-label="Tuần trước"
-            className="p-1 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 transition-all cursor-pointer"
+            className="p-1 rounded-lg text-[#8C4905] hover:bg-[#F7ECE1] active:scale-[0.95] transition-all duration-150 ease-out cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
           >
             <ChevronLeft size={18} />
           </button>
 
-          <div className="text-xs font-bold text-[#8C4905] min-w-[130px] text-center select-none">
+          <div className="text-xs font-bold text-[#8C4905] min-w-[130px] text-center select-none tabular-nums">
             {format(weekStart, "dd/MM")} - {format(weekEnd, "dd/MM/yyyy")}
             {isCurrentWeek && (
               <span className="block text-[10px] text-[#C1762A] font-medium">
@@ -345,10 +361,10 @@ export default function MonitorPage() {
             onClick={handleNextWeek}
             disabled={isCurrentWeek}
             aria-label="Tuần tiếp theo"
-            className={`p-1 rounded-lg transition-all ${
+            className={`p-1 rounded-lg transition-all duration-150 ease-out ${
               isCurrentWeek
-                ? "text-gray-300 cursor-not-allowed"
-                : "text-[#8C4905] hover:bg-[#F7ECE1] active:scale-90 cursor-pointer"
+                ? "text-[#C1762A]/40 cursor-not-allowed"
+                : "text-[#8C4905] hover:bg-[#F7ECE1] active:scale-[0.95] cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
             }`}
           >
             <ChevronRight size={18} />
@@ -423,6 +439,13 @@ export default function MonitorPage() {
       <ChildProblemHistory
         key={selectedStudent.student_id}
         studentId={selectedStudent.student_id}
+      />
+
+      {/* Modal cấp lại mật khẩu cho con (US 11.1 - Task #372 / AC-PW-06) */}
+      <ResetStudentPasswordModal
+        isOpen={isResetPasswordOpen}
+        onClose={() => setIsResetPasswordOpen(false)}
+        student={selectedStudent}
       />
     </div>
   );

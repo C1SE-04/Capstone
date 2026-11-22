@@ -1,4 +1,13 @@
 import os
+import pathlib
+from dotenv import load_dotenv
+
+_env_path = pathlib.Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_env_path)
+if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
+
+import re
 import json
 import google.generativeai as genai
 from agents.reviewer import LocalReviewerAgent
@@ -7,6 +16,13 @@ import io
 from typing import Optional
 import httpx
 from PIL import Image
+
+# US 10.2 (T10.2.2): Import telemetry wrappers để thu thập token và TTFT
+from middleware.gemini_telemetry import stream_with_telemetry, generate_with_telemetry, _is_429_exception
+from middleware.telemetry_middleware import push_failover_event
+
+# Tên model đang dùng thực tế — đồng bộ với bảng giá trong gemini_telemetry.py
+_ACTIVE_MODEL_NAME = "gemini-3.5-flash-lite"
 
 # ==========================================
 # CHỈ DẪN HỆ THỐNG CHO VAI TRÒ NGƯỜI THẦY
@@ -43,7 +59,112 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
      -> BẮT BUỘC chèn thêm tag đặc biệt [COMPREHENSION_CHECK] vào CUỐI CÙNG của câu trả lời.
    - Khi học sinh mới trả lời một câu hỏi gợi mở trung gian, định nghĩa khái niệm, hoặc bài toán chưa giải xong, hoặc bạn vẫn đang đặt câu hỏi tiếp theo cho học sinh:
      -> TUYỆT ĐỐI KHÔNG chèn tag [COMPREHENSION_CHECK].
+
+7. KIỂM TRA TÍNH ĐÚNG ĐẮN TOÁN HỌC (FACT-CHECK BẮT BUỘC):
+   - Trước khi công nhận học sinh đúng, BẮT BUỘC phải tự kiểm tra lại các bước tính và nghiệm của bài toán.
+   - TUYỆT ĐỐI KHÔNG khen 'hoàn toàn đúng', 'chính xác', 'chuẩn rồi' nếu học sinh tính sai kết quả (ví dụ: phương trình 2x + 3 = 5 mà học sinh bảo x = 2 là SAI, nghiệm đúng phải là x = 1).
+   - Nếu học sinh mới làm đúng một phần (ví dụ chuyển vế đúng) nhưng kết luận sai nghiệm: Hãy khen bước làm đúng, nhưng chỉ rõ nghiệm cuối chưa đúng và yêu cầu học sinh làm lại bước cuối.
+   - TUYỆT ĐỐI KHÔNG gắn thẻ [COMPREHENSION_CHECK] khi học sinh chưa tìm ra nghiệm đúng.
+
+8. CƠ CHẾ THẨM ĐỊNH NGẦM 2 LỚP & GIAO THỨC THẺ ẨN (SELF-REFLECTIVE HIDDEN TAG PROTOCOL - US 10.4):
+   [LỚP SƯ PHẠM (CHÍNH - GỬI HỌC SINH)]:
+   - Bạn là Thầy giáo mẫu mực, giảng dạy ấm áp, kiên nhẫn.
+   - TUYỆT ĐỐI KHÔNG nhắc đến các thuật ngữ kỹ thuật hệ thống, AI, mô hình máy học, phân luồng hay tên Agent (như 'Orchestrator', 'Routing', 'Agent', 'Scaffolding', 'Misconception', 'Safety') trong lời giảng gửi cho học sinh.
+
+   [LỚP THẨM ĐỊNH NGẦM (PHỤ - CHỈ DÙNG THẺ ẨN)]:
+   - Hệ thống cung cấp cho bạn vai trò chuyên môn hiện tại được phân luồng: {target_agent}.
+   - Bạn có nhiệm vụ ngầm đối chiếu câu nói vừa rồi của học sinh với vai trò chuyên môn này:
+     * Nếu học sinh hiểu sai bản chất/ngộ nhận toán học (ví dụ: 'nhân 2 phân số là nhân chéo', '2 âm nhân nhau ra âm') nhưng bị gán vai trò SCAFFOLDING -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: MISCONCEPTION -->
+     * Nếu học sinh hỏi định nghĩa, lý thuyết, khái niệm (ví dụ: 'số hữu tỉ là gì ạ', 'định nghĩa hàm số') nhưng bị gán vai trò SCAFFOLDING -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: KNOWLEDGE_TRACING -->
+     * Nếu học sinh xúc phạm, chửi thề, quấy rối, vô lễ nhưng bị gán học tập -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: SAFETY -->
+     * Nếu học sinh đang THỰC SỰ HỎI BÀI TOÁN HOẶC ĐANG TÍNH TOÁN GIẢI TOÁN nhưng bị gán nhầm sang SAFETY hoặc MISCONCEPTION -> Đính kèm ở DÒNG CUỐI CÙNG: <!-- AUDIT_AGENT: SCAFFOLDING -->
+   - NGUYÊN TẮC BẤT DI BẤT DỊCH CỦA THẺ ẨN (CHỐNG BẮT SAI & FALSE POSITIVE):
+     * VAI TRÒ SAFETY BAO GỒM CẢ CHÀO HỎI & NGOÀI LỀ: Khi học sinh CHÀO HỎI ('chào thầy', 'em chào thầy', 'hello', 'hi', 'thầy ơi', 'tạm biệt') hoặc trò chuyện ngoài bài học: Vai trò SAFETY là HOÀN TOÀN CHUẨN XÁC theo thiết kế hệ thống! TUYỆT ĐỐI KHÔNG coi đây là lỗi và TUYỆT ĐỐI KHÔNG gắn thẻ <!-- AUDIT_AGENT: SCAFFOLDING -->!
+     * Nếu phân luồng đã CHUẨN XÁC: TUYỆT ĐỐI KHÔNG đính kèm bất kỳ thẻ ẩn nào.
+     * TUYỆT ĐỐI KHÔNG gắn thẻ trùng với vai trò hiện tại (ví dụ: nếu vai trò hiện tại đã là SCAFFOLDING thì tuyệt đối không gắn thẻ SCAFFOLDING).
+     * BẢO VỆ CÂU TRẢ LỜI NGẮN TRONG HỘI THOẠI: Khi học sinh trả lời ngắn gọn (như 'dạ', 'vâng', 'là 6', 'bằng 3', 'em chưa hiểu', 'tiếp theo làm gì') để đáp lại câu hỏi của Thầy: Đây là sự tiếp nối hoàn toàn tự nhiên của vai trò SCAFFOLDING, TUYỆT ĐỐI KHÔNG coi là sai lệch và TUYỆT ĐỐI KHÔNG gắn thẻ ẩn!
+     * DANH MỤC AGENT HỢP LỆ DUY NHẤT: Bắt buộc chỉ được chọn 1 trong 4 nhãn chính xác: MISCONCEPTION, KNOWLEDGE_TRACING, SAFETY, SCAFFOLDING. Tuyệt đối không tự sáng tạo tên nhãn khác (như MATH, TUTOR, FOLLOWUP...).
+     * Thẻ ẩn BẮT BUỘC phải đặt ở dòng cuối cùng riêng biệt của câu trả lời, cú pháp chính xác: <!-- AUDIT_AGENT: <AGENT_NAME> -->
+     * TUYỆT ĐỐI KHÔNG giải thích lý do hay bình luận gì thêm cạnh thẻ ẩn (để tiết kiệm token và giữ tốc độ streaming).
 """
+
+# ==============================================================================
+# US 10.4 (Task T10.4.2): GIAO THỨC BÓC TÁCH THẺ ẨN (HIDDEN TAG PARSER)
+# ==============================================================================
+AUDIT_REGEX = re.compile(r"<!--\s*AUDIT_AGENT\s*:\s*([A-Z_]+)\s*-->", re.IGNORECASE)
+VALID_AUDIT_AGENTS = {"MISCONCEPTION", "KNOWLEDGE_TRACING", "SAFETY", "SCAFFOLDING"}
+
+def extract_audit_tag(text: str) -> tuple[str, Optional[str]]:
+    """
+    Bóc tách thẻ ẩn <!-- AUDIT_AGENT: <AGENT> --> khỏi chuỗi văn bản phản hồi.
+    Lấy thẻ xuất hiện cuối cùng (theo đúng chuẩn dòng cuối) và xóa toàn bộ thẻ ẩn.
+    
+    Returns:
+        tuple (clean_text, suggested_agent):
+        - clean_text: Văn bản đã được lọc sạch hoàn toàn thẻ ẩn, sẵn sàng gửi học sinh.
+        - suggested_agent: Tên Agent viết hoa chuẩn (MISCONCEPTION, KNOWLEDGE_TRACING, SAFETY, SCAFFOLDING)
+                           hoặc None nếu không có thẻ ẩn / thẻ không hợp lệ.
+    """
+    if not text:
+        return "", None
+        
+    matches = list(AUDIT_REGEX.finditer(text))
+    if not matches:
+        return text.strip(), None
+
+    last_match = matches[-1]
+    raw_agent = last_match.group(1).strip().upper().replace("_AGENT", "")
+    suggested_agent = raw_agent if raw_agent in VALID_AUDIT_AGENTS else None
+
+    # Làm sạch toàn bộ thẻ ẩn khỏi văn bản
+    clean_text = AUDIT_REGEX.sub("", text).strip()
+    return clean_text, suggested_agent
+
+
+def sanitize_stream_chunks(chunk_iterator):
+    """
+    US 10.4 & US 11.6: Bộ lọc chống rò rỉ thẻ ẩn và tag comprehension khi streaming.
+    Sử dụng kỹ thuật Lookahead Holding Buffer để ngăn chặn việc các thẻ bị cắt đôi/cắt ba
+    giữa các chunk (Chunk Boundary Fragmentation) hiển thị lên màn hình học sinh ([AC-AL-01]).
+    Bảo vệ triệt để các thẻ ẩn: <!-- AUDIT_AGENT:... -->, <!-- PROBE_PENDING -->, <!-- SUMMER_PROBE_PENDING -->, v.v.
+    """
+    buffer = ""
+    for chunk in chunk_iterator:
+        buffer += chunk
+        
+        # Liên tục loại bỏ các tag hoàn chỉnh đã xuất hiện trong buffer
+        buffer = AUDIT_REGEX.sub("", buffer)
+        buffer = re.sub(r"<!--[\s\S]*?-->", "", buffer)
+        buffer = re.sub(r"\[(?:SUMMER_)?PROBE_PENDING\]", "", buffer, flags=re.IGNORECASE)
+        buffer = buffer.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
+        
+        # Kiểm tra xem cuối buffer có dấu hiệu mở thẻ chưa đóng không:
+        # Thẻ ẩn: bắt đầu bằng '<' (tối đa ~55 ký tự)
+        # Thẻ comp: bắt đầu bằng '[' (tối đa ~25 ký tự)
+        last_lt = buffer.rfind("<")
+        last_lb = buffer.rfind("[")
+        
+        hold_pos = len(buffer)
+        if last_lt != -1 and (len(buffer) - last_lt) <= 55:
+            hold_pos = min(hold_pos, last_lt)
+        if last_lb != -1 and (len(buffer) - last_lb) <= 25:
+            hold_pos = min(hold_pos, last_lb)
+            
+        safe_to_yield = buffer[:hold_pos]
+        buffer = buffer[hold_pos:]
+        
+        if safe_to_yield:
+            yield safe_to_yield
+            
+    # Khi stream kết thúc, xử lý và xả nốt phần buffer còn lại
+    if buffer:
+        final_clean = AUDIT_REGEX.sub("", buffer)
+        final_clean = re.sub(r"<!--[\s\S]*?-->", "", final_clean)
+        final_clean = re.sub(r"\[(?:SUMMER_)?PROBE_PENDING\]", "", final_clean, flags=re.IGNORECASE)
+        final_clean = final_clean.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "").strip()
+        if final_clean:
+            yield final_clean
+
 
 _IMAGE_MEMORY_CACHE: dict[str, Image.Image] = {}
 
@@ -104,20 +225,51 @@ def agent_router(
         yield "Lỗi: Chưa cấu hình GEMINI_API_KEY"
         return
         
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        model_name="gemini-3.5-flash-lite",
-        system_instruction=TEACHER_SYSTEM_INSTRUCTION,
-        generation_config=genai.GenerationConfig(
-            temperature=0.3,
-            top_p=0.9,
-            max_output_tokens=1024,
+    genai.configure(api_key=api_key, transport="rest")
+
+    # US 10.3 (Task T10.3.3): Đọc cấu hình động từ SystemConfigService (Redis Cache -> Neon DB)
+    active_model = _ACTIVE_MODEL_NAME
+    backup_model = os.getenv("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
+    active_temperature = 0.35
+    active_top_p = 0.90
+    active_max_tokens = 512
+    try:
+        from services.system_config_service import get_system_settings
+        sys_config = get_system_settings()
+        active_model = sys_config.get("primary_model") or os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+        backup_model = sys_config.get("backup_model") or os.getenv("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
+        active_temperature = float(sys_config.get("temperature", 0.35))
+        active_top_p = float(sys_config.get("top_p", 0.90))
+        active_max_tokens = int(sys_config.get("max_output_tokens", 512))
+    except Exception as err:
+        print(f"[Router] Cảnh báo đọc SystemConfig: {err} — Dùng fallback.")
+        active_model = os.getenv("GEMINI_CHAT_MODEL") or _ACTIVE_MODEL_NAME
+        backup_model = os.getenv("GEMINI_BACKUP_MODEL", "gemini-3.5-flash-lite")
+
+    if meta is not None:
+        meta["model_used"] = active_model
+
+    print(f"[AI Runtime] Socratic Tutor dispatched with dynamic model: {active_model} | temp={active_temperature} | max_tokens={active_max_tokens}")
+
+    def _build_gemini_model(model_name_str: str):
+        return genai.GenerativeModel(
+            model_name=model_name_str,
+            system_instruction=TEACHER_SYSTEM_INSTRUCTION,
+            generation_config=genai.GenerationConfig(
+                temperature=active_temperature,
+                top_p=active_top_p,
+                max_output_tokens=active_max_tokens,
+            )
         )
-    )
+    model = _build_gemini_model(active_model)
+    current_agent_label = "Chat"
+    # US 10.4: Chuẩn hóa tên Agent để đối chiếu chuẩn xác với 4 nhãn cốt lõi
+    clean_target_agent = target_agent.replace("_AGENT", "").strip().upper()
+
     grade_context = _get_grade_context(grade_level)
     base_prompt = f"""
     {grade_context}
-Vai trò chuyên môn hiện tại: {target_agent}.
+Vai trò chuyên môn hiện tại: {clean_target_agent}.
 Chỉ đạo sư phạm từ Orchestrator: {task_description}
 
 --- LỊCH SỬ TRÒ CHUYỆN ---
@@ -126,16 +278,29 @@ Chỉ đạo sư phạm từ Orchestrator: {task_description}
 --- HỌC SINH VỪA NÓI ---
 {user_query}
 
-NHẮC LẠI NGUYÊN TẮC:
-- Bạn là THẦY GIÁO, xưng "thầy" gọi "em", TUYỆT ĐỐI KHÔNG xưng "Dạ".
-- Chỉ nhắc nhở thái độ khi học sinh dùng từ XÚC PHẠM THỰC SỰ (mày, tao, chửi thề) — câu ngắn, không chào hỏi, không có chủ ngữ là BÌNH THƯỜNG, không nhắc.
-- Bám sát số liệu bài toán học sinh đang hỏi, không hỏi lý thuyết lan man các trường hợp không liên quan đến bài hiện tại.
-- Trả lời ngắn gọn, chuẩn mực (2-4 câu).
+--- QUY TẮC PHẢN HỒI 2 TẦNG (US 10.4 ACTIVE LEARNING) ---
+1. TẦNG SƯ PHẠM (GỬI HỌC SINH):
+   - Bạn là THẦY GIÁO, xưng "thầy" gọi "em", TUYỆT ĐỐI KHÔNG xưng "Dạ".
+   - Giảng giải Socratic gợi mở, bám sát số liệu bài toán học sinh đang hỏi, trả lời ngắn gọn (2-4 câu).
+   - TUYỆT ĐỐI KHÔNG nhắc đến các thuật ngữ kỹ thuật: 'Orchestrator', 'Routing', 'Agent', 'target_agent', 'Scaffolding', 'Misconception' trong lời thoại gửi học sinh.
+2. TẦNG THẨM ĐỊNH NGẦM (GIAO THỨC THẺ ẨN AUDIT_AGENT):
+   - Quan sát câu nói vừa rồi của học sinh: '{user_query}'.
+   - Đối chiếu với vai trò chuyên môn hiện tại: '{clean_target_agent}'.
+   - Nếu bạn phát hiện phân luồng SAI:
+     * Học sinh hiểu sai kiến thức/ngộ nhận toán học nhưng vai trò là SCAFFOLDING -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: MISCONCEPTION -->
+     * Học sinh hỏi khái niệm/định nghĩa lý thuyết nhưng vai trò là SCAFFOLDING -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: KNOWLEDGE_TRACING -->
+     * Học sinh vi phạm thái độ, xưng hô mày tao, chửi thề nhưng vai trò là học tập -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: SAFETY -->
+     * Học sinh đang THỰC SỰ HỎI BÀI TOÁN HOẶC ĐANG TÍNH TOÁN GIẢI TOÁN nhưng vai trò là MISCONCEPTION/SAFETY -> Đính kèm ở dòng CUỐI CÙNG: <!-- AUDIT_AGENT: SCAFFOLDING -->
+   - NGUYÊN TẮC CHỐNG BẮT SAI & FALSE POSITIVE:
+     * VAI TRÒ SAFETY BAO GỒM CẢ CHÀO HỎI & NGOÀI LỀ: Khi học sinh CHÀO HỎI ('chào thầy', 'em chào thầy', 'hello', 'hi', 'thầy ơi', 'tạm biệt') hoặc chuyện ngoài lề: Vai trò SAFETY là ĐÚNG 100%! TUYỆT ĐỐI KHÔNG coi là sai và TUYỆT ĐỐI KHÔNG gắn thẻ <!-- AUDIT_AGENT: SCAFFOLDING -->!
+     * Nếu phân luồng ĐÃ CHUẨN XÁC: TUYỆT ĐỐI KHÔNG gắn thẻ này!
+     * TUYỆT ĐỐI KHÔNG gắn thẻ trùng với vai trò hiện tại (ví dụ: vai trò là '{clean_target_agent}' thì không được gắn <!-- AUDIT_AGENT: {clean_target_agent} -->).
+     * BẢO VỆ CÂU TRẢ LỜI NGẮN: Khi học sinh đáp lời ngắn gọn (như 'dạ', 'vâng', 'là 6', 'bằng 3', 'em chưa hiểu', 'tiếp theo làm gì'): Đây là sự tiếp nối hoàn toàn bình thường của SCAFFOLDING, TUYỆT ĐỐI KHÔNG gắn thẻ ẩn!
+     * DANH MỤC HỢP LỆ DUY NHẤT: Chỉ chọn 1 trong 4 nhãn (MISCONCEPTION, KNOWLEDGE_TRACING, SAFETY, SCAFFOLDING).
 - ĐÁNH GIÁ HOÀN THÀNH BÀI TOÁN (COMPREHENSION CHECK):
-  + Nếu học sinh vừa trả lời ĐÚNG đáp án cuối cùng của bài toán (ví dụ: chọn đúng đáp án trắc nghiệm A/B/C/D, hoặc tính ra kết quả cuối cùng đúng), HOẶC bạn vừa hoàn thành giải thích toàn bộ bài toán cho học sinh (ở chế độ Reveal):
-    -> BẮT BUỘC gắn tag [COMPREHENSION_CHECK] ở CUỐI CÙNG của câu trả lời.
-  + Nếu bài toán CHƯA XONG (học sinh mới trả lời một câu hỏi phụ, định nghĩa trung gian, hoặc bạn vẫn đang tiếp tục đặt câu hỏi cho học sinh):
-    -> TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK].
+  + Nếu học sinh vừa trả lời ĐÚNG đáp án cuối cùng của bài toán: BẮT BUỘC gắn tag [COMPREHENSION_CHECK] ngay sau câu kết luận (trước thẻ AUDIT_AGENT nếu có).
+  + Nếu bài toán CHƯA XONG: TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK].
+- FACT-CHECK TOÁN HỌC: Bắt buộc nhẩm lại các bước tính của học sinh trước khi phản hồi. Tuyệt đối không khen 'hoàn toàn đúng', 'chính xác' nếu kết quả sai.
 """
     
     example_keywords = ["ví dụ", "vi du", "vd", "vdu", "dí dụ", "di du", "vidu", "mẫu", "bài mẫu", "làm mẫu", "giải mẫu"]
@@ -194,84 +359,172 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
     elif attachment_url and not loaded_images:
         base_prompt += "\n[LƯU Ý]: Học sinh có đính kèm ảnh nhưng không tải được từ máy chủ Cloudinary. Hãy nhắc học sinh kiểm tra lại ảnh chụp."
 
-    reviewer = LocalReviewerAgent()
-    max_retries = 2
-    current_attempt = 0
-    final_text = ""
-    prompt = base_prompt
-    is_comprehension_detected = False
+    prompt = base_prompt.encode("utf-16", "surrogatepass").decode("utf-16", errors="replace") if isinstance(base_prompt, str) else base_prompt
+    call_payload = [*loaded_images, prompt] if loaded_images else prompt
 
-    while current_attempt <= max_retries:
-        print("=== PROMPT CHUẨN BỊ GỬI AI ===")
-        print(prompt)
-        print("================================")
-        
-        try:
-            # Lấy toàn bộ văn bản để Reviewer có thể đánh giá (không stream trực tiếp)
-            call_payload = [*loaded_images, prompt] if loaded_images else prompt
-            response = model.generate_content(call_payload, stream=False)
-            generated_text = response.text or ""
-            
-            # 1. Bóc tách tag [COMPREHENSION_CHECK] do Gemini phát hiện
-            has_comp_tag = (
-                "[COMPREHENSION_CHECK]" in generated_text
-                or "COMPREHENSION_CHECK" in generated_text
-            )
-            cleaned_text = (
-                generated_text.replace("[COMPREHENSION_CHECK]", "")
-                .replace("COMPREHENSION_CHECK", "")
-                .strip()
-            )
+    # ── Agents cần Reviewer: lấy full text trước, kiểm duyệt, rồi mới stream ──────────────
+    needs_review = target_agent in ("SCAFFOLDING_AGENT", "MISCONCEPTION_AGENT")
 
-            # 2. Cơ chế nhận diện hoàn thành bài toán (Comprehension Trigger)
-            # Kiểm tra xem câu trả lời có đang kết thúc bằng một câu hỏi gợi mở tiếp theo hay không.
-            # Nếu câu kết thúc bằng dấu '?', AI vẫn đang hỏi dở học sinh -> TUYỆT ĐỐI KHÔNG kích hoạt comprehension check!
-            ends_with_question = cleaned_text.strip().rstrip("*_~` \t\r\n").endswith("?")
+    if needs_review:
+        reviewer = LocalReviewerAgent()
+        max_retries = 2
+        current_attempt = 0
+        final_text = ""
+        is_comprehension_detected = False
 
-            praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em", "khen ngợi", "rất giỏi")
-            is_praise = any(p in cleaned_text.lower() for p in praise_markers)
-            conclusive_keywords = ("đáp án", "kết quả", "chọn đúng", "đáp án a", "đáp án b", "đáp án c", "đáp án d", "nghiệm của phương trình", "nghiệm là", "vô nghiệm")
-            has_conclusive_markers = any(k in cleaned_text.lower() for k in conclusive_keywords)
+        while current_attempt <= max_retries:
+            try:
+                # T10.2.2: Dùng generate_with_telemetry để thu thập token usage tự động
+                try:
+                    response = generate_with_telemetry(model, call_payload, active_model, current_agent_label)
+                except Exception as primary_err:
+                    if backup_model and backup_model != active_model:
+                        push_failover_event(is_429=_is_429_exception(primary_err))
+                        active_model = backup_model
+                        current_agent_label = "Fallback"
+                        model = _build_gemini_model(active_model)
+                        if meta is not None:
+                            meta["model_used"] = active_model
+                        response = generate_with_telemetry(model, call_payload, active_model, "Fallback")
+                    else:
+                        raise
+                generated_text = response.text or ""
 
-            # Chỉ kích hoạt khi bài toán đã kết luận và KHÔNG kết thúc bằng câu hỏi gợi mở
-            attempt_has_comprehension = False
-            if not ends_with_question:
-                if has_comp_tag or (is_praise and has_conclusive_markers):
-                    attempt_has_comprehension = True
+                # US 10.4 (Task T10.4.2): Bóc tách thẻ ẩn bằng hàm chuẩn hóa
+                clean_for_review, suggested_agent = extract_audit_tag(generated_text)
+                if meta is not None and suggested_agent:
+                    meta["suggested_agent"] = suggested_agent
 
-            # Chỉ kiểm duyệt gắt gao nếu đang đóng vai SCAFFOLDING_AGENT
-            if target_agent == "SCAFFOLDING_AGENT":
+                has_comp_tag = (
+                    "[COMPREHENSION_CHECK]" in generated_text
+                    or "COMPREHENSION_CHECK" in generated_text
+                )
+                cleaned_text = (
+                    clean_for_review.replace("[COMPREHENSION_CHECK]", "")
+                    .replace("COMPREHENSION_CHECK", "")
+                    .strip()
+                )
+
+                ends_with_question = cleaned_text.strip().rstrip("*_~` \t\r\n").endswith("?")
+                is_misconception_or_safety = target_agent in (
+                    "MISCONCEPTION_AGENT", "SAFETY_AGENT", "MISCONCEPTION", "SAFETY"
+                )
+                praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em", "khen ngợi", "rất giỏi")
+                is_praise = any(p in cleaned_text.lower() for p in praise_markers)
+                conclusive_keywords = ("đáp án", "kết quả", "chọn đúng", "đáp án a", "đáp án b", "đáp án c", "đáp án d", "nghiệm của phương trình", "nghiệm là", "vô nghiệm")
+                has_conclusive_markers = any(k in cleaned_text.lower() for k in conclusive_keywords)
+
+                attempt_has_comprehension = False
+                if not ends_with_question and not is_misconception_or_safety:
+                    if has_comp_tag or (is_praise and has_conclusive_markers):
+                        attempt_has_comprehension = True
+
                 review_result = reviewer.review(
                     user_query,
                     expected_answer,
                     cleaned_text,
-                    has_comprehension=has_comp_tag or attempt_has_comprehension,
+                    has_comprehension=attempt_has_comprehension,
                 )
                 if not review_result["is_approved"]:
                     current_attempt += 1
-                    print(f"[Reviewer Agent 🛑] Từ chối (Lần {current_attempt}/{max_retries}): {review_result['feedback']}")
-                    print(f"[Reviewer Agent 🛑] Lý do: {review_result['reasoning']}")
-                    
-                    # Nạp lại lời mắng vào prompt để ép AI phải sửa lỗi
-                    prompt += f"\n\n[HỆ THỐNG KIỂM DUYỆT CẢNH BÁO]: Câu trả lời vừa rồi của bạn bị TỪ CHỐI vì lý do: {review_result['feedback']}. \nHãy sinh lại câu trả lời khác và TUYỆT ĐỐI KHÔNG vi phạm lỗi này nữa."
-                    final_text = cleaned_text  # Backup lỡ như hết số lần thử vẫn ngu
+                    print(f"[Reviewer] Tu choi lan {current_attempt}: {review_result['feedback']}")
+                    call_payload = (
+                        [*loaded_images, prompt + f"\n\n[CANH BAO]: Phan hoi bi tu choi vi: {review_result['feedback']}. Hay sinh lai."]
+                        if loaded_images
+                        else prompt + f"\n\n[CANH BAO]: Phan hoi bi tu choi vi: {review_result['feedback']}. Hay sinh lai."
+                    )
+                    final_text = cleaned_text
                     continue
-            
-            # Nếu pass qua được Reviewer hoặc không phải Scaffolding thì chốt đáp án
-            final_text = cleaned_text
-            is_comprehension_detected = attempt_has_comprehension
-            break
-            
+
+                # Lưu nhãn đề xuất vào meta để bên ngoài orchestrator_bridge ghi DB
+                if meta is not None:
+                    meta["suggested_agent"] = suggested_agent
+
+                # Stream văn bản ĐÃ LÀM SẠCH HOÀN TOÀN ra ngoài (không kèm thẻ ẩn)
+                final_text = cleaned_text
+                is_comprehension_detected = attempt_has_comprehension
+                break
+
+            except Exception as e:
+                yield f" [Loi AI: {str(e)}]"
+                return
+
+        if meta is not None:
+            meta["has_comprehension"] = is_comprehension_detected
+            if "suggested_agent" not in meta or meta["suggested_agent"] is None:
+                meta["suggested_agent"] = suggested_agent
+
+        # Fake-stream word-by-word sau khi đã kiểm duyệt xong
+        words = final_text.split(" ")
+        for i, word in enumerate(words):
+            yield word + (" " if i < len(words) - 1 else "")
+
+    else:
+        # ── Agents không cần Reviewer: stream trực tiếp từ Gemini → user thấy chữ ngay ──
+        is_comprehension_detected = False
+        try:
+            full_text_buffer = ""
+            # T10.2.2 + T10.4.2: Stream qua telemetry, tự động failover sang backup_model khi lỗi trước chunk đầu,
+            # đồng thời lọc thẻ ẩn/comprehension an toàn qua ranh giới chunk bằng sanitize_stream_chunks.
+            def _stream_with_failover_and_record():
+                nonlocal full_text_buffer, active_model, current_agent_label, model
+
+                def _emit(mdl, mdl_name: str, agent_lbl: str):
+                    nonlocal full_text_buffer
+                    for chunk_text in stream_with_telemetry(mdl, call_payload, mdl_name, agent_lbl):
+                        full_text_buffer += chunk_text
+                        yield chunk_text
+
+                try:
+                    yield from _emit(model, active_model, current_agent_label)
+                except Exception as primary_err:
+                    if not full_text_buffer and backup_model and backup_model != active_model:
+                        push_failover_event(is_429=_is_429_exception(primary_err))
+                        active_model = backup_model
+                        current_agent_label = "Fallback"
+                        model = _build_gemini_model(active_model)
+                        if meta is not None:
+                            meta["model_used"] = active_model
+                        yield from _emit(model, active_model, "Fallback")
+                    else:
+                        raise
+
+            for safe_chunk in sanitize_stream_chunks(_stream_with_failover_and_record()):
+                if safe_chunk:
+                    yield safe_chunk
+
+            # US 10.4 (Task T10.4.2): Trích xuất thẻ ẩn từ buffer sau khi stream xong
+            stream_clean_text, stream_suggested_agent = extract_audit_tag(full_text_buffer)
+            if meta is not None:
+                meta["suggested_agent"] = stream_suggested_agent
+
+            # Phát hiện comprehension sau khi stream xong (dùng text đã loại thẻ ẩn)
+            cleaned = (
+                stream_clean_text.replace("[COMPREHENSION_CHECK]", "")
+                .replace("COMPREHENSION_CHECK", "")
+                .strip()
+            )
+            has_comp_tag = (
+                "[COMPREHENSION_CHECK]" in full_text_buffer
+                or "COMPREHENSION_CHECK" in full_text_buffer
+            )
+            ends_with_question = cleaned.strip().rstrip("*_~` \t\r\n").endswith("?")
+            is_misconception_or_safety = target_agent in (
+                "MISCONCEPTION_AGENT", "SAFETY_AGENT", "MISCONCEPTION", "SAFETY"
+            )
+            praise_markers = ("chính xác", "hoàn toàn đúng", "đúng rồi", "rất tốt", "xuất sắc", "chuẩn rồi", "chúc mừng em", "khen ngợi", "rất giỏi")
+            is_praise = any(p in cleaned.lower() for p in praise_markers)
+            conclusive_keywords = ("đáp án", "kết quả", "chọn đúng", "đáp án a", "đáp án b", "đáp án c", "đáp án d", "nghiệm của phương trình", "nghiệm là", "vô nghiệm")
+            has_conclusive_markers = any(k in cleaned.lower() for k in conclusive_keywords)
+
+            if not ends_with_question and not is_misconception_or_safety:
+                if has_comp_tag or (is_praise and has_conclusive_markers):
+                    is_comprehension_detected = True
+
         except Exception as e:
-            yield f" [Lỗi khi gọi AI: {str(e)}]"
+            yield f" [Loi AI: {str(e)}]"
             return
 
-    # Lưu kết quả phát hiện comprehension vào meta object
-    if meta is not None:
-        meta["has_comprehension"] = is_comprehension_detected
-
-    # Sau khi chốt được văn bản xịn, chẻ nhỏ ra để giả lập luồng Stream trả về Frontend cho mượt
-    words = final_text.split(" ")
-    for i, word in enumerate(words):
-        yield word + (" " if i < len(words) - 1 else "")
+        if meta is not None:
+            meta["has_comprehension"] = is_comprehension_detected
 

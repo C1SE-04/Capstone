@@ -52,10 +52,56 @@ export interface AdminTopic {
   };
 }
 
-export type ViolationType = "TOXIC" | "JAILBREAK" | "OFF_TOPIC" | "SENSITIVE";
-export type SeverityLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-export type ActionTaken = "BLOCKED" | "WARNED" | "REDIRECTED";
-export type TargetAgent = "AGENT_TUTOR" | "AGENT_SAFETY" | "ORCHESTRATOR";
+export interface CurriculumTopicItem {
+  id: string;
+  grade: number;
+  book_series: string;
+  semester?: number | null;
+  chapter_name: string;
+  topic_name: string;
+  order_index: number;
+  school_year?: string | null;
+  is_active: boolean;
+  source_url?: string | null;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SyncVietjackResult {
+  success: boolean;
+  total_synced: number;
+  current_total_in_db: number;
+  grades: number[];
+  message: string;
+  elapsed_seconds: number;
+  source?: "LIVE_CRAWL" | "FALLBACK_JSON";
+}
+
+export type ViolationType =
+  | "TOXIC"
+  | "JAILBREAK"
+  | "OFF_TOPIC"
+  | "SENSITIVE"
+  | "PROFANITY"
+  | "ROUTING"
+  | "SAFETY"
+  | string;
+export type SeverityLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+export type ActionTaken =
+  | "BLOCKED"
+  | "WARNED"
+  | "REDIRECTED"
+  | "NOTIFIED_PARENT"
+  | "ROUTED"
+  | "RECORDED"
+  | string;
+export type TargetAgent =
+  | "AGENT_TUTOR"
+  | "AGENT_SAFETY"
+  | "ORCHESTRATOR"
+  | "SAFETY_AGENT"
+  | string;
 export type AuditLogStatus = "PENDING" | "RESOLVED" | "DISMISSED";
 
 export interface SafetyConversationContext {
@@ -73,13 +119,18 @@ export interface AdminSafetyLogItem {
   student_id: string;
   student_name?: string;
   student_email: string;
+  user_id?: string;
+  email?: string;
   student_grade?: number | null;
   message_snippet: string;
+  user_query?: string;
   violation_type: ViolationType;
   severity: SeverityLevel;
   action_taken: ActionTaken;
   target_agent: TargetAgent;
   flagged_reason: string;
+  notify_parent?: boolean;
+  parent_notified_at?: string | null;
   status?: AuditLogStatus;
   conversation_context?: SafetyConversationContext;
 }
@@ -102,3 +153,178 @@ export interface AdminSafetyStatsResponse {
   not_understood_rate_percent: number;
   common_difficult_topics: AdminDifficultTopicStat[];
 }
+
+
+// ==============================================================================
+// US 9.5: QUẢN TRỊ BÁO LỖI & SỰ CỐ HỆ THỐNG (INCIDENT HUB - T9.21 & T9.22)
+// ==============================================================================
+
+export type SystemErrorType =
+  | "CRASH_500"
+  | "AI_TIMEOUT"
+  | "USER_REPORT"
+  | "SMTP_ERROR"
+  | string;
+
+export type SystemErrorSeverity = "CRITICAL" | "WARNING" | "INFO" | string;
+
+export type SystemErrorStatus = "OPEN" | "RESOLVED" | string;
+
+// US 11.2 (Task T11.2.6 & T11.2.7): Schema dữ liệu chẩn đoán nguyên nhân gốc rễ và gợi ý sửa lỗi từ Gemini AI
+export interface AiDiagnosisData {
+  root_cause?: string | null;
+  resolution_summary?: string | null;
+  fix_steps?: string[] | null;
+  code_patch?: string | null;
+  file_path?: string | null;
+  line_number?: number | null;
+  confidence_score?: number | null;
+  model_used?: string | null;
+}
+
+export interface SystemErrorItem {
+  id: string;
+  error_code: string;
+  error_type: SystemErrorType;
+  severity: SystemErrorSeverity;
+  message: string;
+  stack_trace?: string | null;
+  endpoint?: string | null;
+  request_payload?: string | null;
+  user_id?: string | null;
+  user_email?: string | null;
+  username?: string | null;
+  status: SystemErrorStatus;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+  resolved_note?: string | null;
+  created_at: string;
+  ai_diagnosis?: AiDiagnosisData | null;
+  ai_diagnosed_at?: string | null;
+}
+
+export interface SystemErrorsListResponse {
+  success: boolean;
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+  items: SystemErrorItem[];
+}
+
+export interface ResolveErrorPayload {
+  resolved_note?: string;
+}
+
+// ==============================================================================
+// US 10.4 - Task T10.4.5: Active Learning & Giám Sát Tiến Hóa Agent
+// ==============================================================================
+
+export type ActiveLearningAgent =
+  | "MISCONCEPTION"
+  | "SAFETY"
+  | "KNOWLEDGE_TRACING"
+  | "SCAFFOLDING";
+
+export type AuditFeedbackStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface AuditFeedbackItem {
+  id: number;
+  user_query: string;
+  predicted_agent: string;
+  suggested_agent: string;
+  status: AuditFeedbackStatus;
+  created_at: string;
+}
+
+export interface AuditFeedbackListResponse {
+  success: boolean;
+  total: number;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
+  items: AuditFeedbackItem[];
+}
+
+export interface ActiveLearningStats {
+  success: boolean;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
+  total_feedbacks: number;
+  total_training_samples: number;
+  last_model_update?: string | null;
+  intents_distribution: Record<string, number>;
+}
+
+export interface RetrainResult {
+  success: boolean;
+  message: string;
+  retrained_count: number;
+  total_samples: number;
+}
+
+export interface UpdateFeedbackPayload {
+  user_query?: string;
+  suggested_agent?: string;
+}
+
+// ─── US 10.4 (T10.4.7): Nhật ký Tin nhắn ────────────────────────────────────
+
+export type AgentType =
+  | "SCAFFOLDING_AGENT"
+  | "MISCONCEPTION_AGENT"
+  | "SAFETY_AGENT"
+  | "KNOWLEDGE_TRACING_AGENT"
+  | "UNKNOWN_AGENT";
+
+export interface MessageLogItem {
+  msg_id: string;
+  student_question: string;
+  msg_time: string;         // ISO datetime string
+  user_id: string;
+  student_name: string;
+  student_email?: string;
+  grade?: number;
+  session_id: string;
+  session_title?: string;
+  log_id?: string;
+  target_agent?: AgentType | string;
+  routing_reason?: string;
+  notify_parent?: boolean;
+}
+
+export interface MessageLogListResponse {
+  success: boolean;
+  total: number;
+  page: number;
+  page_size: number;
+  items: MessageLogItem[];
+}
+
+export interface MessageLogStats {
+  total_today: number;
+  total_all: number;
+  agent_distribution: Record<string, number>;
+  parent_alerts_today: number;
+  sessions_today: number;
+}
+
+export interface ConversationMessage {
+  msg_id: string;
+  sender_type: string;
+  content: string;
+  created_at: string;
+  attachment_url?: string;
+}
+
+export interface MessageLogConversationResponse {
+  success: boolean;
+  session_id: string;
+  session_title?: string;
+  student_name: string;
+  student_email?: string;
+  grade?: number;
+  messages: ConversationMessage[];
+}
+

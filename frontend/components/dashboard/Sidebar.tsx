@@ -8,7 +8,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { History, Settings, Settings2, LogOut, X, UserPlus, LayoutDashboard, BookMarked } from "lucide-react";
+import { History, Settings, Settings2, LogOut, X, UserPlus, LayoutDashboard, BookMarked, Trophy } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -48,7 +48,8 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
     ...(!isMonitor
       ? [
           { name: "Sổ tay", href: "/dashboard/notebook", icon: BookMarked },
-          ...(!pathname.startsWith("/dashboard/settings") && !pathname.startsWith("/dashboard/notebook")
+          { name: "Bảng xếp hạng", href: "/dashboard/leaderboard", icon: Trophy },
+          ...(!pathname.startsWith("/dashboard/settings") && !pathname.startsWith("/dashboard/notebook") && !pathname.startsWith("/dashboard/leaderboard")
             ? [{ name: "Lịch sử", href: "/dashboard/history", icon: History }]
             : []),
         ]
@@ -113,10 +114,10 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
                   "w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 font-semibold group",
                   isActive
                     ? "bg-[#C1762A] text-white shadow-md"
-                    : "text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#CB6600]"
+                    : "text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#8C4905]"
                 )}
               >
-                <Icon size={20} className={cn(isActive ? "text-white" : "text-[#C1762A] group-hover:text-[#CB6600]", "transition-colors")} />
+                <Icon size={20} className={cn(isActive ? "text-white" : "text-[#C1762A] group-hover:text-[#8C4905]", "transition-colors")} />
                 <span>{link.name}</span>
               </button>
             );
@@ -129,9 +130,9 @@ export function Sidebar({ className, isMobileOpen, setIsMobileOpen }: SidebarPro
                 setShowLinkModal(true);
                 setIsMobileOpen(false);
               }}
-              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 font-semibold group text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#CB6600]"
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 font-semibold group text-[#8C4905] hover:bg-[#F7AD62]/20 hover:text-[#8C4905]"
             >
-              <UserPlus size={20} className="text-[#C1762A] group-hover:text-[#CB6600] transition-colors" />
+              <UserPlus size={20} className="text-[#C1762A] group-hover:text-[#8C4905] transition-colors" />
               <span className="flex-1 text-left">Thêm học sinh</span>
               {linkedStudents.length > 0 && (
                 <span className="bg-[#C1762A] text-white text-xs font-black rounded-full w-5 h-5 flex items-center justify-center">

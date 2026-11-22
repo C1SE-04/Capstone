@@ -30,9 +30,15 @@ import {
   Bot,
   User,
   CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { preprocessLaTeX, cleanLatexForDisplay } from "@/lib/latex";
 
 // Schema tin nhắn đối thoại từng bước giữa Con và AI
 export interface ProblemDialogueMessage {
@@ -54,6 +60,9 @@ export interface ChildProblemItem {
   evaluation: string | null;
   attachment_url: string | null;
   chat_summary: string | null;
+  problem_text?: string | null;
+  category?: "NEW_TOPIC" | "ISOMORPHIC_PRACTICE" | "EXACT_DUPLICATE" | string | null;
+  is_duplicate?: boolean | null;
   dialogue_messages?: ProblemDialogueMessage[];
 }
 
@@ -178,6 +187,39 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
       label: evaluation || "Cần hỗ trợ",
       bg: "bg-orange-50 text-orange-700 border-orange-200",
       dotColor: "bg-orange-500",
+    };
+  };
+
+  // Phân loại nhãn dạng bài toán (US 8.1 - AC 8.1.2: Nhận diện bài cùng dạng đổi số / Luyện tập củng cố)
+  const getCategoryBadge = (
+    category?: string | null,
+    isDuplicate?: boolean | null
+  ) => {
+    if (category === "ISOMORPHIC_PRACTICE") {
+      return {
+        label: "Luyện tập củng cố",
+        tooltip:
+          "Bài toán cùng dạng đổi số liệu, giúp con củng cố kiến thức và rèn luyện thành thạo mà không tính trùng dạng mới",
+        bg: "bg-amber-50 text-amber-800 border-amber-300",
+        iconColor: "text-amber-600",
+        icon: RotateCcw,
+      };
+    }
+    if (category === "EXACT_DUPLICATE" || isDuplicate) {
+      return {
+        label: "Bài trùng lặp",
+        tooltip: "Bài toán trùng lặp nội dung với bài đã giải trước đó",
+        bg: "bg-stone-100 text-stone-600 border-stone-200",
+        iconColor: "text-stone-500",
+        icon: Sparkles,
+      };
+    }
+    return {
+      label: "Dạng bài mới",
+      tooltip: "Dạng toán hoặc chủ đề mới con vừa khám phá",
+      bg: "bg-orange-50 text-orange-800 border-orange-200",
+      iconColor: "text-orange-600",
+      icon: Sparkles,
     };
   };
 
@@ -340,7 +382,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                       {/* Cột thông tin bài */}
                       <div className="space-y-2 flex-1">
-                        {/* Thời gian & Badge tự lập */}
+                        {/* Thời gian & Badge tự lập & Nhãn dạng bài (AC 8.1.2) */}
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-[11px] font-medium text-[#C1762A] flex items-center gap-1">
                             <Clock size={12} />
@@ -351,11 +393,26 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                           >
                             {badge.label} • {item.score}/100đ
                           </span>
+
+                          {/* Nhãn dạng bài toán (AC 8.1.2: Luyện tập củng cố) */}
+                          {(() => {
+                            const catBadge = getCategoryBadge(item.category, item.is_duplicate);
+                            const IconComp = catBadge.icon;
+                            return (
+                              <span
+                                title={catBadge.tooltip}
+                                className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 shadow-2xs transition-colors ${catBadge.bg}`}
+                              >
+                                <IconComp size={11} className={catBadge.iconColor} />
+                                {catBadge.label}
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         {/* Tiêu đề bài toán */}
                         <h3 className="text-base font-extrabold text-[#8C4905] leading-snug">
-                          {title}
+                          {cleanLatexForDisplay(title)}
                         </h3>
 
                         {/* Thống kê gợi ý & chưa hiểu */}
@@ -370,13 +427,13 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                           </span>
                         </div>
 
-                        {/* Đoạn trích chat tóm tắt nếu có */}
-                        {item.chat_summary && (
+                        {/* Đoạn trích chat tóm tắt hoặc đề bài toán con gửi */}
+                        {(item.chat_summary || item.problem_text) && (
                           <div className="mt-3 p-3 rounded-xl bg-white border border-[#F1CCA6]/70 text-xs text-[#8C4905] line-clamp-2 italic leading-relaxed">
                             <span className="font-bold text-[#C1762A] not-italic mr-1.5">
                               Con hỏi:
                             </span>
-                            &ldquo;{item.chat_summary.split(" | ")[0]}&rdquo;
+                            &ldquo;{cleanLatexForDisplay(item.chat_summary ? item.chat_summary.split(" | ")[0] : item.problem_text)}&rdquo;
                           </div>
                         )}
                       </div>
@@ -442,7 +499,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 className={`p-2 rounded-xl border border-[#F1CCA6] text-xs font-bold transition flex items-center gap-1 ${
                   currentPage <= 1
-                    ? "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400"
+                    ? "opacity-40 cursor-not-allowed bg-stone-50 text-stone-400"
                     : "bg-white text-[#8C4905] hover:bg-[#F7ECE1]"
                 }`}
               >
@@ -453,7 +510,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 className={`p-2 rounded-xl border border-[#F1CCA6] text-xs font-bold transition flex items-center gap-1 ${
                   currentPage >= totalPages
-                    ? "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400"
+                    ? "opacity-40 cursor-not-allowed bg-stone-50 text-stone-400"
                     : "bg-white text-[#8C4905] hover:bg-[#F7ECE1]"
                 }`}
               >
@@ -473,7 +530,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
           onClick={() => setActiveImage(null)}
         >
           <div
-            className="relative max-w-4xl w-full bg-[#1e1b18] rounded-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[90vh]"
+            className="relative max-w-4xl w-full bg-[#1C1917] rounded-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -541,7 +598,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                     Hành Trình Tư Duy Của Con
                   </h3>
                   <p className="text-xs text-[#C1762A] line-clamp-1">
-                    {activeDialogue.session_title || "Bài toán giải cùng AI Socratic"}
+                    {cleanLatexForDisplay(activeDialogue.session_title || "Bài toán giải cùng AI Socratic")}
                   </p>
                 </div>
               </div>
@@ -613,7 +670,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                             className={`p-3.5 rounded-2xl border transition-all ${
                               isUser
                                 ? "bg-[#FFFBF7] border-[#F1CCA6] shadow-2xs ml-1"
-                                : "bg-[#FAF8F5] border-[#E2D9CF] shadow-2xs ml-1"
+                                : "bg-white border-[#F1CCA6] shadow-2xs ml-1"
                             }`}
                           >
                             {/* Header tin nhắn */}
@@ -639,7 +696,7 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                               </span>
 
                               {msg.created_at && (
-                                <span className="text-[10px] text-gray-400">
+                                <span className="text-[10px] text-stone-400">
                                   {format(parseISO(msg.created_at), "HH:mm")}
                                 </span>
                               )}
@@ -671,14 +728,26 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                               </div>
                             )}
 
-                            {/* Nội dung đối thoại */}
-                            <p
-                              className={`text-xs leading-relaxed whitespace-pre-line font-medium ${
-                                isUser ? "text-[#8C4905]" : "text-[#5A3818]"
-                              }`}
-                            >
-                              {msg.content}
-                            </p>
+                            {/* Nội dung đối thoại (Hỗ trợ render KaTeX & Markdown chuẩn cho cả Con và AI) */}
+                            {isUser ? (
+                              <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#8C4905] min-w-0 break-words overflow-visible">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkMath, remarkGfm]}
+                                  rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
+                                >
+                                  {preprocessLaTeX(msg.content)}
+                                </ReactMarkdown>
+                              </div>
+                            ) : (
+                              <div className="markdown-prose prose-sm max-w-none text-xs leading-relaxed font-medium text-[#1C1917] min-w-0 break-words overflow-visible">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkMath, remarkGfm]}
+                                  rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
+                                >
+                                  {preprocessLaTeX(msg.content)}
+                                </ReactMarkdown>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -714,13 +783,13 @@ export function ChildProblemHistory({ studentId }: ChildProblemHistoryProps) {
                             : `Con phản hồi bước ${index + 1}:`}
                         </span>
                         <p className="text-xs text-[#8C4905] leading-relaxed font-medium">
-                          &ldquo;{sentence}&rdquo;
+                          &ldquo;{cleanLatexForDisplay(sentence)}&rdquo;
                         </p>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="p-4 rounded-xl bg-gray-50 text-center text-xs text-gray-500">
+                  <div className="p-4 rounded-xl bg-stone-50 text-center text-xs text-stone-500">
                     Chưa có trích đoạn văn bản cho phiên giải này.
                   </div>
                 )}

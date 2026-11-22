@@ -1,0 +1,636 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { GraduationCap, Users, CheckCircle2, ArrowRight, Loader2, Sparkles, BookOpen, Mail, Lock } from "lucide-react";
+import OtpModal from "@/components/OtpModal";
+
+export default function OnboardingPage() {
+  const { data: session, status, update } = useSession();
+  const router = useRouter();
+
+  const [role, setRole] = useState<"STUDENT" | "MONITOR">("STUDENT");
+  const [selectedGrade, setSelectedGrade] = useState<number>(6);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+
+  // Email state & Lỗi riêng của trường Email Phụ huynh (hiển thị trực tiếp tại ô input)
+  const [parentEmail, setParentEmail] = useState("");
+  const [parentEmailError, setParentEmailError] = useState<string | null>(null);
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [isGoogleOAuth, setIsGoogleOAuth] = useState(false);
+
+  // Hàm hủy đăng nhập, dọn dẹp tài khoản PENDING trong DB và đăng xuất sạch NextAuth
+  const handleCancel = useCallback(async () => {
+    try {
+      const token = session?.access_token;
+      if (token) {
+        const backendUrl =
+          process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+        await fetch(`${backendUrl}/auth/cancel-onboarding`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("[Onboarding] Lỗi khi hủy đăng nhập:", err);
+    }
+    await signOut({ callbackUrl: "/" });
+  }, [session]);
+
+  // Bắt sự kiện người dùng nhấn nút Back trên trình duyệt để hủy an toàn
+  useEffect(() => {
+    const handlePopState = () => {
+      handleCancel();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [handleCancel]);
+
+  // Nhận biết tài khoản Google OAuth & điền email cố định
+  useEffect(() => {
+    if ((session?.user as any)?.oauth_provider === "google") {
+      setIsGoogleOAuth(true);
+      if (session?.user?.email) {
+        setParentEmail(session.user.email);
+      }
+    }
+
+    if (session?.access_token) {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      fetch(`${backendUrl}/users/me`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.oauth_provider === "google") {
+            setIsGoogleOAuth(true);
+            if (data.email) {
+              setParentEmail(data.email);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [session]);
+
+  // Điều hướng nếu chưa đăng nhập hoặc đã hoàn tất onboarding
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/");
+    } else if (status === "authenticated" && session) {
+      const isNew = session.is_new_user ?? (session.user as any)?.is_new_user;
+      const userRole = (session.user as any)?.role;
+      const grade = (session.user as any)?.grade_level;
+
+      // TUYỆT ĐỐI KHÔNG chuyển hướng sang Dashboard nếu userRole đang là PENDING
+      if (
+        isNew === false &&
+        userRole !== "PENDING" &&
+        (userRole === "MONITOR" || (userRole === "STUDENT" && grade))
+      ) {
+        if (userRole === "MONITOR") {
+          router.replace("/dashboard/monitor");
+        } else {
+          router.replace("/dashboard/chat");
+        }
+      }
+    }
+  }, [status, session, router]);
+
+  // Hoàn tất lưu onboarding vào backend
+  const finalizeOnboarding = async (targetRole: "STUDENT" | "MONITOR", gradeVal: number | null) => {
+    const token = session?.access_token;
+    if (!token) {
+      throw new Error("Không tìm thấy phiên đăng nhập. Vui lòng đăng nhập lại.");
+    }
+
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    const res = await fetch(`${backendUrl}/auth/onboarding`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        role: targetRole,
+        grade: targetRole === "STUDENT" ? gradeVal : null,
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || "Không thể lưu thông tin. Vui lòng thử lại.");
+    }
+
+    const data = await res.json();
+
+    // Đồng bộ thông tin mới vào session của NextAuth
+    await update({
+      role: data.role,
+      grade_level: data.grade,
+      is_new_user: false,
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+    });
+
+    // Điều hướng người dùng tới Dashboard tương ứng
+    if (data.role === "MONITOR") {
+      router.replace("/dashboard/monitor");
+    } else {
+      router.replace("/dashboard/chat");
+    }
+  };
+
+  // Xử lý gửi OTP cho Phụ huynh — Toàn bộ lỗi được bắt và hiển thị ngay tại khung nhập email
+  const handleRequestParentOtp = async () => {
+    const trimmedEmail = parentEmail.trim();
+    if (!trimmedEmail) {
+      setParentEmailError("Vui lòng nhập email nhận thông báo của phụ huynh");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+    if (!emailRegex.test(trimmedEmail)) {
+      setParentEmailError("Địa chỉ email không hợp lệ. Vui lòng kiểm tra lại định dạng.");
+      return;
+    }
+
+    setParentEmailError(null);
+    setGeneralError(null);
+    setIsSubmitting(true);
+
+    try {
+      const token = session?.access_token;
+      if (!token) {
+        setParentEmailError("Phiên đăng nhập đã hết hạn. Vui lòng tải lại trang.");
+        return;
+      }
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/auth/request-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          purpose: "PARENT_REGISTER",
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        // Hiển thị trực tiếp lỗi ngay tại khung email (VD: Email này đã được sử dụng bởi tài khoản khác)
+        setParentEmailError(data.detail || "Không thể gửi mã OTP tới email này. Vui lòng thử lại.");
+        return;
+      }
+
+      // Mở Modal OTP Digit Input UX
+      setIsOtpModalOpen(true);
+    } catch (err: any) {
+      setParentEmailError(err.message || "Đã xảy ra lỗi khi gửi mã OTP. Vui lòng thử lại.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handler khi submit form
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGeneralError(null);
+
+    if (role === "STUDENT") {
+      if (!selectedGrade || selectedGrade < 4 || selectedGrade > 9) {
+        setGeneralError("Vui lòng chọn khối lớp từ lớp 4 đến lớp 9.");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await finalizeOnboarding("STUDENT", selectedGrade);
+      } catch (err: any) {
+        setGeneralError(err.message || "Đã xảy ra lỗi khi hoàn tất thiết lập.");
+        setIsSubmitting(false);
+      }
+    } else {
+      // Vai trò MONITOR: Bấm tiếp tục mở Modal OTP 6 ô rời
+      await handleRequestParentOtp();
+    }
+  };
+
+  // Callback xác thực OTP từ Modal
+  const handleVerifyOtp = async (otpCode: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = session?.access_token;
+      if (!token) {
+        return { success: false, error: "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại." };
+      }
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/auth/verify-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: parentEmail.trim(),
+          otp_code: otpCode.trim(),
+          purpose: "PARENT_REGISTER",
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const detail = errData.detail || "Mã xác thực không chính xác";
+        if (typeof detail === "string" && (detail.includes("hết hạn") || detail.includes("không hợp lệ"))) {
+          return { success: false, error: "Mã OTP đã hết hạn, vui lòng bấm Gửi lại mã" };
+        }
+        return { success: false, error: detail };
+      }
+
+      // Xác thực OTP thành công -> Hoàn tất Onboarding với role MONITOR
+      await finalizeOnboarding("MONITOR", null);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Mã xác thực không chính xác" };
+    }
+  };
+
+  // Callback gửi lại mã OTP từ Modal
+  const handleResendOtp = async (): Promise<{ success: boolean; error?: string; rateLimitSeconds?: number }> => {
+    try {
+      const token = session?.access_token;
+      if (!token) {
+        return { success: false, error: "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại." };
+      }
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${backendUrl}/auth/request-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: parentEmail.trim(),
+          purpose: "PARENT_REGISTER",
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, error: errData.detail || "Không thể gửi lại mã OTP." };
+      }
+
+      const data = await res.json().catch(() => ({}));
+      return { success: true, rateLimitSeconds: data.rate_limit_seconds || 60 };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Lỗi khi gửi lại mã." };
+    }
+  };
+
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen bg-[#F7ECE1] flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-14 h-14 rounded-full border-4 border-[#F1CCA6] border-t-[#C1762A] animate-spin" />
+          <p className="text-[#8C4905] font-semibold text-base animate-pulse">
+            Đang tải thông tin của bạn...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const grades = [
+    { grade: 4, label: "Lớp 4", level: "Tiểu học" },
+    { grade: 5, label: "Lớp 5", level: "Tiểu học" },
+    { grade: 6, label: "Lớp 6", level: "THCS" },
+    { grade: 7, label: "Lớp 7", level: "THCS" },
+    { grade: 8, label: "Lớp 8", level: "THCS" },
+    { grade: 9, label: "Lớp 9", level: "THCS" },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#F7ECE1] text-[#8C4905] font-sans flex flex-col justify-between p-4 sm:p-8">
+      {/* Top Brand Header */}
+      <header className="max-w-4xl mx-auto w-full flex items-center justify-between pb-6 border-b border-[#F1CCA6]/60">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-white shadow-xs">
+            <img src="/logo.png" alt="SocraticKid" className="w-full h-full object-cover" />
+          </div>
+          <div>
+            <span className="font-extrabold italic text-2xl text-[#C1762A] tracking-tight">
+              SocraticKid
+            </span>
+            <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-[#F1CCA6] text-[#8C4905]">
+              Thiết lập ban đầu
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {session?.user && (
+            <div className="flex items-center gap-2.5 bg-white/70 backdrop-blur-xs py-1.5 px-3 rounded-full border border-[#F1CCA6] shadow-xs">
+              {session.user.image ? (
+                <img
+                  src={session.user.image}
+                  alt="Avatar"
+                  className="w-7 h-7 rounded-full border border-[#C1762A]"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-[#C1762A] text-white flex items-center justify-center font-bold text-xs">
+                  {session.user.name?.[0] || "U"}
+                </div>
+              )}
+              <span className="text-xs font-semibold text-[#8C4905] hidden sm:inline max-w-[150px] truncate">
+                {session.user.name || session.user.email}
+              </span>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Main Container */}
+      <main className="max-w-2xl mx-auto w-full my-8 bg-white/80 backdrop-blur-sm rounded-3xl p-6 sm:p-10 border border-[#F1CCA6] shadow-md">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#F7ECE1] text-[#C1762A] text-xs font-bold mb-3 border border-[#F1CCA6]">
+            <Sparkles className="w-4 h-4 text-[#C1762A]" />
+            Khởi đầu cùng Trợ lý AI
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#C1762A] tracking-tight mb-2">
+            Chào mừng bạn đến với SocraticKid!
+          </h1>
+          <p className="text-sm sm:text-base text-[#8C4905]/80 font-medium max-w-lg mx-auto">
+            Hãy chọn vai trò và khối lớp để AI chuẩn hóa phương pháp gợi mở và đồng hành phù hợp nhất với bạn.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Section 1: Chọn Vai trò */}
+          <div>
+            <label className="block text-sm font-bold text-[#8C4905] mb-3">
+              1. Bạn tham gia SocraticKid với vai trò gì?
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Card Học sinh */}
+              <button
+                type="button"
+                onClick={() => {
+                  setRole("STUDENT");
+                  setParentEmailError(null);
+                  setGeneralError(null);
+                }}
+                className={`relative p-5 rounded-2xl border-2 text-left transition-all duration-150 ease-out cursor-pointer flex flex-col justify-between active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] ${
+                  role === "STUDENT"
+                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-xs ring-2 ring-[#C1762A]/20"
+                    : "border-[#F1CCA6] bg-white hover:border-[#C1762A] hover:bg-[#F7ECE1]/40"
+                }`}
+              >
+                {role === "STUDENT" && (
+                  <div className="absolute top-4 right-4 text-[#C1762A]">
+                    <CheckCircle2 className="w-5 h-5 fill-[#C1762A] text-white" />
+                  </div>
+                )}
+                <div>
+                  <div className="w-12 h-12 rounded-xl bg-[#F1CCA6]/50 flex items-center justify-center text-[#C1762A] mb-3">
+                    <GraduationCap className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-base text-[#8C4905] mb-1">
+                    Em là Học sinh
+                  </h3>
+                  <p className="text-xs text-[#8C4905]/75 font-medium leading-relaxed">
+                    Tự học Toán qua gợi mở từng bước của AI Socratic, tích lũy điểm ngọn lửa Streak.
+                  </p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-[#F1CCA6]/40 flex items-center gap-1.5 text-xs font-bold text-[#C1762A]">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Lớp 4 đến Lớp 9
+                </div>
+              </button>
+
+              {/* Card Phụ huynh */}
+              <button
+                type="button"
+                onClick={() => {
+                  setRole("MONITOR");
+                  setGeneralError(null);
+                }}
+                className={`relative p-5 rounded-2xl border-2 text-left transition-all duration-150 ease-out cursor-pointer flex flex-col justify-between active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] ${
+                  role === "MONITOR"
+                    ? "border-[#C1762A] bg-[#F7ECE1]/60 shadow-xs ring-2 ring-[#C1762A]/20"
+                    : "border-[#F1CCA6] bg-white hover:border-[#C1762A] hover:bg-[#F7ECE1]/40"
+                }`}
+              >
+                {role === "MONITOR" && (
+                  <div className="absolute top-4 right-4 text-[#C1762A]">
+                    <CheckCircle2 className="w-5 h-5 fill-[#C1762A] text-white" />
+                  </div>
+                )}
+                <div>
+                  <div className="w-12 h-12 rounded-xl bg-[#F1CCA6]/50 flex items-center justify-center text-[#C1762A] mb-3">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-base text-[#8C4905] mb-1">
+                    Tôi là Phụ huynh
+                  </h3>
+                  <p className="text-xs text-[#8C4905]/75 font-medium leading-relaxed">
+                    Theo dõi tiến độ tự lập, nhận cảnh báo học tập định kỳ và quản lý bài giải của con.
+                  </p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-[#F1CCA6]/40 flex items-center gap-1.5 text-xs font-bold text-[#C1762A]">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Báo cáo & Giám sát (Xác thực OTP)
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Section 2: Khối lớp (Khi là Học sinh) */}
+          {role === "STUDENT" ? (
+            <div>
+              <label className="block text-sm font-bold text-[#8C4905] mb-1.5">
+                2. Em đang học lớp mấy?
+              </label>
+              <p className="text-xs text-[#8C4905]/70 font-medium mb-3.5">
+                Chương trình học và câu hỏi gợi mở sẽ được tùy biến sát theo sách giáo khoa khối lớp của em.
+              </p>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+                {grades.map((item) => {
+                  const isSelected = selectedGrade === item.grade;
+                  return (
+                    <button
+                      key={item.grade}
+                      type="button"
+                      onClick={() => {
+                        setSelectedGrade(item.grade);
+                        setGeneralError(null);
+                      }}
+                      className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all duration-150 ease-out cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A] ${
+                        isSelected
+                          ? "border-[#C1762A] bg-[#C1762A] text-white shadow-xs"
+                          : "border-[#F1CCA6] bg-white text-[#8C4905] hover:border-[#C1762A] hover:bg-[#F7ECE1]"
+                      }`}
+                    >
+                      <span className="font-extrabold text-base">
+                        {item.label}
+                      </span>
+                      <span
+                        className={`text-[10px] font-semibold ${
+                          isSelected ? "text-[#F7ECE1]" : "text-[#8C4905]/60"
+                        }`}
+                      >
+                        {item.level}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            /* Luồng Email Phụ huynh: Toàn bộ lỗi hiển thị ngay tại khung này */
+            isGoogleOAuth ? (
+              /* Google OAuth — Không cho chỉnh sửa, hiển thị Card cố định y hệt trang Cài đặt */
+              <div className="space-y-2">
+                <div className="flex items-start gap-3.5 p-5 bg-[#F7ECE1]/80 rounded-2xl border border-[#F1CCA6] shadow-xs">
+                  <div className="w-9 h-9 rounded-xl bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center shrink-0 mt-0.5">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-[#8C4905]">
+                        Tài khoản Google — Email nhận thông báo cố định
+                      </p>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#F1CCA6] text-[#8C4905] border border-[#C1762A]/30">
+                        Google OAuth
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#8C4905]/80 leading-relaxed">
+                      Email <span className="font-extrabold text-[#C1762A] break-all">{parentEmail || session?.user?.email}</span> sẽ được dùng để nhận thông báo và cảnh báo học tập của con. Vì bạn đăng nhập bằng Google, email này không thể thay đổi.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Lỗi riêng của Google Email nếu có */}
+                {parentEmailError && (
+                  <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-[#EF4444] text-xs font-bold flex items-center gap-2 animate-shake">
+                    <span className="text-base">⚠️</span>
+                    <span>{parentEmailError}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Tài khoản thường (Username / Password) — Nhập email để nhận mã OTP */
+              <div className="bg-[#F7ECE1]/60 rounded-2xl border border-[#F1CCA6] p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#C1762A]/10 text-[#C1762A] flex items-center justify-center">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-[#8C4905]">Email nhận thông báo Phụ huynh</p>
+                    <p className="text-xs text-[#8C4905]/70">
+                      Hệ thống sẽ gửi mã OTP xác nhận tới email này trước khi hoàn tất kích hoạt.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <input
+                    type="email"
+                    value={parentEmail}
+                    onChange={(e) => {
+                      setParentEmail(e.target.value);
+                      if (parentEmailError) setParentEmailError(null);
+                    }}
+                    placeholder="vidu: phuhuynh@gmail.com"
+                    className={`w-full px-4 py-3 rounded-xl bg-white text-[#1C1917] text-sm font-medium transition-all ${
+                      parentEmailError
+                        ? "border-2 border-[#EF4444] focus:ring-2 focus:ring-[#EF4444]/30 focus:outline-none animate-shake"
+                        : "border border-[#F1CCA6] focus:border-[#C1762A] focus:ring-2 focus:ring-[#C1762A]/20 focus:outline-none"
+                    }`}
+                  />
+                  {/* Báo lỗi ngay bên dưới khung nhập Email */}
+                  {parentEmailError && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-red-50 border border-red-200 text-[#EF4444] text-xs font-bold flex items-center gap-2 animate-fade-in">
+                      <span className="text-base shrink-0">⚠️</span>
+                      <span className="leading-snug">{parentEmailError}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          )}
+
+          {/* Lỗi chung ngay trên nút bấm nếu có (không bao giờ đẩy lên đỉnh trang) */}
+          {generalError && (
+            <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-[#EF4444] text-xs font-bold flex items-center gap-2 animate-fade-in">
+              <span className="text-base shrink-0">⚠️</span>
+              <span>{generalError}</span>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-[#C1762A] to-[#8C4905] text-white font-bold text-base shadow-md hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Đang xử lý...</span>
+              </>
+            ) : (
+              <>
+                <span>
+                  {role === "STUDENT"
+                    ? "Bắt đầu học ngay với SocraticKid"
+                    : isGoogleOAuth
+                    ? "Xác thực OTP Email Google"
+                    : "Tiếp tục xác thực OTP Email"}
+                </span>
+                <ArrowRight className="w-5 h-5" />
+              </>
+            )}
+          </button>
+
+          {/* Nút Hủy đăng nhập */}
+          <div className="text-center pt-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="text-xs font-bold text-[#8C4905]/75 hover:text-[#C1762A] hover:underline transition-colors cursor-pointer"
+            >
+              Không muốn tiếp tục? Hủy đăng nhập và quay về Trang chủ
+            </button>
+          </div>
+        </form>
+      </main>
+
+      {/* Modal OTP 6 ô rời (Digit Input UX) */}
+      <OtpModal
+        isOpen={isOtpModalOpen}
+        email={parentEmail}
+        title="Xác thực OTP Email Phụ huynh"
+        onClose={() => setIsOtpModalOpen(false)}
+        onVerify={handleVerifyOtp}
+        onResend={handleResendOtp}
+        initialCountdown={60}
+      />
+
+      {/* Footer */}
+      <footer className="text-center text-xs text-[#8C4905]/60 font-medium py-3">
+        © 2026 SocraticKid — Trợ lý AI giáo dục Socratic cho học sinh Việt Nam
+      </footer>
+    </div>
+  );
+}

@@ -14,6 +14,7 @@ import { Menu } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { refreshSession } from "@/lib/authFetch";
+import { initBadgeSession } from "@/lib/badgeStorage";
 
 export default function DashboardLayout({
   children,
@@ -83,6 +84,16 @@ export default function DashboardLayout({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [update, isMonitorRoute, isStudent]);
+
+  // [Task T9.8 & T9.8b] Khởi tạo badge session cho học sinh trên toàn Dashboard (sync DB & migrate)
+  const studentId = (session?.user as any)?.id || (session?.user as any)?.email;
+  useEffect(() => {
+    if (studentId && isStudent) {
+      initBadgeSession(studentId).catch((err) => {
+        console.warn("[DashboardLayout] Lỗi initBadgeSession:", err);
+      });
+    }
+  }, [studentId, isStudent]);
 
   // Khi ở trang Chat hoặc Monitor, nhường layout cho trang con tự quản lý
   if (isChatRoute || isMonitorRoute) {

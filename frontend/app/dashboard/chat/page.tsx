@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useSyncExternalStore } from "react";
+import { useState, useEffect, useMemo, useCallback, useSyncExternalStore, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatWindow } from "@/components/chat/ChatWindow";
@@ -10,12 +10,13 @@ import { FileTooLargeToast } from "@/components/chat/FileTooLargeToast";
 // T7.18 (US 7.2): Streak Flame & Badge Modal
 import { StreakBadge } from "@/components/chat/StreakBadge";
 import { BadgeModal, BadgeItem, DEFAULT_BADGES } from "@/components/chat/BadgeModal";
-import { getMergedBadges, saveStoredBadge, resetStoredBadge } from "@/lib/badgeStorage";
+import { getMergedBadges, saveStoredBadge, resetStoredBadge, initBadgeSession, BADGE_SYNC_EVENT } from "@/lib/badgeStorage";
 import { Conversation, Message } from "@/types/chat";
-import { Menu, PanelRight } from "lucide-react";
+import { Menu, PanelRight, Trophy } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/authFetch";
 import { cn } from "@/lib/utils";
+import { cleanLatexForTitle } from "@/lib/latex";
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -58,6 +59,25 @@ export default function ChatPage() {
   // ChatWindow lắng nghe key này để trigger scroll-to-bottom ngay lập tức
   const [selectedChatKey, setSelectedChatKey] = useState(0);
 
+  // US 11.1 (AC 2, AC 3): Rate Limit Cooldown & Đồng hồ đếm lùi thời gian thực
+  const [rateLimitCooldown, setRateLimitCooldown] = useState<number>(0);
+  const lastAiFinishedAtRef = useRef<number>(0);
+
+  // Hiệu ứng đếm lùi mỗi 1 giây cho tới khi về 0 để tự động mở khóa nút Gửi mà không cần tải lại trang
+  useEffect(() => {
+    if (rateLimitCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setRateLimitCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [rateLimitCooldown]);
+
   // Trạng thái mở/đóng thanh sidebar bên phải (Right Sidebar chứa ảnh bài tập giống Zalo)
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
   // URL ảnh đang được phóng to trong ImageZoomModal
@@ -79,16 +99,35 @@ export default function ChatPage() {
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
   const [unlockedBadge, setUnlockedBadge] = useState<Partial<BadgeItem> | undefined>(undefined);
 
-  // Đồng bộ trạng thái huy hiệu từ LocalStorage theo User
+  // US 9.2 (T9.8 & T9.8b): Đồng bộ trạng thái huy hiệu từ Backend DB & LocalStorage theo User
   useEffect(() => {
     if (typeof window !== "undefined") {
       setAllBadges(getMergedBadges(userId));
+
+      let isMounted = true;
+      initBadgeSession(userId).then((merged) => {
+        if (isMounted) {
+          setAllBadges(merged);
+        }
+      });
+
+      const handleBadgesSynced = () => {
+        if (isMounted) {
+          setAllBadges(getMergedBadges(userId));
+        }
+      };
+      window.addEventListener(BADGE_SYNC_EVENT, handleBadgesSynced);
 
       // Hỗ trợ kiểm thử: cho phép Dev/QA reset huy hiệu qua Console
       (window as any).resetSocraticBadges = (badgeId?: string) => {
         resetStoredBadge(badgeId, userId);
         setAllBadges(getMergedBadges(userId));
         console.log(`[Badge] Đã reset huy hiệu ${badgeId || "tất cả"} cho user ${userId}`);
+      };
+
+      return () => {
+        isMounted = false;
+        window.removeEventListener(BADGE_SYNC_EVENT, handleBadgesSynced);
       };
     }
   }, [userId]);
@@ -130,14 +169,19 @@ export default function ChatPage() {
     }
   }, [badgeQueue, isBadgeModalOpen]);
 
-  // Khi tải xong số ngày streak: nếu >= 3 ngày -> mở khóa "Kiên Trì Bền Bỉ" (streak_3)
+  // Khi tải xong số ngày streak: kiểm tra theo kỷ lục cao nhất (nếu >= 3 ngày -> mở khóa, nếu < 3 ngày -> khóa lại)
   const handleStreakLoaded = useCallback(
-    (streakCount: number) => {
-      if (streakCount >= 3) {
+    (streakCount: number, maxStreakCount?: number) => {
+      const highestStreak = maxStreakCount !== undefined ? Math.max(streakCount, maxStreakCount) : streakCount;
+      if (highestStreak >= 3) {
         triggerUnlockBadge("streak_3");
+      } else {
+        // Tự động thu hồi/khóa lại nếu trước đó bị mở do test thử số ngày
+        resetStoredBadge("streak_3", userId);
+        setAllBadges(getMergedBadges(userId));
       }
     },
-    [triggerUnlockBadge]
+    [triggerUnlockBadge, userId]
   );
 
   const isOnline = useSyncExternalStore(
@@ -294,17 +338,50 @@ export default function ChatPage() {
     }
   };
 
-  // US4.1 & US6.1 - Handler: Hoc sinh nhan "Da hieu" -> them tin nhan chuc mung + luu diem tu luc vao DB
+  // US4.1 & US6.1 & US8.1 - Handler: Hoc sinh nhan "Da hieu"
+  // 1. An ngay lap tuc 2 nut "Da hieu / Chua hieu"
+  // 2. Hien thi bubble "SocraticKid dang nghi" (isTyping = true) trong khi Backend goi Gemini phan loai va sinh ten
+  // 3. Sau khi Backend phan loai xong:
+  //    - Neu la bai trung lap (EXACT_DUPLICATE / is_duplicate): Hien loi nhac bai da giai roi, khong tang so bai hoan thanh
+  //    - Neu la bai moi: Hien tin nhan chuc mung, doi cam xuc Cu "correct", nhay so bai + 1 bai va mo khoa huy hieu
   const handleUnderstood = async () => {
+    const prevNotUnderstoodCount = notUnderstoodCount;
     setNotUnderstoodCount(0);
-    console.log("[US4.1 & US6.1] Hoc sinh da hieu bai.");
+    console.log("[US4.1, US6.1, US8.1] Hoc sinh nhan Da hieu -> An nut, hien Socratic dang nghi...");
 
-    // Chỉ thêm message chúc mừng khi đang có cuộc trò chuyện
     if (!activeChatId) return;
 
-    let scoreCreatedAt: string | undefined = undefined;
+    const feedbackMsgId = `feedback-${Date.now()}`;
 
-    // Gửi request lên Backend (Task #160 - T6.4) để kích hoạt tính điểm và lưu vào DB
+    // 1. Cập nhật state ngay lập tức: Ẩn 2 nút & Chèn bong bóng SocraticKid đang nghĩ (content: "")
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeChatId
+          ? {
+            ...c,
+            messages: [
+              ...c.messages.map((m) => ({
+                ...m,
+                isAnswerRevealed: false, // Ẩn tức thì nút Đã hiểu/Chưa hiểu ở tin nhắn trước
+              })),
+              {
+                id: feedbackMsgId,
+                role: "assistant" as const,
+                content: "", // Rỗng -> Kích hoạt hiển thị "SocraticKid đang nghĩ" kèm 3 chấm động trong ChatMessage!
+                emotion: "thinking",
+                isAnswerRevealed: false,
+                isCongrats: false,
+                created_at: new Date().toISOString(),
+              },
+            ],
+          }
+          : c
+      )
+    );
+
+    setIsTyping(true);
+
+    // 2. Gửi request POST /chat/comprehension lên Backend để phân loại & sinh tên (Gemini chạy gộp 1 lần duy nhất)
     try {
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -320,72 +397,145 @@ export default function ChatPage() {
 
       if (res.ok) {
         const resData = await res.json();
-        if (resData.independence) {
-          scoreCreatedAt = resData.independence.created_at;
-          // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time (T6.5)
-          window.dispatchEvent(
-            new CustomEvent("INDEPENDENCE_SCORE_UPDATED", {
-              detail: resData.independence,
-            })
+        const isDuplicate = Boolean(
+          resData?.deduplication?.is_duplicate ||
+          resData?.independence?.is_duplicate ||
+          resData?.deduplication?.category === "EXACT_DUPLICATE"
+        );
+
+        if (isDuplicate) {
+          // --- TRƯỜNG HỢP 1: BÀI TRÙNG LẶP Y HỆT ĐÃ LÀM TRƯỚC ĐÓ (AC 8.1.1) ---
+          const reminderMsg = resData.deduplication?.gentle_reminder
+            ? `**${resData.deduplication.gentle_reminder}**
+
+*(Thầy ghi nhận em đã ôn tập lại bài này! Do giải lại bài đã làm nên điểm cộng sẽ giảm bớt (mỗi lần giảm 10đ, lần này em được +${resData?.independence?.score ?? 90}đ). Em hãy thử sức thêm bài mới nhé!)*`
+            : `**Thầy thấy em đã giải rất tốt bài này rồi!**\n\n*(Thầy ghi nhận em đã ôn tập lại bài này! Do giải lại bài đã làm nên điểm cộng sẽ giảm bớt (mỗi lần giảm 10đ, lần này em được +${resData?.independence?.score ?? 90}đ). Em hãy thử sức thêm bài mới nhé!)*`;
+
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === activeChatId
+                ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === feedbackMsgId
+                      ? {
+                        ...m,
+                        content: reminderMsg,
+                        emotion: "idle",
+                        isAnswerRevealed: false,
+                        isCongrats: false, // Không hiện nhãn chúc mừng / lưu sổ tay cho bài trùng
+                        created_at: resData?.independence?.created_at || new Date().toISOString(),
+                      }
+                      : m
+                  ),
+                }
+                : c
+            )
           );
 
-          // T7.18 (US 7.2): Nếu đạt 100 điểm tự lập -> Mở khóa huy hiệu "Tự lập nhí" (hiện 1 lần duy nhất)
-          if (resData.independence.score === 100 || notUnderstoodCount === 0) {
-            triggerUnlockBadge("independence_100");
+          // Phát sự kiện cập nhật điểm nhưng kèm cờ is_duplicate: true để Sidebar KHÔNG nhảy số bài (+1 bài)
+          if (resData.independence) {
+            window.dispatchEvent(
+              new CustomEvent("INDEPENDENCE_SCORE_UPDATED", {
+                detail: {
+                  ...resData.independence,
+                  is_duplicate: true,
+                  category: "EXACT_DUPLICATE",
+                },
+              })
+            );
           }
+        } else {
+          // --- TRƯỜNG HỢP 2: BÀI MỚI (NEW_TOPIC HOẶC ISOMORPHIC_PRACTICE) ---
+          const congratsMessages = [
+            "**Tuyệt vời!** Em đã hiểu rồi! Thầy rất vui vì em nắm được vấn đề. Hãy tiếp tục phát huy nhé!",
+            "**Xuất sắc!** Em đã hiểu bài rồi! Học toán mà hiểu được như vậy là rất giỏi đó. Tiếp tục nhé!",
+            "**Giỏi lắm!** Em đã nắm được kiến thức này rồi! Mỗi câu hỏi hiểu được là một bước tiến lớn. Cứ tiếp tục học nhé!",
+          ];
+          const randomMsg = congratsMessages[Math.floor(Math.random() * congratsMessages.length)];
 
-          // T7.18 (US 7.2): Nếu bài toán có kèm ảnh bài tập -> Mở khóa huy hiệu "Thám Tử Hình Ảnh" (hiện 1 lần duy nhất)
-          const currentConv = conversations.find((c) => c.id === activeChatId);
-          const hasImageInSession = Boolean(
-            currentImages.length > 0 ||
-            currentConv?.messages.some((m) => Boolean(m.attachment_url))
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === activeChatId
+                ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === feedbackMsgId
+                      ? {
+                        ...m,
+                        content: randomMsg,
+                        emotion: "correct",
+                        isAnswerRevealed: false,
+                        isCongrats: true, // Hiện nút Lưu vào Sổ tay
+                        created_at: resData?.independence?.created_at || new Date().toISOString(),
+                      }
+                      : m
+                  ),
+                }
+                : c
+            )
           );
-          if (hasImageInSession) {
-            triggerUnlockBadge("photo_solver");
+
+          // Phát sự kiện toàn cục để thanh tiến trình Mastery trên Sidebar cập nhật real-time & NHẢY SỐ BÀI (+1 bài)
+          if (resData.independence) {
+            window.dispatchEvent(
+              new CustomEvent("INDEPENDENCE_SCORE_UPDATED", {
+                detail: {
+                  ...resData.independence,
+                  is_duplicate: false,
+                },
+              })
+            );
+
+            // T7.18 (US 7.2): Nếu đạt 100 điểm tự lập -> Mở khóa huy hiệu "Tự lập nhí" (hiện 1 lần duy nhất)
+            if (resData.independence.score === 100 || prevNotUnderstoodCount === 0) {
+              triggerUnlockBadge("independence_100");
+            }
+
+            // T7.18 (US 7.2): Nếu bài toán có kèm ảnh bài tập -> Mở khóa huy hiệu "Thám Tử Hình Ảnh" (hiện 1 lần duy nhất)
+            const currentConv = conversations.find((c) => c.id === activeChatId);
+            const hasImageInSession = Boolean(
+              currentImages.length > 0 ||
+              currentConv?.messages.some((m) => Boolean(m.attachment_url))
+            );
+            if (hasImageInSession) {
+              triggerUnlockBadge("photo_solver");
+            }
           }
         }
       }
     } catch (e) {
-      console.warn("[US6.1] Lỗi gửi comprehension feedback lên backend:", e);
-    }
-
-    const congratsMessages = [
-      "**Tuyệt vời!** Em đã hiểu rồi! Thầy rất vui vì em nắm được vấn đề. Hãy tiếp tục phát huy nhé!",
-      "**Xuất sắc!** Em đã hiểu bài rồi! Học toán mà hiểu được như vậy là rất giỏi đó. Tiếp tục nhé!",
-      "**Giỏi lắm!** Em đã nắm được kiến thức này rồi! Mỗi câu hỏi hiểu được là một bước tiến lớn. Cứ tiếp tục học nhé!",
-    ];
-    const randomMsg = congratsMessages[Math.floor(Math.random() * congratsMessages.length)];
-    const congratsId = `congrats-${Date.now()}`;
-
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeChatId
-          ? {
+      console.warn("[US6.1 & US8.1] Lỗi gửi comprehension feedback lên backend:", e);
+      // Fallback khi lỗi mạng: hiện thông báo chúc mừng mặc định
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeChatId
+            ? {
               ...c,
-              messages: [
-                ...c.messages,
-                {
-                  id: congratsId,
-                  role: "assistant" as const,
-                  content: randomMsg,
-                  emotion: "correct",
-                  isAnswerRevealed: false, // Không hiện lại nút Đã hiểu/Chưa hiểu
-                  isCongrats: true, // Đánh dấu tin nhắn chúc mừng để hiển thị nút Lưu vào Sổ tay
-                  created_at: scoreCreatedAt || new Date().toISOString(),
-                },
-              ],
+              messages: c.messages.map((m) =>
+                m.id === feedbackMsgId
+                  ? {
+                    ...m,
+                    content: "**Tuyệt vời!** Em đã hiểu rồi! Thầy rất vui vì em nắm được vấn đề. Hãy tiếp tục phát huy nhé!",
+                    emotion: "correct",
+                    isAnswerRevealed: false,
+                    isCongrats: true,
+                  }
+                  : m
+              ),
             }
-          : c
-      )
-    );
-
-    // Con cú giữ nguyên trạng thái correct — không reset về idle
+            : c
+        )
+      );
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   // US4.1 - Trigger AI giai thich lai (AN, khong them tin nhan user vao UI)
   // Nhan tham so prompt de tai su dung cho ca lan 1 (giai thich lai) va lan 5+ (dua dap an)
   const triggerSilentReexplain = async (conversationId: string, prompt: string) => {
-    if (!conversationId) return;
+    if (!conversationId || isTyping) return;
     setIsTyping(true);
     const botMessageId = (Date.now() + 1).toString();
     const initialBotMsg: Message = {
@@ -459,18 +609,18 @@ export default function ChatPage() {
                     prev.map((c) =>
                       c.id === conversationId
                         ? {
-                            ...c,
-                            messages: c.messages.map((m) =>
-                              m.id === botMessageId
-                                ? {
-                                    ...m,
-                                    content: aiText,
-                                    emotion: lastEmotion,
-                                    isAnswerRevealed: isAnswerRevealedFlag,
-                                  }
-                                : m,
-                            ),
-                          }
+                          ...c,
+                          messages: c.messages.map((m) =>
+                            m.id === botMessageId
+                              ? {
+                                ...m,
+                                content: aiText,
+                                emotion: lastEmotion,
+                                isAnswerRevealed: isAnswerRevealedFlag,
+                              }
+                              : m,
+                          ),
+                        }
                         : c,
                     ),
                   );
@@ -507,6 +657,7 @@ export default function ChatPage() {
   // - Lan 5+: AI dua ra dap an truc tiep va giai thich tung buoc (prompt ngam)
   const MAX_NOT_UNDERSTOOD = 5;
   const handleNotUnderstood = () => {
+    if (isTyping) return;
     const newCount = notUnderstoodCount + 1;
     setNotUnderstoodCount(newCount);
 
@@ -555,11 +706,11 @@ export default function ChatPage() {
         prev.map((c) =>
           c.id === targetConversationId
             ? {
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === userMessageId ? { ...m, status: "error" } : m,
-                ),
-              }
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === userMessageId ? { ...m, status: "error" } : m,
+              ),
+            }
             : c,
         ),
       );
@@ -574,11 +725,11 @@ export default function ChatPage() {
         prev.map((c) =>
           c.id === targetConversationId
             ? {
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === userMessageId ? { ...m, status: "sent" } : m,
-                ),
-              }
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === userMessageId ? { ...m, status: "sent" } : m,
+              ),
+            }
             : c,
         ),
       );
@@ -631,12 +782,35 @@ export default function ChatPage() {
 
       if (!response.ok) {
         let errMsg = `Lỗi từ máy chủ (${response.status})`;
+        let retryAfterSec = 0;
         try {
           const errData = await response.json();
-          if (errData?.detail) errMsg = errData.detail;
+          if (errData?.detail) {
+            if (typeof errData.detail === "string") {
+              errMsg = errData.detail;
+            } else if (errData.detail.message) {
+              errMsg = errData.detail.message;
+            } else {
+              errMsg = JSON.stringify(errData.detail);
+            }
+            if (errData.detail.retry_after_seconds) {
+              retryAfterSec = Number(errData.detail.retry_after_seconds);
+            }
+          }
         } catch {
           // ignore
         }
+
+        const retryHeader = response.headers.get("Retry-After");
+        if (retryHeader) {
+          retryAfterSec = Math.max(retryAfterSec, parseInt(retryHeader, 10) || 0);
+        }
+
+        // US 11.1 (AC 1 & AC 3): Tự động khóa mờ nút gửi và kích hoạt đồng hồ đếm lùi thời gian thực
+        if (response.status === 429 && retryAfterSec > 0) {
+          setRateLimitCooldown(retryAfterSec);
+        }
+
         throw new Error(errMsg);
       }
 
@@ -677,18 +851,18 @@ export default function ChatPage() {
                     prev.map((c) =>
                       c.id === targetConversationId
                         ? {
-                            ...c,
-                            messages: c.messages.map((m) =>
-                              m.id === botMessageId
-                                ? {
-                                    ...m,
-                                    content: aiText,
-                                    emotion: lastEmotion,
-                                    isAnswerRevealed: isAnswerRevealedFlag,
-                                  }
-                                : m,
-                            ),
-                          }
+                          ...c,
+                          messages: c.messages.map((m) =>
+                            m.id === botMessageId
+                              ? {
+                                ...m,
+                                content: aiText,
+                                emotion: lastEmotion,
+                                isAnswerRevealed: isAnswerRevealedFlag,
+                              }
+                              : m,
+                          ),
+                        }
                         : c,
                     ),
                   );
@@ -716,6 +890,7 @@ export default function ChatPage() {
       );
     } finally {
       setIsTyping(false);
+      lastAiFinishedAtRef.current = Date.now();
     }
   };
 
@@ -724,6 +899,37 @@ export default function ChatPage() {
   // -> Khong reset notUnderstoodCount vi day la phan cua flow "Chua hieu"
   // imageFile?: File - File ảnh đính kèm từ ChatInput (US 6.4: Tích hợp upload Cloudinary)
   const handleSendMessage = async (content: string, isExplanation = false, imageFile?: File) => {
+    // Chống spam: Chặn gửi tin nhắn khi AI đang suy nghĩ / phản hồi hoặc đang trong thời gian chờ cooldown
+    if (isTyping || rateLimitCooldown > 0) {
+      return;
+    }
+
+    // US 11.1 (AC 2): Ở khung chat học sinh, ngay sau khi AI vừa trả lời xong, bấm gửi câu hỏi mới dưới 5 giây.
+    // Hệ thống không gửi đi, hiển thị ngay lời nhắc nhở sư phạm yêu cầu đọc kỹ gợi ý trước khi hỏi tiếp và không trừ lượt hỏi.
+    if (lastAiFinishedAtRef.current > 0) {
+      const elapsedSec = (Date.now() - lastAiFinishedAtRef.current) / 1000;
+      if (elapsedSec < 5) {
+        const remainingCooldown = Math.ceil(5 - elapsedSec);
+        setRateLimitCooldown(remainingCooldown);
+        const pedagogicalMsg: Message = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: "Thầy Socratic nhận thấy em đang gửi câu hỏi rất nhanh. Em hãy dành ít nhất 5 giây để quan sát hình vẽ và đọc kỹ gợi ý của thầy trước khi hỏi tiếp nhé! 🦉",
+        };
+        const targetId = activeChatId || conversations[0]?.id;
+        if (targetId) {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === targetId
+                ? { ...c, messages: [...c.messages, pedagogicalMsg] }
+                : c,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     // US4.1: Chi reset dem "Chua hieu" khi hoc sinh tu go tin nhan moi hoan toan,
     // khong reset khi gui giai thich tu UnderstandingButtons
     if (!isExplanation) {
@@ -762,9 +968,9 @@ export default function ChatPage() {
     if (!targetId) {
       // Trường hợp New Chat: cần tạo Session trên DB trước, rồi mới chat
       const title =
-        content.trim().length > 25
-          ? content.trim().slice(0, 25) + "..."
-          : content.trim() || (imageFile ? "Bài toán từ ảnh" : "Phòng chat mới");
+        cleanLatexForTitle(content) || (imageFile ? "Bài toán từ ảnh" : "Phòng chat mới"); // clean title
+
+
 
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
@@ -865,13 +1071,13 @@ export default function ChatPage() {
               prev.map((c) =>
                 c.id === targetId
                   ? {
-                      ...c,
-                      messages: c.messages.map((m) =>
-                        m.id === messageId
-                          ? { ...m, attachment_url: uploadedAttachmentUrl }
-                          : m,
-                      ),
-                    }
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === messageId
+                        ? { ...m, attachment_url: uploadedAttachmentUrl }
+                        : m,
+                    ),
+                  }
                   : c,
               ),
             );
@@ -889,7 +1095,7 @@ export default function ChatPage() {
 
   // Handler: Thử lại (Retry) khi gửi tin nhắn thất bại
   const handleRetryMessage = (messageId: string, content: string) => {
-    if (!activeChatId) return;
+    if (!activeChatId || isTyping) return;
 
     let targetAttachmentUrl: string | undefined = undefined;
     const currentConv = conversations.find((c) => c.id === activeChatId);
@@ -904,11 +1110,11 @@ export default function ChatPage() {
       prev.map((c) =>
         c.id === activeChatId
           ? {
-              ...c,
-              messages: c.messages.map((m) =>
-                m.id === messageId ? { ...m, status: "sending" } : m,
-              ),
-            }
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === messageId ? { ...m, status: "sending" } : m,
+            ),
+          }
           : c,
       ),
     );
@@ -929,23 +1135,17 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[100dvh] w-screen bg-[#F7ECE1] overflow-hidden font-sans">
-      {/* Sidebar bên trái với transition trượt thu gọn / mở rộng mượt mà */}
-      <div
-        className={cn(
-          "h-full overflow-hidden transition-[width,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          isSidebarCollapsed ? "w-0 opacity-0 pointer-events-none" : "w-64 opacity-100"
-        )}
-      >
-        <ChatSidebar
-          isMobileOpen={isMobileOpen}
-          setIsMobileOpen={setIsMobileOpen}
-          conversations={conversations}
-          activeChatId={activeChatId}
-          onSelectChat={handleSelectChat}
-          onNewChat={handleNewChat}
-          onDeleteChat={handleDeleteChat}
-        />
-      </div>
+      {/* Sidebar bên trái */}
+      <ChatSidebar
+        isMobileOpen={isMobileOpen}
+        setIsMobileOpen={setIsMobileOpen}
+        isCollapsed={isSidebarCollapsed}
+        conversations={conversations}
+        activeChatId={activeChatId}
+        onSelectChat={handleSelectChat}
+        onNewChat={handleNewChat}
+        onDeleteChat={handleDeleteChat}
+      />
 
       {/* Khu vực nội dung Chat bên phải */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
@@ -966,11 +1166,11 @@ export default function ChatPage() {
               <Menu size={22} />
             </button>
             <div
-              className="flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-2 cursor-pointer group"
               onClick={() => router.push("/")}
             >
-              <div className="w-8 h-8 bg-[#D9D9D9] rounded-lg flex items-center justify-center text-[#8C4905] font-bold text-xs shadow-inner">
-                SK
+              <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-[#F7ECE1] shadow-xs group-hover:opacity-85 transition-opacity">
+                <img src="/logo.png" alt="SocraticKid Logo" className="w-full h-full object-cover" />
               </div>
               <span className="font-bold italic text-[#C1762A] text-base">
                 SocraticKid
@@ -978,7 +1178,7 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Khu vực Streak ngọn lửa & Nút bật/tắt thanh ảnh bài tập bên phải */}
+          {/* Khu vực Streak ngọn lửa, Bảng xếp hạng (Cúp) & Nút bật/tắt thanh ảnh bài tập bên phải */}
           <div className="flex items-center gap-2">
             {/* T7.18: Biểu tượng ngọn lửa hoạt hình Streak 🔥 */}
             <StreakBadge
@@ -989,15 +1189,25 @@ export default function ChatPage() {
               }}
             />
 
+            {/* Nút Bảng xếp hạng (Icon cái cúp 🏆) */}
+            <button
+              onClick={() => router.push("/dashboard/leaderboard")}
+              className="flex items-center justify-center h-[34px] w-[34px] rounded-xl bg-white text-[#8C4905] border border-[#F1CCA6] hover:bg-[#F1CCA6]/40 hover:text-[#C1762A] transition-all duration-150 ease-out shadow-xs cursor-pointer group active:scale-[0.95] focus-visible:outline-2 focus-visible:outline-[#C1762A]"
+              title="Xem Bảng xếp hạng (Streak Leaderboard)"
+              aria-label="Xem Bảng xếp hạng"
+            >
+              <Trophy size={17} className="text-[#C1762A] group-hover:scale-110 transition-transform" />
+            </button>
+
             <button
               onClick={() => setIsRightSidebarOpen((prev) => !prev)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all border cursor-pointer",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 ease-out border cursor-pointer active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[#C1762A]",
                 isRightSidebarOpen
-                  ? "bg-[#C1762A] text-white border-[#C1762A] shadow-sm"
+                  ? "bg-[#C1762A] text-white border-[#C1762A] shadow-xs"
                   : "bg-white text-[#8C4905] border-[#F1CCA6] hover:bg-[#F1CCA6]/40"
               )}
-              title="Đóng / mở thanh ảnh bài tập bên phải (giống Zalo)"
+              title="Đóng / mở thanh ảnh bài tập bên phải"
             >
               <PanelRight size={17} />
               <span className="hidden sm:inline">Ảnh bài tập</span>
@@ -1029,6 +1239,7 @@ export default function ChatPage() {
             onUnderstood={handleUnderstood}
             onNotUnderstood={handleNotUnderstood}
             notUnderstoodCount={notUnderstoodCount}
+            cooldownSeconds={rateLimitCooldown}
             selectedChatKey={selectedChatKey}
             sessionId={activeChatId || undefined}
           />

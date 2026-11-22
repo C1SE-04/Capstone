@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
@@ -19,10 +19,20 @@ export const metadata: Metadata = {
   description: "Trợ lý AI sư phạm giúp học sinh từ lớp 4 đến lớp 9 tự học, hiểu sâu và nhớ lâu toán học qua phương pháp gợi mở từng bước.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
-      lang="en"
+      lang="vi"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased scroll-smooth`}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
