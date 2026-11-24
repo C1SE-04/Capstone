@@ -330,29 +330,21 @@ def process_query_with_orchestrator(
     emotion_flag = result.get("emotion_flag", "GUIDING")
     print(f"[Orchestrator] {target_agent} | mode={teaching_mode} | wrong={stats.consecutive_wrong_count if stats else 0} | emotion={emotion_flag} | session_images={len(session_image_urls)}")
 
-    # Lưu log ngầm (US 8.1 - T8.7: kèm session_id, user_id, notify_parent)
-    # Chỉ cảnh báo phụ huynh khi thực sự có vi phạm thô tục, xúc phạm hoặc vô lễ (emotion_flag == WARNING hoặc lý do có profan/toxic/disrespect)
-    # Tuyệt đối KHÔNG báo phụ huynh khi chỉ là chào hỏi (greeting) hay trò chuyện ngoài lề (off-topic)
+    # Đánh giá ban đầu của Orchestrator cục bộ
+    from agents.orchestrator import OrchestratorAgent
+    has_actual_profanity = OrchestratorAgent.has_real_profanity(user_query)
+
     is_greeting_or_offtopic = (
         emotion_flag == "GUIDING"
-        or (reason and any(k in reason.lower() for k in ("greeting", "off-topic", "ngoài lề", "chào hỏi")))
+        or (reason and any(k in reason.lower() for k in ("greeting", "off-topic", "ngoài lề", "chào hỏi", "shouting", "hú")))
     )
-    is_safety_violation = (
-        not is_greeting_or_offtopic
+    initial_safety_violation = (
+        target_agent in ("SAFETY", "SAFETY_AGENT")
+        and not is_greeting_or_offtopic
         and (
-            emotion_flag == "WARNING"
-            or (reason and any(k in reason.lower() for k in ("profan", "toxic", "violation", "disrespect", "vô lễ", "chửi", "hú", "shouting")))
+            has_actual_profanity
+            or (reason and any(k in reason.lower() for k in ("profan", "toxic", "disrespect", "vô lễ", "chửi")))
         )
-    )
-    background_tasks.add_task(
-        save_orchestrator_log,
-        db,
-        user_query,
-        target_agent,
-        reason,
-        session_id,
-        session_user_id,
-        is_safety_violation,
     )
 
     # Yield event orchestrator (kèm stats, teaching_mode và emotion_flag để FE debug)
@@ -376,7 +368,7 @@ def process_query_with_orchestrator(
 
     # Gọi AI stream với enriched_task_description và bộ sưu tập ảnh phiên học
     full_reply = ""
-    meta = {"has_comprehension": False, "suggested_agent": None}
+    meta = {"has_comprehension": False, "suggested_agent": None, "safety_confirmed": None, "safety_reason": None}
     for chunk in agent_router(
         target_agent,
         enriched_task_description,
@@ -391,10 +383,51 @@ def process_query_with_orchestrator(
         full_reply += chunk
         yield f"event: message\ndata: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
 
-    # US 10.4 (Task T10.4.2): Bóc tách thẻ ẩn khỏi phản hồi trước khi lưu DB
-    from router import extract_audit_tag
+    # US 10.4 & US 8.1: Bóc tách thẻ ẩn khỏi phản hồi trước khi lưu DB
+    from router import extract_audit_tag, extract_safety_confirm_tag
     clean_reply, extracted_agent = extract_audit_tag(full_reply)
+    clean_reply, extracted_safety_confirmed, extracted_safety_reason = extract_safety_confirm_tag(clean_reply)
     suggested_agent = meta.get("suggested_agent") or extracted_agent
+
+    # Thẩm định an toàn kép (Second-opinion Gatekeeper qua thẻ ẩn Gemini):
+    gemini_safety_confirmed = meta.get("safety_confirmed") if meta.get("safety_confirmed") is not None else extracted_safety_confirmed
+    gemini_safety_reason = meta.get("safety_reason") or extracted_safety_reason
+
+    final_reason = reason
+    if gemini_safety_confirmed is not None:
+        if gemini_safety_confirmed:
+            # Gemini XÁC NHẬN có vi phạm thực sự
+            final_safety_violation = True
+            final_reason = f"{reason} | [Gemini-Confirmed]: {gemini_safety_reason or 'Vi phạm ngôn từ'}"
+        else:
+            # Gemini BÁC BỎ vi phạm (ví dụ học sinh tâm sự bị bắt nạt, trích dẫn bài, đùa vui) -> HỦY GỬI EMAIL
+            final_safety_violation = False
+            final_reason = f"{reason} | [Gemini-Dismissed]: Không có ác ý / vô hại"
+    else:
+        final_safety_violation = initial_safety_violation
+
+    # Lưu log ngầm (US 8.1 - T8.7: kèm session_id, user_id, notify_parent) sau khi đã có thẩm định kép
+    if background_tasks:
+        background_tasks.add_task(
+            save_orchestrator_log,
+            db,
+            user_query,
+            target_agent,
+            final_reason,
+            session_id,
+            session_user_id,
+            final_safety_violation,
+        )
+    else:
+        save_orchestrator_log(
+            db,
+            user_query,
+            target_agent,
+            final_reason,
+            session_id,
+            session_user_id,
+            final_safety_violation,
+        )
 
     # Lưu phản hồi AI sạch vào DB Message (Học sinh & Phụ huynh không thấy thẻ ẩn)
     if clean_reply and session_id:

@@ -148,8 +148,28 @@ def process_safety_alerts(db: Session) -> int:
             student_name = student_nickname or (student.email.split("@")[0] if student else "Học sinh")
             grade = student.grade if (student and student.grade) else 5
 
-            # 3. Phân loại vi phạm
+            # Lớp bảo vệ bổ sung (Defense-in-depth): Nếu tin nhắn không chứa bất kỳ từ cấm hay xúc phạm nào
+            # (ví dụ do dữ liệu cũ trong DB còn sót lại 'mến thầy', '12 dm', 'chào bạn') hoặc đã bị Gemini bác bỏ -> Bỏ qua không gửi email!
+            from agents.orchestrator import OrchestratorAgent
+            has_real_prof = OrchestratorAgent.has_real_profanity(log.user_query or "")
             reason_str = (log.reason or "").lower()
+            is_gemini_dismissed = "[gemini-dismissed]" in reason_str
+            is_gemini_confirmed = "[gemini-confirmed]" in reason_str
+            is_disrespect_reason = any(k in reason_str for k in ("profan", "tục", "chửi", "disrespect", "vô lễ"))
+
+            if is_gemini_dismissed:
+                print(f"[AlertEmailWorker] Bỏ qua log {log.id} vì Gemini đã xác nhận không có ác ý/vô hại: {log.user_query!r}")
+                log.parent_notified_at = now_utc
+                db.commit()
+                continue
+
+            if not is_gemini_confirmed and not has_real_prof and not is_disrespect_reason:
+                print(f"[AlertEmailWorker] Bỏ qua log {log.id} vì không có vi phạm thô tục thực sự: {log.user_query!r}")
+                log.parent_notified_at = now_utc
+                db.commit()
+                continue
+
+            # 3. Phân loại vi phạm
             violation_type = "PROFANITY" if any(k in reason_str for k in ("profan", "tục", "chửi")) else "TOXIC_LANGUAGE"
 
             incident_time_str = log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else now_utc.strftime("%Y-%m-%d %H:%M:%S")
