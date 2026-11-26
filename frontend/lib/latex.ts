@@ -102,6 +102,7 @@ export function formatLatexForChat(latex: string): string {
   // 2. Chuyển các ký tự thoát dấu khoảng trắng, placeholder & dấu câu của MathLive về văn bản tự nhiên
   text = text
     .replace(/\\placeholder\{[^}]*\}/g, "\\square")
+    .replace(/\\operatorname\{(th|ch|sh|tg|cotg|cth)\}/gi, "$1")
     .replace(/\\ /g, " ")
     .replace(/\\,/g, ",")
     .replace(/\\;/g, ";")
@@ -124,11 +125,13 @@ export function formatLatexForChat(latex: string): string {
     return match;
   });
 
-  // 6. Khắc phục hiện tượng tách chữ do bộ gõ tiếng Việt (VD: "b ằng mấy" -> "bằng mấy")
-  text = text.replace(
-    /(^|\s)([b-df-hj-np-tv-zB-DF-HJ-NP-TV-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ])/gi,
-    "$1$2$3"
-  );
+  // 6. Khắc phục hiện tượng tách chữ do bộ gõ tiếng Việt (VD: "th ầy" -> "thầy", "b ằng mấy" -> "bằng mấy", "ng ười" -> "người")
+  const vietSeparatedRegex = /(^|\s)([b-df-hj-np-tv-zB-DF-HJ-NP-TV-ZđĐ]+)\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ][a-zA-Z\u00C0-\u1EF9]*)/gi;
+  let prevText;
+  do {
+    prevText = text;
+    text = text.replace(vietSeparatedRegex, "$1$2$3");
+  } while (text !== prevText);
 
   // 7. Nếu không có ký hiệu toán hay backslash nào -> văn bản thuần túy
   const hasMathSyntax = /[\\^_{}√±×÷≤≥≠π]/.test(text);
@@ -412,6 +415,7 @@ export function cleanLatexForDisplay(content: string | null | undefined, maxLeng
     .replace(/\\text\s*\{([^{}]*)\}/g, "$1")
     .replace(/\\placeholder\{[^}]*\}/g, "...")
     .replace(/\\square/g, "...")
+    .replace(/\\operatorname\{(th|ch|sh|tg|cotg|cth)\}/gi, "$1")
     .replace(/\\(?:quad|enspace|;|,)*/g, " ")
     .replace(/\\ /g, " ")
     .replace(/\\[a-zA-Z]+/g, "") // Bỏ các lệnh LaTeX còn sót
@@ -422,8 +426,12 @@ export function cleanLatexForDisplay(content: string | null | undefined, maxLeng
 
   // Tách số và chữ tiếng Việt nếu bị dính nhau (VD: "23bằng" -> "23 bằng")
   t = t.replace(/([0-9])([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ])/gi, "$1 $2");
-  // Khắc phục tách chữ tiếng Việt nếu có (VD: "b ằng mấy" -> "bằng mấy")
-  t = t.replace(/(^|\s)([b-df-hj-np-tv-zB-DF-HJ-NP-TV-Z])\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ])/gi, "$1$2$3");
+  // Khắc phục tách chữ tiếng Việt nếu có (VD: "th ầy" -> "thầy", "b ằng mấy" -> "bằng mấy", "ng ười" -> "người")
+  let prevT;
+  do {
+    prevT = t;
+    t = t.replace(/(^|\s)([b-df-hj-np-tv-zB-DF-HJ-NP-TV-ZđĐ]+)\s+([àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ][a-zA-Z\u00C0-\u1EF9]*)/gi, "$1$2$3");
+  } while (t !== prevT);
 
   if (maxLength && t.length > maxLength) {
     return t.slice(0, maxLength) + "...";

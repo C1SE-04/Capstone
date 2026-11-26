@@ -89,10 +89,16 @@ TÁC PHONG VÀ NGUYÊN TẮC SƯ PHẠM BẮT BUỘC:
 """
 
 # ==============================================================================
-# US 10.4 (Task T10.4.2): GIAO THỨC BÓC TÁCH THẺ ẨN (HIDDEN TAG PARSER)
+# US 10.4 & US 8.1: GIAO THỨC BÓC TÁCH THẺ ẨN (HIDDEN TAG PARSER)
 # ==============================================================================
 AUDIT_REGEX = re.compile(r"<!--\s*AUDIT_AGENT\s*:\s*([A-Z_]+)\s*-->", re.IGNORECASE)
 VALID_AUDIT_AGENTS = {"MISCONCEPTION", "KNOWLEDGE_TRACING", "SAFETY", "SCAFFOLDING"}
+
+# Giao thức thẩm định xác nhận an toàn ngôn từ kép (Double-Check Safety Confirmation Tag)
+SAFETY_CONFIRM_REGEX = re.compile(
+    r"<!--\s*SAFETY_CONFIRM\s*:\s*(YES|NO)(?:\s*\|\s*REASON\s*:\s*([^>]+?))?\s*-->",
+    re.IGNORECASE
+)
 
 def extract_audit_tag(text: str) -> tuple[str, Optional[str]]:
     """
@@ -121,35 +127,77 @@ def extract_audit_tag(text: str) -> tuple[str, Optional[str]]:
     return clean_text, suggested_agent
 
 
+def extract_safety_confirm_tag(text: str) -> tuple[str, Optional[bool], Optional[str]]:
+    """
+    Bóc tách thẻ ẩn <!-- SAFETY_CONFIRM: YES|NO | REASON: ... --> do Gemini sinh ra.
+    
+    Returns:
+        tuple (clean_text, is_violation, reason):
+        - clean_text: Văn bản đã làm sạch thẻ SAFETY_CONFIRM.
+        - is_violation: True nếu Gemini xác nhận YES (thực sự vi phạm),
+                        False nếu Gemini xác nhận NO (vô hại / bị bạn bắt nạt / trích dẫn),
+                        None nếu không tìm thấy thẻ ẩn này.
+        - reason: Lý do vi phạm cụ thể do Gemini trích xuất (nếu có).
+    """
+    if not text:
+        return "", None, None
+
+    matches = list(SAFETY_CONFIRM_REGEX.finditer(text))
+    if not matches:
+        return text.strip(), None, None
+
+    last_match = matches[-1]
+    status_str = last_match.group(1).strip().upper()
+    reason_str = (last_match.group(2) or "").strip()
+
+    is_violation = True if status_str == "YES" else False
+    clean_text = SAFETY_CONFIRM_REGEX.sub("", text).strip()
+    return clean_text, is_violation, reason_str if reason_str else None
+
+
 def sanitize_stream_chunks(chunk_iterator):
     """
-    US 10.4 & US 11.6: Bộ lọc chống rò rỉ thẻ ẩn và tag comprehension khi streaming.
-    Sử dụng kỹ thuật Lookahead Holding Buffer để ngăn chặn việc các thẻ bị cắt đôi/cắt ba
+    US 10.4 & US 11.6 & US 8.1: Bộ lọc chống rò rỉ thẻ ẩn và tag comprehension khi streaming.
+    Sử dụng kỹ thuật Dynamic Lookahead Holding Buffer để ngăn chặn việc các thẻ bị cắt đôi/cắt ba
     giữa các chunk (Chunk Boundary Fragmentation) hiển thị lên màn hình học sinh ([AC-AL-01]).
-    Bảo vệ triệt để các thẻ ẩn: <!-- AUDIT_AGENT:... -->, <!-- PROBE_PENDING -->, <!-- SUMMER_PROBE_PENDING -->, v.v.
+    Bảo vệ triệt để: <!-- AUDIT_AGENT:... -->, <!-- SAFETY_CONFIRM:... -->, <!-- PROBE_PENDING -->, v.v.
+    Đảm bảo 100% không rò rỉ dù thẻ có dài bất kỳ (200-500+ ký tự) hoặc stream bị đứt quãng.
     """
     buffer = ""
     for chunk in chunk_iterator:
         buffer += chunk
         
-        # Liên tục loại bỏ các tag hoàn chỉnh đã xuất hiện trong buffer
+        # 1. Liên tục loại bỏ các tag hoàn chỉnh đã xuất hiện trong buffer
         buffer = AUDIT_REGEX.sub("", buffer)
+        buffer = SAFETY_CONFIRM_REGEX.sub("", buffer)
         buffer = re.sub(r"<!--[\s\S]*?-->", "", buffer)
         buffer = re.sub(r"\[(?:SUMMER_)?PROBE_PENDING\]", "", buffer, flags=re.IGNORECASE)
         buffer = buffer.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "")
         
-        # Kiểm tra xem cuối buffer có dấu hiệu mở thẻ chưa đóng không:
-        # Thẻ ẩn: bắt đầu bằng '<' (tối đa ~55 ký tự)
-        # Thẻ comp: bắt đầu bằng '[' (tối đa ~25 ký tự)
-        last_lt = buffer.rfind("<")
-        last_lb = buffer.rfind("[")
-        
+        # 2. Xác định điểm an toàn để xả (yield):
         hold_pos = len(buffer)
-        if last_lt != -1 and (len(buffer) - last_lt) <= 55:
-            hold_pos = min(hold_pos, last_lt)
-        if last_lb != -1 and (len(buffer) - last_lb) <= 25:
-            hold_pos = min(hold_pos, last_lb)
-            
+        
+        # Nếu buffer chứa '<!--' mà chưa gặp '-->' -> Chắc chắn giữ lại từ '<!--' bất kể độ dài
+        open_comment_idx = buffer.rfind("<!--")
+        if open_comment_idx != -1:
+            hold_pos = min(hold_pos, open_comment_idx)
+        else:
+            # Nếu chưa đủ 4 ký tự '<!--', kiểm tra xem đuôi buffer có dở dang '<', '<!', '<!-' không
+            for prefix_len in (3, 2, 1):
+                if len(buffer) >= prefix_len:
+                    tail = buffer[-prefix_len:]
+                    if "<!--".startswith(tail):
+                        hold_pos = min(hold_pos, len(buffer) - prefix_len)
+                        break
+                        
+        # Kiểm tra thẻ ngoặc vuông '[' dở dang (chỉ giữ nếu khớp tiền tố của thẻ hệ thống)
+        open_bracket_idx = buffer.rfind("[")
+        if open_bracket_idx != -1:
+            after_bracket = buffer[open_bracket_idx:].upper()
+            bracket_prefixes = ("[COMPREHENSION", "[PROBE", "[SUMMER_PROBE")
+            if any(p.startswith(after_bracket) or after_bracket.startswith(p) for p in bracket_prefixes):
+                hold_pos = min(hold_pos, open_bracket_idx)
+                
         safe_to_yield = buffer[:hold_pos]
         buffer = buffer[hold_pos:]
         
@@ -159,10 +207,15 @@ def sanitize_stream_chunks(chunk_iterator):
     # Khi stream kết thúc, xử lý và xả nốt phần buffer còn lại
     if buffer:
         final_clean = AUDIT_REGEX.sub("", buffer)
+        final_clean = SAFETY_CONFIRM_REGEX.sub("", final_clean)
         final_clean = re.sub(r"<!--[\s\S]*?-->", "", final_clean)
+        # Loại bỏ triệt để thẻ dở dang chưa kịp đóng do đứt cáp/timeout
+        final_clean = re.sub(r"<!--[\s\S]*$", "", final_clean)
         final_clean = re.sub(r"\[(?:SUMMER_)?PROBE_PENDING\]", "", final_clean, flags=re.IGNORECASE)
+        final_clean = re.sub(r"\[(?:COMPREHENSION_CHECK|SUMMER_PROBE_PENDING|PROBE_PENDING)[^\]]*$", "", final_clean, flags=re.IGNORECASE)
         final_clean = final_clean.replace("[COMPREHENSION_CHECK]", "").replace("COMPREHENSION_CHECK", "").strip()
         if final_clean:
+            yield final_clean
             yield final_clean
 
 
@@ -297,6 +350,14 @@ Chỉ đạo sư phạm từ Orchestrator: {task_description}
      * TUYỆT ĐỐI KHÔNG gắn thẻ trùng với vai trò hiện tại (ví dụ: vai trò là '{clean_target_agent}' thì không được gắn <!-- AUDIT_AGENT: {clean_target_agent} -->).
      * BẢO VỆ CÂU TRẢ LỜI NGẮN: Khi học sinh đáp lời ngắn gọn (như 'dạ', 'vâng', 'là 6', 'bằng 3', 'em chưa hiểu', 'tiếp theo làm gì'): Đây là sự tiếp nối hoàn toàn bình thường của SCAFFOLDING, TUYỆT ĐỐI KHÔNG gắn thẻ ẩn!
      * DANH MỤC HỢP LỆ DUY NHẤT: Chỉ chọn 1 trong 4 nhãn (MISCONCEPTION, KNOWLEDGE_TRACING, SAFETY, SCAFFOLDING).
+3. TẦNG THẨM ĐỊNH AN TOÀN NGÔN TỪ (GIAO THỨC THẺ ẨN SAFETY_CONFIRM):
+   - Đánh giá câu nói của học sinh: '{user_query}' trong ngữ cảnh trò chuyện hiện tại.
+   - BẮT BUỘC đính kèm thẻ ẩn xác nhận ở dòng CUỐI CÙNG (sau mọi nội dung khác):
+     * Nếu học sinh THỰC SỰ có hành vi nói tục, chửi thề, dùng tiếng lóng thô tục, sỉ nhục AI/gia sư, hoặc xưng hô vô lễ thiếu tôn trọng nghiêm trọng:
+       <!-- SAFETY_CONFIRM: YES | REASON: <lý do vi phạm cụ thể ngắn gọn> -->
+     * Nếu học sinh KHÔNG có hành vi nói tục/xúc phạm (ví dụ: học sinh chỉ đang chào hỏi, hỏi bài toán, cảm thán khó khăn 'bài khoai quá', 'tính toát mồ hôi', hoặc học sinh đang TÂM SỰ việc bị bạn bè ở lớp trêu chọc/bắt nạt, trích dẫn văn bản/đề bài, trêu đùa trong sáng):
+       <!-- SAFETY_CONFIRM: NO -->
+   - NGUYÊN TẮC BẢO VỆ HỌC SINH: Thẻ ẩn này dùng để hệ thống quyết định có gửi email thông báo cho Phụ huynh hay không. Tuyệt đối không quy kết oan khi học sinh chỉ đang tâm sự bị bạn bắt nạt hoặc bộc phát khó khăn bài toán bình thường.
 - ĐÁNH GIÁ HOÀN THÀNH BÀI TOÁN (COMPREHENSION CHECK):
   + Nếu học sinh vừa trả lời ĐÚNG đáp án cuối cùng của bài toán: BẮT BUỘC gắn tag [COMPREHENSION_CHECK] ngay sau câu kết luận (trước thẻ AUDIT_AGENT nếu có).
   + Nếu bài toán CHƯA XONG: TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK].
@@ -390,10 +451,16 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
                         raise
                 generated_text = response.text or ""
 
-                # US 10.4 (Task T10.4.2): Bóc tách thẻ ẩn bằng hàm chuẩn hóa
+                # US 10.4 & US 8.1: Bóc tách thẻ ẩn AUDIT_AGENT và SAFETY_CONFIRM
                 clean_for_review, suggested_agent = extract_audit_tag(generated_text)
-                if meta is not None and suggested_agent:
-                    meta["suggested_agent"] = suggested_agent
+                clean_for_review, safety_confirmed, safety_reason = extract_safety_confirm_tag(clean_for_review)
+                if meta is not None:
+                    if suggested_agent:
+                        meta["suggested_agent"] = suggested_agent
+                    if safety_confirmed is not None:
+                        meta["safety_confirmed"] = safety_confirmed
+                    if safety_reason:
+                        meta["safety_reason"] = safety_reason
 
                 has_comp_tag = (
                     "[COMPREHENSION_CHECK]" in generated_text
@@ -493,10 +560,15 @@ HƯỚNG DẪN XỬ LÝ ĐA ẢNH:
                 if safe_chunk:
                     yield safe_chunk
 
-            # US 10.4 (Task T10.4.2): Trích xuất thẻ ẩn từ buffer sau khi stream xong
+            # US 10.4 & US 8.1: Trích xuất thẻ ẩn từ buffer sau khi stream xong
             stream_clean_text, stream_suggested_agent = extract_audit_tag(full_text_buffer)
+            stream_clean_text, stream_safety_confirmed, stream_safety_reason = extract_safety_confirm_tag(stream_clean_text)
             if meta is not None:
                 meta["suggested_agent"] = stream_suggested_agent
+                if stream_safety_confirmed is not None:
+                    meta["safety_confirmed"] = stream_safety_confirmed
+                if stream_safety_reason:
+                    meta["safety_reason"] = stream_safety_reason
 
             # Phát hiện comprehension sau khi stream xong (dùng text đã loại thẻ ẩn)
             cleaned = (

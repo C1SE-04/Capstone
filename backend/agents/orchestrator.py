@@ -601,7 +601,7 @@ class OrchestratorAgent:
 
     # ── Danh sách từ xấu / xúc phạm ─────────────────────────────────────────
     PROFANITY_LIST: tuple = (
-        "đm", "dcm", "dm", "vcl", "vl", "đĩ", "cặc", "lồn","chó chết", "ngu ngốc", "chết đi", "cút đi", "mẹ mày","thằng chó", "địt", 
+        "đm", "dcm", "dm", "vcl", "vl", "đĩ", "cặc", "lồn", "đéo", "đíu", "đếch", "chó chết", "ngu ngốc", "chết đi", "cút đi", "mẹ mày","thằng chó", "địt", 
         "mẹ kiếp", "đệt", "đệch", "đậu má", "dmm", "dkm", "đkm", "đklm", "loz", "lòn", "cẹc", "buồi", "dái", "clgt", "cc", "qq", "ml",
          "sml", "vml", "cđm", "vkl","đụ mẹ", "đụ má", "đĩ mẹ", "đù má", "đù mẹ", "đụ", "cút", "biến đi", "xéo", "cái đệt",
         "địt mẹ", "địt con mẹ", "địt cụ", "địt mợ", "địt tổ sư", "địt mả bố","địt mẹ mày", "đụ mẹ mày", "đm mày", "đm nó", "địt con lồn mẹ", 
@@ -609,7 +609,7 @@ class OrchestratorAgent:
         "cái lồn gì thế", "cái lồn gì vậy", "cái lồn", "mặt lồn", "hãm lồn", "xạo lồn", "con lồn", "thằng lồn", "sấp mặt lồn",
         "con cặc", "cục cặc", "cái cặc", "đầu cặc", "cái quần què", "quần què","phò", "điếm", "cave", "đĩ điếm", "gái điếm", "con đĩ",
         "nứng", "nứng lồn", "nứng sảng", "chịch", "xoạc", "bú cu", "bú lồn", "liếm lồn","súc vật", "súc sinh", "óc chó", "óc lợn", "ngu học", 
-        "ngu như bò", "ngu lồn", "khốn nạn", "khốn kiếp", "chó má",  "đĩ chó", "đĩ ngựa", "đĩ thoã",
+        "ngu như bò", "ngu như chó", "ngu lồn", "khốn nạn", "khốn kiếp", "chó má",  "đĩ chó", "đĩ ngựa", "đĩ thoã",
         "mày", "tao", "mầy", "thằng kia", "con kia", "bot ngu", "thằng bot", "con bot", "ông già", "bà già", "chúng mày", "bọn mày", "thằng này", "con này",
         "fuck", "fuck you", "fck", "fk", "fucking", "shit", "bitch", "asshole", "dick", "cunt",
         "mặt ghẻ", "óc cứt", "óc bò", "đĩ mẹ", "mẹ mày"
@@ -927,6 +927,219 @@ class OrchestratorAgent:
         self._reload_lock = threading.Lock()
         self._local_model = None
         self.reload_model(force=True)
+
+    @classmethod
+    def _is_math_measurement_unit(cls, text: str, start: int, end: int, word: str) -> bool:
+        """
+        Kiểm tra xem từ khớp (dm, ml, cc) có phải là đơn vị đo toán học/dung tích hay không.
+        Tránh bắt nhầm các bài toán như: '12 dm', '500 ml', '200 cc', 'tính diện tích theo dm'.
+        Tuyệt đối không để 'như cc', 'làm cc gì' bị nhận nhầm là đơn vị toán học!
+        """
+        w_lower = word.lower()
+        if w_lower not in ("dm", "ml", "cc"):
+            return False
+
+        # Nếu đứng sau 'như', 'cái', 'làm', 'biết', 'ăn', 'thằng', 'con' -> 100% là chửi tục
+        before_match = text[:start].strip().lower()
+        if re.search(r"\b(như|cái|làm|biết|ăn|thằng|con)\s*$", before_match):
+            return False
+
+        # 1. Liền trước có số hoặc phân số (VD: '12 dm', '12dm', '500 ml', '200 cc', '1/2 dm', '0.5 dm')
+        if re.search(r"(\d+(?:[.,]\d+)?|\b\d+/\d+)\s*$", text[:start]):
+            return True
+
+        # 2. Liền trước có dấu gạch chéo tỉ lệ / đơn vị kép (VD: 'g/cc', 'kg/cc', 'ml/cc')
+        if re.search(r"[/]\s*$", text[:start]):
+            return True
+
+        # 3. Liền trước có từ chỉ hướng đổi hoặc câu hỏi đo lường (VD: 'ra dm', 'sang dm', 'bao nhiêu ml', 'mấy dm', 'theo dm', 'sang ml')
+        if re.search(r"\b(ra|sang|về|theo|bằng|được|là|đơn vị|bao nhiêu|nhiêu|mấy)\s*$", before_match):
+            return True
+
+        # 4. Liền trước là đối tượng hình học (đoạn thẳng DM, đường cao DM, đường thẳng DM, trung tuyến DM, cạnh DM)
+        if re.search(r"\b(đoạn thẳng|đường thẳng|đường cao|trung tuyến|cạnh|tia)\s*$", before_match):
+            return True
+
+        # 5. Liền sau có số mũ/chỉ số lũy thừa (VD: 'dm^2', 'dm2', 'dm²', 'dm^3', 'dm3', 'dm³', 'ml/phút')
+        after = text[end:].lstrip()
+        if after.startswith(("^2", "^3", "2", "3", "²", "³", "/")):
+            return True
+
+        # 6. Đi cùng các cụm từ chỉ đơn vị đo lường rõ ràng
+        unit_phrases = (
+            "đơn vị dm", "đơn vị ml", "đơn vị cc",
+            "đổi ra dm", "đổi sang dm", "đổi về dm", "theo dm",
+            "đổi ra ml", "đổi sang ml", "đổi về ml", "theo ml",
+            "đổi ra cc", "đổi sang cc", "đổi về cc", "theo cc",
+            "dung tích", "thể tích", "xi lanh", "phân khối", "bình", "bể"
+        )
+        t_lower = text.lower()
+        if any(p in t_lower for p in unit_phrases):
+            return True
+
+        return False
+
+    @classmethod
+    def _is_compound_word_tao(cls, text: str, start: int, end: int, word: str) -> bool:
+        """
+        Kiểm tra xem 'tao' có phải là từ ghép 'nhân tạo', 'sáng tạo', 'tạo ra', 'tạo thành' hay không.
+        Tránh bắt nhầm khi học sinh gõ tiếng Việt không dấu: 'thay la tri tue nhan tao'.
+        """
+        if word.lower() != "tao":
+            return False
+        before = text[:start].strip().lower()
+        if re.search(r"\b(nhân|nhan|sáng|sang|cấu|cau|chế|che|đào|dao)\s*$", before):
+            return True
+        after = text[end:].strip().lower()
+        if re.search(r"^(ra|thành|thanh|nên|nen|lập|lap|tác|tac)\b", after):
+            return True
+        return False
+
+    @classmethod
+    def _init_profanity_regexes(cls) -> None:
+        """Biên dịch các bộ regex nhận diện thô tục, lách ký tự và xúc phạm."""
+        if hasattr(cls, "_profanity_regexes_initialized"):
+            return
+
+        escaped = [re.escape(w) for w in cls.PROFANITY_LIST]
+        cls._compiled_profanity_re = re.compile(rf"\b({'|'.join(escaped)})\b", re.IGNORECASE | re.UNICODE)
+
+        # Lách ký tự bằng dấu chấm, gạch nối, gạch dưới: d.m, v.l, c.ặ.c, đ.é.o, l.ồ.n, b.u.ồ.i...
+        cls._obfuscated_profanity_re = re.compile(
+            r"(?i)\b("
+            r"d[\.\-_]m(?!\s*=)|v[\.\-_]l|v[\.\-_][ck][\.\-_]l|c[\.\-_]l[\.\-_]m|d[\.\-_]k[\.\-_]m|đ[\.\-_]k[\.\-_]m|đ[\.\-_]c[\.\-_]l[\.\-_]m|"
+            r"c[\.\-_]ặ[\.\-_]c|c[\.\-_]a[\.\-_]c|đ[\.\-_]é[\.\-_]o|đ[\.\-_]e[\.\-_]o|l[\.\-_]ồ[\.\-_]n|l[\.\-_]o[\.\-_]n|"
+            r"b[\.\-_]u[\.\-_]ồ[\.\-_]i|b[\.\-_]u[\.\-_]o[\.\-_]i|đ[\.\-_]ị[\.\-_]t|đ[\.\-_]i[\.\-_]t|"
+            r"đ[\.\-_]ụ(?:\s*|[\.\-_])m[\.\-_]á|đ[\.\-_]ụ(?:\s*|[\.\-_])m[\.\-_]ẹ"
+            r")\b"
+        )
+
+        # Lách ký tự bằng khoảng trắng cách rời: đ m, d m, v c l, c l m, c ặ c, c a c, l ồ n, l o n, đ é o, đ e o, b u ồ i...
+        cls._spaced_profanity_re = re.compile(
+            r"(?i)\b("
+            r"đ\s+m(?!\s*=)|d\s+m(?!\s*=)|v\s+c\s+l(?:\s+l)*|c\s+l\s+m(?:\s+m)*|c\s+[ặa]\s+c|"
+            r"l\s+[ồo]\s+n|đ\s+[éẹeo]\s+o|b\s+u\s+[ồo]\s+i|đ\s+ụ(?:\s+m\s+[áẹ]|\s+(?:má|mẹ))|"
+            r"đ\s+k\s+m|v\s+k\s+l|d\s+c\s+m|đ\s+c\s+l\s+m|đ\s+[ịi]\s+t|d\s+i\s+t|"
+            r"d\s+a\s+i\s+chứ|s\s+m\s+l|d\s+m\s+m|q\s+q\s+gì"
+            r")\b"
+        )
+
+        # Ký tự leetspeak, dấu sao, ký hiệu thay thế: d*m, đ*m, v*l, cl*m, c*c, l*n, b*ồi, d!t, đ!t, d@y nhu cc, bot r@c...
+        cls._leetspeak_profane_re = re.compile(
+            r"(?i)\b("
+            r"[dđ]\*+m|v\*+l|cl\*+m|[dđ]\*+o|c\*+c|l\*+n|b\*+[ồo]i|"
+            r"d[!1]t|đ[!1]t|d@y\s+nhu\s+cc|bot\s+r@c|r@c\s+ruoi|d0t\s+nhu\s+bo|"
+            r"[dđ]\*+k\*+m|[dđ]\.m\.m\.m|v\.c\.l\.l|c\.l\.m\.m"
+            r")\b"
+        )
+
+        # Tục tĩu gõ KHÔNG DẤU phổ biến: thay lo, thang lo, bot rac, bo di cac, oc cho, me kiep, vai lon, dau buoi, an cac, nung lon, du ma, du me...
+        cls._unaccented_profane_re = re.compile(
+            r"(?i)\b("
+            r"thay\s+lo|thang\s+lo|bot\s+rac|thang\s+bot\s+rac|con\s+bot\s+rac|"
+            r"bo\s+di\s+cac|bo\s+di\s+buoi|bo\s+di\s+dai|"
+            r"oc\s+cho|oc\s+bo|oc\s+lon|oc\s+cut|oc\s+tom|oc\s+ba\s+dau|oc\s+heo|"
+            r"me\s+kiep|vai\s+lon|vai\s+ca\s+lon|vai\s+cac|vai\s+buoi|"
+            r"thang\s+lon|con\s+lon|mat\s+lon|ham\s+lon|xao\s+lon|ngu\s+lon|"
+            r"dau\s+buoi|bu\s+buoi|an\s+buoi|liem\s+buoi|an\s+cac|bu\s+cu|dau\s+khac|"
+            r"nung\s+lon|nung\s+cac|nung\s+sang|"
+            r"du\s+ma|du\s+me|dau\s+ma|di\s+me|con\s+di\s+me|"
+            r"giang\s+kieu\s+deo\s+gi|day\s+kieu\s+deo\s+gi|deo\s+hieu|deo\s+biet|deo\s+them|"
+            r"cut\s+me\s+may|cut\s+me\s+may\s+di|cut\s+di\s+cho\s+ranh|day\s+nhu\s+cc|giai\s+nhu\s+cc"
+            r")\b"
+        )
+
+        # Kéo dài ký tự: dmmm, vclll, đéooo, cặccc, lồnnn, buồiii, đụuuuuuu, đệchhhh...
+        cls._elongated_profanity_re = re.compile(
+            r"(?i)\b("
+            r"d+m{2,}|d{2,}m+|v+c+l{2,}|v+l{2,}|đ[éẹo]+[eo]{2,}|c[ặặc]+[ac]{2,}|l[ồồn]+[on]{2,}|"
+            r"b[uù]+[oòồóô]+[iì]{2,}|bu[ồo]+i{2,}|b[uù]+[oòo]+[iìi]{2,}|đ[ệe]+ch+|đ[ệe]ch{2,}|d[áái]+[ai]{2,}|m[ẹẹ]+[e]*\s+kiếp|"
+            r"đ[ụu]{2,}|c+l+m{2,}|v+ã+i+\s+lồn|"
+            r"ngu{3,}\s+như\s+(?:chó|bò|lợn)|c+ú+t{2,}\s+(?:mẹ|đi|hộ)"
+            r")\b"
+        )
+
+        # Cụm từ xúc phạm thầy cô / bot gia sư đặc trưng học sinh & Tiếng Anh toxic
+        cls._targeted_insult_re = re.compile(
+            r"(?i)\b("
+            r"thầy\s+lỏ|thằng\s+lỏ|bot\s+lỏ|con\s+lỏ|dạy\s+lỏ|"
+            r"bot\s+rác|thằng\s+bot\s+rác|con\s+bot\s+rác|thợ\s+dạy\s+rác|thằng\s+thợ\s+dạy|"
+            r"dạy\s+như\s+cc|dạy\s+làm\s+cc|như\s+hạch\s+dạy|như\s+cc|"
+            r"dạy\s+dốt\s+như\s+bò|ngu\s+như\s+bò\s+mà\s+cũng\s+đòi|dốt\s+như\s+chó\s+bày\s+đặt|"
+            r"dốt\s+từ\s+trong\s+trứng|dot\s+tu\s+trong\s+trung|"
+            r"thằng\s+cha\s+này\s+bị\s+khùng|thằng\s+cha\s+này|bị\s+khùng\s+giải|giải\s+ngu\s+như\s+chó|ngu\s+như\s+chó|"
+            r"bố\s+dí\s+cặc|bố\s+dí\s+buồi|bố\s+dí\s+dái|bố\s+éo\s+thèm|bố\s+đéo\s+thèm|"
+            r"thầy\s+mõm|thay\s+mom|thợ\s+dạy\s+mõm|tho\s+day\s+mom|bot\s+mõm|bot\s+mom|"
+            r"óc\s+tôm|oc\s+tom|óc\s+bã\s+đậu|oc\s+ba\s+dau|óc\s+heo|oc\s+heo|"
+            r"bại\s+não|bai\s+nao|mõm\s+chó|mặt\s+phụ\s+khoa|đồ\s+thần\s+kinh|thần\s+kinh\s+giải\s+bậy|biến\s+mẹ\s+đi|"
+            r"dumbass|gtfo|kys|motherfuck(?:er|ing)?|screw\s+you|stupid\s+bastard|piece\s+of\s+garbage|idiot\s+teacher|"
+            r"suck\s+my\s+dick|eat\s+shit|what\s+the\s+hell\s+giải\s+ngu|"
+            r"bullshit|stfu|eat\s+my\s+balls|useless\s+trash|trash\s+bot|shut\s+your\s+face|shut\s+the\s+hell\s+up"
+            r")\b"
+        )
+
+        cls._profanity_regexes_initialized = True
+
+    @classmethod
+    def has_real_profanity(cls, text: str) -> bool:
+        """
+        Kiểm tra xem văn bản có chứa từ ngữ thô tục / xúc phạm thực sự hay không.
+        Tự động loại trừ các đơn vị đo lường toán học (dm, ml, cc) bị trùng ký tự.
+        """
+        if not text:
+            return False
+
+        cls._init_profanity_regexes()
+
+        # 1. Quét từ thô tục gốc
+        for m in cls._compiled_profanity_re.finditer(text):
+            if cls._is_math_measurement_unit(text, m.start(), m.end(), m.group(0)):
+                continue
+            if cls._is_compound_word_tao(text, m.start(), m.end(), m.group(0)):
+                continue
+            return True
+
+        # 2. Quét từ lách ký tự (obfuscated)
+        m_obf = cls._obfuscated_profanity_re.search(text)
+        if m_obf:
+            matched_obf = m_obf.group(0).lower()
+            # Ngoại lệ toán học đối với d.m
+            if "d.m" in matched_obf or "d-m" in matched_obf or "d_m" in matched_obf:
+                t_low = text.lower()
+                is_math_dm = (
+                    "đoạn thẳng d.m" in t_low
+                    or "đoạn thẳng d-m" in t_low
+                    or "tích d.m" in t_low
+                    or "khoảng cách d.m" in t_low
+                    or "d.m =" in t_low
+                    or "= d.m" in t_low
+                )
+                if not is_math_dm:
+                    return True
+            else:
+                return True
+
+        # 3. Quét ký tự kéo dài
+        if cls._elongated_profanity_re.search(text):
+            return True
+
+        # 4. Quét từ lách bằng khoảng trắng cách rời (spaced letters)
+        if cls._spaced_profanity_re.search(text):
+            return True
+
+        # 5. Quét leetspeak và ký hiệu thay thế
+        if cls._leetspeak_profane_re.search(text):
+            return True
+
+        # 6. Quét từ thô tục gõ không dấu
+        if cls._unaccented_profane_re.search(text):
+            return True
+
+        # 7. Quét xúc phạm gia sư / bot học đường & tiếng Anh toxic
+        if cls._targeted_insult_re.search(text):
+            return True
+
+        return False
 
     def reload_model(self, force: bool = True) -> bool:
         """
@@ -1477,7 +1690,7 @@ class OrchestratorAgent:
         """
 
         # 1.1 Profanity & Disrespect (mày, tao, xúc phạm)
-        if self._profanity_re.search(text_clean):
+        if self.has_real_profanity(text_clean):
             return RoutingResult(
                 selected_agent="SAFETY",
                 task_description=_build_task_description("SAFETY", original_message, safety_subtype="DISRESPECT"),
@@ -1485,7 +1698,7 @@ class OrchestratorAgent:
                 emotion_flag="WARNING",
             )
 
-        # 1.1b Shouting / Gibberish / Hú hét cộc lốc
+        # 1.1b Shouting / Gibberish / Hú hét cộc lốc (không phải vi phạm nghiêm trọng -> emotion_flag='GUIDING')
         is_shouting_msg = (
             any(s == text_clean or text_clean.startswith(s + " ") or text_clean.endswith(" " + s) for s in self.SHOUTING_SIGNALS)
             or bool(self._shouting_re.match(text_clean))
@@ -1495,17 +1708,17 @@ class OrchestratorAgent:
                 selected_agent="SAFETY",
                 task_description=_build_task_description("SAFETY", original_message, safety_subtype="SHOUTING"),
                 routing_scratchpad=f"[Trụ1] Shouting / improper exclamation detected: '{text_clean[:40]}'",
-                emotion_flag="WARNING",
+                emotion_flag="GUIDING",
             )
 
-        # 1.2 Off-topic (chỉ kích hoạt khi không chứa tín hiệu học tập / toán học)
+        # 1.2 Off-topic (chỉ kích hoạt khi không chứa tín hiệu học tập / toán học -> emotion_flag='GUIDING')
         has_offtopic = any(re.search(rf"\b{re.escape(s)}\b", text_clean) for s in self.OFFTOPIC_SIGNALS)
         if has_offtopic and self._no_study_intent(text_clean):
             return RoutingResult(
                 selected_agent="SAFETY",
                 task_description=_build_task_description("SAFETY", original_message),
                 routing_scratchpad=f"[Trụ1] Off-topic signal: '{text_clean[:40]}'",
-                emotion_flag="WARNING",
+                emotion_flag="GUIDING",
             )
 
         # 1.3 Câu chào hỏi (không kèm nội dung bài học)
@@ -1746,21 +1959,31 @@ class OrchestratorAgent:
                 return None
 
             # BẢO VỆ CHỐNG FALSE POSITIVE CHO SAFETY:
-            # Nếu ML đoán SAFETY nhưng câu không chứa bất kỳ từ cấm, hú hét hay ngoài lề thực sự,
-            # mà lại có tín hiệu học tập hoặc toán học -> BÁC BỎ SAFETY!
             if predicted == "SAFETY":
-                has_profanity = bool(self._profanity_re.search(text))
+                has_profanity = self.has_real_profanity(text)
                 has_shouting = (
                     any(s == text or text.startswith(s + " ") or text.endswith(" " + s) for s in self.SHOUTING_SIGNALS)
                     or bool(self._shouting_re.match(text))
                 )
                 has_offtopic = any(s in text for s in self.OFFTOPIC_SIGNALS)
+                has_greeting = (
+                    any(text.startswith(g) for g in self.GREETING_STARTS)
+                    or text in self.GREETING_EXACT
+                )
 
                 has_math_tokens = bool(re.search(r"[\d\+\-\*\/\=]|tìm x|đáp án|kết quả|\bx\b|\by\b", text, re.IGNORECASE))
                 has_study_signal = any(s in text for s in self.STUDY_SIGNALS)
 
+                # 1. Nếu có tín hiệu học tập hoặc toán học mà không có từ cấm thật -> Bác bỏ SAFETY
                 if not (has_profanity or has_shouting or has_offtopic) and (has_math_tokens or has_study_signal):
                     print(f"[ML-Router] Chặn False Positive SAFETY cho câu có tín hiệu học tập/toán học: '{text}' → Bác bỏ SAFETY")
+                    return None
+
+                # 2. BẢO VỆ MẠNH MẼ: Nếu ML đoán SAFETY nhưng câu hoàn toàn KHÔNG CÓ từ cấm thực sự,
+                # không có hú hét, không có ngoài lề, không có chào hỏi (VD: 'mến thầy', 'yêu thầy', các câu khen ngợi ngây thơ...)
+                # -> Mô hình TF-IDF đang bị overfit từ khóa 'thầy' -> Bác bỏ SAFETY, chuyển Trụ 3 / SCAFFOLDING!
+                if not (has_profanity or has_shouting or has_offtopic or has_greeting):
+                    print(f"[ML-Router] Bác bỏ False Positive SAFETY không có căn cứ: '{text}' → Trụ cột 3")
                     return None
 
             task = _build_task_description(predicted, text, problem_context)
@@ -1871,7 +2094,15 @@ class OrchestratorAgent:
         # ────────────────────────────────────────────────────────────────────
 
         if agent == "SAFETY":
-            return "WARNING"
+            # Nếu là chào hỏi, ngoài lề, hú hét -> chỉ là hướng dẫn (GUIDING), không cảnh báo (WARNING)
+            if any(k in routing_scratchpad.lower() for k in ("greeting", "off-topic", "shouting", "ngoài lề", "chào hỏi")):
+                return "GUIDING"
+            # Nếu có từ cấm / xúc phạm thực sự -> WARNING
+            if OrchestratorAgent.has_real_profanity(original_message):
+                return "WARNING"
+            if any(k in routing_scratchpad.lower() for k in ("profan", "disrespect", "violation", "vô lễ", "chửi")):
+                return "WARNING"
+            return "GUIDING"
         if agent == "SCAFFOLDING" and (
             "Math match CORRECT" in routing_scratchpad
             or "Học sinh tính đúng" in routing_scratchpad

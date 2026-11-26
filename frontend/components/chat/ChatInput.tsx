@@ -135,6 +135,8 @@ export function ChatInput({
 
     node.addEventListener("keydown", (e: KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
+        // Chặn Enter khi đang trong quá trình gõ bộ gõ IME tiếng Việt
+        if (e.isComposing || (e as any).keyCode === 229) return;
         e.preventDefault();
         // Chặn gửi tin nhắn nếu đang đợi AI phản hồi
         if (isLoadingRef.current) return;
@@ -174,14 +176,67 @@ export function ChatInput({
       updateContent();
     });
 
+    // Hàm cấu hình loại trừ triệt để phím tắt ngầm và lỗi xung đột bộ gõ tiếng Việt Telex
+    const applyMathLiveConfigs = () => {
+      try {
+        // Cấu hình an toàn thông qua setOptions (hoạt động tốt cả trước và sau khi _mathfield mount)
+        if (typeof node.setOptions === "function") {
+          node.setOptions({
+            mathVirtualKeyboardPolicy: "manual",
+            letterShapeStyle: "upright",
+            mathModeSpace: "\\ ",
+            inlineShortcuts: {}, // Tắt toàn bộ inline shortcuts ("th" -> \operatorname{th}, "ch", "tg", ...)
+            inlineShortcutTimeout: 0,
+            isImplicitFunction: () => false, // Vô hiệu hóa nhận diện "th", "ch" làm hàm toán ngầm
+          });
+        }
+
+        try {
+          node.mathVirtualKeyboardPolicy = "manual";
+          node.letterShapeStyle = "upright";
+          node.mathModeSpace = "\\ ";
+        } catch {}
+
+        // Chỉ can thiệp menuItems và keybindings khi _mathfield đã mount để tránh ném lỗi "Mathfield not mounted"
+        if (node._mathfield) {
+          try {
+            node.menuItems = [];
+          } catch {}
+
+          try {
+            if (Array.isArray(node.keybindings)) {
+              node.keybindings = node.keybindings.filter((kb: any) => {
+                const k = (kb?.key || "").toLowerCase();
+                return (
+                  !k.includes("alt+o") &&
+                  !k.includes("alt+d") &&
+                  !k.includes("alt+p") &&
+                  !k.includes("alt+v")
+                );
+              });
+            }
+          } catch {}
+        }
+      } catch (err) {
+        console.warn("Could not apply MathLive configs:", err);
+      }
+    };
+
+    applyMathLiveConfigs();
+    node.addEventListener("focus", applyMathLiveConfigs);
+    setTimeout(applyMathLiveConfigs, 50);
+    setTimeout(applyMathLiveConfigs, 200);
+
     // @ts-ignore
     import("mathlive").then(() => {
-      // 2. Cấu hình các thuộc tính triệt tiêu lỗi font và phím tắt ngầm
-      node.mathVirtualKeyboardPolicy = "manual";
-      node.menuItems = [];
-      node.letterShapeStyle = "upright"; // Chữ cái đứng thẳng, không in nghiêng
-      node.mathModeSpace = "\\ "; // Nhấn Space chèn dấu cách thật
-      node.inlineShortcuts = {}; // Tắt phím tắt ngầm để không bị nhảy chữ tiếng Việt
+      if (typeof window !== "undefined" && window.customElements) {
+        window.customElements.whenDefined("math-field").then(() => {
+          applyMathLiveConfigs();
+          setTimeout(applyMathLiveConfigs, 50);
+        });
+      }
+      // 2. Cấu hình lại một lần nữa sau khi module MathLive nạp hoàn tất
+      applyMathLiveConfigs();
 
       // 3. Can thiệp trực tiếp vào Shadow DOM để ép font Geist Sans và xóa bỏ lỗi hiển thị ký tự tiếng Việt
       if (node.shadowRoot) {
@@ -191,7 +246,7 @@ export function ChatInput({
           injectedStyle.id = "socratic-math-style";
           injectedStyle.textContent = `
             /* Ép toàn bộ ký tự bên trong Shadow DOM về font Geist Sans chuẩn của website */
-            *, .ML__mathit, .ML__cmr, .ML__text, .ML__base, .ML__fieldcontainer, .ML__content, .ML__latex {
+            *, .ML__mathit, .ML__cmr, .ML__text, .ML__base, .ML__fieldcontainer, .ML__content, .ML__latex, .ML__op {
               font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
               font-style: normal !important;
               letter-spacing: normal !important;
@@ -463,7 +518,9 @@ export function ChatInput({
     if (isLoading || isOffline || (cooldownSeconds && cooldownSeconds > 0)) return;
 
     const mf = mathfieldRef.current as any;
-    const rawVal = mf?.value || "";
+    let rawVal = mf?.value || "";
+    // Xóa toán tử ngầm nếu lỡ phát sinh trong MathLive
+    rawVal = rawVal.replace(/\\operatorname\{(th|ch|sh|tg|cotg|cth)\}/gi, "$1");
     const formatted = formatLatexForChat(rawVal);
     if (!formatted && !attachment) return;
 
