@@ -284,7 +284,7 @@ input:disabled,
 math-field {
   --selection-background-color: rgba(193, 118, 42, 0.25) !important;
   --contains-highlight-background-color: rgba(193, 118, 42, 0.12) !important;
-  --text-highlight-background-color: rgba(193, 118, 42, 0.12) !important;
+  --text-highlight-background-color: transparent !important;
 }
 
 math-field::part(virtual-keyboard-toggle),

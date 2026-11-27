@@ -64,6 +64,62 @@ export function hasNaturalLanguage(text: string): boolean {
 }
 
 /**
+ * Gỡ bỏ wrapper `\displaylines{...}` do MathLive sinh ra khi nhấn xuống dòng (Shift+Enter / nút Xuống dòng)
+ * và tách thành các dòng phân cách bởi `\n`.
+ */
+function unwrapDisplayLines(latex: string): string {
+  const trimmed = latex.trim();
+  const prefixMatch = trimmed.match(/^\\displaylines\s*\{/);
+  if (!prefixMatch) return latex;
+
+  const startIdx = prefixMatch[0].length;
+  let depth = 1;
+  let endIdx = -1;
+  for (let i = startIdx; i < trimmed.length; i++) {
+    if (trimmed[i] === "\\" && (trimmed[i + 1] === "{" || trimmed[i + 1] === "}")) {
+      i++;
+      continue;
+    }
+    if (trimmed[i] === "{") depth++;
+    else if (trimmed[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        endIdx = i;
+        break;
+      }
+    }
+  }
+
+  if (endIdx !== trimmed.length - 1) return latex;
+
+  const inner = trimmed.slice(startIdx, endIdx);
+  const lines: string[] = [];
+  let cur = "";
+  let braceDepth = 0;
+
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch === "\\" && inner[i + 1] === "\\" && braceDepth === 0) {
+      lines.push(cur.trim());
+      cur = "";
+      i++;
+      continue;
+    }
+    if (ch === "\\" && (inner[i + 1] === "{" || inner[i + 1] === "}")) {
+      cur += ch + inner[i + 1];
+      i++;
+      continue;
+    }
+    if (ch === "{") braceDepth++;
+    else if (ch === "}" && braceDepth > 0) braceDepth--;
+    cur += ch;
+  }
+  lines.push(cur.trim());
+
+  return lines.join("\n");
+}
+
+/**
  * Chuẩn hóa chuỗi LaTeX từ MathLive trước khi gửi vào Chat/Markdown.
  * Tách biệt rõ ràng giữa câu chữ tự nhiên và công thức toán học,
  * chỉ bọc $...$ cho các phân đoạn toán thực sự, tránh lỗi dính chữ (mất space) và font nghiêng (math mode).
@@ -71,15 +127,18 @@ export function hasNaturalLanguage(text: string): boolean {
 export function formatLatexForChat(latex: string): string {
   if (!latex) return "";
 
+  const normalized = unwrapDisplayLines(latex);
+
   // Xử lý multiline: mỗi dòng được xử lý riêng lẻ, giữ nguyên ký tự xuống dòng
-  if (latex.includes("\n")) {
-    return latex
+  if (normalized.includes("\n")) {
+    return normalized
       .split("\n")
       .map((line) => formatLatexForChat(line))
-      .join("\n");
+      .join("\n")
+      .trim();
   }
 
-  let text = latex.trim();
+  let text = normalized.trim();
   if (!text) return "";
 
   // 1. Chuẩn hóa Unicode ký tự toán học (như 𝑥, 𝑦, 𝐴, 𝟐 copy từ web/Word) về ký tự chuẩn

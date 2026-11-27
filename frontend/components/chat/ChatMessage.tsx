@@ -132,7 +132,7 @@ export function ChatMessage({
               )}
               {message.content && (
                 <div className="flex items-start gap-2">
-                  <div className="flex-1 break-words [&>p]:m-0 [&_.katex]:text-white [&_.katex-html]:text-white">
+                  <div className="flex-1 break-words [&>p]:m-0 [&>p]:whitespace-pre-line [&_.katex]:text-white [&_.katex-html]:text-white">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}

@@ -247,13 +247,39 @@ def process_query_with_orchestrator(
         else:
             teaching_mode = get_teaching_mode(stats.consecutive_wrong_count, stats.hint_count)
 
-        # 4. Lấy lịch sử ngữ cảnh (loại trừ chính tin nhắn vừa lưu để xác định đúng ngữ cảnh trước đó)
+        # 4. Lấy lịch sử ngữ cảnh (loại trừ đúng tin nhắn vừa lưu cuối cùng để tránh xóa nhầm câu ngắn lặp lại)
         chat_history = get_recent_chat_context(db, session_id, limit=6)
-        prev_messages = [
-            msg for msg in chat_history 
-            if not (msg["role"] == "user" and msg["parts"][0] == user_query)
-        ]
-        history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in prev_messages])
+        prev_messages = list(chat_history)
+        for idx in range(len(prev_messages) - 1, -1, -1):
+            if prev_messages[idx]["role"] == "user" and prev_messages[idx]["parts"][0] == user_query:
+                prev_messages.pop(idx)
+                break
+
+        # Phát hiện đổi bài / gửi ảnh mới giữa phiên để tránh kẹt bộ đếm & phương trình bài cũ
+        is_switching_problem = bool(attachment_url) or _agent._is_new_problem_switch(user_query)
+        if is_switching_problem and stats and not answer_status:
+            if stats.consecutive_wrong_count > 0 or stats.hint_count > 0:
+                stats.consecutive_wrong_count = 0
+                stats.hint_count = 0
+                db.commit()
+                db.refresh(stats)
+            teaching_mode = get_teaching_mode(stats.consecutive_wrong_count, stats.hint_count)
+
+        # Chỉ giữ lại lịch sử thuộc bài toán hiện tại (cắt sau mốc hoàn thành gần nhất nếu có)
+        scoped_messages = prev_messages
+        if is_switching_problem:
+            scoped_messages = []
+        else:
+            last_done_idx = -1
+            for idx, msg in enumerate(prev_messages):
+                if msg["role"] != "user":
+                    low = (msg["parts"][0] or "").lower()
+                    if any(m in low for m in ("hoàn thành xong bài toán", "chúc mừng em", "giải xong bài toán", "em đã hiểu rõ từng bước làm này chưa")):
+                        last_done_idx = idx
+            if last_done_idx != -1 and last_done_idx < len(prev_messages) - 1:
+                scoped_messages = prev_messages[last_done_idx + 1:]
+
+        history_text = "\n".join([f"[{msg['role'].upper()}]: {msg['parts'][0]}" for msg in scoped_messages])
 
         # 4b. Lấy toàn bộ các ảnh bài toán mà học sinh đã gửi trong phiên học này (tối đa 3 ảnh gần nhất)
         session_images_query = (
@@ -477,6 +503,11 @@ def process_query_with_orchestrator(
             stats.hint_count = 0
             db.commit()
             print(f"[Comprehension Trigger] Gemini xác nhận hoàn thành bài toán -> Reset stats cho session {session_id}")
+    elif meta.get("inferred_emotion") in ("CORRECT", "WRONG", "GUIDING") and emotion_flag != "WARNING":
+        emotion_flag = meta["inferred_emotion"]
+        if emotion_flag == "CORRECT":
+            is_gemini_comprehension = True
+            answer_status = "correct"
 
     # Trigger hỏi "Đã hiểu / Chưa hiểu" khi:
     # - Gemini phát hiện hoàn thành bài toán (is_gemini_comprehension), HOẶC

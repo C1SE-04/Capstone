@@ -27,11 +27,19 @@ def _detect_uncovered_claim(message: str) -> bool:
     """
     msg_lower = message.lower().strip()
 
-    # 1. Bảo vệ chống False Positive: học sinh khẳng định 'không lạ', 'quen rồi', 'biết làm'
+    # 1. Bảo vệ chống False Positive: học sinh khẳng định 'không lạ', 'quen rồi', 'biết làm', thuật ngữ tiểu học ('chưa biết') hoặc xin ví dụ
     if re.search(r"(không|ko|chẳng|chả)\s+(thấy\s+)?(lạ|bỡ ngỡ)", msg_lower):
         return False
     if re.search(r"(quen\s+lắm|quen\s+rồi|dễ\s+ợt|biết\s+làm\s+rồi)", msg_lower):
         return False
+    if re.search(r"\b(ví dụ|bài mẫu|làm mẫu|giải mẫu|cho mẫu)\b", msg_lower):
+        return False
+
+    msg_masked = re.sub(
+        r"\b(?:thừa số|số hạng|thành phần|số bị trừ|số trừ|số bị chia|số chia|số)\s+chưa biết\b",
+        "",
+        msg_lower,
+    )
 
     # 2. Nhận diện các tín hiệu chưa học, lạ lẫm hoặc thầy cô bỏ qua bài
     core_pattern = (
@@ -39,7 +47,7 @@ def _detect_uncovered_claim(message: str) -> bool:
         r"\b(lạ|mới\s+toanh|mới\s+tinh|lần\s+đầu|quái\s+lạ|bỏ\s+qua|lướt\s+qua|skip|nhảy\s+cóc|giảm\s+tải)\b|"
         r"\b(chx\s+bh|chx\s+từng|e\s+ch\s+hc)\b"
     )
-    return bool(re.search(core_pattern, msg_lower))
+    return bool(re.search(core_pattern, msg_masked))
 
     return False
 
@@ -194,12 +202,12 @@ def _build_task_description(
                 f"HỌC SINH TIẾP TỤC BỐI RỐI HOẶC THAN CHƯA HỌC: '{message[:80]}'.\n"
                 f"LƯU Ý QUAN TRỌNG (CHỐNG LẶP LẠI THĂM DÒ - AC 9.3.7):\n"
                 f"1. Bạn ĐÃ HỎI thăm dò tiến độ ở lượt trước và học sinh đã trả lời rồi. "
-                f"TUYỆT ĐỐI KHÔNG HỎI LẠI câu 'Ở trường thầy cô đã dạy đến chưa' hay câu hỏi mùa hè lần thứ 2!\n"
+                f"TUYỆT ĐỐI KHÔNG HỎI LẠI câu 'Ở trường thầy cô đã dạy đến chưa' hay 'hiện tại đang học đến bài nào' lần thứ 2!\n"
                 f"2. BẮT BUỘC tiếp tục dẫn dắt Socratic theo KỊCH BẢN B: Hãy hạ thấp rào cản thêm một nấc nữa, "
-                f"tuyệt đối KHÔNG lặp lại câu hỏi toán học vừa hỏi ở lượt trước. "
-                f"Hãy chia nhỏ bước giải hơn nữa hoặc gợi ý một phép tính nhẩm cực kỳ đơn giản để học sinh tự tin trả lời."
+                f"tuyệt đối KHÔNG lặp lại câu hỏi toán học vừa hỏi ở lượt trước, và KÈM 1 khung điền khuyết \\square trong $$...$$ cho bước nhỏ đầu tiên."
             )
 
+        has_concrete_problem = bool(re.search(r"[\d\+\-\*\/\=xXyY]|sqrt|căn|\^", message)) and bool(re.search(r"\d", message))
         # US 9.3 (Task T9.11 & T9.13) + US 11.6 (T401):
         # Đưa dòng thời gian và Kịch bản thăm dò Socratic chuyên sâu vào task_description
         # Probe mới (US 11.6): hỏi cụ thể tên bài học sinh đang học tới + tên bài được hỏi
@@ -216,6 +224,17 @@ def _build_task_description(
             # --- US 11.6: Inject danh sách đầy đủ theo thứ tự vào prompt để Gemini tự so thứ tự ---
             hk1_ordered = "; ".join(f"[{i+1}] {t}" for i, t in enumerate(hk1_topics))
             hk2_ordered = "; ".join(f"[{i+1}] {t}" for i, t in enumerate(hk2_topics))
+            concrete_step_note = (
+                "\nLƯU Ý ĐỀ BÀI CỤ THỂ: Học sinh đã nêu rõ biểu thức/số liệu cụ thể cần tính. "
+                "Thay vì chỉ hỏi tiến độ trường lớp rồi bỏ lửng, hãy đồng cảm ngắn 1 câu rằng chưa quen là bình thường, "
+                "sau đó gợi mở NGAY bước 1 thật dễ hiểu kèm 1 khung điền khuyết `\\square` trong `$$...$$` để em bắt đầu làm ngay!"
+                if has_concrete_problem
+                else (
+                    f"NGUYÊN TẮC QUAN TRỌNG: Nếu rơi vào trường hợp cần hỏi thăm dò tiến độ trường học hoặc kỳ nghỉ hè, "
+                    f"BẠN PHẢI DỪNG LẠI Ở CÂU HỎI THĂM DÒ VÀ GẮN THẺ ẨN <!-- PROBE_PENDING --> (HOẶC [PROBE_PENDING]) Ở CUỐI CÙNG CÂU TRẢ LỜI, "
+                    f"TUYỆT ĐỐI KHÔNG GIẢI BÀI HOẶC ĐẶT PHÉP TÍNH TOÁN NGAY TRONG LƯỢT NÀY!"
+                )
+            )
             return (
                 f"HỌC SINH TUYÊN BỐ CHƯA HỌC: '{message[:80]}'.\n"
                 f"[{timeline_label}] CHƯƠNG TRÌNH LỚP {curr_grade}:\n"
@@ -238,9 +257,7 @@ def _build_task_description(
                 f"     em đã học [Tên bài được hỏi] rồi. Có lẽ em đã quên nên thầy sẽ nhắc lại cách làm bài này...'\n"
                 f"● Nếu học sinh nói 'cô/thầy bỏ qua/không dạy/nhảy cóc/giảm tải'\n"
                 f"  → Kịch bản B với lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!'\n\n"
-                f"NGUYÊN TẮC QUAN TRỌNG: Nếu rơi vào trường hợp cần hỏi thăm dò tiến độ trường học hoặc kỳ nghỉ hè, "
-                f"BẠN PHẢI DỪNG LẠI Ở CÂU HỎI THĂM DÒ VÀ GẮN THẺ ẨN <!-- PROBE_PENDING --> (HOẶC [PROBE_PENDING]) Ở CUỐI CÂU TRẢ LỜI, "
-                f"TUYỆT ĐỐI KHÔNG GIẢI BÀI HOẶC ĐẶT PHÉP TÍNH TOÁN NGAY TRONG LƯỢT NÀY!"
+                f"{concrete_step_note}"
             )
         except Exception as e:
             return (
@@ -260,25 +277,27 @@ def _build_task_description(
         if student_ans and expected_ans:
             return (
                 f"Học sinh nộp đáp án '{student_ans}' — chưa chính xác (đáp án đúng: '{expected_ans}'). "
-                f"{'Bài: ' + problem_text[:60] + '. ' if problem_text else ''}"
+                f"{'Bài: ' + problem_text[:600] + '. ' if problem_text else ''}"
                 "Dùng câu hỏi Socratic để học sinh tự tìm ra bước tính sai. "
                 "Tuyệt đối không tiết lộ đáp án đúng."
             )
         return (
-            f"Học sinh đang hiểu sai hoặc tính sai: '{message[:60]}'. "
+            f"Học sinh đang hiểu sai hoặc tính sai: '{message[:200]}'. "
+            f"{'Bài: ' + problem_text[:600] + '. ' if problem_text else ''}"
             "Xác định chính xác bước sai và đặt câu hỏi gợi mở để học sinh tự phát hiện lỗi."
         )
     # SCAFFOLDING (default)
     if problem_text:
         return (
-            f"Học sinh cần hỗ trợ bài: '{problem_text[:70]}'. "
-            "Dùng phương pháp Socratic: đặt câu hỏi gợi mở cho bước tiếp theo, "
+            f"Học sinh cần hỗ trợ bài: '{problem_text[:600]}'. "
+            "Dùng phương pháp Socratic: đặt câu hỏi gợi mở cho bước tiếp theo "
+            "(kèm 1 dòng khung trình bày có \\square trong $$...$$ nếu chưa chốt đáp án cuối), "
             "tuyệt đối không giải hộ toàn bộ bài."
         )
     return (
         "Học sinh cần được dẫn dắt từng bước. "
         "Dùng phương pháp Socratic: hỏi về bước học sinh vừa làm, "
-        "rồi đặt câu hỏi cho bước tiếp theo. Không giải hộ."
+        "rồi đặt câu hỏi cho bước tiếp theo (kèm 1 dòng khung \\square trong $$...$$ nếu phù hợp). Không giải hộ."
     )
 
 
@@ -831,8 +850,8 @@ class OrchestratorAgent:
         "em nghĩ phải", "em tưởng phải", "em tưởng là",
         "em lấy tử cộng tử mẫu cộng mẫu",
         "em cộng cả tử cả mẫu",
-        "em nhân chéo",
-        "em tính nhầm", "em cộng nhầm", "em nhân nhầm",
+        "em nhân chéo hai phân số", "nhân chéo hai phân số",
+        "em tính nhầm", "em cộng nhầm", "em nhân nhầm", "lập nhầm", "chọn nhầm",
         "hình như em sai", "em sai chỗ nào", "chỗ nào em sai",
         "em tưởng âm nhân âm ra âm",
         "em tưởng trừ số âm thì cũng trừ",
@@ -870,7 +889,7 @@ class OrchestratorAgent:
     def __init__(self, model_name: Optional[str] = None, **kwargs: Any) -> None:
         self.model_name = model_name
         self._minimal_arithmetic_re = re.compile(
-            r"^(?:thầy ơi\s+|thầy\s+|thưa thầy\s+|bạn ơi\s+|tính\s+|em muốn tính\s+|cho em hỏi\s+|giúp em\s+|phép tính\s+|phép tính này\s+)?"
+            r"^(?:thầy ơi\s+|thầy\s+|thưa thầy\s+|bạn ơi\s+|tính\s+|giải\s+|giải bài\s+|em muốn tính\s+|cho em hỏi\s+|giúp em\s+|phép tính\s+|phép tính này\s+)?"
             r"(\d+(?:\.\d+)?)\s*"
             r"([:\/÷\*x×\+\-]|chia cho|chia|nhân với|nhân|cộng với|cộng|trừ đi|trừ)\s*"
             r"(\d+(?:\.\d+)?)"
@@ -900,10 +919,10 @@ class OrchestratorAgent:
         )
 
         # Regex trích xuất phương trình đại số (toán học một ẩn, hỗ trợ cả 2 vế có biến)
-        # math_chars dùng khoảng trắng ngang [ \t] tránh nhảy dòng
+        # math_chars dùng khoảng trắng ngang [ \t] tránh nhảy dòng; math_var không cắt giữa từ tiếng Việt có dấu
         math_chars = r"[\d\.\+\-\*\/:\^\(\) \t]"
-        math_var = r"(?:(?<=\d)[a-zA-Z]|(?<![a-zA-Z\d_])[a-zA-Z](?![a-zA-Z_]))"
-        math_expr = rf"(?:{math_chars}*(?:{math_var})?{math_chars}*)+"
+        math_var = r"(?:(?<=\d)[a-zA-Z](?![a-zA-Z_\u00C0-\u1EF9])|(?<![a-zA-Z\d_\u00C0-\u1EF9])[a-zA-Z](?![a-zA-Z_\u00C0-\u1EF9]))"
+        math_expr = rf"(?:{math_chars}|{math_var})+"
         self._equation_re = re.compile(
             rf"(?:^|(?<=[\s,:]))("
             rf"{math_expr}"
@@ -1208,15 +1227,173 @@ class OrchestratorAgent:
         }
 
     @staticmethod
+    def _normalize_latex_math(text: str) -> str:
+        """
+        Chuẩn hóa ký hiệu toán LaTeX phổ biến sang biểu thức ASCII/SymPy thống nhất:
+        - Loại bỏ \\text{...}, $, $$, \\left, \\right, khoảng trắng mảnh \\, \\; \\!
+        - Chuyển \\times, \\cdot, ×, · -> *, \\div, ÷ -> /
+        - Chuyển \\frac{a}{b}, \\frac52, \\frac 5 2, \\dfrac, \\tfrac (kể cả âm -\\frac...)
+        - Thu gọn dấu trừ đơn ngôi sau khoảng trắng ('- 5/2' -> '-5/2') mà không đụng phép trừ nhị phân ('10 - 5/2').
+        """
+        if not text:
+            return ""
+        s = text
+        while re.search(r"\\text\s*\{([^{}]*)\}", s):
+            s = re.sub(r"\\text\s*\{([^{}]*)\}", r"\1", s)
+        s = re.sub(r"\\[,;!]", " ", s)
+        s = re.sub(r"\\(?:left|right)\b", "", s)
+        s = re.sub(r"\$+", " ", s)
+
+        s = re.sub(r"\\(?:times|cdot)\b", " * ", s)
+        s = re.sub(r"\\div\b", " / ", s)
+        s = s.replace("×", " * ").replace("·", " * ").replace("÷", " / ")
+
+        def _fmt_frac(num: str, den: str) -> str:
+            n = num.strip()
+            d = den.strip()
+            if re.fullmatch(r"-?\d+(?:\.\d+)?", n) and re.fullmatch(r"\d+(?:\.\d+)?", d):
+                return f"{n}/{d}"
+            return f"({n})/({d})"
+
+        braced_re = re.compile(
+            r"\\(?:d|t)?frac\s*\{((?:[^{}]|\{[^{}]*\})+)\}\s*\{((?:[^{}]|\{[^{}]*\})+)\}"
+        )
+        for _ in range(3):
+            new_s = braced_re.sub(lambda m: _fmt_frac(m.group(1), m.group(2)), s)
+            if new_s == s:
+                break
+            s = new_s
+
+        # Hỗn hợp \frac{a}b hoặc \frac a{b}
+        s = re.sub(
+            r"\\(?:d|t)?frac\s*\{([^{}]+)\}\s*([a-zA-Z\d])",
+            lambda m: _fmt_frac(m.group(1), m.group(2)),
+            s,
+        )
+        s = re.sub(
+            r"\\(?:d|t)?frac\s*([a-zA-Z\d])\s*\{([^{}]+)\}",
+            lambda m: _fmt_frac(m.group(1), m.group(2)),
+            s,
+        )
+
+        # Dạng không ngoặc nhọn: \frac52 hoặc \frac 5 2 hoặc \frac x 2
+        s = re.sub(
+            r"\\(?:d|t)?frac\s*([a-zA-Z\d])\s*([a-zA-Z\d])",
+            lambda m: _fmt_frac(m.group(1), m.group(2)),
+            s,
+        )
+
+        # Thu gọn dấu trừ đơn ngôi bị tách khoảng trắng ('- 5/2' -> '-5/2', 'x = - 5/2' -> 'x = -5/2')
+        s = re.sub(r"(^|[=(\[:,])\s*-\s+(?=\d)", r"\1-", s)
+        s = re.sub(r"(\b(?:là|bằng|ra)\s+)-\s+(?=\d)", r"\1-", s, flags=re.IGNORECASE)
+        return re.sub(r"\s+", " ", s).strip()
+
+    @staticmethod
+    def _preprocess_latex_math(text: str) -> str:
+        """Alias tương thích ngược cho _normalize_latex_math."""
+        return OrchestratorAgent._normalize_latex_math(text)
+
+    @staticmethod
+    def _is_explicit_switch_signal(text: str) -> bool:
+        """Nhận diện tín hiệu đổi bài/ảnh mới rõ ràng để không lục lại phương trình bài cũ."""
+        if not text:
+            return False
+        t = text.lower().strip()
+        if any(kw in t for kw in (
+            "đổi bài", "bài khác", "làm bài khác", "sang bài", "chuyển bài",
+            "thôi bài này", "bỏ qua bài này", "bỏ bài này", "không làm nữa",
+            "ko làm nữa", "bài tiếp theo", "câu khác", "bài mới", "ảnh mới",
+        )):
+            return True
+        if re.search(r"^(?:bài|câu)\s*\d+\s*[:\.]", t) and "=" not in t:
+            return True
+        if any(k in t for k in (
+            "tính chu vi", "tính diện tích", "tính thể tích", "hãy chứng minh",
+            "chứng minh rằng", "tính giá trị", "rút gọn biểu thức",
+        )) and "=" not in t and not re.search(r"(?:^|\b)(?:là|bằng|ra|được)\s*-?\d", t):
+            return True
+        return False
+
+    @staticmethod
+    def _is_new_problem_switch(text: str) -> bool:
+        """Alias giữ tương thích cho _is_explicit_switch_signal."""
+        return OrchestratorAgent._is_explicit_switch_signal(text)
+
+    @staticmethod
+    def _slice_history_at_problem_boundary(history_text: str) -> str:
+        """Cắt lịch sử hội thoại tại ranh giới bài toán mới nhất để tránh kéo phương trình bài cũ."""
+        if not history_text:
+            return ""
+        blocks = [
+            b.strip()
+            for b in re.split(r"(?im)^(?=\[(?:USER|STUDENT|AGENT|ASSISTANT|MODEL|THẦY)\]|(?:User|Model|Assistant):)", history_text)
+            if b.strip()
+        ]
+        if len(blocks) <= 1:
+            if "[NEW_PROBLEM_BOUNDARY]" in history_text:
+                return history_text.rsplit("[NEW_PROBLEM_BOUNDARY]", 1)[-1].strip()
+            return history_text
+
+        user_prefixes = ("[user", "[student", "user:")
+        agent_prefixes = ("[agent", "[assistant", "[model", "[thầy", "model:", "assistant:")
+        start_idx = 0
+        for i in range(len(blocks) - 1, -1, -1):
+            b = blocks[i]
+            b_low = b.lower()
+            if "[new_problem_boundary]" in b_low:
+                start_idx = i
+                break
+            if any(b_low.startswith(p) for p in agent_prefixes):
+                if "[comprehension_check]" in b_low or "mẫu trình bày hoàn chỉnh" in b_low or "chúc mừng em đã hoàn thành" in b_low:
+                    start_idx = i + 1
+                    break
+            elif any(b_low.startswith(p) for p in user_prefixes):
+                content = re.sub(r"^\[[^\]]+\]\s*:?\s*|^[a-zA-Z]+:\s*", "", b).strip()
+                if OrchestratorAgent._is_explicit_switch_signal(content):
+                    start_idx = i
+                    break
+
+        if start_idx >= len(blocks):
+            return ""
+        return "\n".join(blocks[start_idx:])
+
+    @staticmethod
     def _normalize(text: str) -> str:
         return re.sub(r"\s+", " ", text.lower()).strip() if text else ""
 
     @staticmethod
+    def _extract_tail_for_eval(text: str) -> str:
+        """Ưu tiên trích vế kết luận cuối sau '=', 'kết quả', 'đáp án', 'bằng', 'ra', 'mất', 'là' nếu có số."""
+        s = OrchestratorAgent._normalize_latex_math(text)
+        if "=" in s:
+            eq_tail = s.rsplit("=", 1)[-1].strip()
+            m_after = list(re.finditer(r"\b(?:kết quả(?:\s+cuối(?:\s+cùng)?)?|đáp án|bằng|tính được|ra(?:\s+là)?|mất|chọn|nên|vậy|suy ra|(?<!tức\s)là)\b", eq_tail, re.IGNORECASE))
+            if m_after:
+                cand_after = eq_tail[m_after[-1].end():].strip()
+                if re.search(r"\d", cand_after):
+                    return cand_after
+            if re.search(r"\d", eq_tail):
+                return eq_tail
+        m_kw = list(re.finditer(r"\b(?:kết quả(?:\s+cuối(?:\s+cùng)?)?|đáp án|bằng|tính được|ra(?:\s+là)?|mất|chọn|(?<!tức\s)là)\b", s, re.IGNORECASE))
+        if m_kw:
+            tail = s[m_kw[-1].end():].strip()
+            if re.search(r"\d", tail):
+                return tail
+        return s
+
+    @staticmethod
     def _extract_fraction(text: str) -> Tuple[Optional[Fraction], Optional[str]]:
-        """Trích xuất số/phân số từ văn bản, bỏ qua 'câu 1', 'bài 2'."""
-        s = re.sub(r"\b(câu|bài|trang|đề)\s*\d+\b", "", text, flags=re.IGNORECASE)
+        """Trích xuất số/phân số từ văn bản (hỗ trợ LaTeX \\frac), bỏ qua 'câu 1', 'bài 2'."""
+        raw_norm = OrchestratorAgent._normalize_latex_math(text)
+        # Chỉ ưu tiên vế kết luận nếu vế đó có số và không chứa biến chữ cái đại số còn dang dở
+        tail = OrchestratorAgent._extract_tail_for_eval(raw_norm)
+        s = tail if (tail != raw_norm and not re.search(r"(?<![a-zA-Z\u00C0-\u1EF9])[xy](?![a-zA-Z\u00C0-\u1EF9])", tail, re.IGNORECASE)) else raw_norm
+        s = re.sub(r"\b(câu|bài|trang|đề)\s*\d+\b", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"\b(?:m|cm|dm|mm|km)\s*\^?\s*[²³23]\b", " ", s, flags=re.IGNORECASE)
+        s = s.replace("²", "").replace("³", "")
+        s = re.sub(r"(?<=\d)\s+(?=\d{3}\b)", "", s)
         s = s.replace(",", ".")
-        matches = list(re.finditer(r"-?\d+(?:/\d+|\.\d+)?", s))
+        matches = list(re.finditer(r"-?\d+(?:/-?\d+|\.\d+)?", s))
         if not matches:
             return None, None
         cand = next((m.group(0) for m in matches if "/" in m.group(0) or "." in m.group(0)), None)
@@ -1237,16 +1414,31 @@ class OrchestratorAgent:
     def _eval_math_expr(text: str) -> Optional[Fraction]:
         """
         Đánh giá biểu thức toán học đơn giản bằng sympy.
-        Hỗ trợ: 3x3+5, (2+3)*4, 2^3, 1/2+1/3, v.v.
+        Hỗ trợ LaTeX (\\frac, \\times, \\div, \\cdot), 3x3+5, (2+3)*4, 2^3, 1/2+1/3, câu có chữ mở đầu.
+        Tránh đánh giá nhầm số thập phân vô hạn tuần hoàn 0,(5), biểu thức còn biến, hay đơn vị phức hợp.
         """
-        expr = re.sub(r"(\d)\s*x\s*(\d)", r"\1*\2", text, flags=re.IGNORECASE)
-        expr = expr.replace("^", "**")
-        m = re.search(r"[\d\s\+\-\*\/\(\)\*\.]+", expr)
-        if not m:
+        s = OrchestratorAgent._normalize_latex_math(text)
+        if re.search(r"\d+\s*,\s*\(\d+\)", s):
             return None
+        s = OrchestratorAgent._extract_tail_for_eval(s)
+        s = re.sub(r"\b(câu|bài|trang|đề)\s*\d+\b", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"(?<=\d),(?=\d)", ".", s)
+        s = re.sub(r"\b(?:m|cm|dm|mm|km)\s*\^?\s*[²³23]\b", " ", s, flags=re.IGNORECASE)
+        s = s.replace("²", "").replace("³", "")
+        expr = re.sub(r"(\d)\s*x\s*(\d)", r"\1*\2", s, flags=re.IGNORECASE)
+        expr = expr.replace(":", "/").replace("^", "**")
+        candidates = [c.strip() for c in re.findall(r"[\d\s\+\-\*\/\(\)\.]+", expr) if re.search(r"\d", c)]
+        if not candidates:
+            return None
+        target_expr = max(candidates, key=len)
         try:
-            result = sympy.sympify(m.group(0).strip())
-            return Fraction(result.p, result.q) if hasattr(result, "p") else Fraction(float(result))
+            result = sympy.sympify(target_expr)
+            if hasattr(result, "p") and hasattr(result, "q"):
+                return Fraction(int(result.p), int(result.q))
+            r_exact = sympy.nsimplify(result, rational=True)
+            if hasattr(r_exact, "p") and hasattr(r_exact, "q"):
+                return Fraction(int(r_exact.p), int(r_exact.q))
+            return Fraction(str(round(float(result), 9))).limit_denominator(10000)
         except Exception:
             return None
 
@@ -1254,10 +1446,12 @@ class OrchestratorAgent:
     def _normalize_math_expr(s: str) -> str:
         """
         Chuẩn hóa biểu thức toán học trước khi đưa vào SymPy:
+        - Chuẩn hóa LaTeX (\\frac, \\times, \\div, \\cdot)
         - Thêm dấu nhân ngầm: 2x -> 2*x, 2(x+1) -> 2*(x+1), )( -> )*(, )x -> )*x, x( -> x*(
-        - Chuyển lũy thừa ^ -> **
-        - Chuyển phép chia : -> /
+        - Chuyển lũy thừa ^ -> ** và phép chia : -> /
         """
+        s = OrchestratorAgent._normalize_latex_math(s)
+        s = re.sub(r"(?<=\d),(?=\d)", ".", s)
         s = re.sub(r"(\d)\s*([a-zA-Z])", r"\1*\2", s)
         s = re.sub(r"(\d)\s*\(", r"\1*(", s)
         s = re.sub(r"\)\s*\(", r")*(", s)
@@ -1269,9 +1463,16 @@ class OrchestratorAgent:
 
     @staticmethod
     def _clean_extracted_equation(raw: str) -> str:
-        """Làm sạch phương trình thô trích xuất từ câu hỏi học sinh."""
+        """Làm sạch phương trình thô trích xuất từ câu hỏi học sinh (giữ nguyên phép chia 'x : 8 = 15')."""
         raw = raw.strip()
-        raw = re.sub(r"^[a-zA-Z]\s*:\s*", "", raw)
+        m_pref = re.match(r"^([a-zA-Z])\s*:\s*(.+)$", raw)
+        if m_pref:
+            p_var, rest = m_pref.group(1), m_pref.group(2)
+            # Xóa nhãn tiền tố ('a: ...', 'tìm x: 48500 - x = 19200') khi phần sau vẫn chứa phương trình có ẩn
+            if re.search(rf"(?<![a-zA-Z]){re.escape(p_var)}(?![a-zA-Z])", rest, re.IGNORECASE) or (
+                p_var.lower() in ("a", "b", "c", "d") and re.search(r"[a-zA-Z]", rest)
+            ):
+                raw = rest
         raw = re.sub(r"^[^\d\(\+\-a-zA-Z]+", "", raw)
         raw = re.sub(r"[^\d\)\w]+$", "", raw)
         return raw.strip()
@@ -1285,7 +1486,18 @@ class OrchestratorAgent:
         try:
             if "=" not in raw_eq:
                 return None
-            lhs_str, rhs_str = raw_eq.split("=", 1)
+            # Bỏ qua ký hiệu hàm như f(-2) = ... hoặc đơn vị đo 22 m, 2.5 m ở cuối vế
+            if re.search(r"\b[a-zA-Z]\s*\(\s*-?\d", raw_eq):
+                return None
+            if re.search(r"=\s*[\d\.\+\-\*\/\s]+\s+(?:m|cm|dm|mm|km|g|kg|l|ml|s|h|ha)\s*$", raw_eq, re.IGNORECASE):
+                return None
+            cleaned_units_eq = re.sub(
+                r"(?<=\d)\s*(?:m|cm|dm|mm|km|g|kg|l|ml|s|h|ha)\b",
+                "",
+                raw_eq,
+                flags=re.IGNORECASE,
+            )
+            lhs_str, rhs_str = cleaned_units_eq.split("=", 1)
             lhs_norm = OrchestratorAgent._normalize_math_expr(lhs_str)
             rhs_norm = OrchestratorAgent._normalize_math_expr(rhs_str)
 
@@ -1315,18 +1527,55 @@ class OrchestratorAgent:
         original_message: str,
         history_text: str = "",
         problem_context: Optional[dict] = None,
+        student_grade: Optional[int] = None,
     ) -> Optional[RoutingResult]:
         """
-        Trụ cột 1 — Nhận diện bài toán phương trình & điều phối Socratic chuẩn xác (Tối đa hóa phạm vi bao phủ):
-        1. Nhận diện phương trình bài toán từ tin nhắn hiện tại (original_message) hoặc ngữ cảnh (history_text, problem_context).
-        2. Nếu học sinh chỉ đưa ra đề bài / nhờ giải / hỏi bài (ví dụ: 'tính 3x + 10 = 25', 'giải 2x - 4 = 10', '3x + 10 = 25'):
-           -> Điều phối trực tiếp SCAFFOLDING (emotion_flag='GUIDING') để Thầy giáo dẫn dắt Socratic bước 1.
-        3. Nếu học sinh đưa ra nghiệm phỏng đoán:
-           - Nghiệm đúng (x = 5 == 5) -> SCAFFOLDING (emotion_flag='CORRECT').
-           - Nghiệm sai (x = 10 != 5) -> MISCONCEPTION (emotion_flag='WRONG').
+        Trụ cột 1 — Nhận diện bài toán phương trình / tìm x & điều phối Socratic chuẩn xác:
+        1. Chuẩn hóa LaTeX (\frac{a}{b}, \frac52) trước khi trích xuất phương trình và nghiệm.
+        2. Tránh bám nhầm phương trình cũ trong history nếu học sinh vừa chuyển sang bài/câu khác.
+        3. Điều phối SCAFFOLDING với chỉ đạo phân tầng theo cấp lớp (Lớp 4–5 / 6–7 / 8–9) và khung điền khuyết \square không lộ phép tính.
         """
-        # 1. Quét tìm phương trình đại số trong tin nhắn hiện tại
-        eq_in_msg = self._equation_re.findall(original_message)
+        msg_norm_latex = self._normalize_latex_math(original_message)
+        msg_norm_latex = re.sub(r"(?<=\d),(?=\d)", ".", msg_norm_latex)
+        # Bỏ qua linear equation parser nếu bài/câu chứa đơn vị thời gian phức hợp (giờ phút, tấn tạ...)
+        ctx_blob = " ".join(
+            str(problem_context.get(k) or "")
+            for k in ("problemText", "problem_text", "problem")
+        ) if problem_context else ""
+        if re.search(r"\b(?:giờ|phút|giây)\b.*\b(?:phút|giây|giờ)\b|\b(?:tấn|tạ|yến)\b", f"{msg_norm_latex} {ctx_blob}", re.IGNORECASE):
+            return None
+        # Bỏ qua linear 1-ẩn nếu bài toán có hệ phương trình hoặc nhiều biến độc lập (VD hệ x, y tính T = 3x - y)
+        distinct_alg_vars = set(
+            re.findall(r"(?<![a-zA-Z\u00C0-\u1EF9])[xyzT](?![a-zA-Z\u00C0-\u1EF9])", f"{msg_norm_latex} {ctx_blob}")
+        )
+        if len(distinct_alg_vars) > 1 or re.search(r"hệ\s+phương\s+trình", f"{msg_norm_latex} {ctx_blob}", re.IGNORECASE):
+            return None
+        # Bỏ qua bài có rẽ nhánh nhiều nghiệm ('hoặc', bậc 2 '^2', giá trị tuyệt đối '|...|')
+        if "hoặc" in original_message.lower() or re.search(r"\^2|\|[^|]+\|", ctx_blob):
+            return None
+        # 1. Tìm phương trình gốc & đáp án chuẩn từ problem_context (trừ khi học sinh đang đổi bài mới)
+        ctx_target = None
+        ctx_sol_frac = None
+        ctx_sol_raw = None
+        is_switch_sig = self._is_explicit_switch_signal(msg_norm_latex)
+        if not is_switch_sig and problem_context:
+            raw_ctx_sol = problem_context.get("correctSolution") or problem_context.get("correct_solution")
+            if raw_ctx_sol is not None:
+                ctx_sol_frac, ctx_sol_raw = self._extract_fraction(str(raw_ctx_sol))
+            for k in ("problemText", "problem_text", "problem", "title", "content"):
+                val = problem_context.get(k)
+                if val and isinstance(val, str):
+                    ctx_s = re.sub(r"(?<=\d),(?=\d)", ".", self._normalize_latex_math(val))
+                    for raw in reversed(self._equation_re.findall(ctx_s)):
+                        res = self._solve_simple_linear_equation(self._clean_extracted_equation(raw))
+                        if res and not re.match(rf"^{res[0]}\s*=\s*-?\d+(?:\.\d+)?(?:/\d+)?$", res[2].strip(), re.IGNORECASE):
+                            ctx_target = res
+                            break
+                if ctx_target:
+                    break
+
+        # 2. Quét tìm phương trình đại số trong tin nhắn hiện tại
+        eq_in_msg = self._equation_re.findall(msg_norm_latex)
         solved_target = None
         eq_source = "msg"
 
@@ -1335,59 +1584,151 @@ class OrchestratorAgent:
             res = self._solve_simple_linear_equation(cleaned)
             if res:
                 v_name, sol, eq_clean = res
-                is_trivial_assign = bool(re.match(rf"^{v_name}\s*=\s*-?\d+$", eq_clean.strip(), re.IGNORECASE))
-                if not is_trivial_assign:
-                    solved_target = res
+                is_trivial_assign = bool(re.match(rf"^{v_name}\s*=\s*-?\d+(?:\.\d+)?(?:/\d+)?$", eq_clean.strip(), re.IGNORECASE))
+                lhs_part, rhs_part = eq_clean.split("=", 1)
+                is_student_solve_expr = (
+                    lhs_part.strip().lower() == v_name.lower()
+                    and not re.search(rf"(?<![a-zA-Z]){re.escape(v_name)}(?![a-zA-Z])", rhs_part, re.IGNORECASE)
+                    and bool(history_text.strip() or (problem_context and (problem_context.get("problemText") or problem_context.get("problem_text"))))
+                )
+                if not is_trivial_assign and not is_student_solve_expr:
+                    # Nếu đang trong cùng 1 bài (không đổi bài) và problem_context đã có phương trình gốc cùng ẩn:
+                    # kiểm tra xem phương trình biến đổi của học sinh có cùng nghiệm với đề gốc không
+                    if ctx_target and (history_text.strip() or ctx_target[0].lower() == v_name.lower()):
+                        if sol != ctx_target[1] and v_name.lower() == ctx_target[0].lower():
+                            task = (
+                                f"Học sinh đang giải bài '{ctx_target[2]}' (đáp án đúng {ctx_target[0]} = {ctx_target[1]}), "
+                                f"nhưng viết bước biến đổi '{eq_clean}' (cho ra {sol} != {ctx_target[1]}). "
+                                "Bạn là THẦY GIÁO: nhẹ nhàng chỉ ra bước chuyển vế/biến đổi vừa rồi bị sai dấu hoặc sai phép tính, "
+                                "đặt câu hỏi gợi mở kèm khung \\square để học sinh tự sửa lại bước đó. KHÔNG nói lộ đáp án và KHÔNG gắn [COMPREHENSION_CHECK]."
+                            )
+                            return RoutingResult(
+                                selected_agent="MISCONCEPTION",
+                                task_description=task,
+                                routing_scratchpad=f"[Trụ1] Linear step equation mismatch: {eq_clean} (sol={sol}) != {ctx_target[2]} (sol={ctx_target[1]})",
+                                emotion_flag="WRONG",
+                            )
+                        solved_target = ctx_target
+                        eq_source = "ctx"
+                    elif (
+                        not is_switch_sig
+                        and ctx_sol_frac is not None
+                        and sol != ctx_sol_frac
+                        and bool(history_text.strip())
+                        and not re.search(r"hệ\s+phương\s+trình|bất\s+phương\s+trình", ctx_blob, re.IGNORECASE)
+                        and len(set(re.findall(r"(?<![a-zA-Z\u00C0-\u1EF9])[xyzT](?![a-zA-Z\u00C0-\u1EF9])", msg_norm_latex))) <= 1
+                        and self._eval_math_expr(msg_norm_latex) != ctx_sol_frac
+                    ):
+                        task = (
+                            f"Học sinh vừa thiết lập/biến đổi '{eq_clean}' (cho ra {v_name} = {sol}, chưa khớp đáp án đúng {ctx_sol_raw}). "
+                            "Bạn là THẦY GIÁO: nhẹ nhàng ghi nhận ý đúng nếu có, chỉ ra chỗ nhầm dấu khi chuyển vế hoặc biểu thức lập chưa chuẩn, "
+                            "đặt câu hỏi gợi mở kèm khung \\square để học sinh tự sửa lại bước đó. "
+                            "TUYỆT ĐỐI KHÔNG khen 'hoàn toàn đúng'/'chính xác', KHÔNG nói lộ đáp án và KHÔNG gắn [COMPREHENSION_CHECK]."
+                        )
+                        return RoutingResult(
+                            selected_agent="MISCONCEPTION",
+                            task_description=task,
+                            routing_scratchpad=f"[Trụ1] Linear context solution mismatch: {eq_clean} ({sol}) != ctx_sol ({ctx_sol_frac})",
+                            emotion_flag="WRONG",
+                        )
+                    else:
+                        solved_target = res
                     break
-                elif not solved_target:
+                elif not solved_target and not is_student_solve_expr:
                     solved_target = res
 
-        # 2. Nếu tin nhắn hiện tại không chứa phương trình đầy đủ, tìm trong context & history
-        if not solved_target or bool(re.match(rf"^{solved_target[0]}\s*=\s*-?\d+$", solved_target[2].strip(), re.IGNORECASE)):
-            context_sources = []
-            if problem_context:
-                for k in ("problem_text", "problem", "title", "content"):
-                    val = problem_context.get(k)
-                    if val and isinstance(val, str):
-                        context_sources.append(val)
-            if history_text:
-                context_sources.append(history_text)
+        # 3. Nếu tin nhắn hiện tại không chứa phương trình đầy đủ, tìm trong context & history đã cắt ranh giới
+        if not solved_target or bool(re.match(rf"^{solved_target[0]}\s*=\s*-?\d+(?:\.\d+)?(?:/\d+)?$", solved_target[2].strip(), re.IGNORECASE)):
+            if ctx_target:
+                solved_target = ctx_target
+                eq_source = "ctx"
+            elif not self._is_explicit_switch_signal(msg_norm_latex):
+                context_sources = []
+                if history_text:
+                    scoped_hist = self._slice_history_at_problem_boundary(history_text)
+                    if scoped_hist:
+                        user_lines = [
+                            ln for ln in scoped_hist.splitlines()
+                            if ln.strip().upper().startswith("[USER]")
+                        ]
+                        hist_target = "\n".join(user_lines) if user_lines else scoped_hist
+                        hist_s = self._normalize_latex_math(hist_target)
+                        context_sources.append(re.sub(r"(?<=\d),(?=\d)", ".", hist_s))
 
-            if context_sources:
-                search_corpus = "\n".join(context_sources)
-                eq_in_ctx = self._equation_re.findall(search_corpus)
-                for raw in reversed(eq_in_ctx):
-                    cleaned = self._clean_extracted_equation(raw)
-                    res = self._solve_simple_linear_equation(cleaned)
-                    if res:
-                        v_name, sol, eq_clean = res
-                        is_trivial_assign = bool(re.match(rf"^{v_name}\s*=\s*-?\d+$", eq_clean.strip(), re.IGNORECASE))
-                        if not is_trivial_assign:
-                            solved_target = res
-                            eq_source = "ctx"
-                            break
+                for src in context_sources:
+                    eq_in_ctx = self._equation_re.findall(src)
+                    for raw in reversed(eq_in_ctx):
+                        cleaned = self._clean_extracted_equation(raw)
+                        res = self._solve_simple_linear_equation(cleaned)
+                        if res:
+                            v_name, sol, eq_clean = res
+                            is_trivial_assign = bool(re.match(rf"^{v_name}\s*=\s*-?\d+(?:\.\d+)?(?:/\d+)?$", eq_clean.strip(), re.IGNORECASE))
+                            if not is_trivial_assign:
+                                solved_target = res
+                                eq_source = "ctx"
+                                break
+                    if eq_source == "ctx":
+                        break
 
         if not solved_target:
             return None
 
         var_name, true_sol, eq_str = solved_target
 
-        # 3. Kiểm tra xem học sinh có đưa ra đề xuất nghiệm trong tin nhắn hiện tại không
+        # 4. Kiểm tra xem học sinh có đưa ra đề xuất nghiệm đã tính xong ở cuối không (tránh bắt 7/8 trong 'x = 7/8 - 1/4')
         ans_pattern = re.compile(
-            rf"(?:(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua|tính ra|tinh ra|ra)\s*(?:là|la\s*)?)?(?<![a-zA-Z\d_]){var_name}\s*=\s*(-?\d+(?:\.\d+)?(?:/\d+)?)|\b(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua)\s*(?:là|la\s*)?(-?\d+(?:\.\d+)?(?:/\d+)?)",
+            rf"(?:(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua|tính ra|tinh ra|ra|được)\s*(?:là|la\s*)?)?(?<![a-zA-Z\d_]){var_name}\s*=\s*(?:(?:[^=?!\n]*=\s*)+)?(-?\d+(?:\.\d+)?(?:/\d+)?)(?!\s*[\+\-\*\/x×÷:])"
+            rf"|\b(?:đáp án|dap an|nghiệm|nghiem|kết quả|ket qua)\s*(?:là|la\s*)?(-?\d+(?:\.\d+)?(?:/\d+)?)(?!\s*[\+\-\*\/x×÷:])"
+            rf"|(?:^|\b|[\d\)]\s*)(?:bằng|là|ra|được|=)\s*(-?\d+(?:\.\d+)?(?:/\d+)?)\s*(?:giờ|phút|cm|m|kg|ngày|tuổi|bạn|em|quyển)?\s*(?:\([^)]*\))?\s*(?:ạ|nhé|nha|hả|đúng|\?)?[\.\s]*$",
             re.IGNORECASE,
         )
 
-        msg_without_eq = original_message.replace(eq_str, " ") if eq_source == "msg" else original_message
-        m = ans_pattern.search(msg_without_eq)
+        msg_without_eq = msg_norm_latex.replace(eq_str, " ")
+        # Loại bỏ các phương trình bước biến đổi chứa ẩn (VD '6x - 12 = 3', '2x = -3 + 9 = 6', 'x - 4 = 7')
+        # để không bắt nhầm vế phải của phương trình bước biến đổi làm đáp án x cuối!
+        for raw_step in eq_in_msg:
+            cleaned_step = self._clean_extracted_equation(raw_step)
+            if "=" in cleaned_step:
+                lhs_step = cleaned_step.split("=", 1)[0]
+                rhs_step = cleaned_step.split("=", 1)[1]
+                is_pure_isolated = bool(re.match(rf"^\s*{re.escape(var_name)}\s*$", lhs_step, re.IGNORECASE)) and not re.search(rf"(?<![a-zA-Z]){re.escape(var_name)}(?![a-zA-Z])", rhs_step, re.IGNORECASE)
+                if re.search(rf"(?<![a-zA-Z]){re.escape(var_name)}(?![a-zA-Z])", lhs_step, re.IGNORECASE) and not is_pure_isolated:
+                    msg_without_eq = msg_without_eq.replace(raw_step, " ")
+        all_ans_matches = list(ans_pattern.finditer(msg_without_eq.strip()))
+        m = all_ans_matches[-1] if all_ans_matches else None
 
         cand_str = None
         if m:
-            cand_str = m.group(1) or m.group(2)
+            if m.group(1) or m.group(2) or m.group(3):
+                raw_cand = m.group(1) or m.group(2) or m.group(3)
+                has_isolated_x_eq = bool(
+                    re.search(
+                        rf"(?<![\d\*\)\/\.a-zA-Z])\b{re.escape(var_name)}\s*=\s*-?\d+(?:\.\d+)?(?:/\d+)?\s*(?:ạ|nhé|nha|hả|\?|$|,|\.)",
+                        msg_norm_latex,
+                        re.IGNORECASE,
+                    )
+                )
+                has_non_unit_coeff_lhs = bool(
+                    re.search(rf"(?:\d+|\))\s*\*?\s*{re.escape(var_name)}\s*=", msg_norm_latex, re.IGNORECASE)
+                )
+                is_asking_next_step = bool(
+                    re.search(r"\b(tiếp theo|bước đầu|bước tiếp|làm gì|làm sao)\b", msg_without_eq, re.IGNORECASE)
+                )
+                has_explicit_conclusion_word = bool(
+                    re.search(r"\b(nên|suy ra|vậy|kết luận|đáp số|kết quả|chiều rộng|chiều dài)\b", msg_without_eq, re.IGNORECASE)
+                )
+                if not ((has_non_unit_coeff_lhs or is_asking_next_step) and not has_isolated_x_eq and not m.group(2) and (is_asking_next_step or not (m.group(3) and has_explicit_conclusion_word))):
+                    cand_str = raw_cand
         elif eq_source == "msg":
             m_guess = re.search(r"\b(?:ra|được|bằng)\s*(-?\d+(?:\.\d+)?(?:/\d+)?)\s*(?:hả|đúng|ạ|\?)", msg_without_eq, re.IGNORECASE)
             if m_guess:
                 cand_str = m_guess.group(1)
+        elif eq_source == "ctx" and re.fullmatch(r"\s*-?\d+(?:\.\d+)?(?:/\d+)?\s*(?:ạ|nhé|nha)?\s*", msg_norm_latex, re.IGNORECASE):
+            # Học sinh chỉ gõ mỗi số/phân số ở bước cuối hoặc khi bị hỏi (chỉ check nếu có dấu '/' hoặc ngữ cảnh đang ở bước cuối)
+            # Lưu ý: ở bước 1 nếu học sinh trả lời số trung gian (vd: "12" trong 3x = 12), không coi nhầm là nghiệm cuối
+            if "/" in msg_norm_latex:
+                cand_frac_chk = msg_norm_latex.strip().split()[0]
+                cand_str = cand_frac_chk
 
         # A. NẾU HỌC SINH ĐOÁN NGHIỆM:
         if cand_str:
@@ -1399,8 +1740,9 @@ class OrchestratorAgent:
             if cand_frac is not None:
                 if cand_frac == true_sol:
                     task = (
-                        f"Học sinh đã giải đúng phương trình '{eq_str}' và tìm ra {var_name} = {cand_str} (nghiệm đúng: {true_sol}). "
-                        "Bạn là THẦY GIÁO: Khen ngợi học sinh đã giải chính xác phương trình, ghi nhận sự nỗ lực và chốt bài toán bằng cách gắn tag [COMPREHENSION_CHECK]."
+                        f"Học sinh đã giải đúng bài toán '{eq_str}' và tìm ra {var_name} = {cand_str} (kết quả đúng: {true_sol}). "
+                        "Bạn là THẦY GIÁO: Khen ngợi học sinh đã tìm ra kết quả chính xác, trình bày ngắn gọn Mẫu trình bày hoàn chỉnh vào vở theo đúng cấp lớp, "
+                        "và chốt bài bằng cách gắn tag [COMPREHENSION_CHECK]."
                     )
                     return RoutingResult(
                         selected_agent="SCAFFOLDING",
@@ -1409,23 +1751,23 @@ class OrchestratorAgent:
                         emotion_flag="CORRECT",
                     )
                 else:
-                    has_transpose_step = any(s in original_message.lower() for s in (
+                    has_transpose_step = any(s in msg_norm_latex.lower() for s in (
                         "chuyển vế", "chuyen ve", "qua thành", "qua thanh", "đổi dấu", "doi dau",
                         "-3", "- 3", "= 2", "=2"
                     ))
                     pedagogical_analysis = (
-                        f"Phân tích sư phạm: Học sinh đã thực hiện bước chuyển vế đúng nhưng ở bước cuối kết luận {var_name} = {cand_str} là SAI "
-                        f"(do quên chia cho hệ số của {var_name}, nghiệm đúng phải là {var_name} = {true_sol})."
+                        f"Phân tích sư phạm: Học sinh đã làm đúng bước đầu nhưng kết luận cuối {var_name} = {cand_str} chưa chính xác "
+                        f"(kết quả đúng phải là {var_name} = {true_sol})."
                         if has_transpose_step else
                         f"Phân tích sư phạm: Học sinh đưa ra kết quả {var_name} = {cand_str} là SAI "
-                        f"(nghiệm đúng của phương trình '{eq_str}' phải là {var_name} = {true_sol})."
+                        f"(kết quả đúng của bài '{eq_str}' phải là {var_name} = {true_sol})."
                     )
                     task = (
-                        f"Học sinh đang giải phương trình '{eq_str}'. {pedagogical_analysis} "
+                        f"Học sinh đang giải bài '{eq_str}'. {pedagogical_analysis} "
                         "Bạn là THẦY GIÁO, điều phối sư phạm Socratic BẮT BUỘC: "
-                        "1. Nếu học sinh có bước chuyển vế đúng, hãy khen ngợi bước đó. "
-                        f"2. Nhẹ nhàng chỉ ra rằng kết quả {var_name} = {cand_str} chưa chính xác, yêu cầu học sinh quan sát lại hệ số của {var_name}. "
-                        "3. Đặt câu hỏi Socratic gợi mở bước chia cuối cùng để học sinh tự tính lại. "
+                        "1. Nếu học sinh có bước làm đúng, hãy khen ngợi bước đó. "
+                        f"2. Nhẹ nhàng chỉ ra kết quả {var_name} = {cand_str} chưa khớp, không nói lộ đáp án hay phép tính cần dùng. "
+                        "3. Đặt câu hỏi gợi mở kèm khung điền khuyết \\square cho bước đang sai để học sinh tự suy nghĩ tính lại. "
                         f"4. TUYỆT ĐỐI KHÔNG khen 'đáp án {var_name} = {cand_str} là hoàn toàn đúng'. "
                         "5. TUYỆT ĐỐI KHÔNG gắn tag [COMPREHENSION_CHECK]."
                     )
@@ -1436,13 +1778,31 @@ class OrchestratorAgent:
                         emotion_flag="WRONG",
                     )
 
-        # B. NẾU HỌC SINH RA ĐỀ / HỎI BÀI TOÁN PHƯƠNG TRÌNH (Chưa đưa ra nghiệm):
+        # B. NẾU HỌC SINH RA ĐỀ / HỎI BÀI TOÁN TÌM X / PHƯƠNG TRÌNH (Chưa đưa ra nghiệm):
+        if student_grade in (4, 5):
+            tier_guide = (
+                "CẤP LỚP 4–5 (TIỂU HỌC): Gọi là 'tìm x' / 'tìm thành phần chưa biết', viết phép nhân dạng $3 \\times x$. "
+                "TUYỆT ĐỐI KHÔNG dùng dấu $\\Leftrightarrow$, KHÔNG nói 'phương trình', 'nghiệm', 'chuyển vế đổi dấu', 'hạng tử tự do'. "
+                "Đưa khung trình bày 1 bước với ô trống \\square (VD: $$3 \\times x = 16 \\ \\square \\ 4$$) và hỏi để học sinh tự suy nghĩ phép tính cần điền."
+            )
+        elif student_grade in (6, 7):
+            tier_guide = (
+                "CẤP LỚP 6–7: Trình bày xuống dòng thẳng dấu `=` (hạn chế dùng $\\Leftrightarrow$). "
+                "KHÔNG dùng thuật ngữ nặng nề ('cô lập hạng tử', 'số hạng tự do'), KHÔNG nói lộ dấu hay phép tính (không bảo 'nhớ đổi dấu thành -4'). "
+                "Hỏi số hạng khi đưa sang vế bên kia thay đổi thế nào và kèm khung 1 bước có ô \\square (VD: $$3x = 16 \\ \\square \\ 4$$)."
+            )
+        else:
+            tier_guide = (
+                "CẤP LỚP 8–9: Trình bày theo chuẩn THCS (có thể dùng $\\Leftrightarrow$ từng dòng). "
+                "KHÔNG nói lộ dấu hay phép tính cần làm; hỏi gợi mở để học sinh tự nhận ra biến đổi ở bước 1 kèm khung điền khuyết 1 bước (VD: $$\\Leftrightarrow 3x = 16 \\ \\square \\ 4$$)."
+            )
+
         task_prompt = (
-            f"Học sinh vừa gửi bài toán phương trình: '{eq_str}' (Nghiệm đúng nội bộ: {var_name} = {true_sol}). "
+            f"Học sinh vừa gửi bài tìm {var_name}: '{eq_str}' (Kết quả đúng nội bộ: {var_name} = {true_sol}). "
             "Bạn là THẦY GIÁO SOCRATIC, điều phối giàn giáo dẫn dắt BẮT BUỘC: "
             f"1. TUYỆT ĐỐI KHÔNG giải hộ bài toán, TUYỆT ĐỐI KHÔNG tiết lộ đáp án {var_name} = {true_sol}. "
-            "2. Hướng dẫn học sinh bước đầu tiên (ví dụ: chuyển các số hạng tự do sang vế phải và đổi dấu, hoặc rút gọn hai vế). "
-            "3. Đặt DUY NHẤT 1 câu hỏi gợi mở ngắn gọn (1-2 câu), ấm áp để học sinh tự làm bước biến đổi đầu tiên."
+            "2. TUYỆT ĐỐI KHÔNG nói lộ dấu (+ hay -) hoặc phép tính (cộng/trừ/nhân/chia) của bước biến đổi; phải đặt câu hỏi để học sinh tự tư duy. "
+            f"3. {tier_guide}"
         )
         return RoutingResult(
             selected_agent="SCAFFOLDING",
@@ -1494,7 +1854,7 @@ class OrchestratorAgent:
         raw = raw_op.strip().lower()
         if raw in (":", "/", "÷", "chia cho", "chia"):
             return "DIV", ":"
-        if raw in ("*", "x", "×", "nhân với", "nhân"):
+        if raw in ("*", "x", "×", "·", "nhân với", "nhân"):
             return "MUL", "×"
         if raw in ("+", "cộng với", "cộng"):
             return "ADD", "+"
@@ -1512,11 +1872,8 @@ class OrchestratorAgent:
         Ví dụ: "4/2", "10:2", "3*5", "12+8", "10:2 = ?", "thầy ơi 4/2 bằng mấy ạ".
         Điều phối trực tiếp sang SCAFFOLDING với chỉ đạo Socratic sư phạm (chia kẹo / đồ vật).
         """
-        # Chuẩn hóa biểu thức LaTeX phân số \frac{a}{b} -> a/b và bỏ ký tự $ bao quanh
-        expr_target = text_clean
-        if "\\frac" in expr_target or "$" in expr_target:
-            expr_target = re.sub(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", r"\1/\2", expr_target)
-            expr_target = re.sub(r"\$([^\$]+)\$", r"\1", expr_target).strip()
+        # Chuẩn hóa biểu thức LaTeX phân số \frac{a}{b} / \frac52 / \times / \div / \cdot / \,
+        expr_target = self._normalize_latex_math(text_clean)
 
         m = self._minimal_arithmetic_re.match(expr_target)
         if not m:
@@ -1805,7 +2162,8 @@ class OrchestratorAgent:
                 f"   -> Áp dụng Kịch bản B (hướng dẫn kiên nhẫn từ bước đơn giản nhất, không truy cứu hay phán xét).{summer_unclear_note}\n\n"
                 f"4. NẾU HỌC SINH BÁO THẦY CÔ BỎ QUA / KHÔNG DẠY / NHẢY CÓC / GIẢM TẢI / LƯỚT QUA BÀI NÀY:\n"
                 f"   -> BẮT BUỘC ÁP DỤNG KỊCH BẢN B kèm lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!' rồi hướng dẫn từ nền tảng đơn giản nhất."
-                f"{curriculum_order_note}"
+                f"{curriculum_order_note}\n"
+                f"QUAN TRỌNG: Sau khi giải thích nền tảng, LUÔN kèm 1 khung điền khuyết `\\square` trong `$$...$$` cho bước nhỏ đầu tiên và TUYỆT ĐỐI KHÔNG hỏi lại tiến độ trường lớp."
             )
             return RoutingResult(
                 selected_agent="SCAFFOLDING",
@@ -1825,8 +2183,22 @@ class OrchestratorAgent:
                 routing_scratchpad=f"[Trụ1] Uncovered claim detected: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )
-        # 1.4 Câu hỏi lý thuyết "X là gì?" / "thế nào là X"
-        if self._theory_re.search(text_clean) or any(s in text_clean for s in self.THEORY_SIGNALS):
+        # 1.4 Câu hỏi lý thuyết thuần túy ("X là gì?" / "thế nào là X"), không chặn câu có phép tính/đáp án/xin ví dụ
+        _has_calc_or_eq_or_ex = (
+            bool(re.search(r"=", original_message))
+            or bool(re.search(r"\b(ví dụ|bài mẫu|làm mẫu|cho mẫu|cho xin vd)\b", text_clean, re.IGNORECASE))
+            or (
+                bool(re.search(r"\d", text_clean))
+                and any(w in text_clean for w in (
+                    "bằng", "ra ", "suy ra", "vậy", "nên ", "kết quả", "đáp án",
+                    "chọn", "tính ", "tìm ", "tưởng", "quên dấu", "thay ", "công thức tính",
+                    "tam giác", "không thể", "duy nhất", "đường thẳng",
+                ))
+            )
+        )
+        if not _has_calc_or_eq_or_ex and (
+            self._theory_re.search(text_clean) or any(s in text_clean for s in self.THEORY_SIGNALS)
+        ):
             return RoutingResult(
                 selected_agent="KNOWLEDGE_TRACING",
                 task_description=_build_task_description("KNOWLEDGE_TRACING", original_message, problem_context),
@@ -1838,8 +2210,10 @@ class OrchestratorAgent:
                 ),
             )
 
-        # 1.5 Tín hiệu lỗi sai rõ ràng
-        if any(s in text_clean for s in self.MISCONCEPTION_SIGNALS):
+        # 1.5 Tín hiệu lỗi sai rõ ràng (trừ khi học sinh đang xin ví dụ mẫu)
+        if any(s in text_clean for s in self.MISCONCEPTION_SIGNALS) and not re.search(
+            r"\b(ví dụ|bài mẫu|làm mẫu|cho mẫu)\b", text_clean, re.IGNORECASE
+        ):
             return RoutingResult(
                 selected_agent="MISCONCEPTION",
                 task_description=_build_task_description("MISCONCEPTION", original_message, problem_context),
@@ -1847,11 +2221,19 @@ class OrchestratorAgent:
                 emotion_flag="WRONG",
             )
 
-        # 1.6 Tín hiệu cầu cứu / cần gợi ý
+        # 1.6 Tín hiệu cầu cứu / cần gợi ý — nếu có phương trình tìm x kèm theo, ưu tiên kiểm tra tiến độ phương trình trước
         if any(s in text_clean for s in self.HELP_SIGNALS):
+            eq_help = self._check_linear_equation_progress(
+                original_message, history_text, problem_context, student_grade=student_grade
+            )
+            if eq_help is not None:
+                return eq_help
             return RoutingResult(
                 selected_agent="SCAFFOLDING",
-                task_description=_build_task_description("SCAFFOLDING", original_message, problem_context),
+                task_description=_build_task_description(
+                    "SCAFFOLDING", original_message, problem_context,
+                    student_grade=student_grade, history_text=history_text,
+                ),
                 routing_scratchpad=f"[Trụ1] Help signal: '{text_clean[:40]}'",
                 emotion_flag="GUIDING",
             )
@@ -1868,7 +2250,9 @@ class OrchestratorAgent:
         # 1.6c Kiểm tra giải phương trình và so khớp nghiệm từ ngữ cảnh (Linear Equation Verifier)
         # Ví dụ: 2x + 3 = 5 (nghiệm x = 1). Học sinh nói x = 2 -> MISCONCEPTION (WRONG)
         # =========================================================================
-        eq_route = self._check_linear_equation_progress(original_message, history_text, problem_context)
+        eq_route = self._check_linear_equation_progress(
+            original_message, history_text, problem_context, student_grade=student_grade
+        )
         if eq_route is not None:
             return eq_route
 
@@ -1880,10 +2264,19 @@ class OrchestratorAgent:
                 or problem_context.get("correct_solution")
             )
         if correct_solution:
-            correct_frac, correct_raw = self._extract_fraction(str(correct_solution))
+            sol_raw_17 = str(correct_solution).strip()
+            sol_no_units_17 = re.sub(r"\b(?:m|cm|dm|mm|km)\s*\^?\s*[²³23]\b", " ", sol_raw_17, flags=re.IGNORECASE)
+            is_algebraic_poly_sol = (
+                bool(re.search(r"[xXyYzZ]", sol_no_units_17))
+                and not re.match(r"^[a-zA-Z]\s*=\s*-?\d+(?:[.,]\d+)?(?:/\d+)?$", sol_raw_17)
+                and any(op in sol_no_units_17 for op in ("+", "-", "*", "^", "/"))
+            )
+            correct_frac, correct_raw = (
+                (None, None) if is_algebraic_poly_sol else self._extract_fraction(sol_raw_17)
+            )
             if correct_frac is not None:
-                # FIX #2: Nếu câu học sinh chứa từ phủ định / không hiểu
-                # thì KHÔNG so khớp toán học — tránh trích số từ "bài 3", "câu 2" nhầm thành đáp án
+                # FIX #2: Nếu câu học sinh chứa từ phủ định / không hiểu HOẶC đang hỏi đề bài (lượt đầu / chưa có dấu hiệu nộp đáp án)
+                # thì KHÔNG so khớp toán học — tránh bắt nhầm con số trong đề bài ("472850", "18500 kg") thành đáp án sai!
                 _negation_signals = (
                     "không hiểu", "ko hiểu", "k hiểu", "chưa hiểu",
                     "không biết", "ko biết", "k biết",
@@ -1893,20 +2286,121 @@ class OrchestratorAgent:
                     "bài này", "câu này", "đề này",
                 )
                 _has_negation = any(s in text_clean for s in _negation_signals)
-                if _has_negation:
+                _explicit_answer_claim = bool(
+                    re.search(r"\b(?:đáp án|kết quả|em tính được|em tính ra|em ra|tính ra)\b|\bbằng\s+-?\d", text_clean)
+                ) or (
+                    any(a in text_clean for a in ("đúng không", "phải không"))
+                    and bool(history_text.strip() or re.search(r"\b(?:tính ra|được\s+-?\d|kết quả|đáp án)\b|=", text_clean))
+                )
+                _has_question_ask = any(
+                    q in text_clean for q in ("làm sao", "thế nào", "cách làm", "hướng dẫn", "đổi ", "làm tròn", "hỏi ", "phải không thầy", "đúng không thầy")
+                ) and not bool(re.search(r"\b(?:em tính được|em tính ra|em ra|đáp án|kết quả)\b", text_clean))
+                _is_asking_problem = (
+                    (not history_text.strip() and (not _explicit_answer_claim or _has_question_ask))
+                    or (_has_question_ask and not _explicit_answer_claim)
+                )
+                _has_valid_unit_conv = False
+                if not _has_negation and "=" in original_message:
+                    # 1.7d Kiểm tra sai sót đổi đơn vị trực tiếp (VD: "3 tấn 5 tạ = 3050 kg")
+                    _unit_families = {
+                        "mass": {"tấn": 1000.0, "tạ": 100.0, "yến": 10.0, "kg": 1.0, "g": 0.001, "gam": 0.001},
+                        "length": {"km": 1000.0, "m": 1.0, "dm": 0.1, "cm": 0.01, "mm": 0.001},
+                        "time": {"giờ": 3600.0, "phút": 60.0, "giây": 1.0},
+                    }
+                    _u_pat = r"(?:\d+(?:[.,]\d+)?\s*(?:tấn|tạ|yến|kg|gam|km|dm|cm|mm|m|g|giờ|phút|giây)\b\s*,?\s*)+"
+                    for _um in re.finditer(rf"({_u_pat})\s*=\s*({_u_pat})", original_message, re.IGNORECASE):
+                        _lhs_s, _rhs_s = _um.group(1), _um.group(2)
+                        _tok_re = re.compile(r"(\d+(?:[.,]\d+)?)\s*(tấn|tạ|yến|kg|gam|km|dm|cm|mm|m|g|giờ|phút|giây)\b", re.IGNORECASE)
+                        _ltoks = [(float(n.replace(",", ".")), u.lower()) for n, u in _tok_re.findall(_lhs_s)]
+                        _rtoks = [(float(n.replace(",", ".")), u.lower()) for n, u in _tok_re.findall(_rhs_s)]
+                        for _fam in _unit_families.values():
+                            if _ltoks and _rtoks and all(u in _fam for _, u in _ltoks + _rtoks):
+                                _lval = sum(v * _fam[u] for v, u in _ltoks)
+                                _rval = sum(v * _fam[u] for v, u in _rtoks)
+                                if abs(_lval - _rval) > 1e-4:
+                                    _r_target_unit = _rtoks[-1][1]
+                                    _exp_val = _lval / _fam[_r_target_unit]
+                                    _exp_str = f"{int(_exp_val) if _exp_val.is_integer() else round(_exp_val, 4)} {_r_target_unit}"
+                                    return RoutingResult(
+                                        selected_agent="MISCONCEPTION",
+                                        task_description=_build_task_description(
+                                            "MISCONCEPTION", original_message, problem_context,
+                                            student_ans=_rhs_s.strip(), expected_ans=_exp_str,
+                                        ),
+                                        routing_scratchpad=f"[Trụ1] Unit conversion mismatch: {_lhs_s.strip()} != {_rhs_s.strip()} (expected {_exp_str})",
+                                        emotion_flag="WRONG",
+                                    )
+                                _has_valid_unit_conv = True
+                                break
+
+                if _has_negation or _is_asking_problem:
                     return None  # Bỏ qua so khớp toán học, xuống Trụ 2
 
-                _has_operator = bool(re.search(r"[\+\-\*\/\^\(\)x]", original_message, re.IGNORECASE))
-                if _has_operator:
-                    student_frac = self._eval_math_expr(original_message)
-                    student_raw = original_message[:30] if student_frac is not None else None
+                msg_norm_17 = self._normalize_latex_math(original_message)
+                _msg_low_17 = msg_norm_17.lower()
+                msg_clean_units = re.sub(r"\b(?:m|cm|dm|mm|km)\s*\^?\s*[²³23]\b", " ", msg_norm_17, flags=re.IGNORECASE)
+                msg_clean_units = msg_clean_units.replace("²", "").replace("³", "")
+                msg_clean_units = re.sub(r"(?<=\d)\s+(?=\d{3}\b)", "", msg_clean_units)
+
+                # Phần biểu thức cuối sau '=', 'ra', 'bằng', 'kết quả', 'mất', 'là' để xem học sinh đã rút gọn xong thành số cuối hay còn phép tính
+                rhs_tail = self._extract_tail_for_eval(msg_clean_units)
+                _rhs_low_17 = rhs_tail.lower()
+                _is_conclusive_avg_formula = bool(
+                    "=" not in rhs_tail
+                    and not _msg_low_17.rstrip().endswith("?")
+                    and re.search(r"\b(?:nên|vậy|suy ra)\b[^.\n]*\btrung bình\b[^.\n]*\blà\b", _msg_low_17)
+                )
+                _rhs_has_unfinished_ops = (
+                    not _is_conclusive_avg_formula
+                    and bool(re.search(r"(?:\d|\))\s*(?:[\+\-\*×÷:]|\.(?=\s+\d))\s*(?:\d|\()", rhs_tail))
+                )
+
+                # Tách biệt: điều kiện chặn CORRECT (chặt, chỉ chặn khi chính vế kết luận còn dở/bước hỏi)
+                # vs điều kiện chặn WRONG mismatch (rộng, tránh bắt nhầm số trung gian ở bài nhiều bước).
+                _block_correct_match = (
+                    bool(re.search(r"\d+\s*,\s*\(\d+\)", _msg_low_17))
+                    or bool(re.search(r"\b\d+\s*(?:giờ|phút)\s+\d+\s*(?:phút|giây)\b|\b\d+\s*(?:tấn|tạ)\s+\d+\s*(?:tạ|yến|kg)\b", _rhs_low_17))
+                    or any(w in _msg_low_17 for w in (
+                        "đúng chưa", "làm vậy", "tiếp theo", "bước đầu", "giữ nguyên", "vế phải", "vế trái", "lập hệ",
+                        "ngày thứ", "1 phần", "giá trị một phần",
+                    ))
+                    or bool(re.search(r"\b(?:tính được|tính ra|ra là|bằng)\s*[^.\n]+?\bvà\b", _rhs_low_17))
+                    or bool(re.search(r"=\s*[^.\n]+?\bvà\b", _rhs_low_17))
+                )
+                _block_mismatch_wrong = (
+                    _block_correct_match
+                    or _has_valid_unit_conv
+                    or ("√" in original_message or "sqrt" in _msg_low_17)
+                    or (
+                        not _is_conclusive_avg_formula
+                        and any(w in _msg_low_17 for w in (
+                            "bước", "nhóm", "rút gọn", "khai triển", "em đổi", "quy đồng", "nhân chéo",
+                            "chiều dài", "chiều rộng", "nửa chu vi", "lần lượt", "thể tích", "tổng",
+                            "cả ba", "hai đáy", "x1", "x2", "vi-ét", "viète", "tần số", "lời giải",
+                            "kết quả thuận lợi", "bcnn", "ưcln", "ucln", "số học sinh", "công việc",
+                            "mỗi giờ", "được giảm", "giảm giá", "chiết khấu", "được không",
+                        ))
+                    )
+                    or bool(re.search(r"=\s*[^.\n]+?\bvà\b", _msg_low_17))
+                    or _msg_low_17.count("=") >= 2 and "," in _msg_low_17
+                )
+
+                _has_operator = bool(re.search(r"[\+\-\*\/\^\(\)x:=]", msg_clean_units, re.IGNORECASE))
+                if _has_operator and not _rhs_has_unfinished_ops:
+                    student_frac = self._eval_math_expr(msg_clean_units)
+                    student_raw = msg_norm_17[:30] if student_frac is not None else None
                     if student_frac is None:
-                        student_frac, student_raw = self._extract_fraction(original_message)
+                        student_frac, student_raw = self._extract_fraction(msg_clean_units)
+                elif not _rhs_has_unfinished_ops:
+                    student_frac, student_raw = self._extract_fraction(msg_clean_units)
                 else:
-                    student_frac, student_raw = self._extract_fraction(original_message)
+                    student_frac, student_raw = (None, None)
 
                 if student_frac is not None:
-                    if student_frac == correct_frac:
+                    has_unreduced_sqrt = ("√" in rhs_tail or "sqrt" in _rhs_low_17) and not any(
+                        tok in str(correct_solution).lower() for tok in ("√", "sqrt")
+                    )
+                    if student_frac == correct_frac and not _block_correct_match and not has_unreduced_sqrt:
                         return RoutingResult(
                             selected_agent="SCAFFOLDING",
                             task_description=_build_task_description(
@@ -1915,7 +2409,7 @@ class OrchestratorAgent:
                             routing_scratchpad=f"[Trụ1] Math match CORRECT: {student_raw} == {correct_raw}",
                             emotion_flag="CORRECT",
                         )
-                    else:
+                    elif student_frac != correct_frac and not _block_mismatch_wrong and not re.search(r"\b[a-zA-Z]\b", msg_clean_units):
                         return RoutingResult(
                             selected_agent="MISCONCEPTION",
                             task_description=_build_task_description(
@@ -1924,6 +2418,58 @@ class OrchestratorAgent:
                             ),
                             routing_scratchpad=f"[Trụ1] Math mismatch: {student_raw} != {correct_raw}",
                             emotion_flag="WRONG",
+                        )
+            elif history_text.strip():
+                # 1.7b Khớp biểu thức đại số / đa thức tương đương qua SymPy (VD: '3x^2 + 2x + 5')
+                sol_str = str(correct_solution).strip()
+                sol_low = sol_str.lower()
+                exp_forms = [
+                    str(f).strip().lower()
+                    for f in (problem_context.get("expectedAnswerForms") or [])
+                    if isinstance(f, str) and len(str(f).strip()) >= 2
+                ]
+                msg_low_q = original_message.strip().lower()
+
+                if re.search(r"[xXyYzZ]", sol_str) and any(op in sol_str for op in ("+", "-", "*", "^", "/")):
+                    try:
+                        exp_sym = sympy.sympify(self._normalize_math_expr(sol_str))
+                        tail_alg = self._extract_tail_for_eval(original_message)
+                        tail_alg = re.sub(r"\s*(?:ạ|nhé|nha|đúng không|phải không|thầy)\s*[\.\?!]*$", "", tail_alg, flags=re.IGNORECASE).strip()
+                        if tail_alg and re.search(r"[xXyYzZ]", tail_alg):
+                            stu_sym = sympy.sympify(self._normalize_math_expr(tail_alg))
+                            if sympy.simplify(stu_sym - exp_sym) == 0:
+                                return RoutingResult(
+                                    selected_agent="SCAFFOLDING",
+                                    task_description=_build_task_description(
+                                        "SCAFFOLDING", original_message, problem_context
+                                    ) + f" (Học sinh tính đúng: {sol_str} ✓)",
+                                    routing_scratchpad=f"[Trụ1] Algebraic match CORRECT: {tail_alg} == {sol_str}",
+                                    emotion_flag="CORRECT",
+                                )
+                    except Exception:
+                        pass
+
+                # 1.7c Khớp đáp án định tính (VD: 'Không', 'Có song song', 'a // b', 'Không thể')
+                if not msg_low_q.endswith("?"):
+                    qual_hit = False
+                    if sol_low in ("không", "không thể", "vô nghiệm"):
+                        qual_hit = any(len(f) >= 4 and f in msg_low_q for f in exp_forms) or (
+                            "không thể" in msg_low_q and any(w in msg_low_q for w in ("nên ", "suy ra", "vậy"))
+                        )
+                    elif "song song" in sol_low and "song song" in msg_low_q:
+                        qual_hit = any(w in msg_low_q for w in ("vì ", "nên ", "do ", "suy ra"))
+                    elif "đỉnh" in sol_low and "cạnh" in sol_low:
+                        qual_hit = ("đỉnh" in msg_low_q and ("cạnh" in msg_low_q or "tia" in msg_low_q))
+                    elif any(len(f) >= 4 and f in msg_low_q for f in exp_forms):
+                        qual_hit = True
+                    if qual_hit:
+                        return RoutingResult(
+                            selected_agent="SCAFFOLDING",
+                            task_description=_build_task_description(
+                                "SCAFFOLDING", original_message, problem_context
+                            ) + f" (Học sinh tính đúng: {correct_solution} ✓)",
+                            routing_scratchpad=f"[Trụ1] Qualitative match CORRECT: {correct_solution}",
+                            emotion_flag="CORRECT",
                         )
 
         return None  # Không khớp → chuyển Trụ cột 2
@@ -1986,6 +2532,33 @@ class OrchestratorAgent:
                     print(f"[ML-Router] Bác bỏ False Positive SAFETY không có căn cứ: '{text}' → Trụ cột 3")
                     return None
 
+            # BẢO VỆ CHỐNG FALSE POSITIVE CHO MISCONCEPTION:
+            # Tránh ML Router gán nhầm câu trả lời đúng ("Chu vi bằng (15+10)x2 = 50m", "bằng 50m", "x=10")
+            # hoặc đề bài mới ("tính 3x + 10 = 25", "\frac{10}{2} = ?") thành MISCONCEPTION khi không có tín hiệu hiểu sai rõ ràng.
+            if predicted == "MISCONCEPTION":
+                is_asking_example_only = bool(re.search(r"\b(ví dụ|bài mẫu|làm mẫu|cho mẫu|hay nhầm|hay bị nhầm)\b", text, re.IGNORECASE))
+                has_explicit_misconception = (
+                    not is_asking_example_only
+                    and (
+                        any(s in text for s in self.MISCONCEPTION_SIGNALS)
+                        or bool(re.search(
+                            r"\b(?:tưởng|nhầm|lộn|sai|ngộ nhận|lạ quá|vô lý|cấn|ảo)\b",
+                            text,
+                            re.IGNORECASE,
+                        ))
+                    )
+                )
+                looks_like_neutral_answer_or_prompt = bool(
+                    re.search(
+                        r"(=|\bbằng\b|\bchu vi\b|\bdiện tích\b|\bthể tích\b|\btỉ số\b|\bxác suất\b|\btrung bình\b|\bđộ dài\b|\bđiểm\b|\bđoạn\b|\btia\b|\bhệ\b|\bđổi\b|\btổng\b|\bhiệu\b|\btính\b|\bgiải\b|\bđáp án\b|\\frac|\bgóc\b|\bđộ\b|\bvì\b|\bnên\b|\bsuy ra\b|\blớn hơn\b|\bnhỏ hơn\b|\btam giác\b|\bhình\b|\bkg\b|\btấn\b|\btạ\b|\bquyển\b|\bbao nhiêu\b|\bthế nào\b|\blàm sao\b|\d+)",
+                        text,
+                        re.IGNORECASE,
+                    )
+                )
+                if not has_explicit_misconception and (looks_like_neutral_answer_or_prompt or is_asking_example_only):
+                    print(f"[ML-Router] Chặn False Positive MISCONCEPTION cho câu trả lời/đề bài trung tính: '{text}' -> Trụ cột 3")
+                    return None
+
             task = _build_task_description(predicted, text, problem_context)
             print(f"[ML-Router] [MATCH] {predicted} ({max_prob:.1%})")
             return RoutingResult(
@@ -2023,15 +2596,21 @@ class OrchestratorAgent:
         # Trụ cột 2 - Dự đoán ML trước
         ml_res = self._ml_route(text_clean, problem_context)
 
-        # Ưu tiên An toàn ngôn từ (SAFETY) & Ngộ nhận toán học (MISCONCEPTION - US 10.4): Kể cả tin nhắn đầu tiên
-        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT", "MISCONCEPTION", "MISCONCEPTION_AGENT"):
-            return ml_res
-
-        # Phễu "Bắt đầu phiên học mới"
         is_empty_history = (
             not history_text.strip()
             or history_text.strip() == "(Đây là tin nhắn đầu tiên trong phiên này)"
         )
+        # Ưu tiên An toàn ngôn từ (SAFETY) & Ngộ nhận toán học (MISCONCEPTION) — nhưng KHÔNG bắt nhầm Turn 1 hỏi bài thành MISCONCEPTION
+        if ml_res is not None and ml_res.get("selected_agent") in ("SAFETY", "SAFETY_AGENT"):
+            return ml_res
+        if ml_res is not None and ml_res.get("selected_agent") in ("MISCONCEPTION", "MISCONCEPTION_AGENT"):
+            has_wrong_kw = any(s in text_clean for s in self.MISCONCEPTION_SIGNALS) or bool(
+                re.search(r"\b(?:tưởng|nhầm|lộn|ngộ nhận|lạ quá|vô lý|cấn)\b", text_clean, re.IGNORECASE)
+            )
+            if not is_empty_history or has_wrong_kw:
+                return ml_res
+
+        # Phễu "Bắt đầu phiên học mới"
         if is_empty_history:
             student_val, _ = self._extract_fraction(text_clean)
             has_math_expr = bool(self._math_expr_re.search(text_clean))
@@ -2085,10 +2664,15 @@ class OrchestratorAgent:
             "tử cộng tử mẫu cộng mẫu", "nhân chéo nhầm",
         )
         msg_lower = original_message.lower()
+        is_help_or_example_ask = (
+            "Help signal" in routing_scratchpad
+            or "Uncovered claim" in routing_scratchpad
+            or bool(re.search(r"\b(ví dụ|bài mẫu|làm mẫu|cho mẫu|hay nhầm|hay bị nhầm|em chưa quen|em chưa học)\b", msg_lower))
+        )
         if (
             "Math mismatch" in routing_scratchpad
             or "math mismatch" in routing_scratchpad
-            or any(kw in msg_lower for kw in _explicit_wrong_keywords)
+            or (not is_help_or_example_ask and any(kw in msg_lower for kw in _explicit_wrong_keywords))
         ):
             return "WRONG"
         # ────────────────────────────────────────────────────────────────────

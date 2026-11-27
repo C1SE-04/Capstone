@@ -64,7 +64,7 @@ class TestUS10_3_SystemSettingsSchema(unittest.TestCase):
         # Generation config
         self.assertEqual(float(setting.temperature), 0.35)
         self.assertEqual(float(setting.top_p), 0.90)
-        self.assertEqual(setting.max_output_tokens, 512)
+        self.assertEqual(setting.max_output_tokens, 1024)
 
         # Pedagogical & Safety
         self.assertEqual(setting.socratic_strictness, "BALANCED")

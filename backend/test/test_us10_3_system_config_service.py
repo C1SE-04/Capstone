@@ -141,7 +141,7 @@ class TestUS10_3_SystemConfigService(unittest.TestCase):
 
         # Bước 1: Thay đổi từ 3.8-flash sang 3.5-flash
         update_system_settings(
-            new_data={"primary_model": "gemini-3.5-flash", "max_output_tokens": 1024},
+            new_data={"primary_model": "gemini-3.5-flash", "max_output_tokens": 2048},
             changed_by="admin@socratickid.edu.vn",
             change_summary="Đổi cấu hình tạm",
             db=self.db,
@@ -159,7 +159,7 @@ class TestUS10_3_SystemConfigService(unittest.TestCase):
 
         # Cấu hình phải được khôi phục về bản cũ (primary_model ban đầu: gemini-3.8-flash)
         self.assertEqual(rolled_back["primary_model"], "gemini-3.8-flash")
-        self.assertEqual(rolled_back["max_output_tokens"], 512)
+        self.assertEqual(rolled_back["max_output_tokens"], 1024)
 
         # Phải sinh ra thêm 1 bản ghi audit ghi nhận thao tác rollback
         all_audits = get_setting_audits(limit=5, db=self.db)
