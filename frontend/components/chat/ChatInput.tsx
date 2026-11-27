@@ -27,8 +27,10 @@ import {
   ImageIcon,
   AlertCircle,
   Maximize2,
+  Minimize2,
   ChevronDown,
   ChevronUp,
+  CornerDownLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FileTooLargeToast } from "./FileTooLargeToast";
@@ -52,6 +54,19 @@ export interface ChatInputProps {
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
+/** Kiểm tra nội dung MathLive có thực sự rỗng (kể cả khi còn khung \displaylines{\\ } sau Ctrl+A xóa hết) */
+function isMathFieldEffectivelyEmpty(latex: string): boolean {
+  if (!latex) return true;
+  const cleaned = latex
+    .replace(/\\displaylines\s*\{/g, "")
+    .replace(/\\text\s*\{\s*\}/g, "")
+    .replace(/\\\\/g, "")
+    .replace(/[{}]/g, "")
+    .replace(/\\ /g, "")
+    .trim();
+  return cleaned.length === 0;
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export function ChatInput({
@@ -63,6 +78,8 @@ export function ChatInput({
   // ── State ──
   const [hasContent, setHasContent] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [canExpand, setCanExpand] = useState(false);
   const [attachment, setAttachment] = useState<ImageAttachment | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -82,8 +99,47 @@ export function ChatInput({
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const sheetContainerRef = useRef<HTMLDivElement>(null);
   const handleSendRef = useRef<() => void>(() => {});
+  const handleInsertNewLineRef = useRef<() => void>(() => {});
   const attachImageRef = useRef<(file: File) => void>(() => {});
   const isLoadingRef = useRef(isLoading);
+  const preserveEmptyNewLineRef = useRef(false);
+
+  // Đồng bộ hasContent và tự động dọn bảng \displaylines trống khi người dùng Ctrl+A / tô xóa hết
+  const syncContentState = useCallback((node: any, allowEmptyMultiline = false) => {
+    if (!node) return;
+    const val = node.value || "";
+    const empty = isMathFieldEffectivelyEmpty(val);
+
+    if (empty && val.length > 0 && !allowEmptyMultiline) {
+      node.value = "";
+      node.scrollTop = 0;
+      setHasContent(false);
+      setIsExpanded(false);
+      setCanExpand(false);
+      return;
+    }
+
+    if (empty) {
+      setIsExpanded(false);
+      setCanExpand(false);
+    }
+
+    setHasContent(!empty);
+  }, []);
+
+  // Đảm bảo trên điện thoại (iOS/Android), phần tử ẩn .ML__keyboard-sink của MathLive
+  // mở bàn phím hệ thống thay vì bị chặn bởi inputmode="none".
+  const syncMobileKeyboardInput = useCallback((node: HTMLElement | null) => {
+    const sink = node?.shadowRoot?.querySelector(".ML__keyboard-sink") as HTMLElement | null;
+    if (sink) {
+      if (sink.getAttribute("inputmode") !== "text") {
+        sink.setAttribute("inputmode", "text");
+      }
+      if (sink.getAttribute("aria-multiline") !== "true") {
+        sink.setAttribute("aria-multiline", "true");
+      }
+    }
+  }, []);
 
   // Cập nhật trạng thái disabled / readOnly cho MathLive khi isLoading hoặc isOffline thay đổi
   useEffect(() => {
@@ -124,14 +180,31 @@ export function ChatInput({
 
     // 1. Lắng nghe sự kiện gõ phím & cập nhật hasContent ĐỒNG BỘ ngay lập tức
     const updateContent = () => {
-      const val = node.value || "";
-      setHasContent(Boolean(val.trim().length > 0));
+      const keepEmpty = preserveEmptyNewLineRef.current;
+      preserveEmptyNewLineRef.current = false;
+      syncContentState(node, keepEmpty);
     };
 
     updateContent();
     node.addEventListener("input", updateContent);
     node.addEventListener("change", updateContent);
-    node.addEventListener("keyup", updateContent);
+    // Chỉ kiểm tra lại khi nhả phím xóa (tránh serialize toàn bộ AST MathLive ở mọi phím như Ctrl+A / mũi tên)
+    node.addEventListener("keyup", (e: KeyboardEvent) => {
+      if (e.key === "Backspace" || e.key === "Delete") {
+        updateContent();
+      }
+    });
+    node.addEventListener("cut", () => setTimeout(updateContent, 0));
+
+    // Theo dõi chiều cao nội dung để hiện nút phóng to khi nhập từ ~3 dòng trở lên
+    if (typeof ResizeObserver !== "undefined" && !node._socraticResizeObserver) {
+      const ro = new ResizeObserver(() => {
+        const expandable = node.scrollHeight > 68;
+        setCanExpand(expandable);
+      });
+      ro.observe(node);
+      node._socraticResizeObserver = ro;
+    }
 
     node.addEventListener("keydown", (e: KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -141,12 +214,18 @@ export function ChatInput({
         // Chặn gửi tin nhắn nếu đang đợi AI phản hồi
         if (isLoadingRef.current) return;
         handleSendRef.current?.();
+      } else if (e.key === "Enter" && e.shiftKey) {
+        if (e.isComposing || (e as any).keyCode === 229) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (isLoadingRef.current) return;
+        handleInsertNewLineRef.current?.();
       }
     });
 
     // Fix lỗi paste:
     // 1. Nếu paste file ảnh (chụp màn hình Snipping Tool, copy ảnh web) -> đính kèm ảnh
-    // 2. Nếu paste text: MathLive mặc định ở math mode làm mất dấu cách. Chuyển sang text mode để giữ nguyên khoảng trắng.
+    // 2. Nếu paste text: MathLive mặc định ở math mode làm mất dấu cách. Chuyển sang text mode để giữ nguyên khoảng trắng & xuống dòng.
     node.addEventListener("paste", (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (items) {
@@ -166,25 +245,34 @@ export function ChatInput({
       if (!text) return;
       e.preventDefault();
       // Chuẩn hóa Unicode ký tự toán học (như 𝑥, 𝑦, 𝐴, 𝟐 copy từ web/Word) về ký tự chuẩn
-      const cleanText = text.normalize("NFKC");
-      // Dùng insert() API của MathLive với mode text để giữ space
-      if (typeof node.insert === "function") {
-        node.insert(cleanText, { mode: "text" });
-      } else {
-        node.executeCommand(["insert", cleanText]);
-      }
+      const cleanText = text.normalize("NFKC").replace(/\r\n?/g, "\n");
+      const pastedLines = cleanText.split("\n");
+      pastedLines.forEach((line, idx) => {
+        if (line) {
+          // Dùng insert() API của MathLive với mode text để giữ space
+          if (typeof node.insert === "function") {
+            node.insert(line, { mode: "text" });
+          } else {
+            node.executeCommand(["insert", line]);
+          }
+        }
+        if (idx < pastedLines.length - 1) {
+          node.executeCommand("addRowAfter");
+        }
+      });
       updateContent();
     });
 
     // Hàm cấu hình loại trừ triệt để phím tắt ngầm và lỗi xung đột bộ gõ tiếng Việt Telex
     const applyMathLiveConfigs = () => {
       try {
+        syncMobileKeyboardInput(node);
         // Cấu hình an toàn thông qua setOptions (hoạt động tốt cả trước và sau khi _mathfield mount)
         if (typeof node.setOptions === "function") {
           node.setOptions({
             mathVirtualKeyboardPolicy: "manual",
             letterShapeStyle: "upright",
-            mathModeSpace: "\\ ",
+            mathModeSpace: "\\text{ }",
             inlineShortcuts: {}, // Tắt toàn bộ inline shortcuts ("th" -> \operatorname{th}, "ch", "tg", ...)
             inlineShortcutTimeout: 0,
             isImplicitFunction: () => false, // Vô hiệu hóa nhận diện "th", "ch" làm hàm toán ngầm
@@ -194,7 +282,7 @@ export function ChatInput({
         try {
           node.mathVirtualKeyboardPolicy = "manual";
           node.letterShapeStyle = "upright";
-          node.mathModeSpace = "\\ ";
+          node.mathModeSpace = "\\text{ }";
         } catch {}
 
         // Chỉ can thiệp menuItems và keybindings khi _mathfield đã mount để tránh ném lỗi "Mathfield not mounted"
@@ -223,7 +311,7 @@ export function ChatInput({
     };
 
     applyMathLiveConfigs();
-    node.addEventListener("focus", applyMathLiveConfigs);
+    node.addEventListener("focus", () => syncMobileKeyboardInput(node));
     setTimeout(applyMathLiveConfigs, 50);
     setTimeout(applyMathLiveConfigs, 200);
 
@@ -245,8 +333,133 @@ export function ChatInput({
           injectedStyle = document.createElement("style");
           injectedStyle.id = "socratic-math-style";
           injectedStyle.textContent = `
+            /* Cho phép khung nhập tự dãn chiều cao theo nội dung (6 hàng mặc định, 16 hàng khi phóng to) và cuộn dọc khi vượt quá */
+            :host {
+              display: block !important;
+              width: 100% !important;
+              min-height: 36px !important;
+              max-height: var(--socratic-mf-max-height, 156px) !important;
+              overflow-y: auto !important;
+              overflow-x: hidden !important;
+              box-sizing: border-box !important;
+              scrollbar-width: thin;
+              scrollbar-color: rgba(140, 73, 5, 0.3) transparent;
+            }
+
+            :host::-webkit-scrollbar {
+              width: 5px;
+            }
+
+            :host::-webkit-scrollbar-track {
+              background: transparent;
+            }
+
+            :host::-webkit-scrollbar-thumb {
+              background-color: rgba(140, 73, 5, 0.28);
+              border-radius: 9999px;
+            }
+
+            :host::-webkit-scrollbar-thumb:hover {
+              background-color: rgba(140, 73, 5, 0.48);
+            }
+
+            .ML__container {
+              min-height: 36px !important;
+              align-items: flex-start !important;
+              touch-action: pan-y !important;
+            }
+
+            .ML__content {
+              display: block !important;
+              overflow: visible !important;
+              width: 100% !important;
+              box-sizing: border-box !important;
+            }
+
+            .ML__latex {
+              display: block !important;
+              width: 100% !important;
+              white-space: normal !important;
+              line-height: 1.5 !important;
+              overflow-wrap: break-word !important;
+            }
+
+            /* Chỉ bật inline-wrap ở cấp gốc để không phá vỡ layout phân số/căn thức lồng nhau */
+            .ML__latex > .ML__base {
+              display: inline !important;
+              width: auto !important;
+              white-space: normal !important;
+            }
+
+            .ML__text {
+              white-space: pre-wrap !important;
+              overflow-wrap: break-word !important;
+            }
+
+            .ML__focused .ML__text {
+              background: transparent !important;
+              background-color: transparent !important;
+            }
+
+            /* Hỗ trợ xuống dòng thật (Shift+Enter / nút Xuống dòng -> \displaylines) mà vẫn tự wrap không đè dòng */
+            /* Lưu ý: Dùng child combinator (>) để khớp chính xác cấp bảng gốc (.ML__latex > .ML__mtable hoặc > .ML__base > .ML__mtable) và không làm vỡ .ML__vlist của phân số bên trong */
+            .ML__latex:has(> .ML__mtable) > .ML__strut,
+            .ML__latex:has(> .ML__mtable) > .ML__strut--bottom,
+            .ML__latex:has(> .ML__base > .ML__mtable) > .ML__strut,
+            .ML__latex:has(> .ML__base > .ML__mtable) > .ML__strut--bottom {
+              display: none !important;
+            }
+
+            .ML__latex:has(> .ML__mtable),
+            .ML__latex:has(> .ML__base > .ML__mtable),
+            .ML__latex > .ML__mtable,
+            .ML__latex > .ML__base > .ML__mtable,
+            .ML__latex > .ML__mtable > .col-align-l,
+            .ML__latex > .ML__base > .ML__mtable > .col-align-l,
+            .ML__latex > .ML__mtable > .col-align-l > .ML__vlist-t,
+            .ML__latex > .ML__base > .ML__mtable > .col-align-l > .ML__vlist-t,
+            .ML__latex > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r,
+            .ML__latex > .ML__base > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r {
+              display: block !important;
+              width: 100% !important;
+            }
+
+            .ML__latex > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist,
+            .ML__latex > .ML__base > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist {
+              display: flex !important;
+              flex-direction: column !important;
+              gap: 4px !important;
+              width: 100% !important;
+              height: auto !important;
+            }
+
+            .ML__latex > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist > span,
+            .ML__latex > .ML__base > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist > span {
+              position: static !important;
+              top: auto !important;
+              height: auto !important;
+              min-height: 1.5em !important;
+              display: block !important;
+              width: 100% !important;
+            }
+
+            .ML__latex > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist > span > span:not(.ML__pstrut),
+            .ML__latex > .ML__base > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist > span > span:not(.ML__pstrut) {
+              display: block !important;
+              width: 100% !important;
+              height: auto !important;
+              white-space: normal !important;
+            }
+
+            .ML__latex > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist > span > .ML__pstrut,
+            .ML__latex > .ML__base > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist > span > .ML__pstrut,
+            .ML__latex > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist-s,
+            .ML__latex > .ML__base > .ML__mtable > .col-align-l > .ML__vlist-t > .ML__vlist-r > .ML__vlist-s {
+              display: none !important;
+            }
+
             /* Ép toàn bộ ký tự bên trong Shadow DOM về font Geist Sans chuẩn của website */
-            *, .ML__mathit, .ML__cmr, .ML__text, .ML__base, .ML__fieldcontainer, .ML__content, .ML__latex, .ML__op {
+            :host, .ML__mathit, .ML__cmr, .ML__text, .ML__base, .ML__fieldcontainer, .ML__content, .ML__latex, .ML__op {
               font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
               font-style: normal !important;
               letter-spacing: normal !important;
@@ -289,13 +502,13 @@ export function ChatInput({
               color: inherit !important;
             }
 
-            /* Khi người dùng chủ động bôi đen (selection) */
+            /* Khi người dùng chủ động bôi đen (selection) - không bo góc từng ký tự để tránh lag khi Ctrl+A đoạn dài */
             .ML__selection,
             .ML__focused .ML__selection,
             :host(:focus) .ML__selection {
               background: rgba(193, 118, 42, 0.25) !important;
               background-color: rgba(193, 118, 42, 0.25) !important;
-              border-radius: 4px !important;
+              border-radius: 0 !important;
               color: inherit !important;
             }
 
@@ -320,7 +533,7 @@ export function ChatInput({
         }
       }
     });
-  }, []);
+  }, [syncMobileKeyboardInput, syncContentState]);
 
   // Lắng nghe phím Escape để đóng preview ảnh
   useEffect(() => {
@@ -500,10 +713,40 @@ export function ChatInput({
           break;
       }
 
-      setHasContent(Boolean(mf.value && mf.value.trim().length > 0));
+      syncContentState(mf);
     },
-    []
+    [syncContentState]
   );
+
+  const handleInsertNewLine = useCallback(() => {
+    if (isLoadingRef.current || isOffline) return;
+    const mf = mathfieldRef.current as any;
+    if (!mf) return;
+
+    syncMobileKeyboardInput(mf);
+    mf.focus();
+    const sink = mf.shadowRoot?.querySelector(".ML__keyboard-sink") as HTMLElement | null;
+    if (sink) {
+      try {
+        sink.focus({ preventScroll: true });
+      } catch {}
+    }
+
+    preserveEmptyNewLineRef.current = true;
+    let inserted = mf.executeCommand("addRowAfter");
+    if (!inserted) {
+      mf.executeCommand("moveToMathfieldEnd");
+      inserted = mf.executeCommand("addRowAfter");
+    }
+
+    syncContentState(mf, true);
+    setTimeout(() => {
+      try {
+        mf.executeCommand("scrollIntoView");
+      } catch {}
+    }, 20);
+  }, [isOffline, syncMobileKeyboardInput, syncContentState]);
+  handleInsertNewLineRef.current = handleInsertNewLine;
 
   // ── Gửi tin nhắn ──
 
@@ -527,8 +770,11 @@ export function ChatInput({
     onSendMessage(formatted, attachment?.file);
     if (mf) {
       mf.value = "";
+      mf.scrollTop = 0;
     }
     setHasContent(false);
+    setIsExpanded(false);
+    setCanExpand(false);
     removeAttachment();
   };
   handleSendRef.current = handleSend;
@@ -648,13 +894,35 @@ export function ChatInput({
           }
         }}
         className={cn(
-          "relative flex items-center gap-2 bg-[#F1CCA6]/40 p-2 pl-3 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-all",
+          "relative flex items-end gap-2 bg-[#F1CCA6]/40 p-2 pl-3 pr-2 rounded-3xl border border-[#C1762A]/20 shadow-sm focus-within:border-[#C1762A] focus-within:bg-white transition-colors duration-150",
           isOffline && "opacity-75 bg-[#F7ECE1] border-[#F1CCA6]",
           isLoading && "bg-[#F7ECE1]/80 border-[#C1762A]/30 cursor-not-allowed opacity-80"
         )}
       >
+        {/* Nút Phóng to / Thu nhỏ khung nhập (tối đa 6 dòng mặc định -> 16 dòng khi phóng to) */}
+        {(canExpand || isExpanded) && (
+          <button
+            id="chat-expand-btn"
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setIsExpanded((prev) => !prev);
+              const mf = mathfieldRef.current as any;
+              if (mf) {
+                syncMobileKeyboardInput(mf);
+                mf.focus();
+              }
+            }}
+            aria-label={isExpanded ? "Thu gọn khung nhập" : "Phóng to khung nhập"}
+            title={isExpanded ? "Thu gọn khung nhập (tối đa 6 dòng)" : "Phóng to khung nhập (tối đa 16 dòng)"}
+            className="absolute top-2.5 right-3 z-10 p-1.5 rounded-full text-[#8C4905]/65 hover:text-[#8C4905] hover:bg-[#F1CCA6]/60 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-[#C1762A]"
+          >
+            {isExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+        )}
+
         {/* Nút + và Mobile Bottom Sheet */}
-        <div className="relative shrink-0 self-center" ref={sheetContainerRef}>
+        <div className="relative shrink-0 self-end" ref={sheetContainerRef}>
           <button
             id="chat-attach-btn"
             onClick={handlePlusClick}
@@ -754,18 +1022,28 @@ export function ChatInput({
         <div
           onClick={() => {
             if (!isLoading && !isOffline) {
-              (mathfieldRef.current as any)?.focus();
+              const mf = mathfieldRef.current as any;
+              if (!mf) return;
+              syncMobileKeyboardInput(mf);
+              mf.focus();
+              // Gọi đồng bộ trên keyboard-sink trong sự kiện click/tap để iOS Safari & Android mở bàn phím hệ thống
+              const sink = mf.shadowRoot?.querySelector(".ML__keyboard-sink") as HTMLElement | null;
+              if (sink) {
+                try {
+                  sink.focus({ preventScroll: true });
+                } catch {}
+              }
             }
           }}
           className={cn(
-            "relative flex-1 flex items-center min-h-[44px] max-h-[160px] overflow-y-auto px-1 py-1 transition-all",
+            "relative flex-1 min-w-0 flex items-center min-h-[40px] px-1",
             isLoading || isOffline ? "cursor-not-allowed select-none opacity-60" : "cursor-text"
           )}
         >
           {/* Placeholder tự nhiên khi khung nhập rỗng */}
           {!hasContent && (
             <div
-              className="absolute left-1 top-1/2 -translate-y-1/2 text-[#8C4905]/50 pointer-events-none text-xs sm:text-sm font-medium truncate select-none"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8C4905]/50 pointer-events-none text-xs sm:text-sm font-medium truncate select-none"
             >
               {cooldownSeconds && cooldownSeconds > 0 ? (
                 <span className="text-[#C1762A] font-semibold flex items-center gap-1">
@@ -790,25 +1068,29 @@ export function ChatInput({
               disabled: isLoading || isOffline ? "true" : undefined,
               "read-only": isLoading || isOffline ? "true" : undefined,
               class: cn(
-                "w-full outline-none border-none bg-transparent font-medium text-base py-1 leading-normal transition-all",
+                "w-full outline-none border-none bg-transparent font-medium text-base leading-normal",
                 isLoading || isOffline
                   ? "text-[#1C1917]/40 cursor-not-allowed pointer-events-none"
                   : "text-[#1C1917] cursor-text"
               ),
-              onInput: (e: any) => {
-                const val = (e?.target as any)?.value || "";
-                setHasContent(Boolean(val.trim().length > 0));
-              },
               style: {
                 "--primary-color": "#C1762A",
                 "--caret-color": "#8C4905",
                 "--selection-background-color": "rgba(193, 118, 42, 0.25)",
                 "--contains-highlight-background-color": "rgba(193, 118, 42, 0.12)",
-                "--text-highlight-background-color": "rgba(193, 118, 42, 0.12)",
+                "--text-highlight-background-color": "transparent",
                 "--placeholder-color": "#8C4905",
                 "--placeholder-opacity": "0.75",
+                "--socratic-mf-max-height": isExpanded
+                  ? "min(396px, calc(100dvh - 240px))"
+                  : "156px",
                 display: "block",
+                width: "100%",
                 minHeight: "36px",
+                maxHeight: isExpanded ? "min(396px, calc(100dvh - 240px))" : "156px",
+                overflowY: "auto",
+                overflowX: "hidden",
+                boxSizing: "border-box",
               } as React.CSSProperties,
             })
           ) : (
@@ -817,10 +1099,29 @@ export function ChatInput({
         </div>
 
         {/* ── Cặp Chevron chuẩn Google Math Solver (ở góc phải khung nhập) ── */}
-        <div className="hidden sm:flex flex-col items-center justify-center text-[#8C4905]/40 select-none shrink-0 self-center px-1">
+        <div className="hidden sm:flex flex-col items-center justify-center text-[#8C4905]/40 select-none shrink-0 self-end mb-2.5 px-1">
           <ChevronUp className="w-3.5 h-3.5 -mb-1 stroke-[2.5]" />
           <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
         </div>
+
+        {/* Nút Xuống dòng (bên trái nút Gửi) */}
+        <button
+          id="chat-newline-btn"
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={handleInsertNewLine}
+          disabled={isLoading || isOffline}
+          aria-label="Xuống dòng"
+          title="Xuống dòng (Shift + Enter)"
+          className={cn(
+            "p-2.5 rounded-full flex items-center justify-center transition-colors duration-150 self-end shrink-0 focus-visible:outline-2 focus-visible:outline-[#C1762A]",
+            !isLoading && !isOffline
+              ? "bg-[#F1CCA6]/70 text-[#8C4905] hover:bg-[#F1CCA6] active:scale-[0.95] cursor-pointer"
+              : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed opacity-60"
+          )}
+        >
+          <CornerDownLeft size={20} />
+        </button>
 
         {/* Nút Gửi */}
         <button
@@ -828,7 +1129,7 @@ export function ChatInput({
           onClick={handleSend}
           disabled={!canSend || isLoading || isOffline}
           className={cn(
-            "p-2.5 rounded-full flex items-center justify-center transition-all duration-150 ease-out self-center shadow-xs shrink-0 focus-visible:outline-2 focus-visible:outline-[#C1762A]",
+            "p-2.5 rounded-full flex items-center justify-center transition-colors duration-150 self-end shadow-xs shrink-0 focus-visible:outline-2 focus-visible:outline-[#C1762A]",
             canSend && !isLoading && !isOffline
               ? "bg-[#C1762A] text-white hover:bg-[#8C4905] active:scale-[0.95] cursor-pointer"
               : "bg-[#F1CCA6]/40 text-[#8C4905]/40 cursor-not-allowed opacity-60"

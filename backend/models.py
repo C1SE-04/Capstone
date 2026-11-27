@@ -817,7 +817,7 @@ class SystemSettings(Base):
     # Tham số sinh văn bản (Generation Config)
     temperature = Column(Numeric(3, 2), nullable=False, default=0.35, server_default="0.35")
     top_p = Column(Numeric(3, 2), nullable=False, default=0.90, server_default="0.90")
-    max_output_tokens = Column(Integer, nullable=False, default=512, server_default="512")
+    max_output_tokens = Column(Integer, nullable=False, default=1024, server_default="1024")
 
     # Tham số Sư phạm & An toàn (Pedagogical & Safety)
     socratic_strictness = Column(String(20), nullable=False, default="BALANCED", server_default="BALANCED")

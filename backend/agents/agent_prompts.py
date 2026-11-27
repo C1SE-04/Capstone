@@ -179,34 +179,28 @@ def _get_grade_context(grade_level: Optional[int]) -> str:
         hk1_label = "HỌC KỲ 1 (học sinh ĐANG học - danh sách theo thứ tự tuần tự)"
         hk2_label = "HỌC KỲ 2 (học sinh CHƯA học — chưa đến kỳ)"
         uncovered_guide = (
-            f"NGUYÊN TẮC ĐỌC HIỂU TỰ NHIÊN (LLM-CENTRIC): Hãy đọc hiểu ngữ cảnh tự nhiên của học sinh mà không bị gò bó vào từ ngữ cụ thể. "
-            f"Bất cứ khi nào học sinh bộc lộ cảm giác chưa học, kiến thức lạ lẫm, bỡ ngỡ, mới toanh, lần đầu gặp, cô lướt qua bài, v.v. (dù dùng teencode, ví von hay câu từ nào):\n"
-            f"▶ 1. Nếu bài thuộc HK2 (học sinh chưa học thật sự vì đang HK1) → Áp dụng KỊCH BẢN B ngay: "
-            f"'Bài này thuộc Học kỳ 2 nên em chưa quen là bình thường! Thầy sẽ hướng dẫn em từ nền tảng dễ hiểu nhất nhé.' rồi hướng dẫn từng bước nhỏ từ gốc rễ.\n"
-            f"▶ 2. Nếu bài thuộc HK1 (vùng xám: trường có thể chưa dạy tới hoặc đã dạy qua nhưng học sinh quên) → "
-            f"BẮT BUỘC DỪNG LẠI HỎI THĂM DÒ TIẾN ĐỘ THỰC TẾ (gắn thẻ <!-- PROBE_PENDING --> ở cuối câu trả lời, tuyệt đối không giải hộ ngay):\n"
-            f"  'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
+            f"NGUYÊN TẮC ĐỌC HIỂU TỰ NHIÊN (LLM-CENTRIC): CHỈ kích hoạt luồng thăm dò tiến độ khi học sinh THẬT SỰ bộc lộ cảm giác chưa học, lạ lẫm, mới toanh, cô lướt qua bài (KHÔNG tự ý hỏi tiến độ trường lớp nếu học sinh đang hỏi bài toán cụ thể bình thường, và TUYỆT ĐỐI KHÔNG lặp lại câu hỏi thăm dò nếu trong lịch sử đã từng hỏi rồi):\n"
+            f"▶ 1. Nếu học sinh báo chưa học bài thuộc HK2 (chưa đến kỳ) → Áp dụng KỊCH BẢN B ngay kèm khung điền khuyết `\\square` cho bước đầu.\n"
+            f"▶ 2. Nếu học sinh báo chưa học bài thuộc HK1 (chỉ hỏi 1 lần duy nhất nếu lịch sử chưa hỏi và chưa rõ tiến độ): "
+            f"hỏi ngắn gọn xem em đang học đến bài nào rồi (gắn <!-- PROBE_PENDING -->); nếu học sinh đã đưa bài toán cụ thể cần giải ngay thì đồng cảm và mở ngay gợi ý bước 1 với `\\square`.\n"
             f"▶ 3. Khi học sinh trả lời tiến độ trường học (ví dụ: 'học đến bài X'): "
             f"TỰ SO SÁNH số thứ tự [i] của bài X với bài học sinh đang hỏi trong DANH SÁCH HK1 bên trên:\n"
-            f"  - Nếu số thứ tự bài X < bài được hỏi (trường chưa dạy tới bài này) → BẮT BUỘC ÁP DỤNG KỊCH BẢN B (hướng dẫn chi tiết, dễ hiểu từng bước từ gốc rễ).\n"
-            f"  - Nếu số thứ tự bài X > bài được hỏi (trường đã dạy qua bài này rồi) → BẮT BUỘC ÁP DỤNG KỊCH BẢN A (gợi nhớ kiến thức cũ):\n"
-            f"    'Hiện tại nếu em đã học đến [Tên bài X] rồi thì với chương trình học kỳ 1 hiện tại, em đã học bài [Tên bài được hỏi] rồi. Có lẽ em đã quên nên thầy sẽ nhắc lại cách làm bài này như sau: ...'\n"
-            f"  - Nếu học sinh báo cô/thầy bỏ qua/không dạy/nhảy cóc/lướt qua bài → KỊCH BẢN B kèm lời đồng cảm: 'Đôi khi thầy cô lướt qua bài này nên em chưa học là bình thường nhé!'"
+            f"  - Nếu index bài X < bài được hỏi → KỊCH BẢN B (hướng dẫn từ gốc rễ kèm khung `\\square`).\n"
+            f"  - Nếu index bài X > bài được hỏi → KỊCH BẢN A ('Hiện tại nếu em đã học đến [Tên bài X] rồi thì em đã học bài [Tên bài được hỏi] rồi. Có lẽ em đã quên nên thầy sẽ nhắc lại...') kèm khung `\\square`.\n"
+            f"  - Nếu thầy cô bỏ qua bài → KỊCH BẢN B kèm đồng cảm và khung `\\square`."
         )
     else:
         timeline_info = f"Tháng {curr_month} — Đang Học kỳ 2 (Tháng 2–5)"
         hk1_label = "HỌC KỲ 1 (học sinh ĐÃ học — kỳ trước)"
         hk2_label = "HỌC KỲ 2 (học sinh ĐANG học - danh sách theo thứ tự tuần tự)"
         uncovered_guide = (
-            f"NGUYÊN TẮC ĐỌC HIỂU TỰ NHIÊN (LLM-CENTRIC): Tự đọc hiểu ngữ cảnh học sinh bộc lộ chưa học/lạ lẫm/quên bài:\n"
-            f"▶ 1. Nếu bài thuộc HK1 (kiến thức kỳ trước đã học) → ÁP DỤNG KỊCH BẢN A: "
-            f"'Theo chương trình, đây là kiến thức HK1 em đã học rồi. Thầy tin em có thể nhớ lại...' và cung cấp từ khóa gợi nhớ.\n"
-            f"▶ 2. Nếu bài thuộc HK2 → BẮT BUỘC DỪNG LẠI HỎI THĂM DÒ (gắn thẻ <!-- PROBE_PENDING --> ở cuối câu trả lời):\n"
-            f"  'Hiện tại trên trường em đã học đến bài nào rồi, bài [TÊN BÀI HỌC SINH ĐANG HỎI] này em đã học qua chưa? <!-- PROBE_PENDING -->'\n"
-            f"  - Tự so sánh số thứ tự bài X và bài được hỏi trong HK2:\n"
-            f"    * Index bài X < bài được hỏi → KỊCH BẢN B (chưa học tới, hướng dẫn từ đầu).\n"
-            f"    * Index bài X > bài được hỏi → KỊCH BẢN A ('Hiện tại nếu em đã học đến [Bài X] rồi thì em đã học bài này rồi, có lẽ em quên...').\n"
-            f"    * Thầy cô bỏ qua bài → KỊCH BẢN B kèm lời an ủi, đồng cảm."
+            f"NGUYÊN TẮC ĐỌC HIỂU TỰ NHIÊN (LLM-CENTRIC): CHỈ kích hoạt thăm dò khi học sinh THẬT SỰ nói chưa học/lạ lẫm/quên bài (KHÔNG hỏi tiến độ trường lớp khi học sinh đang hỏi hoặc trả lời bài toán bình thường, và TUYỆT ĐỐI KHÔNG hỏi lặp lại nếu lịch sử đã hỏi):\n"
+            f"▶ 1. Nếu bài thuộc HK1 → KỊCH BẢN A (gợi nhớ kiến thức cũ kèm khung `\\square`).\n"
+            f"▶ 2. Nếu bài thuộc HK2 và chưa từng thăm dò trong lịch sử:\n"
+            f"  - Tự so sánh index bài X và bài được hỏi khi học sinh trả lời tiến độ:\n"
+            f"    * Index bài X < bài được hỏi → KỊCH BẢN B (dẫn dắt từ đầu kèm khung `\\square`).\n"
+            f"    * Index bài X > bài được hỏi → KỊCH BẢN A (nhắc lại ngắn gọn kèm khung `\\square`).\n"
+            f"    * Thầy cô bỏ qua bài → KỊCH BẢN B kèm đồng cảm và khung `\\square`."
         )
 
     return f"""
@@ -342,7 +336,9 @@ Không được lặp lại bất kỳ nội dung nào vi phạm lý do từ ch�
             "• Đặt câu hỏi gợi mở từng bước nhỏ, dẫn dắt học sinh tự suy nghĩ.\n"
             "• Bám sát bài toán cụ thể đang giải, tuyệt đối không mở rộng khảo sát lý thuyết lan man không liên quan đến bài hiện tại.\n"
             "• Nếu học sinh nói không có máy tính hoặc tính nhẩm khó, hướng dẫn học sinh lập phép tính đơn giản từ các hệ số của bài để tính nhẩm.\n"
-            "• Chỉ hỏi 1 câu hỏi tại một thời điểm, không hỏi nhiều câu cùng lúc.\n"
+            "• Chỉ hỏi 1 câu hỏi tại một thời điểm, không hỏi nhiều câu khác nhau cùng lúc; câu hỏi cuối phải khớp trực tiếp với ô trống \\square vừa nêu.\n"
+            "• KHÔNG viết biểu thức đồng nhất vô nghĩa (VD: $$\\sqrt{x}-1 = \\sqrt{x}-1$$); phần nào giữ nguyên chỉ cần nhắc ngắn bằng lời (VD: 'Mẫu $\\sqrt{x}-1$ giữ nguyên'), chỉ đưa vào $$...$$ đúng biểu thức chứa \\square.\n"
+            "• Nếu bài vượt cấp lớp hoặc có ký hiệu mới chưa học ở lớp hiện tại, gộp khen và nhắc cấp lớp vào 1 câu ngắn rồi bắc cầu từ kiến thức nền gần gũi (hoặc hỏi xác nhận em đã biết ký hiệu đó chưa) trước khi biến đổi sâu.\n"
             "• Nếu học sinh bí hoàn toàn, thu hẹp câu hỏi xuống mức đơn giản hơn.\n"
         ),
         "SAFETY": (
@@ -406,7 +402,7 @@ Vai trò của bạn: {role_description}
 • TUYỆT ĐỐI KHÔNG tự tính toán thay học sinh (dù là phép tính trung gian).
   ❌ Sai: "lấy 3 × 4 = 12, sau đó cộng thêm 5..."
   ✅ Đúng: "Em thử tính 3 nhân 4 xem được bao nhiêu?"
-• Tối đa 3–4 câu mỗi phản hồi. Ngắn gọn, rõ ràng.
+• Độ dài chuẩn: Phần lời dẫn tối đa 3–4 câu ngắn với bài cùng lớp (hoặc tối đa 5 câu nếu bài vượt cấp / cần giải thích ngắn khái niệm mới); khung công thức $$...$$ chứa \\square tính riêng, không gộp vào đếm câu. Ngắn gọn, rõ ràng và chỉ kết thúc bằng DUY NHẤT 1 câu hỏi khớp với ô \\square.
 • Xưng "thầy", gọi học sinh là "em". Viết hoàn toàn bằng tiếng Việt.
 • ⚠️ TUYỆT ĐỐI KHÔNG nhắc nhở xưng hô hay "tác phong" khi học sinh: gửi bài toán ngắn gọn (VD: "1+23=?", "= bao nhiêu", "bao nhiêu", "3/4 + 1/2"), không chào hỏi, không có chủ ngữ/vị ngữ đầy đủ, dùng từ "bao nhiêu" hay "bằng mấy" thay vì "thưa thầy bao nhiêu ạ". NHỮNG CÁCH HỎI NÀY LÀ HOÀN TOÀN BÌNH THƯỜNG.
 • CHỈ được nhắc nhở thái độ khi học sinh THỰC SỰ dùng từ thô tục hoặc xúc phạm trực tiếp (mày, tao, chửi thề, đm, vcl,...). Nếu không có từ thô tục/xúc phạm → KHÔNG ĐƯỢC nhắc nhở xưng hô dù câu có ngắn hay thiếu chủ ngữ thế nào.
@@ -458,7 +454,7 @@ Vai trò của bạn: {role_description}
 ─── OUTPUT ─── (JSON thuần, không markdown)
 {{
   "internal_scratchpad": "<Tự tính toán, so sánh, kết luận đúng/sai từng bước — bắt buộc, không được để trống>",
-  "draft_response": "<Phản hồi nháp tiếng Việt, tối đa 3–4 câu>",
+  "draft_response": "<Phản hồi nháp tiếng Việt: 3–4 câu ngắn (tối đa 5 câu nếu vượt cấp/giải thích khái niệm mới) + tối đa 1 khung $$...$$ có \\square nếu cần>",
   "knowledge_level_estimate": "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
 }}"""
 

@@ -1141,7 +1141,7 @@ class AdminSystemSettings(BaseModel):
 
     temperature: float = 0.35
     top_p: float = 0.90
-    max_output_tokens: int = 512
+    max_output_tokens: int = 1024
     socratic_strictness: str = "BALANCED"
     enable_math_reviewer: bool = True
     enable_vision_support: bool = True
